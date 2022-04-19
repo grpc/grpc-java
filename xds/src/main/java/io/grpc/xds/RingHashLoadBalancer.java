@@ -224,40 +224,40 @@ final class RingHashLoadBalancer extends LoadBalancer {
    */
   private void updateBalancingState() {
     checkState(!subchannels.isEmpty(), "no subchannel has been created");
-    boolean start_connection_attempt = false;
-    int num_idle_ = 0;
-    int num_ready_ = 0;
-    int num_connecting_ = 0;
-    int num_transient_failure_ = 0;
+    boolean startConnectionAttempt = false;
+    int numIdle = 0;
+    int numReady = 0;
+    int numConnecting = 0;
+    int numTransientFailure = 0;
     for (Subchannel subchannel : subchannels.values()) {
       ConnectivityState state = getSubchannelStateInfoRef(subchannel).value.getState();
       if (state == READY) {
-        num_ready_++;
+        numReady++;
         break;
       } else if (state == TRANSIENT_FAILURE) {
-        num_transient_failure_++;
+        numTransientFailure++;
       } else if (state == CONNECTING ) {
-        num_connecting_++;
+        numConnecting++;
       } else if (state == IDLE) {
-        num_idle_++;
+        numIdle++;
       }
     }
     ConnectivityState overallState;
-    if (num_ready_ > 0) {
+    if (numReady > 0) {
       overallState = READY;
-    } else if (num_transient_failure_ >= 2) {
+    } else if (numTransientFailure >= 2) {
       overallState = TRANSIENT_FAILURE;
-      start_connection_attempt = true;
-    } else if (num_connecting_ > 0) {
+      startConnectionAttempt = true;
+    } else if (numConnecting > 0) {
       overallState = CONNECTING;
-    } else if (num_transient_failure_ == 1 && subchannels.size() > 1) {
+    } else if (numTransientFailure == 1 && subchannels.size() > 1) {
       overallState = CONNECTING;
-      start_connection_attempt = true;
-    } else if (num_idle_ > 0) {
+      startConnectionAttempt = true;
+    } else if (numIdle > 0) {
       overallState = IDLE;
     } else {
       overallState = TRANSIENT_FAILURE;
-      start_connection_attempt = true;
+      startConnectionAttempt = true;
     }
     RingHashPicker picker = new RingHashPicker(syncContext, ring, subchannels);
     // TODO(chengyuanzhang): avoid unnecessary reprocess caused by duplicated server addr updates
@@ -281,7 +281,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
     // Note that we do the same thing when the policy is in state
     // CONNECTING, just to ensure that we don't remain in CONNECTING state
     // indefinitely if there are no new picks coming in.
-    if (start_connection_attempt) {
+    if (startConnectionAttempt) {
       if (!connectionAttemptIterator.hasNext()) {
         connectionAttemptIterator = subchannels.values().iterator();
       }
