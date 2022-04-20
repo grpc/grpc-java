@@ -14,10 +14,10 @@ java_library(
         ":internal",
         "//api",
         "//context",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_errorprone_error_prone_annotations",
+        "@maven//:com_google_guava_guava",
+        "@maven//:com_google_j2objc_j2objc_annotations",
     ],
 )
 
@@ -34,14 +34,14 @@ java_library(
     deps = [
         "//api",
         "//context",
-        "@com_google_android_annotations//jar",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_code_gson_gson//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-        "@io_perfmark_perfmark_api//jar",
-        "@org_codehaus_mojo_animal_sniffer_annotations//jar",
+        "@maven//:com_google_android_annotations",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_code_gson_gson",
+        "@maven//:com_google_errorprone_error_prone_annotations",
+        "@maven//:com_google_guava_guava",
+        "@maven//:com_google_j2objc_j2objc_annotations",
+        "@maven//:io_perfmark_perfmark_api",
+        "@maven//:org_codehaus_mojo_animal_sniffer_annotations",
     ],
 )
 
@@ -57,10 +57,10 @@ java_library(
     deps = [
         ":internal",
         "//api",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-        "@org_codehaus_mojo_animal_sniffer_annotations//jar",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_guava_guava",
+        "@maven//:com_google_j2objc_j2objc_annotations",
+        "@maven//:org_codehaus_mojo_animal_sniffer_annotations",
     ],
 )
 

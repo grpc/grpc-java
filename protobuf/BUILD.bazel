@@ -7,10 +7,10 @@ java_library(
     deps = [
         "//api",
         "//protobuf-lite",
-        "@com_google_api_grpc_proto_google_common_protos//jar",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
+        "@maven//:com_google_api_grpc_proto_google_common_protos",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_guava_guava",
+        "@maven//:com_google_j2objc_j2objc_annotations",
         "@com_google_protobuf//:protobuf_java",
     ],
 )

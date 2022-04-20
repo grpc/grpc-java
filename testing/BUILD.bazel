@@ -14,11 +14,11 @@ java_library(
         "//core:inprocess",
         "//core:util",
         "//stub",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-        "@com_google_truth_truth//jar",
-        "@junit_junit//jar",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_guava_guava",
+        "@maven//:com_google_j2objc_j2objc_annotations",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
     ],
 )
 
@@ -31,6 +31,6 @@ java_library(
     deps = [
         "//api",
         "//core:internal",
-        "@io_opencensus_opencensus_api//jar",
+        "@maven//:io_opencensus_opencensus_api",
     ],
 )

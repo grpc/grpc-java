@@ -14,11 +14,12 @@ java_library(
         "//core:internal",
         "//core:util",
         "//stub",
-        "@com_google_auto_value_auto_value_annotations//jar",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@io_grpc_grpc_proto//:rls_java_proto",
         "@io_grpc_grpc_proto//:rls_config_java_proto",
+        "@maven//:com_google_auto_value_auto_value_annotations",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_guava_guava",
+        "@maven//:org_apache_tomcat_annotations_api",
     ],
 )
 
@@ -26,7 +27,7 @@ java_plugin(
     name = "autovalue_plugin",
     processor_class = "com.google.auto.value.processor.AutoValueProcessor",
     deps = [
-        "@com_google_auto_value_auto_value//jar",
+        "@maven//:com_google_auto_value_auto_value",
     ],
 )
 
@@ -37,7 +38,7 @@ java_library(
     ],
     neverlink = 1,
     exports = [
-        "@com_google_auto_value_auto_value//jar",
+        "@maven//:com_google_auto_value_auto_value",
     ],
 )
 
