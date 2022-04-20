@@ -24,7 +24,13 @@ protobuf_deps()
 maven_install(
     artifacts = IO_GRPC_GRPC_JAVA_ARTIFACTS + PROTOBUF_MAVEN_ARTIFACTS,
     override_targets = IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
+    maven_install_json = "@//:maven_install.json",
+    fail_if_repin_required = True, # So if we update our deps, we don't forget to repin
     repositories = [
         "https://repo.maven.apache.org/maven2/",
     ],
 )
+
+load("@maven//:defs.bzl", "pinned_maven_install")
+
+pinned_maven_install()
