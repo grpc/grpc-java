@@ -67,7 +67,6 @@ import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.InternalLogId;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
@@ -78,7 +77,6 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
@@ -139,6 +137,14 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
+  @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE = 1024L;
+  @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
+  @VisibleForTesting
+  static final int DEFAULT_LEAST_REQUEST_CHOICE_COUNT = 2;
+  @VisibleForTesting
+  static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
@@ -1637,16 +1643,21 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     }
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LegacyLoadBalancerConfigFactory.newConfig(cluster, enableLeastRequest));
-    LoadBalancerProvider lbProvider = loadBalancerRegistry.getProvider(lbConfig.getPolicyName());
-    NameResolver.ConfigOrError configOrError = lbProvider
-        .parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
+    // TODO: If load_balancing_policy is set in Cluster use it for LB config, otherwise fall back
+    // to using the legacy lb_policy field.
+    ImmutableMap<String, ?> lbPolicyConfig = LegacyLoadBalancerConfigFactory.newConfig(cluster,
+        enableLeastRequest);
+
+    // Validate the LB config by trying to parse it with the corresponding LB provider.
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbPolicyConfig);
+    NameResolver.ConfigOrError configOrError = loadBalancerRegistry.getProvider(
+        lbConfig.getPolicyName()).parseLoadBalancingPolicyConfig(
+        lbConfig.getRawConfigValue());
     if (configOrError.getError() != null) {
       throw new ResourceInvalidException(structOrError.getErrorDetail());
     }
 
-    updateBuilder.lbPolicySelection(new PolicySelection(lbProvider, configOrError.getConfig()));
+    updateBuilder.lbPolicyConfig(lbPolicyConfig);
 
     return updateBuilder.build();
   }
