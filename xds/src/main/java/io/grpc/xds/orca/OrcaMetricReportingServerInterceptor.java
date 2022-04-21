@@ -28,6 +28,8 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.protobuf.ProtoUtils;
+import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.InternalCallMetricRecorder;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -60,17 +62,18 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   public <ReqT, RespT> Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     Context ctx = Context.current();
-    CallMetricRecorder callMetricRecorder = CallMetricRecorder.CONTEXT_KEY.get(ctx);
+    CallMetricRecorder callMetricRecorder = InternalCallMetricRecorder.CONTEXT_KEY.get(ctx);
     if (callMetricRecorder == null) {
-      callMetricRecorder = new CallMetricRecorder();
-      ctx = ctx.withValue(CallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+      callMetricRecorder = InternalCallMetricRecorder.newCallMetricRecorder();
+      ctx = ctx.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
     }
     final CallMetricRecorder finalCallMetricRecorder = callMetricRecorder;
     ServerCall<ReqT, RespT> trailerAttachingCall =
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
-            OrcaLoadReport report = finalCallMetricRecorder.finalizeAndDump();
+            OrcaLoadReport report = fromInternalReport(
+                InternalCallMetricRecorder.finalizeAndDump2(finalCallMetricRecorder));
             if (!report.equals(OrcaLoadReport.getDefaultInstance())) {
               trailers.put(ORCA_ENDPOINT_LOAD_METRICS_KEY, report);
             }
@@ -82,5 +85,15 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         trailerAttachingCall,
         headers,
         next);
+  }
+
+  private static OrcaLoadReport fromInternalReport(
+      InternalCallMetricRecorder.CallMetricReport internalReport) {
+    return OrcaLoadReport.newBuilder()
+        .setCpuUtilization(internalReport.cpuUtilization())
+        .setMemUtilization(internalReport.memoryUtilization())
+        .putAllUtilization(internalReport.utilizationMetrics())
+        .putAllRequestCost(internalReport.requestCostMetrics())
+        .build();
   }
 }

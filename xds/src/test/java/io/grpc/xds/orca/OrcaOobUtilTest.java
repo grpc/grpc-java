@@ -61,7 +61,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaReportingHelperWrapper;

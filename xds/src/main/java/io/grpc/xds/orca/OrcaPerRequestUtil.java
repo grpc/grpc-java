@@ -195,7 +195,7 @@ public abstract class OrcaPerRequestUtil {
     @VisibleForTesting
     static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
         Metadata.Key.of(
-            "x-endpoint-load-metrics-bin",
+            "endpoint-load-metrics-bin",
             ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
     private static final CallOptions.Key<OrcaReportBroker> ORCA_REPORT_BROKER_KEY =

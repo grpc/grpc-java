@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.orca;
+package io.grpc.services;
 
-import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
@@ -35,7 +35,7 @@ public final class CallMetricRecorder {
   private static final CallMetricRecorder NOOP = new CallMetricRecorder().disable();
 
   static final Context.Key<CallMetricRecorder> CONTEXT_KEY =
-      Context.key("io.grpc.xds.orca.CallMetricRecorder");
+      Context.key("io.grpc.services.CallMetricRecorder");
 
   private final AtomicReference<ConcurrentHashMap<String, Double>> utilizationMetrics =
       new AtomicReference<>();
@@ -44,9 +44,6 @@ public final class CallMetricRecorder {
   private double cpuUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
   private volatile boolean disabled;
-
-  CallMetricRecorder() {
-  }
 
   /**
    * Returns the call metric recorder attached to the current {@link Context}.  If there is none,
@@ -97,7 +94,7 @@ public final class CallMetricRecorder {
    * @return this recorder object
    * @since 1.47.0
    */
-  public CallMetricRecorder recordRequestCostMetric(String name, double value) {
+  public CallMetricRecorder recordCallMetric(String name, double value) {
     if (disabled) {
       return this;
     }
@@ -144,28 +141,39 @@ public final class CallMetricRecorder {
     return this;
   }
 
+
+  /**
+   * Returns all request cost metric values. No more metric values will be recorded after this
+   * method is called. Calling this method multiple times returns the same collection of metric
+   * values.
+   *
+   * @return a map containing all saved metric name-value pairs.
+   */
+  Map<String, Double> finalizeAndDump() {
+    disabled = true;
+    Map<String, Double> savedMetrics = requestCostMetrics.get();
+    if (savedMetrics == null) {
+      return Collections.emptyMap();
+    }
+    return Collections.unmodifiableMap(savedMetrics);
+  }
+
   /**
    * Returns all save metric values. No more metric values will be recorded after this method is
    * called. Calling this method multiple times returns the same collection of metric values.
    *
    * @return a per-request ORCA reports containing all saved metrics.
    */
-  OrcaLoadReport finalizeAndDump() {
-    disabled = true;
+  InternalCallMetricRecorder.CallMetricReport finalizeAndDump2() {
+    Map<String, Double> savedRequestCostMetrics = finalizeAndDump();
     Map<String, Double> savedUtilizationMetrics = utilizationMetrics.get();
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    Map<String, Double> savedRequestCostMetrics = requestCostMetrics.get();
-    if (savedRequestCostMetrics == null) {
-      savedRequestCostMetrics = Collections.emptyMap();
-    }
-    return OrcaLoadReport.newBuilder()
-            .putAllUtilization(savedUtilizationMetrics)
-            .putAllRequestCost(savedRequestCostMetrics)
-            .setCpuUtilization(cpuUtilizationMetric)
-            .setMemUtilization(memoryUtilizationMetric)
-            .build();
+    return InternalCallMetricRecorder.CallMetricReport.create(cpuUtilizationMetric,
+        memoryUtilizationMetric, ImmutableMap.copyOf(savedRequestCostMetrics),
+        ImmutableMap.copyOf(savedUtilizationMetrics)
+    );
   }
 
   @VisibleForTesting

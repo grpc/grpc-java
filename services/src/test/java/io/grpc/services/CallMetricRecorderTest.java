@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.orca;
+package io.grpc.services;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.github.xds.data.orca.v3.OrcaLoadReport;
+import com.google.common.truth.Truth;
 import io.grpc.Context;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -32,7 +33,7 @@ public class CallMetricRecorderTest {
 
   @Test
   public void dumpGivesEmptyResultWhenNoSavedMetricValues() {
-    assertThat(recorder.finalizeAndDump()).isEqualTo(OrcaLoadReport.getDefaultInstance());
+    assertThat(recorder.finalizeAndDump()).isEmpty();
   }
 
   @Test
@@ -40,48 +41,48 @@ public class CallMetricRecorderTest {
     recorder.recordUtilizationMetric("cost1", 154353.423);
     recorder.recordUtilizationMetric("cost2", 0.1367);
     recorder.recordUtilizationMetric("cost3", 1437.34);
-    recorder.recordRequestCostMetric("util1", 37465.12);
-    recorder.recordRequestCostMetric("util2", 10293.0);
-    recorder.recordRequestCostMetric("util3", 1.0);
+    recorder.recordCallMetric("util1", 37465.12);
+    recorder.recordCallMetric("util2", 10293.0);
+    recorder.recordCallMetric("util3", 1.0);
     recorder.recordCpuUtilizationMetric(0.1928);
     recorder.recordMemoryUtilizationMetric(47.4);
 
-    OrcaLoadReport dump = recorder.finalizeAndDump();
-    assertThat(dump.getUtilizationMap())
+    InternalCallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    Truth.assertThat(dump.utilizationMetrics())
         .containsExactly("cost1", 154353.423, "cost2", 0.1367, "cost3", 1437.34);
-    assertThat(dump.getRequestCostMap())
+    Truth.assertThat(dump.requestCostMetrics())
         .containsExactly("util1", 37465.12, "util2", 10293.0, "util3", 1.0);
-    assertThat(dump.getCpuUtilization()).isEqualTo(0.1928);
-    assertThat(dump.getMemUtilization()).isEqualTo(47.4);
+    Truth.assertThat(dump.cpuUtilization()).isEqualTo(0.1928);
+    Truth.assertThat(dump.memoryUtilization()).isEqualTo(47.4);
   }
 
   @Test
   public void noMetricsRecordedAfterSnapshot() {
-    OrcaLoadReport initDump = recorder.finalizeAndDump();
+    Map<String, Double> initDump = recorder.finalizeAndDump();
     recorder.recordUtilizationMetric("cost", 154353.423);
     assertThat(recorder.finalizeAndDump()).isEqualTo(initDump);
   }
 
   @Test
   public void lastValueWinForMetricsWithSameName() {
-    recorder.recordRequestCostMetric("cost1", 3412.5435);
-    recorder.recordRequestCostMetric("cost2", 6441.341);
-    recorder.recordRequestCostMetric("cost1", 6441.341);
-    recorder.recordRequestCostMetric("cost1", 4654.67);
-    recorder.recordRequestCostMetric("cost2", 75.83);
+    recorder.recordCallMetric("cost1", 3412.5435);
+    recorder.recordCallMetric("cost2", 6441.341);
+    recorder.recordCallMetric("cost1", 6441.341);
+    recorder.recordCallMetric("cost1", 4654.67);
+    recorder.recordCallMetric("cost2", 75.83);
     recorder.recordMemoryUtilizationMetric(1.3);
     recorder.recordMemoryUtilizationMetric(3.1);
     recorder.recordUtilizationMetric("util1", 28374.21);
     recorder.recordMemoryUtilizationMetric(9384.0);
     recorder.recordUtilizationMetric("util1", 84323.3);
 
-    OrcaLoadReport dump = recorder.finalizeAndDump();
-    assertThat(dump.getRequestCostMap())
+    InternalCallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    Truth.assertThat(dump.requestCostMetrics())
         .containsExactly("cost1", 4654.67, "cost2", 75.83);
-    assertThat(dump.getMemUtilization()).isEqualTo(9384.0);
-    assertThat(dump.getUtilizationMap())
+    Truth.assertThat(dump.memoryUtilization()).isEqualTo(9384.0);
+    Truth.assertThat(dump.utilizationMetrics())
         .containsExactly("util1", 84323.3);
-    assertThat(dump.getCpuUtilization()).isEqualTo(0);
+    Truth.assertThat(dump.cpuUtilization()).isEqualTo(0);
   }
 
   @Test
