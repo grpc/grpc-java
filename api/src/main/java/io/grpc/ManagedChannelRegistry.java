@@ -28,7 +28,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.GuardedBy;
@@ -156,20 +155,17 @@ public final class ManagedChannelRegistry {
   @VisibleForTesting
   ManagedChannelBuilder<?> newChannelBuilder(NameResolverRegistry nameResolverRegistry,
       String target, ChannelCredentials creds) {
-    URI uri;
+    NameResolverProvider nameResolverProvider = null;
     try {
-      uri = new URI(target);
-    } catch (URISyntaxException e) {
-      throw new ProviderNotFoundException(e.getMessage());
+      URI uri = new URI(target);
+      nameResolverProvider = nameResolverRegistry.providers().get(uri.getScheme());
+    } catch (URISyntaxException ignore) {
+      // bad URI found, just ignore and continue
     }
-    String scheme = uri.getScheme();
-    if (scheme == null) {
-      scheme = nameResolverRegistry.asFactory().getDefaultScheme();
+    if (nameResolverProvider == null) {
+      nameResolverProvider = nameResolverRegistry.providers().get(
+          nameResolverRegistry.asFactory().getDefaultScheme());
     }
-    Map<String, NameResolverProvider> nameResolverProviderMap
-        = nameResolverRegistry.providers();
-
-    NameResolverProvider nameResolverProvider = nameResolverProviderMap.get(scheme);
     Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
         = (nameResolverProvider != null)
         ? nameResolverProvider.getProducedSocketAddressTypes() :

@@ -351,13 +351,33 @@ public class ManagedChannelRegistryTest {
   @Test
   public void newChannelBuilder_badUri() {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
-    ManagedChannelRegistry registry = new ManagedChannelRegistry();
-    try {
-      registry.newChannelBuilder(nameResolverRegistry,":testing123", creds);
-      fail("expected exception");
-    } catch (ManagedChannelRegistry.ProviderNotFoundException ex) {
-      assertThat(ex).hasMessageThat().contains("Expected scheme name at index 0: :testing123");
+    class SocketAddress1 extends SocketAddress {
     }
+
+    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+
+    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+      @Override public ManagedChannelBuilder<?> delegate() {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    final ManagedChannelBuilder<?> mcb = new MockChannelBuilder();
+    registry.register(new BaseProvider(true, 4) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+          String passedTarget, ChannelCredentials passedCreds) {
+        return NewChannelBuilderResult.channelBuilder(mcb);
+      }
+    });
+    assertThat(
+        registry.newChannelBuilder(nameResolverRegistry, ":testing123", creds)).isSameInstanceAs(
+        mcb);
   }
 
   private static class BaseNameResolverProvider extends NameResolverProvider {
