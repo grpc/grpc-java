@@ -63,7 +63,7 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
   }
 
   @Override
-  protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }
 

@@ -18,7 +18,6 @@ package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -173,8 +172,8 @@ public final class ManagedChannelRegistry {
     NameResolverProvider nameResolverProvider = nameResolverProviderMap.get(scheme);
     Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
         = (nameResolverProvider != null)
-        ? nameResolverProvider.getSupportedSocketAddressTypes() :
-        Collections.singleton(InetSocketAddress.class);
+        ? nameResolverProvider.getProducedSocketAddressTypes() :
+        Collections.emptySet();
 
     List<ManagedChannelProvider> providers = providers();
     if (providers.isEmpty()) {
@@ -186,22 +185,22 @@ public final class ManagedChannelRegistry {
     for (ManagedChannelProvider provider : providers()) {
       Collection<Class<? extends SocketAddress>> channelProviderSocketAddressTypes
           = provider.getSupportedSocketAddressTypes();
-      if (channelProviderSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
-        ManagedChannelProvider.NewChannelBuilderResult result
-            = provider.newChannelBuilder(target, creds);
-        if (result.getChannelBuilder() != null) {
-          return result.getChannelBuilder();
-        }
-        error.append("; ");
-        error.append(provider.getClass().getName());
-        error.append(": ");
-        error.append(result.getError());
-      } else {
+      if (!channelProviderSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
         error.append("; ");
         error.append(provider.getClass().getName());
         error.append(": does not support 1 or more of ");
         error.append(Arrays.toString(nameResolverSocketAddressTypes.toArray()));
+        continue;
       }
+      ManagedChannelProvider.NewChannelBuilderResult result
+          = provider.newChannelBuilder(target, creds);
+      if (result.getChannelBuilder() != null) {
+        return result.getChannelBuilder();
+      }
+      error.append("; ");
+      error.append(provider.getClass().getName());
+      error.append(": ");
+      error.append(result.getError());
     }
     throw new ProviderNotFoundException(error.substring(2));
   }

@@ -173,13 +173,13 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return Collections.singleton(SocketAddress1.class);
       }
     });
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 6, "sc2") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         fail("Should not be called");
         throw new AssertionError();
       }
@@ -234,7 +234,7 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return ImmutableSet.of(SocketAddress1.class, SocketAddress2.class);
       }
     });
@@ -283,7 +283,7 @@ public class ManagedChannelRegistryTest {
   }
 
   @Test
-  public void newChannelBuilder_inetSocketAddress_asDefault() {
+  public void newChannelBuilder_emptySet_asDefault() {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
 
     ManagedChannelRegistry registry = new ManagedChannelRegistry();
@@ -297,7 +297,7 @@ public class ManagedChannelRegistryTest {
     registry.register(new BaseProvider(true, 4) {
       @Override
       protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-        return Collections.singleton(InetSocketAddress.class);
+        return Collections.emptySet();
       }
 
       @Override
@@ -319,7 +319,7 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return Collections.singleton(SocketAddress1.class);
       }
     });
