@@ -138,14 +138,6 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   @VisibleForTesting
-  static final long DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE = 1024L;
-  @VisibleForTesting
-  static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
-  @VisibleForTesting
-  static final int DEFAULT_LEAST_REQUEST_CHOICE_COUNT = 2;
-  @VisibleForTesting
-  static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
-  @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
