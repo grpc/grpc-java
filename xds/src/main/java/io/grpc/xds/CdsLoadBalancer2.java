@@ -25,6 +25,7 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
@@ -190,12 +191,21 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       LbConfig unwrappedLbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
           root.result.lbPolicyConfig());
       LoadBalancerProvider lbProvider = lbRegistry.getProvider(unwrappedLbConfig.getPolicyName());
-      Object lbConfig = lbProvider.parseLoadBalancingPolicyConfig(
-          unwrappedLbConfig.getRawConfigValue()).getConfig();
+      if (lbProvider == null) {
+        throw NameResolver.ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
+                "No provider available for LB: " + unwrappedLbConfig.getPolicyName())).getError()
+            .asRuntimeException();
+      }
+      NameResolver.ConfigOrError configOrError = lbProvider.parseLoadBalancingPolicyConfig(
+          unwrappedLbConfig.getRawConfigValue());
+      if (configOrError.getError() != null) {
+        throw configOrError.getError().augmentDescription("Unable to parse the LB config")
+            .asRuntimeException();
+      }
 
       ClusterResolverConfig config = new ClusterResolverConfig(
           Collections.unmodifiableList(instances),
-          new PolicySelection(lbProvider, lbConfig));
+          new PolicySelection(lbProvider, configOrError.getConfig()));
       if (childLb == null) {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }

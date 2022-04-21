@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -25,6 +26,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -88,7 +90,8 @@ public class CdsLoadBalancer2Test {
       new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
-          throw new AssertionError(e);
+          throw new RuntimeException(e);
+          //throw new AssertionError(e);
         }
       });
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
@@ -514,6 +517,34 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancer.upstreamError.getDescription()).isEqualTo("unreachable");
     verify(helper, never()).updateBalancingState(
         any(ConnectivityState.class), any(SubchannelPicker.class));
+  }
+
+  @Test
+  public void unknownLbProvider() {
+    try {
+      xdsClient.deliverCdsUpdate(CLUSTER,
+          CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext)
+              .lbPolicyConfig(ImmutableMap.of("unknown", ImmutableMap.of("foo", "bar"))).build());
+    } catch (Exception e) {
+      assertThat(e).hasCauseThat().hasMessageThat().contains("No provider available");
+      return;
+    }
+    fail("Expected the unknown LB to cause an exception");
+  }
+
+  @Test
+  public void invalidLbConfig() {
+    try {
+      xdsClient.deliverCdsUpdate(CLUSTER,
+          CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext)
+              .lbPolicyConfig(
+                  ImmutableMap.of("ring_hash_experimental", ImmutableMap.of("minRingSize", "-1")))
+              .build());
+    } catch (Exception e) {
+      assertThat(e).hasCauseThat().hasMessageThat().contains("Unable to parse");
+      return;
+    }
+    fail("Expected the invalid config to casue an exception");
   }
 
   private static void assertPicker(SubchannelPicker picker, Status expectedStatus,
