@@ -2537,8 +2537,16 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         respTimer.cancel();
         respTimer = null;
       }
+
+      // Include node ID in xds failures to allow cross-referencing with control plane logs
+      // when debugging.
+      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+      Status errorAugmented = Status.fromCode(error.getCode())
+          .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())
+          .withCause(error.getCause());
+
       for (ResourceWatcher watcher : watchers) {
-        watcher.onError(error);
+        watcher.onError(errorAugmented);
       }
     }
 
