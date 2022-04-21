@@ -2538,9 +2538,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         respTimer = null;
       }
 
-      // Include node ID in RPC failure status messages that originate from XdsClient.
-      // We expect all watchers to propagate the description to the channel, and expose it
-      // to the caller.
+      // Include node ID in xds failures to allow cross-referencing with control plane logs
+      // when debugging.
       String description = error.getDescription() == null ? "" : error.getDescription() + " ";
       Status errorAugmented = Status.fromCode(error.getCode())
           .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())

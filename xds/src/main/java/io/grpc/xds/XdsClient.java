@@ -398,6 +398,12 @@ abstract class XdsClient {
 
     /**
      * Called when the resource discovery RPC encounters some transient error.
+     *
+     * <p>Note that we expect that the implementer to:
+     * - Override {@link Status} code with UNAVAILABLE to comply with the guarantee to not generate
+     *   certain statuses by the library: https://grpc.github.io/grpc/core/md_doc_statuscodes.html
+     * - Keep {@link Status} description in one form or another, as it contains valuable debugging
+     *   information, such as node id.
      */
     void onError(Status error);
 
