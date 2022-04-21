@@ -24,6 +24,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
@@ -178,8 +179,7 @@ abstract class XdsClient {
 
     abstract ClusterType clusterType();
 
-    // Endpoint-level load balancing policy.
-    abstract LbPolicy lbPolicy();
+    abstract ImmutableMap<String, ?> lbPolicyConfig();
 
     // Only valid if lbPolicy is "ring_hash_experimental".
     abstract long minRingSize();
@@ -276,7 +276,7 @@ abstract class XdsClient {
       return MoreObjects.toStringHelper(this)
           .add("clusterName", clusterName())
           .add("clusterType", clusterType())
-          .add("lbPolicy", lbPolicy())
+          .add("lbPolicyConfig", lbPolicyConfig())
           .add("minRingSize", minRingSize())
           .add("maxRingSize", maxRingSize())
           .add("choiceCount", choiceCount())
@@ -297,19 +297,21 @@ abstract class XdsClient {
       // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      // Private, use roundRobinLbPolicy() or ringHashLbPolicy(long, long).
-      protected abstract Builder lbPolicy(LbPolicy lbPolicy);
+      protected abstract Builder lbPolicyConfig(ImmutableMap<String, ?> lbPolicyConfig);
 
       Builder roundRobinLbPolicy() {
-        return this.lbPolicy(LbPolicy.ROUND_ROBIN);
+        return this.lbPolicyConfig(ImmutableMap.of("round_robin", ImmutableMap.of()));
       }
 
-      Builder ringHashLbPolicy(long minRingSize, long maxRingSize) {
-        return this.lbPolicy(LbPolicy.RING_HASH).minRingSize(minRingSize).maxRingSize(maxRingSize);
+      Builder ringHashLbPolicy(Long minRingSize, Long maxRingSize) {
+        return this.lbPolicyConfig(ImmutableMap.of("ring_hash_experimental",
+            ImmutableMap.of("minRingSize", minRingSize.doubleValue(), "maxRingSize",
+                maxRingSize.doubleValue())));
       }
 
-      Builder leastRequestLbPolicy(int choiceCount) {
-        return this.lbPolicy(LbPolicy.LEAST_REQUEST).choiceCount(choiceCount);
+      Builder leastRequestLbPolicy(Integer choiceCount) {
+        return this.lbPolicyConfig(ImmutableMap.of("least_request_experimental",
+            ImmutableMap.of("choiceCount", choiceCount.doubleValue())));
       }
 
       // Private, use leastRequestLbPolicy(int).

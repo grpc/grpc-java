@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -25,6 +26,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -39,6 +41,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -87,7 +90,8 @@ public class CdsLoadBalancer2Test {
       new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
-          throw new AssertionError(e);
+          throw new RuntimeException(e);
+          //throw new AssertionError(e);
         }
       });
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
@@ -121,8 +125,10 @@ public class CdsLoadBalancer2Test {
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));
-    lbRegistry.register(new FakeLoadBalancerProvider("ring_hash_experimental"));
-    lbRegistry.register(new FakeLoadBalancerProvider("least_request_experimental"));
+    lbRegistry.register(
+        new FakeLoadBalancerProvider("ring_hash_experimental", new RingHashLoadBalancerProvider()));
+    lbRegistry.register(new FakeLoadBalancerProvider("least_request_experimental",
+        new LeastRequestLoadBalancerProvider()));
     loadBalancer = new CdsLoadBalancer2(helper, lbRegistry);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -513,6 +519,34 @@ public class CdsLoadBalancer2Test {
         any(ConnectivityState.class), any(SubchannelPicker.class));
   }
 
+  @Test
+  public void unknownLbProvider() {
+    try {
+      xdsClient.deliverCdsUpdate(CLUSTER,
+          CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext)
+              .lbPolicyConfig(ImmutableMap.of("unknown", ImmutableMap.of("foo", "bar"))).build());
+    } catch (Exception e) {
+      assertThat(e).hasCauseThat().hasMessageThat().contains("No provider available");
+      return;
+    }
+    fail("Expected the unknown LB to cause an exception");
+  }
+
+  @Test
+  public void invalidLbConfig() {
+    try {
+      xdsClient.deliverCdsUpdate(CLUSTER,
+          CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext)
+              .lbPolicyConfig(
+                  ImmutableMap.of("ring_hash_experimental", ImmutableMap.of("minRingSize", "-1")))
+              .build());
+    } catch (Exception e) {
+      assertThat(e).hasCauseThat().hasMessageThat().contains("Unable to parse");
+      return;
+    }
+    fail("Expected the invalid config to casue an exception");
+  }
+
   private static void assertPicker(SubchannelPicker picker, Status expectedStatus,
       @Nullable Subchannel expectedSubchannel)  {
     PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
@@ -539,9 +573,15 @@ public class CdsLoadBalancer2Test {
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
     private final String policyName;
+    private final LoadBalancerProvider configParsingDelegate;
 
     FakeLoadBalancerProvider(String policyName) {
+      this(policyName, null);
+    }
+
+    FakeLoadBalancerProvider(String policyName, LoadBalancerProvider configParsingDelegate) {
       this.policyName = policyName;
+      this.configParsingDelegate = configParsingDelegate;
     }
 
     @Override
@@ -564,6 +604,15 @@ public class CdsLoadBalancer2Test {
     @Override
     public String getPolicyName() {
       return policyName;
+    }
+
+    @Override
+    public NameResolver.ConfigOrError parseLoadBalancingPolicyConfig(
+        Map<String, ?> rawLoadBalancingPolicyConfig) {
+      if (configParsingDelegate != null) {
+        return configParsingDelegate.parseLoadBalancingPolicyConfig(rawLoadBalancingPolicyConfig);
+      }
+      return super.parseLoadBalancingPolicyConfig(rawLoadBalancingPolicyConfig);
     }
   }
 
