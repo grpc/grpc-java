@@ -90,6 +90,7 @@ public class SdsX509TrustManagerTest {
   @Test
   public void missingPeerCerts() {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("foo.com").build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -104,6 +105,7 @@ public class SdsX509TrustManagerTest {
   @Test
   public void emptyArrayPeerCerts() {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("foo.com").build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -118,6 +120,7 @@ public class SdsX509TrustManagerTest {
   @Test
   public void noSansInPeerCerts() throws CertificateException, IOException {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("foo.com").build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -138,6 +141,7 @@ public class SdsX509TrustManagerTest {
             .setExact("waterzooi.test.google.be")
             .setIgnoreCase(false)
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -154,6 +158,7 @@ public class SdsX509TrustManagerTest {
             .setExact("waterZooi.test.Google.be")
             .setIgnoreCase(false)
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -171,6 +176,7 @@ public class SdsX509TrustManagerTest {
   public void oneSanInPeerCertsVerifies_ignoreCase() throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setExact("Waterzooi.Test.google.be").setIgnoreCase(true).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -186,6 +192,7 @@ public class SdsX509TrustManagerTest {
             .setPrefix("waterzooi.") // test.google.be
             .setIgnoreCase(false)
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -199,6 +206,7 @@ public class SdsX509TrustManagerTest {
       throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setPrefix("waterZooi.").setIgnoreCase(false).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -219,6 +227,7 @@ public class SdsX509TrustManagerTest {
             .setPrefix("WaterZooi.") // test.google.be
             .setIgnoreCase(true)
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -231,6 +240,7 @@ public class SdsX509TrustManagerTest {
   public void oneSanInPeerCerts_suffix() throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setSuffix(".google.be").setIgnoreCase(false).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -244,6 +254,7 @@ public class SdsX509TrustManagerTest {
       throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setSuffix(".gooGle.bE").setIgnoreCase(false).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -261,6 +272,7 @@ public class SdsX509TrustManagerTest {
   public void oneSanInPeerCerts_suffixIgnoreCase() throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setSuffix(".GooGle.BE").setIgnoreCase(true).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -273,6 +285,7 @@ public class SdsX509TrustManagerTest {
   public void oneSanInPeerCerts_substring() throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setContains("zooi.test.google").setIgnoreCase(false).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -286,6 +299,7 @@ public class SdsX509TrustManagerTest {
       throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setContains("zooi.Test.gooGle").setIgnoreCase(false).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -303,6 +317,7 @@ public class SdsX509TrustManagerTest {
   public void oneSanInPeerCerts_substringIgnoreCase() throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setContains("zooI.Test.Google").setIgnoreCase(true).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -318,6 +333,7 @@ public class SdsX509TrustManagerTest {
             .setSafeRegex(
                 RegexMatcher.newBuilder().setRegex("water[[:alpha:]]{1}ooi\\.test\\.google\\.be"))
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -333,6 +349,7 @@ public class SdsX509TrustManagerTest {
             .setSafeRegex(
                 RegexMatcher.newBuilder().setRegex("no-match-string|\\*\\.test\\.youtube\\.com"))
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -348,6 +365,7 @@ public class SdsX509TrustManagerTest {
             .setSafeRegex(
                 RegexMatcher.newBuilder().setRegex("([[:digit:]]{1,3}\\.){3}[[:digit:]]{1,3}"))
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -363,6 +381,7 @@ public class SdsX509TrustManagerTest {
             .setSafeRegex(
                 RegexMatcher.newBuilder().setRegex("water[[:alpha:]]{2}ooi\\.test\\.google\\.be"))
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -382,6 +401,7 @@ public class SdsX509TrustManagerTest {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
     StringMatcher stringMatcher1 =
         StringMatcher.newBuilder().setExact("waterzooi.test.google.be").build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()
             .addMatchSubjectAltNames(stringMatcher)
@@ -397,6 +417,7 @@ public class SdsX509TrustManagerTest {
   public void oneSanInPeerCertsNotFoundException()
           throws CertificateException, IOException {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -416,6 +437,7 @@ public class SdsX509TrustManagerTest {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
     StringMatcher stringMatcher1 =
         StringMatcher.newBuilder().setSuffix("test.youTube.Com").setIgnoreCase(true).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()
             .addMatchSubjectAltNames(stringMatcher)
@@ -433,6 +455,7 @@ public class SdsX509TrustManagerTest {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
     StringMatcher stringMatcher1 =
         StringMatcher.newBuilder().setContains("est.Google.f").setIgnoreCase(true).build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()
             .addMatchSubjectAltNames(stringMatcher)
@@ -452,6 +475,7 @@ public class SdsX509TrustManagerTest {
     //    sub.test.example.com.
     StringMatcher stringMatcher =
         StringMatcher.newBuilder().setExact("sub.abc.test.youtube.com").build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);
@@ -469,6 +493,7 @@ public class SdsX509TrustManagerTest {
   public void oneIpAddressInPeerCertsVerifies() throws CertificateException, IOException {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
     StringMatcher stringMatcher1 = StringMatcher.newBuilder().setExact("192.168.1.3").build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()
             .addMatchSubjectAltNames(stringMatcher)
@@ -484,6 +509,7 @@ public class SdsX509TrustManagerTest {
   public void oneIpAddressInPeerCertsMismatch() throws CertificateException, IOException {
     StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
     StringMatcher stringMatcher1 = StringMatcher.newBuilder().setExact("192.168.2.3").build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()
             .addMatchSubjectAltNames(stringMatcher)
@@ -561,6 +587,7 @@ public class SdsX509TrustManagerTest {
             .setExact("waterzooi.test.google.be")
             .setIgnoreCase(false)
             .build();
+    @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
     trustManager = new SdsX509TrustManager(certContext, mockDelegate);

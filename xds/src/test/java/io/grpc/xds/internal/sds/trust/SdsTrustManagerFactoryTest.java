@@ -256,7 +256,9 @@ public class SdsTrustManagerFactoryTest {
           String... verifySans) {
     CertificateValidationContext.Builder builder = CertificateValidationContext.newBuilder();
     for (String san : verifySans) {
-      builder.addMatchSubjectAltNames(StringMatcher.newBuilder().setExact(san));
+      @SuppressWarnings("deprecation")
+      CertificateValidationContext.Builder unused =
+          builder.addMatchSubjectAltNames(StringMatcher.newBuilder().setExact(san));
     }
     return builder.build();
   }
