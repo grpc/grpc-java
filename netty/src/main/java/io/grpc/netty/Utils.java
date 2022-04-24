@@ -44,6 +44,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.ServerChannel;
+import io.netty.channel.epoll.Epoll;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -89,6 +90,10 @@ class Utils {
       = new DefaultEventLoopGroupResource(1, "grpc-nio-boss-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> NIO_WORKER_EVENT_LOOP_GROUP
       = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", EventLoopGroupType.NIO);
+  public static final Resource<EventLoopGroup> UDS_CHANNELS_EVENT_LOOP_GROUP =
+      Epoll.isAvailable() ? new DefaultEventLoopGroupResource(1, "UdsChannels",
+          EventLoopGroupType.EPOLL) : null;
+
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 

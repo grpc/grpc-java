@@ -17,7 +17,8 @@ evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     api project(':grpc-core'),
-            libraries.netty
+            libraries.netty,
+            libraries.netty_epoll
     implementation libraries.netty_proxy_handler,
             libraries.guava,
             libraries.errorprone,
@@ -29,8 +30,7 @@ dependencies {
             project(':grpc-testing'),
             project(':grpc-testing-proto')
     testRuntimeOnly libraries.netty_tcnative,
-            libraries.conscrypt,
-            libraries.netty_epoll
+            libraries.conscrypt
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     alpnagent libraries.jetty_alpn_agent
 }
