@@ -1,23 +1,20 @@
 syntax = "proto3";
 
-package envoy.type.matcher;
+package xds.type.matcher.v3;
 
-import "envoy/type/matcher/regex.proto";
+import "xds/type/matcher/v3/regex.proto";
 
-import "envoy/annotations/deprecation.proto";
-import "udpa/annotations/status.proto";
 import "validate/validate.proto";
 
-option java_package = "io.envoyproxy.envoy.type.matcher";
+option java_package = "com.github.xds.type.matcher.v3";
 option java_outer_classname = "StringProto";
 option java_multiple_files = true;
-option go_package = "github.com/envoyproxy/go-control-plane/envoy/type/matcher";
-option (udpa.annotations.file_status).package_version_status = FROZEN;
+option go_package = "github.com/cncf/xds/go/xds/type/matcher/v3";
 
 // [#protodoc-title: String matcher]
 
 // Specifies the way to match a string.
-// [#next-free-field: 7]
+// [#next-free-field: 8]
 message StringMatcher {
   oneof match_pattern {
     option (validate.required) = true;
@@ -46,26 +43,15 @@ message StringMatcher {
     string suffix = 3 [(validate.rules).string = {min_len: 1}];
 
     // The input string must match the regular expression specified here.
-    // The regex grammar is defined `here
-    // <https://en.cppreference.com/w/cpp/regex/ecmascript>`_.
+    RegexMatcher safe_regex = 5 [(validate.rules).message = {required: true}];
+
+    // The input string must have the substring specified here.
+    // Note: empty contains match is not allowed, please use regex instead.
     //
     // Examples:
     //
-    // * The regex ``\d{3}`` matches the value *123*
-    // * The regex ``\d{3}`` does not match the value *1234*
-    // * The regex ``\d{3}`` does not match the value *123.456*
-    //
-    // .. attention::
-    //   This field has been deprecated in favor of `safe_regex` as it is not safe for use with
-    //   untrusted input in all cases.
-    string regex = 4 [
-      deprecated = true,
-      (validate.rules).string = {max_bytes: 1024},
-      (envoy.annotations.disallowed_by_default) = true
-    ];
-
-    // The input string must match the regular expression specified here.
-    RegexMatcher safe_regex = 5 [(validate.rules).message = {required: true}];
+    // * *abc* matches the value *xyz.abc.def*
+    string contains = 7 [(validate.rules).string = {min_len: 1}];
   }
 
   // If true, indicates the exact/prefix/suffix matching should be case insensitive. This has no
