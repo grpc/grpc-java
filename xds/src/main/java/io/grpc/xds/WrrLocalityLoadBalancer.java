@@ -24,6 +24,7 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -31,20 +32,25 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import javax.annotation.Nullable;
 
 /**
  * This load balancer acts as a parent for the {@link WeightedTargetLoadBalancer} and configures
  * it with a child policy in its configuration and locality weights it gets from an attribute in
  * {@link io.grpc.LoadBalancer.ResolvedAddresses}.
  */
-public class WrrLocalityLoadBalancer extends LoadBalancer {
+final class WrrLocalityLoadBalancer extends LoadBalancer {
 
   private final XdsLogger logger;
-  private LoadBalancer childLb;
   private final Helper helper;
+  @Nullable
+  private GracefulSwitchLoadBalancer switchLb;
+  @Nullable
+  private String currentPolicyName;
 
   WrrLocalityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
+    switchLb = new GracefulSwitchLoadBalancer(helper);
     logger = XdsLogger.withLogId(
         InternalLogId.allocate("xds-wrr-locality-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
@@ -61,6 +67,14 @@ public class WrrLocalityLoadBalancer extends LoadBalancer {
     Map<Locality, Integer> localityWeights = resolvedAddresses.getAttributes()
         .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
 
+    // Not having locality weights is a misconfiguration, and we have to return with an error.
+    if (localityWeights == null) {
+      Status unavailable =
+          Status.UNAVAILABLE.withDescription("wrr_locality error: no locality weights provided");
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
+      return;
+    }
+
     // Weighted target LB expects a WeightedPolicySelection for each locality as it will create a
     // child LB for each.
     Map<String, WeightedPolicySelection> weightedPolicySelections = new HashMap<>();
@@ -70,8 +84,14 @@ public class WrrLocalityLoadBalancer extends LoadBalancer {
               wrrLocalityConfig.childPolicy));
     }
 
-    childLb = wrrLocalityConfig.childPolicy.getProvider().newLoadBalancer(helper);
-    childLb.handleResolvedAddresses(
+    // If this is the first update or the new LB config has a different policy, switch over to it.
+    PolicySelection newPolicySelection = wrrLocalityConfig.childPolicy;
+    if (!newPolicySelection.getProvider().getPolicyName().equals(currentPolicyName)) {
+      switchLb.switchTo(newPolicySelection.getProvider());
+      currentPolicyName = newPolicySelection.getProvider().getPolicyName();
+    }
+
+    switchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(weightedPolicySelections))
             .build());
@@ -80,8 +100,8 @@ public class WrrLocalityLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    if (childLb != null) {
-      childLb.handleNameResolutionError(error);
+    if (switchLb != null) {
+      switchLb.handleNameResolutionError(error);
     } else {
       helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
     }
@@ -89,8 +109,8 @@ public class WrrLocalityLoadBalancer extends LoadBalancer {
 
   @Override
   public void shutdown() {
-    if (childLb != null) {
-      childLb.shutdown();
+    if (switchLb != null) {
+      switchLb.shutdown();
     }
   }
 

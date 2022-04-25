@@ -30,7 +30,6 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 
 /**
  * The provider for {@link WrrLocalityLoadBalancer}. An instance of this class should be acquired
@@ -38,10 +37,7 @@ import javax.annotation.Nullable;
  * "xds_wrr_locality_experimental".
  */
 @Internal
-public class WrrLocalityLoadBalancerProvider extends LoadBalancerProvider {
-
-  @Nullable
-  private LoadBalancerRegistry lbRegistry;
+public final class WrrLocalityLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
@@ -70,13 +66,12 @@ public class WrrLocalityLoadBalancerProvider extends LoadBalancerProvider {
           JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
       if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
         return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-            "No child policy in wrr_locality LB policy:\n "
+            "No child policy in wrr_locality LB policy: "
                 + rawConfig));
       }
-      LoadBalancerRegistry lbRegistry =
-          this.lbRegistry == null ? LoadBalancerRegistry.getDefaultRegistry() : this.lbRegistry;
       ConfigOrError selectedConfig =
-          ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, lbRegistry);
+          ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates,
+              LoadBalancerRegistry.getDefaultRegistry());
       if (selectedConfig.getError() != null) {
         return selectedConfig;
       }

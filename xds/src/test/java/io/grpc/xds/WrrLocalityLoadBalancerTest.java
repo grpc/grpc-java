@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,6 +32,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
+import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
@@ -69,7 +71,7 @@ public class WrrLocalityLoadBalancerTest {
   @Captor
   private ArgumentCaptor<ConnectivityState> connectivityStateCaptor;
   @Captor
-  private ArgumentCaptor<ErrorPicker> errorPickerCaptor;
+  private ArgumentCaptor<SubchannelPicker> errorPickerCaptor;
 
   private EquivalentAddressGroup eag = new EquivalentAddressGroup(mockSocketAddress);
 
@@ -79,6 +81,7 @@ public class WrrLocalityLoadBalancerTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     when(mockProvider.newLoadBalancer(isA(Helper.class))).thenReturn(mockChildLb);
+    when(mockProvider.getPolicyName()).thenReturn("round_robin");
     loadBalancer = new WrrLocalityLoadBalancer(mockHelper);
   }
 
@@ -107,6 +110,24 @@ public class WrrLocalityLoadBalancerTest {
     assertThat(wtConfig.targets).containsEntry(localityTwo.toString(),
         new WeightedPolicySelection(2, childPolicy));
 
+  }
+
+  @Test
+  public void handleResolvedAddresses_noLocalityWeights() {
+    // A two locality cluster with a mock child LB policy.
+    Locality localityOne = Locality.create("region1", "zone1", "subzone1");
+    Locality localityTwo = Locality.create("region2", "zone2", "subzone2");
+    PolicySelection childPolicy = new PolicySelection(mockProvider, null);
+
+    // The child config is delivered wrapped in the wrr_locality config and the locality weights
+    // in a ResolvedAddresses attribute.
+    WrrLocalityConfig wlConfig = new WrrLocalityConfig(childPolicy);
+    deliverAddresses(wlConfig, null);
+
+    // With no locality weights, we should get a TRANSIENT_FAILURE.
+    verify(mockHelper).getAuthority();
+    verify(mockHelper).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE),
+        isA(ErrorPicker.class));
   }
 
   @Test
