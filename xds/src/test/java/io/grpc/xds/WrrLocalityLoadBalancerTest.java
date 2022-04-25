@@ -115,8 +115,6 @@ public class WrrLocalityLoadBalancerTest {
   @Test
   public void handleResolvedAddresses_noLocalityWeights() {
     // A two locality cluster with a mock child LB policy.
-    Locality localityOne = Locality.create("region1", "zone1", "subzone1");
-    Locality localityTwo = Locality.create("region2", "zone2", "subzone2");
     PolicySelection childPolicy = new PolicySelection(mockProvider, null);
 
     // The child config is delivered wrapped in the wrr_locality config and the locality weights
