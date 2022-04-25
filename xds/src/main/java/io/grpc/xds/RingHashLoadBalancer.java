@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * A {@link LoadBalancer} that provides consistent hashing based load balancing to upstream hosts.
@@ -399,10 +400,12 @@ final class RingHashLoadBalancer extends LoadBalancer {
       // Try finding a READY subchannel. Starting from the ring entry next to the RPC's hash.
       // If the one of the first two subchannels is not in TRANSIENT_FAILURE, return result
       // based on that subchannel. Otherwise, fail the pick unless a READY subchannel is found.
-      // Meanwhile, trigger connection for the first subchannel that is in IDLE if no subchannel
-      // before it is in CONNECTING or READY.
-      boolean hasPending = false;  // true if having subchannel(s) in CONNECTING or IDLE
-      boolean canBuffer = true;  // true if RPCs can be buffered with a pending subchannel
+      // Meanwhile, trigger connection for the channel and status:
+      // For the first subchannel that is in IDLE or TRANSIENT_FAILURE;
+      // And for the second subchannel that is in IDLE or TRANSIENT_FAILURE;
+      // And for each of the following subchannels that is in TRANSIENT_FAILURE or IDLE,
+      // stop until we find the first subchannel that is in CONNECTING or IDLE status.
+      boolean foundFirstNonFailed = false;  // true if having subchannel(s) in CONNECTING or IDLE
       Subchannel firstSubchannel = null;
       Subchannel secondSubchannel = null;
       for (int i = 0; i < ring.size(); i++) {
@@ -417,35 +420,49 @@ final class RingHashLoadBalancer extends LoadBalancer {
         // are failed unless there is a READY connection.
         if (firstSubchannel == null) {
           firstSubchannel = subchannel.subchannel;
-        } else if (subchannel.subchannel != firstSubchannel) {
-          if (secondSubchannel == null) {
-            secondSubchannel = subchannel.subchannel;
-          } else if (subchannel.subchannel != secondSubchannel) {
-            canBuffer = false;
+          PickResult maybeBuffer = pickSubchannelsNonReady(subchannel);
+          if (maybeBuffer != null) {
+            return maybeBuffer;
           }
-        }
-        if (subchannel.stateInfo.getState() == TRANSIENT_FAILURE) {
-          continue;
-        }
-        if (!hasPending) {  // first non-failing subchannel
-          if (subchannel.stateInfo.getState() == IDLE) {
-            final Subchannel finalSubchannel = subchannel.subchannel;
-            syncContext.execute(new Runnable() {
-              @Override
-              public void run() {
-                finalSubchannel.requestConnection();
-              }
-            });
+        } else if (subchannel.subchannel != firstSubchannel && secondSubchannel == null) {
+          secondSubchannel = subchannel.subchannel;
+          PickResult maybeBuffer = pickSubchannelsNonReady(subchannel);
+          if (maybeBuffer != null) {
+            return maybeBuffer;
           }
-          if (canBuffer) {  // done if this is the first or second two subchannel
-            return PickResult.withNoResult();  // queue the pick and re-process later
+        } else if (subchannel.subchannel != firstSubchannel
+            && subchannel.subchannel != secondSubchannel) {
+          if (!foundFirstNonFailed) {
+            pickSubchannelsNonReady(subchannel);
+            if (subchannel.stateInfo.getState() != TRANSIENT_FAILURE) {
+              foundFirstNonFailed = true;
+            }
           }
-          hasPending = true;
         }
       }
       // Fail the pick with error status of the original subchannel hit by hash.
       SubchannelView originalSubchannel = pickableSubchannels.get(ring.get(mid).addrKey);
       return PickResult.withError(originalSubchannel.stateInfo.getStatus());
+    }
+
+    @Nullable
+    private PickResult pickSubchannelsNonReady(SubchannelView subchannel) {
+      if (subchannel.stateInfo.getState() == TRANSIENT_FAILURE
+          || subchannel.stateInfo.getState() == IDLE ) {
+        final Subchannel finalSubchannel = subchannel.subchannel;
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            finalSubchannel.requestConnection();
+          }
+        });
+      }
+      if (subchannel.stateInfo.getState() == CONNECTING
+          || subchannel.stateInfo.getState() == IDLE) {
+        return PickResult.withNoResult();
+      } else {
+        return null;
+      }
     }
   }
 
