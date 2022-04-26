@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Queues;
 import com.google.protobuf.ByteString;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
@@ -37,6 +38,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.xds.OrcaOobService;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,6 +51,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -60,13 +63,20 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
+  private final OrcaOobService orcaOobService;
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
    */
-  public TestServiceImpl(ScheduledExecutorService executor) {
+  public TestServiceImpl(ScheduledExecutorService executor,
+                         @Nullable OrcaOobService orcaOobService) {
     this.executor = executor;
     this.compressableBuffer = ByteString.copyFrom(new byte[1024]);
+    this.orcaOobService = orcaOobService;
+  }
+
+  public TestServiceImpl(ScheduledExecutorService executor) {
+    this(executor, null);
   }
 
   @Override
@@ -451,7 +461,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   /**
    * Update hardcoded backend metrics data for the call.
    */
-  public static ServerInterceptor reportQueryMetricsInterceptor() {
+  public ServerInterceptor reportQueryMetricsInterceptor() {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
@@ -462,6 +472,9 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
           public void request(int numMessages) {
             super.request(numMessages);
             CallMetricRecorder.getCurrent().recordCallMetric("queue", 2.0);
+            if (orcaOobService != null) {
+              orcaOobService.setAllUtilizationMetrics(ImmutableMap.of("util", 0.4875));
+            }
           }
         }, headers);
       }

@@ -162,18 +162,21 @@ public class TestServiceServer {
       serverCreds = InsecureServerCredentials.create();
     }
     List<ServerInterceptor> optionalInterceptors = new ArrayList<>();
+    ServerBuilder<?> builder = Grpc.newServerBuilderForPort(port, serverCreds)
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    OrcaOobService orcaOobService = null;
     if (useOrca) {
-      optionalInterceptors.add(TestServiceImpl.reportQueryMetricsInterceptor());
+      orcaOobService = new OrcaOobService(1, TimeUnit.SECONDS, executor);
+      builder.addService(orcaOobService.getService());
+    }
+    TestServiceImpl testService = new TestServiceImpl(executor, orcaOobService);
+    if (useOrca) {
+      optionalInterceptors.add(testService.reportQueryMetricsInterceptor());
       optionalInterceptors.add(OrcaMetricReportingServerInterceptor.getInstance());
     }
-    ServerBuilder<?> builder = Grpc.newServerBuilderForPort(port, serverCreds)
-        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-        .addService(
-            ServerInterceptors.intercept(
-                new TestServiceImpl(executor), TestServiceImpl.interceptors(optionalInterceptors)));
-    if (useOrca) {
-      builder.addService(new OrcaOobService( 1, TimeUnit.SECONDS, executor).getService());
-    }
+    builder.addService(
+        ServerInterceptors.intercept(testService,
+            TestServiceImpl.interceptors(optionalInterceptors)));
     server = builder.build().start();
   }
 

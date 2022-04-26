@@ -101,6 +101,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.xds.OrcaOobUtil;
 import io.grpc.xds.OrcaPerRequestUtil;
 import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
@@ -180,6 +181,8 @@ public abstract class AbstractInteropTest {
 
   protected static final String TEST_ORCA_LB_POLICY_NAME = "test_backend_metrics_load_balancer";
   private final LinkedBlockingQueue<OrcaLoadReport> savedLoadReports = new LinkedBlockingQueue<>();
+  private final LinkedBlockingQueue<OrcaLoadReport> savedOobLoadReports =
+      new LinkedBlockingQueue<>();
 
   private static final FakeTagger tagger = new FakeTagger();
   private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
@@ -2033,6 +2036,8 @@ public abstract class AbstractInteropTest {
     assertEquals(savedLoadReports.poll(), OrcaLoadReport.newBuilder()
         .putRequestCost("queue", 2.0).build());
     assertThat(savedLoadReports.isEmpty()).isTrue();
+    assertEquals(savedOobLoadReports.poll(), OrcaLoadReport.newBuilder()
+        .putUtilization("util", 0.4875).build());
   }
 
   protected static void assertSuccess(StreamRecorder<?> recorder) {
@@ -2510,7 +2515,18 @@ public abstract class AbstractInteropTest {
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       if (subchannel == null) {
-        final Subchannel subchannel = helper.createSubchannel(
+        OrcaOobUtil.OrcaReportingHelperWrapper wrappedHelper =
+            OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(helper,
+                new OrcaOobUtil.OrcaOobReportListener() {
+                  @Override
+                  public void onLoadReport(OrcaLoadReport orcaLoadReport) {
+                    savedOobLoadReports.add(orcaLoadReport);
+                  }
+                });
+        wrappedHelper.setReportingConfig(OrcaOobUtil.OrcaReportingConfig.newBuilder()
+            .setReportInterval(1, TimeUnit.SECONDS)
+            .build());
+        final Subchannel subchannel = wrappedHelper.asHelper().createSubchannel(
             CreateSubchannelArgs.newBuilder()
                 .setAddresses(servers)
                 .build());
