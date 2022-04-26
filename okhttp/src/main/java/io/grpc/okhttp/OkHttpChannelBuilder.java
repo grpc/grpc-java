@@ -37,13 +37,15 @@ import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ManagedChannelImplBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
-import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.internal.CipherSuite;
 import io.grpc.okhttp.internal.ConnectionSpec;
@@ -137,6 +139,8 @@ public final class OkHttpChannelBuilder extends
           ((ExecutorService) executor).shutdown();
         }
       };
+  private static final ObjectPool<Executor> DEFAULT_TRANSPORT_EXECUTOR_POOL =
+      SharedResourcePool.forResource(SHARED_EXECUTOR);
 
   /** Creates a new builder for the given server host and port. */
   public static OkHttpChannelBuilder forAddress(String host, int port) {
@@ -168,8 +172,9 @@ public final class OkHttpChannelBuilder extends
     return new OkHttpChannelBuilder(target, creds, result.callCredentials, result.factory);
   }
 
-  private Executor transportExecutor;
-  private ScheduledExecutorService scheduledExecutorService;
+  private ObjectPool<Executor> transportExecutorPool = DEFAULT_TRANSPORT_EXECUTOR_POOL;
+  private ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool =
+      SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
   private SocketFactory socketFactory;
   private SSLSocketFactory sslSocketFactory;
@@ -247,7 +252,11 @@ public final class OkHttpChannelBuilder extends
    * to shutdown the executor when appropriate.
    */
   public OkHttpChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
-    this.transportExecutor = transportExecutor;
+    if (transportExecutor == null) {
+      this.transportExecutorPool = DEFAULT_TRANSPORT_EXECUTOR_POOL;
+    } else {
+      this.transportExecutorPool = new FixedObjectPool<>(transportExecutor);
+    }
     return this;
   }
 
@@ -468,8 +477,8 @@ public final class OkHttpChannelBuilder extends
    */
   public OkHttpChannelBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
-    this.scheduledExecutorService =
-        checkNotNull(scheduledExecutorService, "scheduledExecutorService");
+    this.scheduledExecutorServicePool =
+        new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
     return this;
   }
 
@@ -508,8 +517,8 @@ public final class OkHttpChannelBuilder extends
   OkHttpTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(
-        transportExecutor,
-        scheduledExecutorService,
+        transportExecutorPool,
+        scheduledExecutorServicePool,
         socketFactory,
         createSslSocketFactory(),
         hostnameVerifier,
@@ -712,9 +721,10 @@ public final class OkHttpChannelBuilder extends
    */
   @Internal
   static final class OkHttpTransportFactory implements ClientTransportFactory {
+    private final ObjectPool<Executor> executorPool;
     final Executor executor;
-    private final boolean usingSharedExecutor;
-    private final boolean usingSharedScheduler;
+    private final ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool;
+    final ScheduledExecutorService scheduledExecutorService;
     final TransportTracer.Factory transportTracerFactory;
     final SocketFactory socketFactory;
     @Nullable final SSLSocketFactory sslSocketFactory;
@@ -729,13 +739,12 @@ public final class OkHttpChannelBuilder extends
     final int flowControlWindow;
     private final boolean keepAliveWithoutCalls;
     final int maxInboundMetadataSize;
-    private final ScheduledExecutorService timeoutService;
     final boolean useGetForSafeMethods;
     private boolean closed;
 
     private OkHttpTransportFactory(
-        Executor executor,
-        @Nullable ScheduledExecutorService timeoutService,
+        ObjectPool<Executor> executorPool,
+        ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool,
         @Nullable SocketFactory socketFactory,
         @Nullable SSLSocketFactory sslSocketFactory,
         @Nullable HostnameVerifier hostnameVerifier,
@@ -749,9 +758,10 @@ public final class OkHttpChannelBuilder extends
         int maxInboundMetadataSize,
         TransportTracer.Factory transportTracerFactory,
         boolean useGetForSafeMethods) {
-      usingSharedScheduler = timeoutService == null;
-      this.timeoutService = usingSharedScheduler
-          ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : timeoutService;
+      this.executorPool = executorPool;
+      this.executor = executorPool.getObject();
+      this.scheduledExecutorServicePool = scheduledExecutorServicePool;
+      this.scheduledExecutorService = scheduledExecutorServicePool.getObject();
       this.socketFactory = socketFactory;
       this.sslSocketFactory = sslSocketFactory;
       this.hostnameVerifier = hostnameVerifier;
@@ -766,15 +776,8 @@ public final class OkHttpChannelBuilder extends
       this.maxInboundMetadataSize = maxInboundMetadataSize;
       this.useGetForSafeMethods = useGetForSafeMethods;
 
-      usingSharedExecutor = executor == null;
       this.transportTracerFactory =
           Preconditions.checkNotNull(transportTracerFactory, "transportTracerFactory");
-      if (usingSharedExecutor) {
-        // The executor was unspecified, using the shared executor.
-        this.executor = SharedResourceHolder.get(SHARED_EXECUTOR);
-      } else {
-        this.executor = executor;
-      }
     }
 
     @Override
@@ -809,7 +812,7 @@ public final class OkHttpChannelBuilder extends
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return timeoutService;
+      return scheduledExecutorService;
     }
 
     @Nullable
@@ -821,8 +824,8 @@ public final class OkHttpChannelBuilder extends
         return null;
       }
       ClientTransportFactory factory = new OkHttpTransportFactory(
-          executor,
-          timeoutService,
+          executorPool,
+          scheduledExecutorServicePool,
           socketFactory,
           result.factory,
           hostnameVerifier,
@@ -846,13 +849,8 @@ public final class OkHttpChannelBuilder extends
       }
       closed = true;
 
-      if (usingSharedScheduler) {
-        SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
-      }
-
-      if (usingSharedExecutor) {
-        SharedResourceHolder.release(SHARED_EXECUTOR, executor);
-      }
+      executorPool.returnObject(executor);
+      scheduledExecutorServicePool.returnObject(scheduledExecutorService);
     }
   }
 }

@@ -188,7 +188,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
     final GracefulSwitchLoadBalancer lb;
     // Timer to fail over to the next priority if not connected in 10 sec. Scheduled only once at
     // child initialization.
-    final ScheduledHandle failOverTimer;
+    ScheduledHandle failOverTimer;
+    boolean seenReadyOrIdleSinceTransientFailure = false;
     // Timer to delay shutdown and deletion of the priority. Scheduled whenever the child is
     // deactivated.
     @Nullable ScheduledHandle deletionTimer;
@@ -200,24 +201,23 @@ final class PriorityLoadBalancer extends LoadBalancer {
       this.priority = priority;
       childHelper = new ChildHelper(ignoreReresolution);
       lb = new GracefulSwitchLoadBalancer(childHelper);
-
-      class FailOverTask implements Runnable {
-        @Override
-        public void run() {
-          if (deletionTimer != null && deletionTimer.isPending()) {
-            // The child is deactivated.
-            return;
-          }
-          picker = new ErrorPicker(
-              Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority));
-          logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
-          currentPriority = null; // reset currentPriority to guarantee failover happen
-          tryNextPriority(true);
-        }
-      }
-
       failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS, executor);
       logger.log(XdsLogLevel.DEBUG, "Priority created: {0}", priority);
+    }
+
+    final class FailOverTask implements Runnable {
+      @Override
+      public void run() {
+        if (deletionTimer != null && deletionTimer.isPending()) {
+          // The child is deactivated.
+          return;
+        }
+        picker = new ErrorPicker(
+            Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority));
+        logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
+        currentPriority = null; // reset currentPriority to guarantee failover happen
+        tryNextPriority(true);
+      }
     }
 
     /**
@@ -312,11 +312,17 @@ final class PriorityLoadBalancer extends LoadBalancer {
             if (deletionTimer != null && deletionTimer.isPending()) {
               return;
             }
-            if (failOverTimer.isPending()) {
-              if (newState.equals(READY) || newState.equals(IDLE)
-                  || newState.equals(TRANSIENT_FAILURE)) {
-                failOverTimer.cancel();
+            if (newState.equals(CONNECTING) ) {
+              if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
+                failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
+                    executor);
               }
+            } else if (newState.equals(READY) || newState.equals(IDLE)) {
+              seenReadyOrIdleSinceTransientFailure = true;
+              failOverTimer.cancel();
+            } else if (newState.equals(TRANSIENT_FAILURE)) {
+              seenReadyOrIdleSinceTransientFailure = false;
+              failOverTimer.cancel();
             }
             tryNextPriority(true);
           }
