@@ -15,11 +15,11 @@ fi
 # so for the rest of the build we will be using "-PskipCodegen=true"
 # avoid further complicating the build.
 docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
-  -m 2GB -e "GRADLE_OPTS=-Xms128m -Xmx1024m" \
+  -m 2GB \
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   openjdk:11-jdk-slim-buster \
-  ./gradlew build -x test -PskipAndroid=true -PskipCodegen=true
+  ./gradlew build -x test -PskipAndroid=true -PskipCodegen=true -Dorg.gradle.jvmargs="-Xms128m -Xmx1024m"
 
 # Build and run java tests under aarch64 image.
 # To be able to run this docker container on x64 machine, one needs to have
@@ -34,8 +34,8 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
 # - run docker container under current user's UID to avoid polluting the workspace
 # - set the user.home property to avoid creating a "?" directory under grpc-java
 docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
-  -m 2GB -e "GRADLE_OPTS=-Xms128m -Xmx1024m" \
+  -m 2GB \
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   arm64v8/openjdk:11-jdk-slim-buster \
-  ./gradlew build -PskipAndroid=true -PskipCodegen=true
+  ./gradlew build -PskipAndroid=true -PskipCodegen=true -Dorg.gradle.jvmargs="-Xms128m -Xmx1024m"
