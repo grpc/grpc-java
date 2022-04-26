@@ -10,12 +10,13 @@ else
   DOCKER_ARGS=
 fi
 
+cat /sys/fs/cgroup/memory/memory.limit_in_bytes
+
 # build under x64 docker image to save time over building everything under
 # aarch64 emulator. We've already built and tested the protoc binaries
 # so for the rest of the build we will be using "-PskipCodegen=true"
 # avoid further complicating the build.
 docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
-  -m 2GB \
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   openjdk:11-jdk-slim-buster \
@@ -34,7 +35,6 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
 # - run docker container under current user's UID to avoid polluting the workspace
 # - set the user.home property to avoid creating a "?" directory under grpc-java
 docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
-  -m 2GB \
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   arm64v8/openjdk:11-jdk-slim-buster \
