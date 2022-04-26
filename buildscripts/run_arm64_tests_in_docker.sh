@@ -10,8 +10,6 @@ else
   DOCKER_ARGS=
 fi
 
-cat /sys/fs/cgroup/memory/memory.limit_in_bytes
-
 # build under x64 docker image to save time over building everything under
 # aarch64 emulator. We've already built and tested the protoc binaries
 # so for the rest of the build we will be using "-PskipCodegen=true"
@@ -20,7 +18,7 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   openjdk:11-jdk-slim-buster \
-  ./gradlew build -x test -PskipAndroid=true -PskipCodegen=true -Dorg.gradle.jvmargs="-Xms128m -Xmx1024m"
+  ./gradlew build -x test -PskipAndroid=true -PskipCodegen=true -Dorg.gradle.jvmargs="-Xms256m -Xmx2048m"
 
 # Build and run java tests under aarch64 image.
 # To be able to run this docker container on x64 machine, one needs to have
@@ -38,4 +36,4 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   arm64v8/openjdk:11-jdk-slim-buster \
-  ./gradlew build -PskipAndroid=true -PskipCodegen=true -Dorg.gradle.jvmargs="-Xms128m -Xmx1024m"
+  ./gradlew build -PskipAndroid=true -PskipCodegen=true -Dorg.gradle.jvmargs="-Xms256m -Xmx2048m"
