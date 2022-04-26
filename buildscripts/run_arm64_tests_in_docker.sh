@@ -10,7 +10,7 @@ else
   DOCKER_ARGS=
 fi
 
-export GRADLE_OPTS="-Xms128m -Xmx1024m"
+export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xms128m -Xmx1024m'"
 export JAVA_OPTS="-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs"
 
 # build under x64 docker image to save time over building everything under
