@@ -16,6 +16,11 @@
 
 package io.grpc.binder;
 
+import static android.Manifest.permission.ACCESS_COARSE_LOCATION;
+import static android.Manifest.permission.ACCESS_FINE_LOCATION;
+import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
+import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -26,8 +31,9 @@ import android.content.pm.Signature;
 import android.os.Process;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.Status;
-import io.grpc.binder.SecurityPolicy;
+import java.util.HashMap;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -39,7 +45,6 @@ public final class SecurityPoliciesTest {
   private static final int MY_UID = Process.myUid();
   private static final int OTHER_UID = MY_UID + 1;
   private static final int OTHER_UID_SAME_SIGNATURE = MY_UID + 2;
-  private static final int OTHER_UID_NO_SIGNATURE = MY_UID + 3;
   private static final int OTHER_UID_UNKNOWN = MY_UID + 4;
 
   private static final String PERMISSION_DENIED_REASONS = "some reasons";
@@ -49,7 +54,6 @@ public final class SecurityPoliciesTest {
 
   private static final String OTHER_UID_PACKAGE_NAME = "other.package";
   private static final String OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME = "other.package.samesignature";
-  private static final String OTHER_UID_NO_SIGNATURE_PACKAGE_NAME = "other.package.nosignature";
 
   private Context appContext;
   private PackageManager packageManager;
@@ -60,24 +64,22 @@ public final class SecurityPoliciesTest {
   public void setUp() {
     appContext = ApplicationProvider.getApplicationContext();
     packageManager = appContext.getPackageManager();
-    installPackage(MY_UID, appContext.getPackageName(), SIG1);
-    installPackage(OTHER_UID, OTHER_UID_PACKAGE_NAME, SIG2);
-    installPackage(OTHER_UID_SAME_SIGNATURE, OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME, SIG1);
-    installPackage(OTHER_UID_NO_SIGNATURE, OTHER_UID_NO_SIGNATURE_PACKAGE_NAME);
   }
 
   @SuppressWarnings("deprecation")
-  private void installPackage(int uid, String packageName, Signature... signatures) {
-    PackageInfo info = new PackageInfo();
-    info.packageName = packageName;
-    info.signatures = signatures;
-    shadowOf(packageManager).installPackage(info);
-    shadowOf(packageManager).setPackagesForUid(uid, packageName);
+  private void installPackages(int uid, PackageInfo... packageInfo) {
+    String[] packageNames = new String[packageInfo.length];
+    for (int i = 0; i < packageInfo.length; i++) {
+      shadowOf(packageManager).installPackage(packageInfo[i]);
+      packageNames[i] = packageInfo[i].packageName;
+    }
+    shadowOf(packageManager).setPackagesForUid(uid, packageNames);
   }
 
   @Test
   public void testInternalOnly() throws Exception {
     policy = SecurityPolicies.internalOnly();
+
     assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
     assertThat(policy.checkAuthorization(OTHER_UID).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
@@ -99,6 +101,11 @@ public final class SecurityPoliciesTest {
   @Test
   public void testHasSignature_succeedsIfPackageNameAndSignaturesMatch()
       throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
     policy = SecurityPolicies.hasSignature(packageManager, OTHER_UID_PACKAGE_NAME, SIG2);
 
     // THEN UID for package that has SIG2 will be authorized
@@ -107,6 +114,14 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testHasSignature_failsIfPackageNameDoesNotMatch() throws Exception {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
+            .setSignatures(SIG1)
+            .build();
+
+    installPackages(OTHER_UID_SAME_SIGNATURE, info);
+
     policy = SecurityPolicies.hasSignature(packageManager, appContext.getPackageName(), SIG1);
 
     // THEN UID for package that has SIG1 but different package name will not be authorized
@@ -116,6 +131,11 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testHasSignature_failsIfSignatureDoesNotMatch() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
     policy = SecurityPolicies.hasSignature(packageManager, OTHER_UID_PACKAGE_NAME, SIG1);
 
     // THEN UID for package that doesn't have SIG1 will not be authorized
@@ -126,6 +146,11 @@ public final class SecurityPoliciesTest {
   @Test
   public void testOneOfSignatures_succeedsIfPackageNameAndSignaturesMatch()
       throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
     policy =
         SecurityPolicies.oneOfSignatures(
             packageManager, OTHER_UID_PACKAGE_NAME, ImmutableList.of(SIG2));
@@ -136,6 +161,14 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testOneOfSignature_failsIfAllSignaturesDoNotMatch() throws Exception {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
+            .setSignatures(SIG1)
+            .build();
+
+    installPackages(OTHER_UID_SAME_SIGNATURE, info);
+
     policy =
         SecurityPolicies.oneOfSignatures(
             packageManager,
@@ -150,11 +183,14 @@ public final class SecurityPoliciesTest {
   @Test
   public void testOneOfSignature_succeedsIfPackageNameAndOneOfSignaturesMatch()
       throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
     policy =
         SecurityPolicies.oneOfSignatures(
-            packageManager,
-            OTHER_UID_PACKAGE_NAME,
-            ImmutableList.of(SIG1, SIG2));
+            packageManager, OTHER_UID_PACKAGE_NAME, ImmutableList.of(SIG1, SIG2));
 
     // THEN UID for package that has SIG2 will be authorized
     assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
@@ -164,11 +200,170 @@ public final class SecurityPoliciesTest {
   public void testHasSignature_failsIfUidUnknown() throws Exception {
     policy =
         SecurityPolicies.hasSignature(
-          packageManager,
-          appContext.getPackageName(),
-          SIG1);
+            packageManager,
+            appContext.getPackageName(),
+            SIG1);
 
     assertThat(policy.checkAuthorization(OTHER_UID_UNKNOWN).getCode())
-      .isEqualTo(Status.UNAUTHENTICATED.getCode());
+        .isEqualTo(Status.UNAUTHENTICATED.getCode());
+  }
+
+  @Test
+  public void testHasPermissions_sharedUserId_succeedsIfAllPackageHavePermissions()
+      throws Exception {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .setPermission(ACCESS_COARSE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .build();
+
+    PackageInfo infoSamePerms =
+        newBuilder()
+            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .setPermission(ACCESS_COARSE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .build();
+
+    installPackages(OTHER_UID, info, infoSamePerms);
+
+    policy =
+        SecurityPolicies.hasPermissions(
+            packageManager, ImmutableSet.of(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION));
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  public void testHasPermissions_sharedUserId_failsIfOnePackageHasNoPermissions() throws Exception {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .build();
+
+    PackageInfo infoNoPerms =
+        newBuilder()
+            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, 0)
+            .build();
+
+    installPackages(OTHER_UID, info, infoNoPerms);
+
+    policy = SecurityPolicies.hasPermissions(packageManager, ImmutableSet.of(ACCESS_FINE_LOCATION));
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
+        .contains("does not have permission");
+  }
+
+  @Test
+  public void testHasPermissions_succeedsIfPackageHasPermissions() throws Exception {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .setPermission(ACCESS_COARSE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .setPermission(WRITE_EXTERNAL_STORAGE, 0)
+            .build();
+
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.hasPermissions(
+            packageManager, ImmutableSet.of(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION));
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  public void testHasPermissions_failsIfPackageDoesNotHaveOnePermission() throws Exception {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .setPermission(ACCESS_COARSE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .setPermission(WRITE_EXTERNAL_STORAGE, 0)
+            .build();
+
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.hasPermissions(
+            packageManager, ImmutableSet.of(ACCESS_FINE_LOCATION, WRITE_EXTERNAL_STORAGE));
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
+        .contains("does not have permission");
+  }
+
+  @Test
+  public void testHasPermissions_failsIfPackageDoesNotHavePermissions() throws Exception {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_PACKAGE_NAME)
+            .setPermission(ACCESS_FINE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .setPermission(ACCESS_COARSE_LOCATION, REQUESTED_PERMISSION_GRANTED)
+            .setPermission(WRITE_EXTERNAL_STORAGE, 0)
+            .build();
+
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.hasPermissions(packageManager, ImmutableSet.of(WRITE_EXTERNAL_STORAGE));
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
+        .contains("does not have permission");
+  }
+
+  private static PackageInfoBuilder newBuilder() {
+    return new PackageInfoBuilder();
+  }
+
+  private static class PackageInfoBuilder {
+    private String packageName;
+    private Signature[] signatures;
+    private final HashMap<String, Integer> permissions = new HashMap<>();
+
+    public PackageInfoBuilder setPackageName(String packageName) {
+      this.packageName = packageName;
+      return this;
+    }
+
+    public PackageInfoBuilder setPermission(String permissionName, int permissionFlag) {
+      this.permissions.put(permissionName, permissionFlag);
+      return this;
+    }
+
+    public PackageInfoBuilder setSignatures(Signature... signatures) {
+      this.signatures = signatures;
+      return this;
+    }
+
+    public PackageInfo build() {
+      checkState(this.packageName != null, "packageName is a mandatory field");
+
+      PackageInfo packageInfo = new PackageInfo();
+
+      packageInfo.packageName = this.packageName;
+
+      if (this.signatures != null) {
+        packageInfo.signatures = this.signatures;
+      }
+
+      if (!this.permissions.isEmpty()) {
+        String[] requestedPermissions =
+            this.permissions.keySet().toArray(new String[this.permissions.size()]);
+        int[] requestedPermissionsFlags = new int[requestedPermissions.length];
+
+        for (int i = 0; i < requestedPermissions.length; i++) {
+          requestedPermissionsFlags[i] = this.permissions.get(requestedPermissions[i]);
+        }
+
+        packageInfo.requestedPermissions = requestedPermissions;
+        packageInfo.requestedPermissionsFlags = requestedPermissionsFlags;
+      }
+
+      return packageInfo;
+    }
   }
 }
