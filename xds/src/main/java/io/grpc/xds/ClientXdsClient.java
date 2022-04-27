@@ -1867,11 +1867,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       Locality locality =  parseLocality(localityLbEndpointsProto.getLocality());
       localityLbEndpointsMap.put(locality, localityLbEndpoints);
       if (!priorities.containsKey(priority)) {
-        priorities.put(localityLbEndpoints.priority(), new HashSet<>());
+        priorities.put(priority, new HashSet<>());
       }
       if (!priorities.get(priority).add(locality)) {
-        throw new ResourceInvalidException("duplicate locality " + locality
-            + " for priority:" + priority);
+        throw new ResourceInvalidException("ClusterLoadAssignment has duplicate locality:"
+            + locality + " for priority:" + priority);
       }
     }
     if (priorities.size() != maxPriority + 1) {
