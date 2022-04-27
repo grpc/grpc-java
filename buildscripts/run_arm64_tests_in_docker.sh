@@ -14,6 +14,7 @@ fi
 cat <<EOF >> "${grpc_java_dir}/gradle.properties"
 skipAndroid=true
 skipCodegen=true
+org.gradle.parallel=true
 org.gradle.jvmargs=-Xmx1024m
 EOF
 
