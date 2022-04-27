@@ -10,7 +10,11 @@ else
   DOCKER_ARGS=
 fi
 
-export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xms128m -Xmx1024m'"
+
+cat <<EOF >> "${grpc_java_dir}/gradle.properties"
+org.gradle.jvmargs=-Xms128m -Xmx1024m
+EOF
+
 export JAVA_OPTS="-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs"
 
 # build under x64 docker image to save time over building everything under
@@ -19,7 +23,7 @@ export JAVA_OPTS="-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.us
 # avoid further complicating the build.
 docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
   --user "$(id -u):$(id -g)" \
-  -e GRADLE_OPTS -e JAVA_OPTS \
+  -e JAVA_OPTS \
   openjdk:11-jdk-slim-buster \
   ./gradlew build -x test -PskipAndroid=true -PskipCodegen=true
 
@@ -37,6 +41,6 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
 # - set the user.home property to avoid creating a "?" directory under grpc-java
 docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
   --user "$(id -u):$(id -g)" \
-  -e GRADLE_OPTS -e JAVA_OPTS \
+  -e JAVA_OPTS \
   arm64v8/openjdk:11-jdk-slim-buster \
   ./gradlew build -PskipAndroid=true -PskipCodegen=true
