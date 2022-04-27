@@ -100,6 +100,7 @@ import io.opencensus.tags.TagValue;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Tracing;
+import io.opencensus.trace.unsafe.ContextUtils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -1546,7 +1547,6 @@ public abstract class AbstractInteropTest {
         Collections.singleton(streamingRequest), Collections.singleton(goldenStreamingResponse));
   }
 
-  @SuppressWarnings("deprecation")
   @Test(timeout = 10000)
   public void censusContextsPropagated() {
     Assume.assumeTrue("Skip the test because server is not in the same process.", server != null);
@@ -1561,7 +1561,7 @@ public abstract class AbstractInteropTest {
                 .emptyBuilder()
                 .putLocal(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
                 .build());
-    ctx = io.opencensus.trace.unsafe.ContextUtils.withValue(ctx, clientParentSpan);
+    ctx = ContextUtils.withValue(ctx, clientParentSpan);
     Context origCtx = ctx.attach();
     try {
       blockingStub.unaryCall(SimpleRequest.getDefaultInstance());
@@ -1581,7 +1581,7 @@ public abstract class AbstractInteropTest {
       }
       assertTrue("tag not found", tagFound);
 
-      Span span = io.opencensus.trace.unsafe.ContextUtils.getValue(serverCtx);
+      Span span = ContextUtils.getValue(serverCtx);
       assertNotNull(span);
       SpanContext spanContext = span.getContext();
       assertEquals(clientParentSpan.getContext().getTraceId(), spanContext.getTraceId());
