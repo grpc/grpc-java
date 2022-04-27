@@ -253,11 +253,6 @@ public class ManagedChannelRegistryTest {
         throw new AssertionError();
       }
     });
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
-      @Override public ManagedChannelBuilder<?> delegate() {
-        throw new UnsupportedOperationException();
-      }
-    }
 
     registry.register(new BaseProvider(true, 4) {
       @Override
