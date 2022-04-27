@@ -14,7 +14,7 @@ fi
 cat <<EOF >> "${grpc_java_dir}/gradle.properties"
 skipAndroid=true
 skipCodegen=true
-org.gradle.jvmargs=-Xms128m -Xmx1024m
+org.gradle.jvmargs=-Xmx1024m
 EOF
 
 export JAVA_OPTS="-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs"
