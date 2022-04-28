@@ -171,4 +171,24 @@ public final class SecurityPoliciesTest {
     assertThat(policy.checkAuthorization(OTHER_UID_UNKNOWN).getCode())
       .isEqualTo(Status.UNAUTHENTICATED.getCode());
   }
+
+  @Test
+  public void testAllOf_succeedsIfAllSecurityPoliciesAllowed() throws Exception {
+    policy = SecurityPolicies.allOf(SecurityPolicies.internalOnly());
+
+    assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  public void testAllOf_failsIfOneSecurityPoliciesNotAllowed() throws Exception {
+    policy =
+        SecurityPolicies.allOf(
+            SecurityPolicies.internalOnly(),
+            SecurityPolicies.permissionDenied("Not allowed SecurityPolicy"));
+
+    assertThat(policy.checkAuthorization(MY_UID).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(MY_UID).getDescription())
+        .contains("Not allowed SecurityPolicy");
+  }
 }
