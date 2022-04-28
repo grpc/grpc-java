@@ -32,7 +32,6 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import javax.annotation.Nullable;
 
 /**
  * This load balancer acts as a parent for the {@link WeightedTargetLoadBalancer} and configures
@@ -44,8 +43,6 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
   private final GracefulSwitchLoadBalancer switchLb;
-  @Nullable
-  private String currentPolicyName;
 
   WrrLocalityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -83,13 +80,7 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
               wrrLocalityConfig.childPolicy));
     }
 
-    // If this is the first update or the new LB config has a different policy, switch over to it.
-    PolicySelection newPolicySelection = wrrLocalityConfig.childPolicy;
-    if (!newPolicySelection.getProvider().getPolicyName().equals(currentPolicyName)) {
-      switchLb.switchTo(newPolicySelection.getProvider());
-      currentPolicyName = newPolicySelection.getProvider().getPolicyName();
-    }
-
+    switchLb.switchTo(wrrLocalityConfig.childPolicy.getProvider());
     switchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(weightedPolicySelections))
@@ -101,8 +92,6 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
     if (switchLb != null) {
       switchLb.handleNameResolutionError(error);
-    } else {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
     }
   }
 
