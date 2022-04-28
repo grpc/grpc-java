@@ -190,6 +190,37 @@ public final class SecurityPolicies {
   }
 
   /**
+   * Creates a {@link SecurityPolicy} that allows access if and only if *all* of the specified
+   * {@code securityPolicies} allow access.
+   *
+   * @param securityPolicies the security policies that all must allow access.
+   * @throws NullPointerException if any of the inputs are {@code null}.
+   * @throws IllegalArgumentException if {@code securityPolicies} is empty.
+   */
+  public static SecurityPolicy allOf(SecurityPolicy... securityPolicies) {
+    Preconditions.checkNotNull(securityPolicies, "securityPolicies");
+    Preconditions.checkArgument(securityPolicies.length > 0, "securityPolicies must not be empty");
+
+    return allOfSecurityPolicy(securityPolicies);
+  }
+
+  private static SecurityPolicy allOfSecurityPolicy(SecurityPolicy... securityPolicies) {
+    return new SecurityPolicy() {
+      @Override
+      public Status checkAuthorization(int uid) {
+        for (SecurityPolicy policy : securityPolicies) {
+          Status checkAuth = policy.checkAuthorization(uid);
+          if (!checkAuth.isOk()) {
+            return checkAuth;
+          }
+        }
+
+        return Status.OK;
+      }
+    };
+  }
+
+  /**
    * Creates a {@link SecurityPolicy} which checks if the caller has all of the given permissions
    * from {@code permissions}.
    *
