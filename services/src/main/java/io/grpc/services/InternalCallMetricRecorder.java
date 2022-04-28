@@ -16,10 +16,6 @@
 
 package io.grpc.services;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
-import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.Context;
 import io.grpc.Internal;
 import java.util.Map;
@@ -33,30 +29,6 @@ public final class InternalCallMetricRecorder {
 
   public static final Context.Key<CallMetricRecorder> CONTEXT_KEY = CallMetricRecorder.CONTEXT_KEY;
 
-  @AutoValue
-  public abstract static class CallMetricReport {
-
-    public abstract double cpuUtilization();
-
-    public abstract double memoryUtilization();
-
-    public abstract ImmutableMap<String, Double> requestCostMetrics();
-
-    public abstract ImmutableMap<String, Double> utilizationMetrics();
-
-    /**
-     *  Create a report for backend metrics, only for grpc usage.
-     */
-    static CallMetricReport create(double cpuUtilization, double memoryUtilization,
-                                          ImmutableMap<String, Double> requestCostMetrics,
-                                          ImmutableMap<String, Double> utilizationMetrics) {
-      checkNotNull(requestCostMetrics, "requestCostMetrics");
-      checkNotNull(utilizationMetrics, "utilizationMetrics");
-      return new AutoValue_InternalCallMetricRecorder_CallMetricReport(cpuUtilization,
-          memoryUtilization, requestCostMetrics, utilizationMetrics);
-    }
-  }
-
   // Prevent instantiation.
   private InternalCallMetricRecorder() {
   }
@@ -69,7 +41,7 @@ public final class InternalCallMetricRecorder {
     return recorder.finalizeAndDump();
   }
 
-  public static CallMetricReport finalizeAndDump2(CallMetricRecorder recorder) {
+  public static CallMetricRecorder.CallMetricReport finalizeAndDump2(CallMetricRecorder recorder) {
     return recorder.finalizeAndDump2();
   }
 }

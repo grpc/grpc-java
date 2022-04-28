@@ -16,6 +16,9 @@
 
 package io.grpc.services;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Context;
@@ -44,6 +47,30 @@ public final class CallMetricRecorder {
   private double cpuUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
   private volatile boolean disabled;
+
+  @AutoValue
+  public abstract static class CallMetricReport {
+
+    public abstract double cpuUtilization();
+
+    public abstract double memoryUtilization();
+
+    public abstract ImmutableMap<String, Double> requestCostMetrics();
+
+    public abstract ImmutableMap<String, Double> utilizationMetrics();
+
+    /**
+     * Create a report for all backend metrics.
+     */
+    static CallMetricReport create(double cpuUtilization, double memoryUtilization,
+                                   ImmutableMap<String, Double> requestCostMetrics,
+                                   ImmutableMap<String, Double> utilizationMetrics) {
+      checkNotNull(requestCostMetrics, "requestCostMetrics");
+      checkNotNull(utilizationMetrics, "utilizationMetrics");
+      return new AutoValue_CallMetricRecorder_CallMetricReport(cpuUtilization,
+          memoryUtilization, requestCostMetrics, utilizationMetrics);
+    }
+  }
 
   /**
    * Returns the call metric recorder attached to the current {@link Context}.  If there is none,
@@ -164,13 +191,13 @@ public final class CallMetricRecorder {
    *
    * @return a per-request ORCA reports containing all saved metrics.
    */
-  InternalCallMetricRecorder.CallMetricReport finalizeAndDump2() {
+  CallMetricReport finalizeAndDump2() {
     Map<String, Double> savedRequestCostMetrics = finalizeAndDump();
     Map<String, Double> savedUtilizationMetrics = utilizationMetrics.get();
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    return InternalCallMetricRecorder.CallMetricReport.create(cpuUtilizationMetric,
+    return CallMetricReport.create(cpuUtilizationMetric,
         memoryUtilizationMetric, ImmutableMap.copyOf(savedRequestCostMetrics),
         ImmutableMap.copyOf(savedUtilizationMetrics)
     );

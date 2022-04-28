@@ -38,20 +38,20 @@ public class CallMetricRecorderTest {
 
   @Test
   public void dumpDumpsAllSavedMetricValues() {
-    recorder.recordUtilizationMetric("cost1", 154353.423);
-    recorder.recordUtilizationMetric("cost2", 0.1367);
-    recorder.recordUtilizationMetric("cost3", 1437.34);
-    recorder.recordCallMetric("util1", 37465.12);
-    recorder.recordCallMetric("util2", 10293.0);
-    recorder.recordCallMetric("util3", 1.0);
+    recorder.recordUtilizationMetric("util1", 154353.423);
+    recorder.recordUtilizationMetric("util2", 0.1367);
+    recorder.recordUtilizationMetric("util3", 1437.34);
+    recorder.recordCallMetric("cost1", 37465.12);
+    recorder.recordCallMetric("cost2", 10293.0);
+    recorder.recordCallMetric("cost3", 1.0);
     recorder.recordCpuUtilizationMetric(0.1928);
     recorder.recordMemoryUtilizationMetric(47.4);
 
-    InternalCallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    CallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.utilizationMetrics())
-        .containsExactly("cost1", 154353.423, "cost2", 0.1367, "cost3", 1437.34);
+        .containsExactly("util1", 154353.423, "util2", 0.1367, "util3", 1437.34);
     Truth.assertThat(dump.requestCostMetrics())
-        .containsExactly("util1", 37465.12, "util2", 10293.0, "util3", 1.0);
+        .containsExactly("cost1", 37465.12, "cost2", 10293.0, "cost3", 1.0);
     Truth.assertThat(dump.cpuUtilization()).isEqualTo(0.1928);
     Truth.assertThat(dump.memoryUtilization()).isEqualTo(47.4);
   }
@@ -76,7 +76,7 @@ public class CallMetricRecorderTest {
     recorder.recordMemoryUtilizationMetric(9384.0);
     recorder.recordUtilizationMetric("util1", 84323.3);
 
-    InternalCallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    CallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.requestCostMetrics())
         .containsExactly("cost1", 4654.67, "cost2", 75.83);
     Truth.assertThat(dump.memoryUtilization()).isEqualTo(9384.0);

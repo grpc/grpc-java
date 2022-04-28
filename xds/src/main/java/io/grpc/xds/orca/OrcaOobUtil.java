@@ -37,6 +37,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -68,6 +69,7 @@ import javax.annotation.Nullable;
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
  * out-of-band backend cost metrics in the format of Open Request Cost Aggregation (ORCA).
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9129")
 public abstract class OrcaOobUtil {
 
   private static final Logger logger = Logger.getLogger(OrcaPerRequestUtil.class.getName());

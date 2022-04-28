@@ -20,6 +20,7 @@ import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
 import io.grpc.Contexts;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -39,6 +40,7 @@ import io.grpc.services.InternalCallMetricRecorder;
  *
  * @since 1.23.0
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9127")
 public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
@@ -88,7 +90,7 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   }
 
   private static OrcaLoadReport fromInternalReport(
-      InternalCallMetricRecorder.CallMetricReport internalReport) {
+      CallMetricRecorder.CallMetricReport internalReport) {
     return OrcaLoadReport.newBuilder()
         .setCpuUtilization(internalReport.cpuUtilization())
         .setMemUtilization(internalReport.memoryUtilization())
