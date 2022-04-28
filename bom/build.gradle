@@ -17,6 +17,7 @@ publishing {
           'grpc-authz',
           'grpc-compiler',
           'grpc-gae-interop-testing-jdk8',
+          'grpc-observability',
         ]
 
         def dependencyManagement = asNode().appendNode('dependencyManagement')
