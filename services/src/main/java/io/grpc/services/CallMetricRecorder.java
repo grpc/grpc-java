@@ -55,16 +55,18 @@ public final class CallMetricRecorder {
 
     public abstract double memoryUtilization();
 
-    public abstract ImmutableMap<String, Double> requestCostMetrics();
+    @SuppressWarnings("AutoValueImmutableFields")
+    public abstract Map<String, Double> requestCostMetrics();
 
-    public abstract ImmutableMap<String, Double> utilizationMetrics();
+    @SuppressWarnings("AutoValueImmutableFields")
+    public abstract Map<String, Double> utilizationMetrics();
 
     /**
      * Create a report for all backend metrics.
      */
     static CallMetricReport create(double cpuUtilization, double memoryUtilization,
-                                   ImmutableMap<String, Double> requestCostMetrics,
-                                   ImmutableMap<String, Double> utilizationMetrics) {
+                                   Map<String, Double> requestCostMetrics,
+                                   Map<String, Double> utilizationMetrics) {
       checkNotNull(requestCostMetrics, "requestCostMetrics");
       checkNotNull(utilizationMetrics, "utilizationMetrics");
       return new AutoValue_CallMetricRecorder_CallMetricReport(cpuUtilization,
