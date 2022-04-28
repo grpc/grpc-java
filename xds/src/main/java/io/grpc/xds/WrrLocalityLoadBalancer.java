@@ -90,16 +90,12 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    if (switchLb != null) {
-      switchLb.handleNameResolutionError(error);
-    }
+    switchLb.handleNameResolutionError(error);
   }
 
   @Override
   public void shutdown() {
-    if (switchLb != null) {
-      switchLb.shutdown();
-    }
+    switchLb.shutdown();
   }
 
   /**
