@@ -2349,10 +2349,11 @@ public abstract class ClientXdsClientTestBase {
 
     // Updated EDS response.
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
-        ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 1),
+        ImmutableList.of(
             mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 1)
+              mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 1),
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                mf.buildLbEndpoint("172.44.2.3", 8080, "healthy", 10), 2, 1)
             ),
         ImmutableList.<Message>of()));
     call.sendResponse(EDS, updatedClusterLoadAssignment, "0", "0001");
