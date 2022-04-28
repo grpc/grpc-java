@@ -53,10 +53,13 @@ public class LegacyLoadBalancerConfigFactoryTest {
 
   @Test
   public void ringHash() throws ResourceInvalidException {
-    Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.RING_HASH).setRingHashLbConfig(
-        RingHashLbConfig.newBuilder()
-            .setMinimumRingSize(UInt64Value.newBuilder().setValue(1).build())
-            .setMaximumRingSize(UInt64Value.newBuilder().setValue(2).build()).build()).build();
+    Cluster cluster = Cluster.newBuilder()
+        .setLbPolicy(LbPolicy.RING_HASH)
+        .setRingHashLbConfig(
+            RingHashLbConfig.newBuilder()
+                .setMinimumRingSize(UInt64Value.of(1))
+                .setMaximumRingSize(UInt64Value.of(2)))
+        .build();
 
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
         LegacyLoadBalancerConfigFactory.newConfig(cluster, true));
@@ -85,9 +88,11 @@ public class LegacyLoadBalancerConfigFactoryTest {
   public void leastRequest() throws ResourceInvalidException {
     System.setProperty("io.grpc.xds.experimentalEnableLeastRequest", "true");
 
-    Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.LEAST_REQUEST)
-        .setLeastRequestLbConfig(LeastRequestLbConfig.newBuilder()
-            .setChoiceCount(UInt32Value.newBuilder().setValue(10).build())).build();
+    Cluster cluster = Cluster.newBuilder()
+        .setLbPolicy(LbPolicy.LEAST_REQUEST)
+        .setLeastRequestLbConfig(
+            LeastRequestLbConfig.newBuilder().setChoiceCount(UInt32Value.of(10)))
+        .build();
 
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
         LegacyLoadBalancerConfigFactory.newConfig(cluster, true));
