@@ -253,7 +253,9 @@ public final class SecurityPoliciesTest {
     assertThat(policy.checkAuthorization(OTHER_UID).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
-        .contains("does not have permission");
+        .contains(ACCESS_FINE_LOCATION);
+    assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
+        .contains(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME);
   }
 
   @Test
@@ -292,7 +294,9 @@ public final class SecurityPoliciesTest {
     assertThat(policy.checkAuthorization(OTHER_UID).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
-        .contains("does not have permission");
+        .contains(WRITE_EXTERNAL_STORAGE);
+    assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
+        .contains(OTHER_UID_PACKAGE_NAME);
   }
 
   @Test
@@ -312,7 +316,9 @@ public final class SecurityPoliciesTest {
     assertThat(policy.checkAuthorization(OTHER_UID).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
-        .contains("does not have permission");
+        .contains(WRITE_EXTERNAL_STORAGE);
+    assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
+        .contains(OTHER_UID_PACKAGE_NAME);
   }
 
   private static PackageInfoBuilder newBuilder() {
