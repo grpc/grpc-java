@@ -43,8 +43,7 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
 
   private final XdsLogger logger;
   private final Helper helper;
-  @Nullable
-  private GracefulSwitchLoadBalancer switchLb;
+  private final GracefulSwitchLoadBalancer switchLb;
   @Nullable
   private String currentPolicyName;
 
