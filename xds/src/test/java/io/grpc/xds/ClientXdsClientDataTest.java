@@ -1760,7 +1760,11 @@ public class ClientXdsClientDataTest {
         cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("least_request_experimental");
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    @SuppressWarnings("unchecked")
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
   }
 
   @Test

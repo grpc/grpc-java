@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
-import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
@@ -49,8 +48,6 @@ import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
-import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
-import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -155,6 +152,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private final Helper helper;
     private final List<String> clusters = new ArrayList<>();
     private final Map<String, ClusterState> clusterStates = new HashMap<>();
+    private final Map<Locality, Integer> localityWeights = new HashMap<>();
     private PolicySelection endpointLbPolicy;
     private ResolvedAddresses resolvedAddresses;
     private LoadBalancer childLb;
@@ -249,6 +247,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           resolvedAddresses.toBuilder()
               .setLoadBalancingPolicyConfig(childConfig)
               .setAddresses(Collections.unmodifiableList(addresses))
+              .setAttributes(resolvedAddresses.getAttributes().toBuilder()
+                  .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS, localityWeights).build())
               .build());
     }
 
@@ -409,6 +409,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                     "Discard locality {0} with 0 healthy endpoints", locality);
                 continue;
               }
+              localityWeights.put(locality, localityLbInfo.localityWeight());
               if (!prioritizedLocalityWeights.containsKey(priorityName)) {
                 prioritizedLocalityWeights.put(priorityName, new HashMap<Locality, Integer>());
               }
@@ -686,32 +687,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       List<DropOverload> dropOverloads) {
     Map<String, PriorityChildConfig> configs = new HashMap<>();
     for (String priority : prioritizedLocalityWeights.keySet()) {
-      PolicySelection leafPolicy =  endpointLbPolicy;
-      // Depending on the endpoint-level load balancing policy, different LB hierarchy may be
-      // created. If the endpoint-level LB policy is round_robin or least_request_experimental,
-      // it creates a two-level LB hierarchy: a locality-level LB policy that balances load
-      // according to locality weights followed by an endpoint-level LB policy that balances load
-      // between endpoints within the locality. If the endpoint-level LB policy is
-      // ring_hash_experimental, it creates a unified LB policy that balances load by weighing the
-      // product of each endpoint's weight and the weight of the locality it belongs to.
-      if (endpointLbPolicy.getProvider().getPolicyName().equals("round_robin")
-          || endpointLbPolicy.getProvider().getPolicyName().equals("least_request_experimental")) {
-        Map<Locality, Integer> localityWeights = prioritizedLocalityWeights.get(priority);
-        Map<String, WeightedPolicySelection> targets = new HashMap<>();
-        for (Locality locality : localityWeights.keySet()) {
-          int weight = localityWeights.get(locality);
-          WeightedPolicySelection target = new WeightedPolicySelection(weight, endpointLbPolicy);
-          targets.put(localityName(locality), target);
-        }
-        LoadBalancerProvider weightedTargetLbProvider =
-            lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME);
-        WeightedTargetConfig weightedTargetConfig =
-            new WeightedTargetConfig(Collections.unmodifiableMap(targets));
-        leafPolicy = new PolicySelection(weightedTargetLbProvider, weightedTargetConfig);
-      }
       ClusterImplConfig clusterImplConfig =
           new ClusterImplConfig(cluster, edsServiceName, lrsServerInfo, maxConcurrentRequests,
-              dropOverloads, leafPolicy, tlsContext);
+              dropOverloads, endpointLbPolicy, tlsContext);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
       PolicySelection clusterImplPolicy =

@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
@@ -38,6 +39,9 @@ abstract class LegacyLoadBalancerConfigFactory {
   static final String LEAST_REQUEST_FIELD_NAME = "least_request_experimental";
   static final String CHOICE_COUNT_FIELD_NAME = "choiceCount";
 
+  static final String WRR_LOCALITY_FIELD_NAME = "wrr_locality_experimental";
+  static final String CHILD_POLICY_FIELD = "childPolicy";
+
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
    * Cluster}.
@@ -47,19 +51,25 @@ abstract class LegacyLoadBalancerConfigFactory {
   static ImmutableMap<String, ?> newConfig(Cluster cluster, boolean enableLeastRequest)
       throws ResourceInvalidException {
     switch (cluster.getLbPolicy()) {
-      case ROUND_ROBIN:
-        return newRoundRobinConfig();
       case RING_HASH:
         return newRingHashConfig(cluster);
+      case ROUND_ROBIN:
+        return newWrrLocalityConfig(newRoundRobinConfig());
       case LEAST_REQUEST:
         if (enableLeastRequest) {
-          return newLeastRequestConfig(cluster);
+          return newWrrLocalityConfig(newLeastRequestConfig(cluster));
         }
         break;
       default:
     }
     throw new ResourceInvalidException(
         "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
+  }
+
+  private static ImmutableMap<String, ?> newWrrLocalityConfig(
+      ImmutableMap<String, ?> childConfig) {
+    return ImmutableMap.<String, Object>builder().put(WRR_LOCALITY_FIELD_NAME,
+        ImmutableMap.of(CHILD_POLICY_FIELD, ImmutableList.of(childConfig))).build();
   }
 
   // Builds an empty configuration for round robin (it is not configurable).

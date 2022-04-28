@@ -30,6 +30,8 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
+import java.util.List;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -46,9 +48,14 @@ public class LegacyLoadBalancerConfigFactoryTest {
 
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
         LegacyLoadBalancerConfigFactory.newConfig(cluster, true));
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
 
-    assertThat(lbConfig.getPolicyName()).isEqualTo("round_robin");
-    assertThat(lbConfig.getRawConfigValue()).isEmpty();
+    @SuppressWarnings("unchecked")
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+    assertThat(childConfigs).hasSize(1);
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(childConfigs.get(0).getRawConfigValue()).isEmpty();
   }
 
   @Test
@@ -70,7 +77,7 @@ public class LegacyLoadBalancerConfigFactoryTest {
   }
 
   @Test
-  public void ringHash_invalidHash() throws ResourceInvalidException {
+  public void ringHash_invalidHash() {
     Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.RING_HASH).setRingHashLbConfig(
         RingHashLbConfig.newBuilder().setHashFunction(HashFunction.MURMUR_HASH_2)).build();
 
@@ -96,14 +103,20 @@ public class LegacyLoadBalancerConfigFactoryTest {
 
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
         LegacyLoadBalancerConfigFactory.newConfig(cluster, true));
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
 
-    assertThat(lbConfig.getPolicyName()).isEqualTo("least_request_experimental");
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "choiceCount")).isEqualTo(10);
+    @SuppressWarnings("unchecked")
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
+    assertThat(
+        JsonUtil.getNumberAsLong(childConfigs.get(0).getRawConfigValue(), "choiceCount")).isEqualTo(
+        10);
   }
 
 
   @Test
-  public void leastRequest_notEnabled() throws ResourceInvalidException {
+  public void leastRequest_notEnabled() {
     System.setProperty("io.grpc.xds.experimentalEnableLeastRequest", "false");
 
     Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.LEAST_REQUEST).build();
