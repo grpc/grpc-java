@@ -213,7 +213,7 @@ public final class SecurityPolicies {
   private static Status checkPermissions(
       int uid, PackageManager packageManager, ImmutableSet<String> permissions) {
     String[] packages = packageManager.getPackagesForUid(uid);
-    if (packages == null) {
+    if (packages == null || packages.length == 0) {
       return Status.UNAUTHENTICATED.withDescription(
           "Rejected by permission check security policy. No packages found for uid");
     }
