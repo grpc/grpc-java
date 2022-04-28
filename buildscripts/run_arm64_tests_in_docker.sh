@@ -24,10 +24,10 @@ export JAVA_OPTS="-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.us
 # aarch64 emulator. We've already built and tested the protoc binaries
 # so for the rest of the build we will be using "-PskipCodegen=true"
 # avoid further complicating the build.
-docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
-  --user "$(id -u):$(id -g)" -e JAVA_OPTS \
-  openjdk:11-jdk-slim-buster \
-  ./gradlew build -x test
+# docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
+#  --user "$(id -u):$(id -g)" -e JAVA_OPTS \
+#  openjdk:11-jdk-slim-buster \
+#  ./gradlew build -x test
 
 # Build and run java tests under aarch64 image.
 # To be able to run this docker container on x64 machine, one needs to have
