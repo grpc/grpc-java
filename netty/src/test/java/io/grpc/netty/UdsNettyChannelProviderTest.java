@@ -29,7 +29,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelProvider.NewChannelBuilderResult;
 import io.grpc.ManagedChannelRegistryAccessor;
-import io.grpc.Server;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -155,8 +154,8 @@ public class UdsNettyChannelProviderTest {
   private void createUdsServer(String name) throws IOException {
     elg = new EpollEventLoopGroup();
     boss = new EpollEventLoopGroup(1);
-    Server server =
-        cleanupRule.register(NettyServerBuilder.forAddress(new DomainSocketAddress(name))
+    cleanupRule.register(
+        NettyServerBuilder.forAddress(new DomainSocketAddress(name))
             .bossEventLoopGroup(boss)
             .workerEventLoopGroup(elg)
             .channelType(EpollServerDomainSocketChannel.class)
