@@ -2343,6 +2343,29 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void edsDuplicateLocalityInTheSamePriority() {
+    DiscoveryRpcCall call = startResourceWatcher(EDS, EDS_RESOURCE, edsResourceWatcher);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+
+    // Updated EDS response.
+    Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+              mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 1),
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                mf.buildLbEndpoint("172.44.2.3", 8080, "healthy", 10), 2, 1)
+            ),
+        ImmutableList.<Message>of()));
+    call.sendResponse(EDS, updatedClusterLoadAssignment, "0", "0001");
+    String errorMsg = "EDS response ClusterLoadAssignment"
+        + " \'cluster-load-assignment.googleapis.com\' "
+        + "validation error: ClusterLoadAssignment has duplicate "
+        + "locality:Locality{region=region2, zone=zone2, subZone=subzone2} for priority:1";
+    call.verifyRequestNack(EDS, EDS_RESOURCE, "", "0001", NODE, ImmutableList.of(
+        errorMsg));
+  }
+
+  @Test
   public void edsResourceDeletedByCds() {
     String resource = "backend-service.googleapis.com";
     CdsResourceWatcher cdsWatcher = mock(CdsResourceWatcher.class);
