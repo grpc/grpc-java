@@ -17,11 +17,17 @@
 package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
+import io.netty.channel.unix.DomainSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
 
-public class UdsNameResolverProvider extends NameResolverProvider {
+@Internal
+public final class UdsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "unix";
 
@@ -56,5 +62,10 @@ public class UdsNameResolverProvider extends NameResolverProvider {
   @Override
   protected int priority() {
     return 3;
+  }
+
+  @Override
+  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+    return Collections.singleton(DomainSocketAddress.class);
   }
 }

@@ -27,7 +27,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public final class UdsNameResolver extends NameResolver {
+final class UdsNameResolver extends NameResolver {
   private NameResolver.Listener2 listener;
   private final String authority;
 

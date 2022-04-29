@@ -29,7 +29,21 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelProvider.NewChannelBuilderResult;
 import io.grpc.ManagedChannelRegistryAccessor;
+import io.grpc.Server;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.protobuf.SimpleRequest;
+import io.grpc.testing.protobuf.SimpleResponse;
+import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerDomainSocketChannel;
+import io.netty.channel.unix.DomainSocketAddress;
+import java.io.IOException;
+import org.junit.Assume;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -37,7 +51,16 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link UdsNettyChannelProvider}. */
 @RunWith(JUnit4.class)
 public class UdsNettyChannelProviderTest {
+
+  private static final String TEST_SOCKET = "/tmp/test.socket";
+  @Rule
+  public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+
+
   private UdsNettyChannelProvider provider = new UdsNettyChannelProvider();
+
+  private EventLoopGroup elg;
+  private EventLoopGroup boss;
 
   @Test
   public void provided() {
@@ -108,5 +131,51 @@ public class UdsNettyChannelProviderTest {
     assertThat(channel).isNotNull();
     assertThat(channel.authority()).isEqualTo("/sock.sock");
     channel.shutdownNow();
+  }
+
+  @Test
+  public void udsClientServerTestUsingProvider() throws IOException {
+    Assume.assumeTrue(Epoll.isAvailable());
+    createUdsServer(TEST_SOCKET);
+    ManagedChannelBuilder<?> channelBuilder =
+        Grpc.newChannelBuilder("unix://" + TEST_SOCKET, InsecureChannelCredentials.create());
+    SimpleServiceGrpc.SimpleServiceBlockingStub stub =
+        SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
+    assertThat(unaryRpc("buddy", stub)).isEqualTo("Hello buddy");
+  }
+
+  /** Say hello to server. */
+  private static String unaryRpc(
+      String requestMessage, SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub) {
+    SimpleRequest request = SimpleRequest.newBuilder().setRequestMessage(requestMessage).build();
+    SimpleResponse response = blockingStub.unaryRpc(request);
+    return response.getResponseMessage();
+  }
+
+  private void createUdsServer(String name) throws IOException {
+    elg = new EpollEventLoopGroup();
+    boss = new EpollEventLoopGroup(1);
+    Server server =
+        cleanupRule.register(NettyServerBuilder.forAddress(new DomainSocketAddress(name))
+            .bossEventLoopGroup(boss)
+            .workerEventLoopGroup(elg)
+            .channelType(EpollServerDomainSocketChannel.class)
+            .addService(new SimpleServiceImpl())
+            .directExecutor()
+            .build()
+            .start());
+  }
+
+  private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
+
+    @Override
+    public void unaryRpc(SimpleRequest req, StreamObserver<SimpleResponse> responseObserver) {
+      SimpleResponse response =
+          SimpleResponse.newBuilder()
+              .setResponseMessage("Hello " + req.getRequestMessage())
+              .build();
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+    }
   }
 }
