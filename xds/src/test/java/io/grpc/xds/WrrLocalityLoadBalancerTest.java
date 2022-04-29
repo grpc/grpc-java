@@ -43,19 +43,23 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.SocketAddress;
 import java.util.Map;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link WrrLocalityLoadBalancerProvider}.
  */
 @RunWith(JUnit4.class)
 public class WrrLocalityLoadBalancerTest {
+  @Rule
+  public final MockitoRule mockito = MockitoJUnit.rule();
 
   @Mock
   private LoadBalancerProvider mockProvider;
@@ -73,13 +77,12 @@ public class WrrLocalityLoadBalancerTest {
   @Captor
   private ArgumentCaptor<SubchannelPicker> errorPickerCaptor;
 
-  private EquivalentAddressGroup eag = new EquivalentAddressGroup(mockSocketAddress);
+  private final EquivalentAddressGroup eag = new EquivalentAddressGroup(mockSocketAddress);
 
   private WrrLocalityLoadBalancer loadBalancer;
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     when(mockProvider.newLoadBalancer(isA(Helper.class))).thenReturn(mockChildLb);
     when(mockProvider.getPolicyName()).thenReturn("round_robin");
     loadBalancer = new WrrLocalityLoadBalancer(mockHelper);
