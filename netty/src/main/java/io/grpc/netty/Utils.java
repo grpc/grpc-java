@@ -89,9 +89,6 @@ class Utils {
       = new DefaultEventLoopGroupResource(1, "grpc-nio-boss-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> NIO_WORKER_EVENT_LOOP_GROUP
       = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", EventLoopGroupType.NIO);
-  public static final Resource<EventLoopGroup> UDS_CHANNELS_EVENT_LOOP_GROUP =
-      isEpollAvailable() ? new DefaultEventLoopGroupResource(1, "UdsChannels",
-          EventLoopGroupType.EPOLL) : null;
 
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;

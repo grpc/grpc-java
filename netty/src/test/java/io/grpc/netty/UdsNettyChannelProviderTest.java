@@ -54,7 +54,6 @@ public class UdsNettyChannelProviderTest {
 
   @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
 
-  private static final String TEST_SOCKET = "/test.socket";
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
@@ -151,7 +150,7 @@ public class UdsNettyChannelProviderTest {
   @Test
   public void udsClientServerTestUsingProvider() throws IOException {
     Assume.assumeTrue(Utils.isEpollAvailable());
-    String socketPath = tempFolder.getRoot().getAbsolutePath() + TEST_SOCKET;
+    String socketPath = tempFolder.getRoot().getAbsolutePath() + "/test.socket";
     createUdsServer(socketPath);
     ManagedChannelBuilder<?> channelBuilder =
         Grpc.newChannelBuilder("unix://" + socketPath, InsecureChannelCredentials.create());

@@ -72,13 +72,17 @@ public final class UdsNettyChannelProvider extends ManagedChannelProvider {
       ChannelCredentials creds,
       CallCredentials callCredentials,
       ProtocolNegotiator.ClientFactory negotiator) {
+    if (Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE == null) {
+      throw new IllegalStateException("Epoll is not available");
+    }
     String targetPath = UdsNameResolverProvider.getTargetPathFromUri(URI.create(target));
     NettyChannelBuilder builder =
         new NettyChannelBuilder(
             new DomainSocketAddress(targetPath), creds, callCredentials, negotiator);
     builder =
         builder
-            .eventLoopGroupPool(SharedResourcePool.forResource(Utils.UDS_CHANNELS_EVENT_LOOP_GROUP))
+            .eventLoopGroupPool(
+                SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP))
             .channelType(Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE);
     return builder;
   }

@@ -22,13 +22,14 @@ dependencies {
             libraries.guava,
             libraries.errorprone,
             libraries.perfmark,
-            ("io.netty:netty-transport-native-epoll:${nettyVersion}")
+            ("io.netty:netty-transport-native-unix-common:${nettyVersion}")
 
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-testing-proto')
+            project(':grpc-testing-proto'),
+            ("io.netty:netty-transport-native-epoll:${nettyVersion}")
     testRuntimeOnly libraries.netty_tcnative,
             libraries.conscrypt,
             libraries.netty_epoll
