@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
@@ -28,9 +28,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.protobuf.ProtoUtils;
-import io.grpc.services.CallMetricRecorder;
-import io.grpc.services.InternalCallMetricRecorder;
-import java.util.Map;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -40,7 +37,7 @@ import java.util.Map;
  *
  * @since 1.23.0
  */
-final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
+public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
       new OrcaMetricReportingServerInterceptor();
@@ -48,7 +45,7 @@ final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
   @VisibleForTesting
   static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
       Metadata.Key.of(
-          "x-endpoint-load-metrics-bin",
+          "endpoint-load-metrics-bin",
           ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
   @VisibleForTesting
@@ -63,22 +60,18 @@ final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
   public <ReqT, RespT> Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     Context ctx = Context.current();
-    CallMetricRecorder callMetricRecorder = InternalCallMetricRecorder.CONTEXT_KEY.get(ctx);
+    CallMetricRecorder callMetricRecorder = CallMetricRecorder.CONTEXT_KEY.get(ctx);
     if (callMetricRecorder == null) {
-      callMetricRecorder = InternalCallMetricRecorder.newCallMetricRecorder();
-      ctx = ctx.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+      callMetricRecorder = new CallMetricRecorder();
+      ctx = ctx.withValue(CallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
     }
     final CallMetricRecorder finalCallMetricRecorder = callMetricRecorder;
     ServerCall<ReqT, RespT> trailerAttachingCall =
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
-            Map<String, Double> metricValues =
-                InternalCallMetricRecorder.finalizeAndDump(finalCallMetricRecorder);
-            // Only attach a metric report if there are some metric values to be reported.
-            if (!metricValues.isEmpty()) {
-              OrcaLoadReport report =
-                  OrcaLoadReport.newBuilder().putAllRequestCost(metricValues).build();
+            OrcaLoadReport report = finalCallMetricRecorder.finalizeAndDump();
+            if (!report.equals(OrcaLoadReport.getDefaultInstance())) {
               trailers.put(ORCA_ENDPOINT_LOAD_METRICS_KEY, report);
             }
             super.close(status, trailers);

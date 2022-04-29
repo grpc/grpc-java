@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -34,7 +34,7 @@ import java.util.List;
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
  * per-request backend cost metrics in the format of Open Request Cost Aggregation (ORCA).
  */
-abstract class OrcaPerRequestUtil {
+public abstract class OrcaPerRequestUtil {
   private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER = new ClientStreamTracer() {};
   private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
       new ClientStreamTracer.Factory() {
@@ -67,7 +67,7 @@ abstract class OrcaPerRequestUtil {
   }
 
   /**
-   * Creates a new {@link ClientStreamTracer.Factory} with provided {@link
+   * Creates a new {@link io.grpc.ClientStreamTracer.Factory} with provided {@link
    * OrcaPerRequestReportListener} installed to receive callback when a per-request ORCA report is
    * received.
    *
@@ -93,7 +93,7 @@ abstract class OrcaPerRequestUtil {
       OrcaPerRequestReportListener listener);
 
   /**
-   * Creates a new {@link ClientStreamTracer.Factory} with provided {@link
+   * Creates a new {@link io.grpc.ClientStreamTracer.Factory} with provided {@link
    * OrcaPerRequestReportListener} installed to receive callback when a per-request ORCA report is
    * received.
    *

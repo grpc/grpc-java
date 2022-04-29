@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -68,7 +68,7 @@ import javax.annotation.Nullable;
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
  * out-of-band backend cost metrics in the format of Open Request Cost Aggregation (ORCA).
  */
-abstract class OrcaOobUtil {
+public abstract class OrcaOobUtil {
 
   private static final Logger logger = Logger.getLogger(OrcaPerRequestUtil.class.getName());
   private static final OrcaOobUtil DEFAULT_INSTANCE =
@@ -95,7 +95,8 @@ abstract class OrcaOobUtil {
   }
 
   /**
-   * Creates a new {@link LoadBalancer.Helper} with provided {@link OrcaOobReportListener} installed
+   * Creates a new {@link io.grpc.LoadBalancer.Helper} with provided
+   * {@link OrcaOobReportListener} installed
    * to receive callback when an out-of-band ORCA report is received.
    *
    * <p>Example usages:
@@ -197,9 +198,9 @@ abstract class OrcaOobUtil {
   }
 
   /**
-   * Blueprint for the wrapper that wraps a {@link LoadBalancer.Helper} with the capability of
-   * allowing {@link LoadBalancer}s interested in receiving out-of-band ORCA reports to update the
-   * reporting configuration such as reporting interval.
+   * Blueprint for the wrapper that wraps a {@link io.grpc.LoadBalancer.Helper} with the capability
+   * of allowing {@link LoadBalancer}s interested in receiving out-of-band ORCA reports to update
+   * the reporting configuration such as reporting interval.
    */
   public abstract static class OrcaReportingHelperWrapper {
 
@@ -220,8 +221,8 @@ abstract class OrcaOobUtil {
     public abstract void setReportingConfig(OrcaReportingConfig config);
 
     /**
-     * Returns a wrapped {@link LoadBalancer.Helper}. Subchannels created through it will retrieve
-     * ORCA load reports if the server supports it.
+     * Returns a wrapped {@link io.grpc.LoadBalancer.Helper}. Subchannels created through it will
+     * retrieve ORCA load reports if the server supports it.
      */
     public abstract LoadBalancer.Helper asHelper();
   }
