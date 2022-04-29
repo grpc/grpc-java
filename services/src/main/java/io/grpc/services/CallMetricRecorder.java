@@ -19,7 +19,6 @@ package io.grpc.services;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
@@ -50,15 +49,15 @@ public final class CallMetricRecorder {
   public static final class CallMetricReport {
     private double cpuUtilization;
     private double memoryUtilization;
-    private ImmutableMap<String, Double> requestCostMetrics;
-    private ImmutableMap<String, Double> utilizationMetrics;
+    private Map<String, Double> requestCostMetrics;
+    private Map<String, Double> utilizationMetrics;
 
     /**
      * Create a report for all backend metrics.
      */
     CallMetricReport(double cpuUtilization, double memoryUtilization,
-                                   ImmutableMap<String, Double> requestCostMetrics,
-                                   ImmutableMap<String, Double> utilizationMetrics) {
+                                   Map<String, Double> requestCostMetrics,
+                                   Map<String, Double> utilizationMetrics) {
       this.cpuUtilization = cpuUtilization;
       this.memoryUtilization = memoryUtilization;
       this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
@@ -208,8 +207,8 @@ public final class CallMetricRecorder {
       savedUtilizationMetrics = Collections.emptyMap();
     }
     return new CallMetricReport(cpuUtilizationMetric,
-        memoryUtilizationMetric, ImmutableMap.copyOf(savedRequestCostMetrics),
-        ImmutableMap.copyOf(savedUtilizationMetrics)
+        memoryUtilizationMetric, Collections.unmodifiableMap(savedRequestCostMetrics),
+        Collections.unmodifiableMap(savedUtilizationMetrics)
     );
   }
 
