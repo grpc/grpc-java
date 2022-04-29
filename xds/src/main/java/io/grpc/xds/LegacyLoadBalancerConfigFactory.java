@@ -88,7 +88,7 @@ abstract class LegacyLoadBalancerConfigFactory {
       configBuilder.put(MAX_RING_SIZE_FIELD_NAME,
           ((Long) lbConfig.getMaximumRingSize().getValue()).doubleValue());
     }
-    return ImmutableMap.of(RING_HASH_FIELD_NAME, configBuilder.build());
+    return ImmutableMap.of(RING_HASH_FIELD_NAME, configBuilder.buildOrThrow());
   }
 
   // Builds a new least request config.
@@ -100,6 +100,6 @@ abstract class LegacyLoadBalancerConfigFactory {
       configBuilder.put(CHOICE_COUNT_FIELD_NAME,
           ((Integer) lbConfig.getChoiceCount().getValue()).doubleValue());
     }
-    return ImmutableMap.of(LEAST_REQUEST_FIELD_NAME, configBuilder.build());
+    return ImmutableMap.of(LEAST_REQUEST_FIELD_NAME, configBuilder.buildOrThrow());
   }
 }

@@ -250,14 +250,14 @@ final class XdsNameResolver extends NameResolver {
         rawRetryPolicy.put(
             "perAttemptRecvTimeout", Durations.toString(retryPolicy.perAttemptRecvTimeout()));
       }
-      methodConfig.put("retryPolicy", rawRetryPolicy.build());
+      methodConfig.put("retryPolicy", rawRetryPolicy.buildOrThrow());
     }
     if (timeoutNano != null) {
       String timeout = timeoutNano / 1_000_000_000.0 + "s";
       methodConfig.put("timeout", timeout);
     }
     return Collections.singletonMap(
-        "methodConfig", Collections.singletonList(methodConfig.build()));
+        "methodConfig", Collections.singletonList(methodConfig.buildOrThrow()));
   }
 
   @VisibleForTesting
@@ -277,7 +277,7 @@ final class XdsNameResolver extends NameResolver {
     Map<String, ?> rawServiceConfig = ImmutableMap.of(
         "loadBalancingConfig",
         ImmutableList.of(ImmutableMap.of(
-            "cluster_manager_experimental", ImmutableMap.of("childPolicy", childPolicy.build()))));
+            "cluster_manager_experimental", ImmutableMap.of("childPolicy", childPolicy.buildOrThrow()))));
 
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
@@ -996,7 +996,7 @@ final class XdsNameResolver extends NameResolver {
                 "childPolicy",
                 ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
             .put("childPolicyConfigTargetFieldName", "cluster")
-            .build();
+            .buildOrThrow();
         return ImmutableMap.of("rls_experimental", rlsConfig);
       }
     }

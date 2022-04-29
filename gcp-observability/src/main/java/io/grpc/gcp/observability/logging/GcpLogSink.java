@@ -144,7 +144,7 @@ public class GcpLogSink implements Sink {
     if (customTags != null) {
       tagsBuilder.putAll(customTags);
     }
-    return tagsBuilder.build();
+    return tagsBuilder.buildOrThrow();
   }
 
   @VisibleForTesting

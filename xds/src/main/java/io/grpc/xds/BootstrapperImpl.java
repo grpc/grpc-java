@@ -245,7 +245,7 @@ class BootstrapperImpl extends Bootstrapper {
         authorityInfoMapBuilder.put(
             authorityName, AuthorityInfo.create(clientListnerTemplate, authorityServers));
       }
-      builder.authorities(authorityInfoMapBuilder.build());
+      builder.authorities(authorityInfoMapBuilder.buildOrThrow());
     }
 
     return builder.build();

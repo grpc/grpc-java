@@ -2093,9 +2093,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
               : getSubscribedResourcesMap(type).entrySet()) {
             metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
           }
-          metadataSnapshot.put(type, metadataMap.build());
+          metadataSnapshot.put(type, metadataMap.buildOrThrow());
         }
-        future.set(metadataSnapshot.build());
+        future.set(metadataSnapshot.buildOrThrow());
       }
     });
     return future;
