@@ -36,14 +36,15 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerDomainSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.io.IOException;
+import org.junit.After;
 import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -51,7 +52,9 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class UdsNettyChannelProviderTest {
 
-  private static final String TEST_SOCKET = "/tmp/test.socket";
+  @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
+
+  private static final String TEST_SOCKET = "/test.socket";
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
@@ -60,6 +63,16 @@ public class UdsNettyChannelProviderTest {
 
   private EventLoopGroup elg;
   private EventLoopGroup boss;
+
+  @After
+  public void tearDown() {
+    if (elg != null) {
+      elg.shutdownGracefully();
+    }
+    if (boss != null) {
+      boss.shutdownGracefully();
+    }
+  }
 
   @Test
   public void provided() {
@@ -123,6 +136,7 @@ public class UdsNettyChannelProviderTest {
 
   @Test
   public void managedChannelRegistry_newChannelBuilder() {
+    Assume.assumeTrue(Utils.isEpollAvailable());
     ManagedChannelBuilder<?> managedChannelBuilder
             = Grpc.newChannelBuilder("unix:///sock.sock", InsecureChannelCredentials.create());
     assertThat(managedChannelBuilder).isNotNull();
@@ -134,10 +148,11 @@ public class UdsNettyChannelProviderTest {
 
   @Test
   public void udsClientServerTestUsingProvider() throws IOException {
-    Assume.assumeTrue(Epoll.isAvailable());
-    createUdsServer(TEST_SOCKET);
+    Assume.assumeTrue(Utils.isEpollAvailable());
+    String socketPath = tempFolder.getRoot().getAbsolutePath() + TEST_SOCKET;
+    createUdsServer(socketPath);
     ManagedChannelBuilder<?> channelBuilder =
-        Grpc.newChannelBuilder("unix://" + TEST_SOCKET, InsecureChannelCredentials.create());
+        Grpc.newChannelBuilder("unix://" + socketPath, InsecureChannelCredentials.create());
     SimpleServiceGrpc.SimpleServiceBlockingStub stub =
         SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
     assertThat(unaryRpc("buddy", stub)).isEqualTo("Hello buddy");

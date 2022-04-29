@@ -44,7 +44,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.ServerChannel;
-import io.netty.channel.epoll.Epoll;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -91,7 +90,7 @@ class Utils {
   public static final Resource<EventLoopGroup> NIO_WORKER_EVENT_LOOP_GROUP
       = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> UDS_CHANNELS_EVENT_LOOP_GROUP =
-      Epoll.isAvailable() ? new DefaultEventLoopGroupResource(1, "UdsChannels",
+      isEpollAvailable() ? new DefaultEventLoopGroupResource(1, "UdsChannels",
           EventLoopGroupType.EPOLL) : null;
 
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
@@ -109,6 +108,7 @@ class Utils {
 
   public static final ChannelFactory<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_FACTORY;
   public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
+  public static final Class<? extends Channel> EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE;
 
   @Nullable
   private static final Constructor<? extends EventLoopGroup> EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR;
@@ -117,6 +117,7 @@ class Utils {
     // Decide default channel types and EventLoopGroup based on Epoll availability
     if (isEpollAvailable()) {
       DEFAULT_CLIENT_CHANNEL_TYPE = epollChannelType();
+      EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE = epollDomainSocketChannelType();
       DEFAULT_SERVER_CHANNEL_FACTORY = new ReflectiveChannelFactory<>(epollServerChannelType());
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = epollEventLoopGroupConstructor();
       DEFAULT_BOSS_EVENT_LOOP_GROUP
@@ -127,6 +128,7 @@ class Utils {
       logger.log(Level.FINE, "Epoll is not available, using Nio.", getEpollUnavailabilityCause());
       DEFAULT_SERVER_CHANNEL_FACTORY = nioServerChannelFactory();
       DEFAULT_CLIENT_CHANNEL_TYPE = NioSocketChannel.class;
+      EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE = null;
       DEFAULT_BOSS_EVENT_LOOP_GROUP = NIO_BOSS_EVENT_LOOP_GROUP;
       DEFAULT_WORKER_EVENT_LOOP_GROUP = NIO_WORKER_EVENT_LOOP_GROUP;
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = null;
@@ -328,6 +330,17 @@ class Utils {
       return channelType;
     } catch (ClassNotFoundException e) {
       throw new RuntimeException("Cannot load EpollSocketChannel", e);
+    }
+  }
+
+  // Must call when epoll is available
+  private static Class<? extends Channel> epollDomainSocketChannelType() {
+    try {
+      Class<? extends Channel> channelType = Class
+          .forName("io.netty.channel.epoll.EpollDomainSocketChannel").asSubclass(Channel.class);
+      return channelType;
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Cannot load EpollDomainSocketChannel", e);
     }
   }
 

@@ -22,7 +22,6 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.internal.SharedResourcePool;
-import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -80,7 +79,7 @@ public final class UdsNettyChannelProvider extends ManagedChannelProvider {
     builder =
         builder
             .eventLoopGroupPool(SharedResourcePool.forResource(Utils.UDS_CHANNELS_EVENT_LOOP_GROUP))
-            .channelType(EpollDomainSocketChannel.class);
+            .channelType(Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE);
     return builder;
   }
 

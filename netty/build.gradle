@@ -17,12 +17,12 @@ evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     api project(':grpc-core'),
-            libraries.netty,
-            libraries.netty_epoll
+            libraries.netty
     implementation libraries.netty_proxy_handler,
             libraries.guava,
             libraries.errorprone,
-            libraries.perfmark
+            libraries.perfmark,
+            ("io.netty:netty-transport-native-epoll:${nettyVersion}")
 
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
@@ -30,7 +30,8 @@ dependencies {
             project(':grpc-testing'),
             project(':grpc-testing-proto')
     testRuntimeOnly libraries.netty_tcnative,
-            libraries.conscrypt
+            libraries.conscrypt,
+            libraries.netty_epoll
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     alpnagent libraries.jetty_alpn_agent
 }
