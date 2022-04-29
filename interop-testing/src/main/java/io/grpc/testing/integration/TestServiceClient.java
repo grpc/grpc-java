@@ -480,7 +480,7 @@ public class TestServiceClient {
     }
   }
 
-  private class Tester extends AbstractInteropTest {
+  private class Tester extends NewAbstractInteropTest {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
       boolean useGeneric = false;
