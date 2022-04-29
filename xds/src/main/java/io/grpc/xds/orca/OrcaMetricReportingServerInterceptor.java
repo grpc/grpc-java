@@ -20,6 +20,7 @@ import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
 import io.grpc.Contexts;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -28,6 +29,8 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.protobuf.ProtoUtils;
+import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.InternalCallMetricRecorder;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -37,6 +40,7 @@ import io.grpc.protobuf.ProtoUtils;
  *
  * @since 1.23.0
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9127")
 public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
@@ -60,17 +64,18 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   public <ReqT, RespT> Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     Context ctx = Context.current();
-    CallMetricRecorder callMetricRecorder = CallMetricRecorder.CONTEXT_KEY.get(ctx);
+    CallMetricRecorder callMetricRecorder = InternalCallMetricRecorder.CONTEXT_KEY.get(ctx);
     if (callMetricRecorder == null) {
-      callMetricRecorder = new CallMetricRecorder();
-      ctx = ctx.withValue(CallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+      callMetricRecorder = InternalCallMetricRecorder.newCallMetricRecorder();
+      ctx = ctx.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
     }
     final CallMetricRecorder finalCallMetricRecorder = callMetricRecorder;
     ServerCall<ReqT, RespT> trailerAttachingCall =
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
-            OrcaLoadReport report = finalCallMetricRecorder.finalizeAndDump();
+            OrcaLoadReport report = fromInternalReport(
+                InternalCallMetricRecorder.finalizeAndDump2(finalCallMetricRecorder));
             if (!report.equals(OrcaLoadReport.getDefaultInstance())) {
               trailers.put(ORCA_ENDPOINT_LOAD_METRICS_KEY, report);
             }
@@ -82,5 +87,15 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         trailerAttachingCall,
         headers,
         next);
+  }
+
+  private static OrcaLoadReport fromInternalReport(
+      CallMetricRecorder.CallMetricReport internalReport) {
+    return OrcaLoadReport.newBuilder()
+        .setCpuUtilization(internalReport.getCpuUtilization())
+        .setMemUtilization(internalReport.getMemoryUtilization())
+        .putAllUtilization(internalReport.getUtilizationMetrics())
+        .putAllRequestCost(internalReport.getRequestCostMetrics())
+        .build();
   }
 }

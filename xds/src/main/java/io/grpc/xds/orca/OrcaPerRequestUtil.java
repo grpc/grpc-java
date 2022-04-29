@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.internal.ForwardingClientStreamTracer;
@@ -34,6 +35,7 @@ import java.util.List;
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
  * per-request backend cost metrics in the format of Open Request Cost Aggregation (ORCA).
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9128")
 public abstract class OrcaPerRequestUtil {
   private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER = new ClientStreamTracer() {};
   private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
@@ -195,7 +197,7 @@ public abstract class OrcaPerRequestUtil {
     @VisibleForTesting
     static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
         Metadata.Key.of(
-            "x-endpoint-load-metrics-bin",
+            "endpoint-load-metrics-bin",
             ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
     private static final CallOptions.Key<OrcaReportBroker> ORCA_REPORT_BROKER_KEY =

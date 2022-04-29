@@ -36,6 +36,8 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -88,7 +90,7 @@ public class OrcaMetricReportingServerInterceptorTest {
                   entry.getValue());
             }
             for (Map.Entry<String, Double> entry : applicationCostMetrics.entrySet()) {
-              CallMetricRecorder.getCurrent().recordRequestCostMetric(entry.getKey(),
+              CallMetricRecorder.getCurrent().recordCallMetric(entry.getKey(),
                   entry.getValue());
             }
             CallMetricRecorder.getCurrent().recordCpuUtilizationMetric(cpuUtilizationMetrics);
@@ -127,7 +129,7 @@ public class OrcaMetricReportingServerInterceptorTest {
         return new ServerStreamTracer() {
           @Override
           public Context filterContext(Context context) {
-            return context.withValue(CallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+            return context.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
           }
         };
       }
@@ -224,7 +226,7 @@ public class OrcaMetricReportingServerInterceptorTest {
 
       private final class TrailersCapturingClientCallListener
           extends SimpleForwardingClientCallListener<RespT> {
-        TrailersCapturingClientCallListener(ClientCall.Listener<RespT> responseListener) {
+        TrailersCapturingClientCallListener(Listener<RespT> responseListener) {
           super(responseListener);
         }
 
