@@ -18,7 +18,6 @@ package io.grpc.services;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Context;
@@ -48,29 +47,38 @@ public final class CallMetricRecorder {
   private double memoryUtilizationMetric = 0;
   private volatile boolean disabled;
 
-  @AutoValue
-  public abstract static class CallMetricReport {
-
-    public abstract double cpuUtilization();
-
-    public abstract double memoryUtilization();
-
-    @SuppressWarnings("AutoValueImmutableFields")
-    public abstract Map<String, Double> requestCostMetrics();
-
-    @SuppressWarnings("AutoValueImmutableFields")
-    public abstract Map<String, Double> utilizationMetrics();
+  public static final class CallMetricReport {
+    private double cpuUtilization;
+    private double memoryUtilization;
+    private ImmutableMap<String, Double> requestCostMetrics;
+    private ImmutableMap<String, Double> utilizationMetrics;
 
     /**
      * Create a report for all backend metrics.
      */
-    static CallMetricReport create(double cpuUtilization, double memoryUtilization,
-                                   Map<String, Double> requestCostMetrics,
-                                   Map<String, Double> utilizationMetrics) {
-      checkNotNull(requestCostMetrics, "requestCostMetrics");
-      checkNotNull(utilizationMetrics, "utilizationMetrics");
-      return new AutoValue_CallMetricRecorder_CallMetricReport(cpuUtilization,
-          memoryUtilization, requestCostMetrics, utilizationMetrics);
+    CallMetricReport(double cpuUtilization, double memoryUtilization,
+                                   ImmutableMap<String, Double> requestCostMetrics,
+                                   ImmutableMap<String, Double> utilizationMetrics) {
+      this.cpuUtilization = cpuUtilization;
+      this.memoryUtilization = memoryUtilization;
+      this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
+      this.utilizationMetrics = checkNotNull(utilizationMetrics, "utilizationMetrics");
+    }
+
+    public double getCpuUtilization() {
+      return cpuUtilization;
+    }
+
+    public double getMemoryUtilization() {
+      return memoryUtilization;
+    }
+
+    public Map<String, Double> getRequestCostMetrics() {
+      return requestCostMetrics;
+    }
+
+    public Map<String, Double> getUtilizationMetrics() {
+      return utilizationMetrics;
     }
   }
 
@@ -199,7 +207,7 @@ public final class CallMetricRecorder {
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    return CallMetricReport.create(cpuUtilizationMetric,
+    return new CallMetricReport(cpuUtilizationMetric,
         memoryUtilizationMetric, ImmutableMap.copyOf(savedRequestCostMetrics),
         ImmutableMap.copyOf(savedUtilizationMetrics)
     );
