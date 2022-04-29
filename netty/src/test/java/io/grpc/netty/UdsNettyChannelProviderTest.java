@@ -104,6 +104,7 @@ public class UdsNettyChannelProviderTest {
 
   @Test
   public void builderForTarget() {
+    Assume.assumeTrue(Utils.isEpollAvailable());
     assertThat(provider.builderForTarget("unix:sock.sock")).isInstanceOf(NettyChannelBuilder.class);
   }
 
@@ -119,6 +120,7 @@ public class UdsNettyChannelProviderTest {
 
   @Test
   public void newChannelBuilder_success() {
+    Assume.assumeTrue(Utils.isEpollAvailable());
     NewChannelBuilderResult result =
         provider.newChannelBuilder("unix:sock.sock", TlsChannelCredentials.create());
     assertThat(result.getChannelBuilder()).isInstanceOf(NettyChannelBuilder.class);
