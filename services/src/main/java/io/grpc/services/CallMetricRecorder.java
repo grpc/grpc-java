@@ -16,6 +16,8 @@
 
 package io.grpc.services;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
@@ -36,11 +38,47 @@ public final class CallMetricRecorder {
   static final Context.Key<CallMetricRecorder> CONTEXT_KEY =
       Context.key("io.grpc.services.CallMetricRecorder");
 
-  private final AtomicReference<ConcurrentHashMap<String, Double>> metrics =
+  private final AtomicReference<ConcurrentHashMap<String, Double>> utilizationMetrics =
       new AtomicReference<>();
+  private final AtomicReference<ConcurrentHashMap<String, Double>> requestCostMetrics =
+      new AtomicReference<>();
+  private double cpuUtilizationMetric = 0;
+  private double memoryUtilizationMetric = 0;
   private volatile boolean disabled;
 
-  CallMetricRecorder() {
+  public static final class CallMetricReport {
+    private double cpuUtilization;
+    private double memoryUtilization;
+    private Map<String, Double> requestCostMetrics;
+    private Map<String, Double> utilizationMetrics;
+
+    /**
+     * Create a report for all backend metrics.
+     */
+    CallMetricReport(double cpuUtilization, double memoryUtilization,
+                                   Map<String, Double> requestCostMetrics,
+                                   Map<String, Double> utilizationMetrics) {
+      this.cpuUtilization = cpuUtilization;
+      this.memoryUtilization = memoryUtilization;
+      this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
+      this.utilizationMetrics = checkNotNull(utilizationMetrics, "utilizationMetrics");
+    }
+
+    public double getCpuUtilization() {
+      return cpuUtilization;
+    }
+
+    public double getMemoryUtilization() {
+      return memoryUtilization;
+    }
+
+    public Map<String, Double> getRequestCostMetrics() {
+      return requestCostMetrics;
+    }
+
+    public Map<String, Double> getUtilizationMetrics() {
+      return utilizationMetrics;
+    }
   }
 
   /**
@@ -62,39 +100,116 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement.  If RPC has already finished, this method is no-op.
+   * Records a call metric measurement for utilization.
+   * If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
    * @return this recorder object
    * @since 1.23.0
    */
+  public CallMetricRecorder recordUtilizationMetric(String name, double value) {
+    if (disabled) {
+      return this;
+    }
+    if (utilizationMetrics.get() == null) {
+      // The chance of race of creation of the map should be very small, so it should be fine
+      // to create these maps that might be discarded.
+      utilizationMetrics.compareAndSet(null, new ConcurrentHashMap<String, Double>());
+    }
+    utilizationMetrics.get().put(name, value);
+    return this;
+  }
+
+  /**
+   * Records a call metric measurement for request cost.
+   * If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   * @since 1.47.0
+   */
   public CallMetricRecorder recordCallMetric(String name, double value) {
     if (disabled) {
       return this;
     }
-    if (metrics.get() == null) {
+    if (requestCostMetrics.get() == null) {
       // The chance of race of creation of the map should be very small, so it should be fine
       // to create these maps that might be discarded.
-      metrics.compareAndSet(null, new ConcurrentHashMap<String, Double>());
+      requestCostMetrics.compareAndSet(null, new ConcurrentHashMap<String, Double>());
     }
-    metrics.get().put(name, value);
+    requestCostMetrics.get().put(name, value);
     return this;
+  }
+
+  /**
+   * Records a call metric measurement for CPU utilization.
+   * If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   * @since 1.47.0
+   */
+  public CallMetricRecorder recordCpuUtilizationMetric(double value) {
+    if (disabled) {
+      return this;
+    }
+    cpuUtilizationMetric = value;
+    return this;
+  }
+
+  /**
+   * Records a call metric measurement for memory utilization.
+   * If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   * @since 1.47.0
+   */
+  public CallMetricRecorder recordMemoryUtilizationMetric(double value) {
+    if (disabled) {
+      return this;
+    }
+    memoryUtilizationMetric = value;
+    return this;
+  }
+
+
+  /**
+   * Returns all request cost metric values. No more metric values will be recorded after this
+   * method is called. Calling this method multiple times returns the same collection of metric
+   * values.
+   *
+   * @return a map containing all saved metric name-value pairs.
+   */
+  Map<String, Double> finalizeAndDump() {
+    disabled = true;
+    Map<String, Double> savedMetrics = requestCostMetrics.get();
+    if (savedMetrics == null) {
+      return Collections.emptyMap();
+    }
+    return Collections.unmodifiableMap(savedMetrics);
   }
 
   /**
    * Returns all save metric values. No more metric values will be recorded after this method is
    * called. Calling this method multiple times returns the same collection of metric values.
    *
-   * @return a map containing all saved metric name-value pairs.
+   * @return a per-request ORCA reports containing all saved metrics.
    */
-  Map<String, Double> finalizeAndDump() {
-    disabled = true;
-    Map<String, Double> savedMetrics = metrics.get();
-    if (savedMetrics == null) {
-      return Collections.emptyMap();
+  CallMetricReport finalizeAndDump2() {
+    Map<String, Double> savedRequestCostMetrics = finalizeAndDump();
+    Map<String, Double> savedUtilizationMetrics = utilizationMetrics.get();
+    if (savedUtilizationMetrics == null) {
+      savedUtilizationMetrics = Collections.emptyMap();
     }
-    return Collections.unmodifiableMap(savedMetrics);
+    return new CallMetricReport(cpuUtilizationMetric,
+        memoryUtilizationMetric, Collections.unmodifiableMap(savedRequestCostMetrics),
+        Collections.unmodifiableMap(savedUtilizationMetrics)
+    );
   }
 
   @VisibleForTesting

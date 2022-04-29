@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
 import io.grpc.Contexts;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -30,7 +31,6 @@ import io.grpc.Status;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.services.CallMetricRecorder;
 import io.grpc.services.InternalCallMetricRecorder;
-import java.util.Map;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -40,7 +40,8 @@ import java.util.Map;
  *
  * @since 1.23.0
  */
-final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9127")
+public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
       new OrcaMetricReportingServerInterceptor();
@@ -48,7 +49,7 @@ final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
   @VisibleForTesting
   static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
       Metadata.Key.of(
-          "x-endpoint-load-metrics-bin",
+          "endpoint-load-metrics-bin",
           ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
   @VisibleForTesting
@@ -73,12 +74,9 @@ final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
-            Map<String, Double> metricValues =
-                InternalCallMetricRecorder.finalizeAndDump(finalCallMetricRecorder);
-            // Only attach a metric report if there are some metric values to be reported.
-            if (!metricValues.isEmpty()) {
-              OrcaLoadReport report =
-                  OrcaLoadReport.newBuilder().putAllRequestCost(metricValues).build();
+            OrcaLoadReport report = fromInternalReport(
+                InternalCallMetricRecorder.finalizeAndDump2(finalCallMetricRecorder));
+            if (!report.equals(OrcaLoadReport.getDefaultInstance())) {
               trailers.put(ORCA_ENDPOINT_LOAD_METRICS_KEY, report);
             }
             super.close(status, trailers);
@@ -89,5 +87,15 @@ final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
         trailerAttachingCall,
         headers,
         next);
+  }
+
+  private static OrcaLoadReport fromInternalReport(
+      CallMetricRecorder.CallMetricReport internalReport) {
+    return OrcaLoadReport.newBuilder()
+        .setCpuUtilization(internalReport.getCpuUtilization())
+        .setMemUtilization(internalReport.getMemoryUtilization())
+        .putAllUtilization(internalReport.getUtilizationMetrics())
+        .putAllRequestCost(internalReport.getRequestCostMetrics())
+        .build();
   }
 }
