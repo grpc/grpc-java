@@ -277,7 +277,8 @@ final class XdsNameResolver extends NameResolver {
     Map<String, ?> rawServiceConfig = ImmutableMap.of(
         "loadBalancingConfig",
         ImmutableList.of(ImmutableMap.of(
-            "cluster_manager_experimental", ImmutableMap.of("childPolicy", childPolicy.buildOrThrow()))));
+            "cluster_manager_experimental",
+            ImmutableMap.of("childPolicy", childPolicy.buildOrThrow()))));
 
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
