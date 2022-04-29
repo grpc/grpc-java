@@ -226,7 +226,7 @@ public class OrcaMetricReportingServerInterceptorTest {
 
       private final class TrailersCapturingClientCallListener
           extends SimpleForwardingClientCallListener<RespT> {
-        TrailersCapturingClientCallListener(Listener<RespT> responseListener) {
+        TrailersCapturingClientCallListener(ClientCall.Listener<RespT> responseListener) {
           super(responseListener);
         }
 

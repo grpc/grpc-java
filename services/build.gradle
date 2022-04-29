@@ -24,6 +24,7 @@ dependencies {
             project(':grpc-core')
     implementation libraries.protobuf_util,
             libraries.guava
+
     runtimeOnly libraries.errorprone
 
     compileOnly libraries.javax_annotation

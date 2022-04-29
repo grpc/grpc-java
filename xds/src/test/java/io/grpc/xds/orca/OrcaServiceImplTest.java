@@ -40,7 +40,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.orca.OrcaOobService;
 import java.util.Iterator;
 import java.util.Random;
 import java.util.concurrent.CyclicBarrier;
