@@ -109,6 +109,7 @@ public class UdsNettyChannelProviderTest {
 
   @Test
   public void builderForTarget_badScheme() {
+    Assume.assumeTrue(Utils.isEpollAvailable());
     try {
       provider.builderForTarget("dns:sock.sock");
       fail("exception expected");
@@ -127,6 +128,7 @@ public class UdsNettyChannelProviderTest {
 
   @Test
   public void newChannelBuilder_badScheme() {
+    Assume.assumeTrue(Utils.isEpollAvailable());
     try {
       provider.newChannelBuilder("dns:sock.sock", InsecureChannelCredentials.create());
       fail("exception expected");
