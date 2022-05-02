@@ -69,7 +69,7 @@ public abstract class OrcaPerRequestUtil {
   }
 
   /**
-   * Creates a new {@link ClientStreamTracer.Factory} with provided {@link
+   * Creates a new {@link io.grpc.ClientStreamTracer.Factory} with provided {@link
    * OrcaPerRequestReportListener} installed to receive callback when a per-request ORCA report is
    * received.
    *
@@ -95,7 +95,7 @@ public abstract class OrcaPerRequestUtil {
       OrcaPerRequestReportListener listener);
 
   /**
-   * Creates a new {@link ClientStreamTracer.Factory} with provided {@link
+   * Creates a new {@link io.grpc.ClientStreamTracer.Factory} with provided {@link
    * OrcaPerRequestReportListener} installed to receive callback when a per-request ORCA report is
    * received.
    *
