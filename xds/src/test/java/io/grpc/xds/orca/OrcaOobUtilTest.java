@@ -175,7 +175,6 @@ public class OrcaOobUtilTest {
   }
 
   @Before
-  @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
 
@@ -223,7 +222,6 @@ public class OrcaOobUtilTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void singlePolicyTypicalWorkflow() {
     setOrcaReportConfig(orcaHelperWrapper, SHORT_INTERVAL_CONFIG);
     verify(origHelper, atLeast(0)).getSynchronizationContext();
@@ -391,7 +389,6 @@ public class OrcaOobUtilTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void orcReportingDisabledWhenServiceNotImplemented() {
     setOrcaReportConfig(orcaHelperWrapper, SHORT_INTERVAL_CONFIG);
     createSubchannel(orcaHelperWrapper.asHelper(), 0, Attributes.EMPTY);
