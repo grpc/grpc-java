@@ -18,7 +18,6 @@ package io.grpc.netty;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import io.grpc.Grpc;
@@ -97,7 +96,7 @@ public class UdsNettyChannelProviderTest {
 
   @Test
   public void basicMethods() {
-    assertTrue(provider.isAvailable());
+    Assume.assumeTrue(provider.isAvailable());
     assertEquals(3, provider.priority());
   }
 
