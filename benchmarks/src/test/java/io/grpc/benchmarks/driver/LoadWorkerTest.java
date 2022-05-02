@@ -16,7 +16,7 @@
 
 package io.grpc.benchmarks.driver;
 
-import static org.junit.Assert.assertTrue;
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import io.grpc.ManagedChannel;
@@ -194,12 +194,12 @@ public class LoadWorkerTest {
       }
     }
     clientObserver.onCompleted();
-    assertTrue(stat.hasLatencies());
-    assertTrue(stat.getLatencies().getCount() < stat.getLatencies().getSum());
+    assertThat(stat.hasLatencies()).isTrue();
+    assertThat(stat.getLatencies().getCount()).isLessThan(stat.getLatencies().getSum());
     double mean = stat.getLatencies().getSum() / stat.getLatencies().getCount();
     System.out.println("Mean " + mean + " us");
-    assertTrue(mean > stat.getLatencies().getMinSeen());
-    assertTrue(mean < stat.getLatencies().getMaxSeen());
+    assertThat(stat.getLatencies().getMinSeen()).isLessThan(mean);
+    assertThat(stat.getLatencies().getMaxSeen()).isGreaterThan(mean);
   }
 
   private StreamObserver<Control.ClientArgs> startClient(Control.ClientArgs clientArgs)
