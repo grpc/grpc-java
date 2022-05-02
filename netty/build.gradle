@@ -29,7 +29,7 @@ dependencies {
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
-            ("io.netty:netty-transport-native-epoll:${nettyVersion}")
+            libraries.netty_epoll_common
     testRuntimeOnly libraries.netty_tcnative,
             libraries.conscrypt,
             libraries.netty_epoll
