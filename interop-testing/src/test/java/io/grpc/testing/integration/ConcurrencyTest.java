@@ -120,6 +120,9 @@ public class ConcurrencyTest {
         // all clients send their requests at approximately the same time.
         startBarrier.await();
         clientStub.streamingOutputCall(request, new SignalingResponseObserver(completionFuture));
+      } catch (InterruptedException ex) {
+        Thread.currentThread().interrupt();
+        completionFuture.setException(ex);
       } catch (Throwable t) {
         completionFuture.setException(t);
       }
