@@ -181,7 +181,7 @@ public class LoadWorkerTest {
       throws InterruptedException {
 
     Stats.ClientStats stat = null;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 30; i++) {
       // Poll until we get some stats
       Thread.sleep(300);
       clientObserver.onNext(MARK);
@@ -197,7 +197,7 @@ public class LoadWorkerTest {
     assertThat(stat.hasLatencies()).isTrue();
     assertThat(stat.getLatencies().getCount()).isLessThan(stat.getLatencies().getSum());
     double mean = stat.getLatencies().getSum() / stat.getLatencies().getCount();
-    System.out.println("Mean " + mean + " us");
+    System.out.println("Mean " + mean + " ns");
     assertThat(stat.getLatencies().getMinSeen()).isLessThan(mean);
     assertThat(stat.getLatencies().getMaxSeen()).isGreaterThan(mean);
   }
