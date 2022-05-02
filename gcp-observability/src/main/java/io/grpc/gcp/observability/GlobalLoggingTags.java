@@ -47,8 +47,8 @@ final class GlobalLoggingTags {
     ImmutableMap.Builder<String, String> locationTagsBuilder = ImmutableMap.builder();
     ImmutableMap.Builder<String, String> customTagsBuilder = ImmutableMap.builder();
     populate(locationTagsBuilder, customTagsBuilder);
-    locationTags = locationTagsBuilder.build();
-    customTags = customTagsBuilder.build();
+    locationTags = locationTagsBuilder.buildOrThrow();
+    customTags = customTagsBuilder.buildOrThrow();
   }
 
   private static String applyTrim(String value) {
