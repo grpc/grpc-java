@@ -34,7 +34,7 @@ public final class UdsNettyChannelProvider extends ManagedChannelProvider {
 
   @Override
   public boolean isAvailable() {
-    return true;
+    return (Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE != null);
   }
 
   @Override

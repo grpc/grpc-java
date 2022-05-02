@@ -22,7 +22,7 @@ dependencies {
             libraries.guava,
             libraries.errorprone,
             libraries.perfmark,
-            ("io.netty:netty-transport-native-unix-common:${nettyVersion}")
+            libraries.netty_unix_common
 
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
