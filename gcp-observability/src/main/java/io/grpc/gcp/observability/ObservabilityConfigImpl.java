@@ -18,11 +18,14 @@ package io.grpc.gcp.observability;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 
@@ -31,34 +34,55 @@ import java.util.Map;
  */
 final class ObservabilityConfigImpl implements ObservabilityConfig {
   private static final String CONFIG_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY";
+  private static final String CONFIG_FILE_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY_JSON";
 
-  private boolean enableCloudLogging = true;
+  private boolean enableCloudLogging = false;
+  private boolean enableCloudMonitoring = false;
+  private boolean enableCloudTracing = false;
   private String destinationProjectId = null;
   private Long flushMessageCount = null;
   private List<LogFilter> logFilters;
   private List<EventType> eventTypes;
+  private Sampler sampler;
 
   static ObservabilityConfigImpl getInstance() throws IOException {
     ObservabilityConfigImpl config = new ObservabilityConfigImpl();
-    config.parse(System.getenv(CONFIG_ENV_VAR_NAME));
+    String configFile = System.getenv(CONFIG_FILE_ENV_VAR_NAME);
+    if (configFile != null) {
+      config.parseFile(configFile);
+    } else {
+      config.parse(System.getenv(CONFIG_ENV_VAR_NAME));
+    }
     return config;
+  }
+
+  void parseFile(String configFile) throws IOException {
+    parse(new String(Files.readAllBytes(Paths.get(configFile)), Charsets.US_ASCII));
   }
 
   @SuppressWarnings("unchecked")
   void parse(String config) throws IOException {
     checkArgument(config != null, CONFIG_ENV_VAR_NAME + " value is null!");
-    parseLoggingConfig((Map<String, ?>) JsonParser.parse(config));
+    parseConfig((Map<String, ?>) JsonParser.parse(config));
   }
 
-  private void parseLoggingConfig(Map<String, ?> loggingConfig) {
-    if (loggingConfig != null) {
-      Boolean value = JsonUtil.getBoolean(loggingConfig, "enable_cloud_logging");
+  private void parseConfig(Map<String, ?> config) {
+    if (config != null) {
+      Boolean value = JsonUtil.getBoolean(config, "enable_cloud_logging");
       if (value != null) {
         enableCloudLogging = value;
       }
-      destinationProjectId = JsonUtil.getString(loggingConfig, "destination_project_id");
-      flushMessageCount = JsonUtil.getNumberAsLong(loggingConfig, "flush_message_count");
-      List<?> rawList = JsonUtil.getList(loggingConfig, "log_filters");
+      value = JsonUtil.getBoolean(config, "enable_cloud_monitoring");
+      if (value != null) {
+        enableCloudMonitoring = value;
+      }
+      value = JsonUtil.getBoolean(config, "enable_cloud_tracing");
+      if (value != null) {
+        enableCloudTracing = value;
+      }
+      destinationProjectId = JsonUtil.getString(config, "destination_project_id");
+      flushMessageCount = JsonUtil.getNumberAsLong(config, "flush_message_count");
+      List<?> rawList = JsonUtil.getList(config, "log_filters");
       if (rawList != null) {
         List<Map<String, ?>> jsonLogFilters = JsonUtil.checkObjectList(rawList);
         ImmutableList.Builder<LogFilter> logFiltersBuilder = new ImmutableList.Builder<>();
@@ -67,7 +91,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         }
         this.logFilters = logFiltersBuilder.build();
       }
-      rawList = JsonUtil.getList(loggingConfig, "event_types");
+      rawList = JsonUtil.getList(config, "event_types");
       if (rawList != null) {
         List<String> jsonEventTypes = JsonUtil.checkStringList(rawList);
         ImmutableList.Builder<EventType> eventTypesBuilder = new ImmutableList.Builder<>();
@@ -75,6 +99,20 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
           eventTypesBuilder.add(convertEventType(jsonEventType));
         }
         this.eventTypes = eventTypesBuilder.build();
+      }
+      String sampler = JsonUtil.getString(config, "global_trace_sampler");
+      Double samplingRate = JsonUtil.getNumberAsDouble(config, "global_trace_sampling_rate");
+      checkArgument(
+          sampler == null || samplingRate == null,
+          "only one of 'global_trace_sampler' or 'global_trace_sampling_rate' can be specified");
+      if (sampler != null) {
+        this.sampler = new Sampler(SamplerType.valueOf(sampler.toUpperCase()));
+      }
+      if (samplingRate != null) {
+        checkArgument(
+            samplingRate >= 0.0 && samplingRate <= 1.0,
+            "'global_trace_sampling_rate' needs to be between 0.0 and 1.0");
+        this.sampler = new Sampler(samplingRate);
       }
     }
   }
@@ -114,6 +152,16 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   @Override
+  public boolean isEnableCloudMonitoring() {
+    return enableCloudMonitoring;
+  }
+
+  @Override
+  public boolean isEnableCloudTracing() {
+    return enableCloudTracing;
+  }
+
+  @Override
   public String getDestinationProjectId() {
     return destinationProjectId;
   }
@@ -131,5 +179,10 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   @Override
   public List<EventType> getEventTypes() {
     return eventTypes;
+  }
+
+  @Override
+  public Sampler getSampler() {
+    return sampler;
   }
 }

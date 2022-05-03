@@ -25,6 +25,12 @@ public interface ObservabilityConfig {
   /** Is Cloud Logging enabled. */
   boolean isEnableCloudLogging();
 
+  /** Is Cloud Monitoring enabled. */
+  boolean isEnableCloudMonitoring();
+
+  /** Is Cloud Tracing enabled. */
+  boolean isEnableCloudTracing();
+
   /** Get destination project ID - where logs will go. */
   String getDestinationProjectId();
 
@@ -37,10 +43,12 @@ public interface ObservabilityConfig {
   /** Get event types to log. */
   List<EventType> getEventTypes();
 
+  Sampler getSampler();
+
   /**
    * POJO for representing a filter used in configuration.
    */
-  public static class LogFilter {
+  class LogFilter {
     /** Pattern indicating which service/method to log. */
     public final String pattern;
 
@@ -62,5 +70,34 @@ public interface ObservabilityConfig {
       this.headerBytes = headerBytes;
       this.messageBytes = messageBytes;
     }
+  }
+
+  enum SamplerType {
+    ALWAYS,
+    NEVER,
+    PROBABILISTIC;
+  }
+
+  class Sampler {
+
+    Sampler(double probability) {
+      this.probability = probability;
+      this.type = SamplerType.PROBABILISTIC;
+    }
+
+    Sampler(SamplerType type) {
+      this.type = type;
+    }
+
+    double getProbability() {
+      return probability;
+    }
+
+    SamplerType getType() {
+      return type;
+    }
+
+    private SamplerType type;
+    private double probability;
   }
 }
