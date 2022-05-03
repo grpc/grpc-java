@@ -25,6 +25,7 @@ dependencies {
 
     annotationProcessor libraries.autovalue
     api project(':grpc-api')
+    
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-alts'),
