@@ -365,6 +365,11 @@ final class CensusTracingModule {
       span.end(createEndSpanOptions(status, isSampledToLocalTracing));
     }
 
+    /*
+     TODO(dnvindhya): Replace deprecated ContextUtils usage with ContextHandleUtils to interact
+     with io.grpc.Context as described in {@link io.opencensus.trace.unsafeContextUtils} to remove
+     SuppressWarnings annotation.
+    */
     @SuppressWarnings("deprecation")
     @Override
     public Context filterContext(Context context) {
@@ -404,6 +409,7 @@ final class CensusTracingModule {
 
   @VisibleForTesting
   final class TracingClientInterceptor implements ClientInterceptor {
+
     @SuppressWarnings("deprecation")
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
