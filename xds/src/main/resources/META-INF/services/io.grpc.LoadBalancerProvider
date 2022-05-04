@@ -6,3 +6,4 @@ io.grpc.xds.ClusterResolverLoadBalancerProvider
 io.grpc.xds.ClusterImplLoadBalancerProvider
 io.grpc.xds.LeastRequestLoadBalancerProvider
 io.grpc.xds.RingHashLoadBalancerProvider
+io.grpc.xds.WrrLocalityLoadBalancerProvider

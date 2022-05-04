@@ -92,10 +92,10 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   private static OrcaLoadReport fromInternalReport(
       CallMetricRecorder.CallMetricReport internalReport) {
     return OrcaLoadReport.newBuilder()
-        .setCpuUtilization(internalReport.cpuUtilization())
-        .setMemUtilization(internalReport.memoryUtilization())
-        .putAllUtilization(internalReport.utilizationMetrics())
-        .putAllRequestCost(internalReport.requestCostMetrics())
+        .setCpuUtilization(internalReport.getCpuUtilization())
+        .setMemUtilization(internalReport.getMemoryUtilization())
+        .putAllUtilization(internalReport.getUtilizationMetrics())
+        .putAllRequestCost(internalReport.getRequestCostMetrics())
         .build();
   }
 }

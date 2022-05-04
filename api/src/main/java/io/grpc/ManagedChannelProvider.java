@@ -17,6 +17,8 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
+import java.net.SocketAddress;
+import java.util.Collection;
 
 /**
  * Provider of managed channels for transport agnostic consumption.
@@ -78,6 +80,11 @@ public abstract class ManagedChannelProvider {
   protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
     return NewChannelBuilderResult.error("ChannelCredentials are unsupported");
   }
+
+  /**
+   * Returns the {@link SocketAddress} types this ManagedChannelProvider supports.
+   */
+  protected abstract Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes();
 
   public static final class NewChannelBuilderResult {
     private final ManagedChannelBuilder<?> channelBuilder;

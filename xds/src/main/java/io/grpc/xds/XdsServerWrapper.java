@@ -546,7 +546,7 @@ final class XdsServerWrapper extends Server {
           perRouteInterceptors.put(route, interceptor);
         }
       }
-      return perRouteInterceptors.build();
+      return perRouteInterceptors.buildOrThrow();
     }
 
     private ServerInterceptor combineInterceptors(final List<ServerInterceptor> interceptors) {

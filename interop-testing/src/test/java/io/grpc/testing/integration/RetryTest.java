@@ -276,7 +276,7 @@ public class RetryTest {
         .put("maxBackoff", "10s")
         .put("backoffMultiplier", 1D)
         .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
-        .build();
+        .buildOrThrow();
     createNewChannel();
     ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
@@ -314,7 +314,7 @@ public class RetryTest {
         .put("maxBackoff", "10s")
         .put("backoffMultiplier", 1D)
         .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
-        .build();
+        .buildOrThrow();
     createNewChannel();
 
     ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
@@ -364,7 +364,7 @@ public class RetryTest {
         .put("maxBackoff", "10s")
         .put("backoffMultiplier", 1D)
         .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
-        .build();
+        .buildOrThrow();
     createNewChannel();
 
     // We will have streamClosed return at a particular moment that we want.

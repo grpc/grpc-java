@@ -44,6 +44,7 @@ import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.Locality;
+import io.envoyproxy.envoy.config.core.v3.PathConfigSource;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
 import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
@@ -104,6 +105,8 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.lookup.v1.GrpcKeyBuilder;
 import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
@@ -1614,7 +1617,8 @@ public class ClientXdsClientDataTest {
             .setRds(Rds.newBuilder()
                 .setRouteConfigName("rds-config-foo")
                 .setConfigSource(
-                    ConfigSource.newBuilder().setPath("foo-path")))
+                    ConfigSource.newBuilder()
+                        .setPathConfigSource(PathConfigSource.newBuilder().setPath("foo-path"))))
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
@@ -1733,8 +1737,8 @@ public class ClientXdsClientDataTest {
     CdsUpdate update = ClientXdsClient.processCluster(
         cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
-    assertThat(update.lbPolicySelection().getProvider().getPolicyName()).isEqualTo(
-        "ring_hash_experimental");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
   }
 
   @Test
@@ -1755,8 +1759,8 @@ public class ClientXdsClientDataTest {
     CdsUpdate update = ClientXdsClient.processCluster(
         cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
-    assertThat(update.lbPolicySelection().getProvider().getPolicyName()).isEqualTo(
-        "least_request_experimental");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("least_request_experimental");
   }
 
   @Test
@@ -1820,7 +1824,7 @@ public class ClientXdsClientDataTest {
             EdsClusterConfig.newBuilder()
                 .setEdsConfig(
                     ConfigSource.newBuilder()
-                        .setPath("foo-path"))
+                        .setPathConfigSource(PathConfigSource.newBuilder().setPath("foo-path")))
                 .setServiceName("service-foo.googleapis.com"))
         .setLbPolicy(LbPolicy.ROUND_ROBIN)
         .build();

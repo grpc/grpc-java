@@ -23,10 +23,15 @@ import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
@@ -181,9 +186,26 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         return;
       }
 
+      // The LB policy config is provided in service_config.proto/JSON format. It is unwrapped
+      // to determine the name of the policy in the load balancer registry.
+      LbConfig unwrappedLbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
+          root.result.lbPolicyConfig());
+      LoadBalancerProvider lbProvider = lbRegistry.getProvider(unwrappedLbConfig.getPolicyName());
+      if (lbProvider == null) {
+        throw NameResolver.ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
+                "No provider available for LB: " + unwrappedLbConfig.getPolicyName())).getError()
+            .asRuntimeException();
+      }
+      NameResolver.ConfigOrError configOrError = lbProvider.parseLoadBalancingPolicyConfig(
+          unwrappedLbConfig.getRawConfigValue());
+      if (configOrError.getError() != null) {
+        throw configOrError.getError().augmentDescription("Unable to parse the LB config")
+            .asRuntimeException();
+      }
+
       ClusterResolverConfig config = new ClusterResolverConfig(
           Collections.unmodifiableList(instances),
-          root.result.lbPolicySelection());
+          new PolicySelection(lbProvider, configOrError.getConfig()));
       if (childLb == null) {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }

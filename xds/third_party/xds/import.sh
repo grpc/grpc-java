@@ -18,7 +18,7 @@
 set -e
 BRANCH=main
 # import VERSION from one of the google internal CLs
-VERSION=cb28da3451f158a947dfc45090fe92b07b243bc1
+VERSION=d92e9ce0af512a73a3a126b32fa4920bee12e180
 GIT_REPO="https://github.com/cncf/xds.git"
 GIT_BASE_DIR=xds
 SOURCE_PROTO_BASE_DIR=xds
@@ -26,26 +26,30 @@ TARGET_PROTO_BASE_DIR=src/main/proto
 # Sorted alphabetically.
 FILES=(
 udpa/annotations/migrate.proto
-xds/annotations/v3/migrate.proto
 udpa/annotations/security.proto
-xds/annotations/v3/security.proto
 udpa/annotations/security.proto
-xds/annotations/v3/security.proto
 udpa/annotations/sensitive.proto
-xds/annotations/v3/sensitive.proto
 udpa/annotations/status.proto
-xds/annotations/v3/status.proto
 udpa/annotations/versioning.proto
-xds/annotations/v3/versioning.proto
-xds/data/orca/v3/orca_load_report.proto
-xds/service/orca/v3/orca.proto
 udpa/type/v1/typed_struct.proto
-xds/type/v3/typed_struct.proto
+xds/annotations/v3/migrate.proto
+xds/annotations/v3/security.proto
+xds/annotations/v3/security.proto
+xds/annotations/v3/sensitive.proto
+xds/annotations/v3/status.proto
+xds/annotations/v3/versioning.proto
 xds/core/v3/authority.proto
 xds/core/v3/collection_entry.proto
 xds/core/v3/context_params.proto
+xds/core/v3/extension.proto
 xds/core/v3/resource_locator.proto
 xds/core/v3/resource_name.proto
+xds/data/orca/v3/orca_load_report.proto
+xds/service/orca/v3/orca.proto
+xds/type/matcher/v3/matcher.proto
+xds/type/matcher/v3/regex.proto
+xds/type/matcher/v3/string.proto
+xds/type/v3/typed_struct.proto
 )
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/xds

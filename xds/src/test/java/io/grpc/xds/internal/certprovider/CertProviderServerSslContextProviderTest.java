@@ -177,6 +177,7 @@ public class CertProviderServerSslContextProviderTest {
             new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
             certificateProviderRegistry, watcherCaptor, "testca", 0);
+    @SuppressWarnings("deprecation")
     CertificateValidationContext staticCertValidationContext =
         CertificateValidationContext.newBuilder().addAllMatchSubjectAltNames(Arrays
             .asList(StringMatcher.newBuilder().setExact("foo.com").build(),

@@ -21,6 +21,7 @@ import static junit.framework.TestCase.assertTrue;
 
 import io.grpc.benchmarks.proto.Control;
 import io.grpc.benchmarks.proto.Stats;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -30,6 +31,14 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class LoadClientTest {
+  private LoadClient loadClient;
+
+  @After
+  public void tearDown() {
+    if (loadClient != null) {
+      loadClient.shutdownNow();
+    }
+  }
 
   @Test
   public void testHistogramToStatsConversion() throws Exception {
@@ -48,7 +57,7 @@ public class LoadClientTest {
     config.getLoadParamsBuilder().getClosedLoopBuilder();
     config.addServerTargets("localhost:9999");
 
-    LoadClient loadClient = new LoadClient(config.build());
+    loadClient = new LoadClient(config.build());
     loadClient.delay(1);
     loadClient.delay(10);
     loadClient.delay(10);

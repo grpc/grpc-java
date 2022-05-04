@@ -67,7 +67,6 @@ import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.InternalLogId;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
@@ -78,7 +77,6 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
@@ -1637,16 +1635,21 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     }
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LegacyLoadBalancerConfigFactory.newConfig(cluster, enableLeastRequest));
-    LoadBalancerProvider lbProvider = loadBalancerRegistry.getProvider(lbConfig.getPolicyName());
-    NameResolver.ConfigOrError configOrError = lbProvider
-        .parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
+    // TODO: If load_balancing_policy is set in Cluster use it for LB config, otherwise fall back
+    // to using the legacy lb_policy field.
+    ImmutableMap<String, ?> lbPolicyConfig = LegacyLoadBalancerConfigFactory.newConfig(cluster,
+        enableLeastRequest);
+
+    // Validate the LB config by trying to parse it with the corresponding LB provider.
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbPolicyConfig);
+    NameResolver.ConfigOrError configOrError = loadBalancerRegistry.getProvider(
+        lbConfig.getPolicyName()).parseLoadBalancingPolicyConfig(
+        lbConfig.getRawConfigValue());
     if (configOrError.getError() != null) {
       throw new ResourceInvalidException(structOrError.getErrorDetail());
     }
 
-    updateBuilder.lbPolicySelection(new PolicySelection(lbProvider, configOrError.getConfig()));
+    updateBuilder.lbPolicyConfig(lbPolicyConfig);
 
     return updateBuilder.build();
   }
@@ -1840,7 +1843,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
       throws ResourceInvalidException {
-    Set<Integer> priorities = new HashSet<>();
+    Map<Integer, Set<Locality>> priorities = new HashMap<>();
     Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
     List<DropOverload> dropOverloads = new ArrayList<>();
     int maxPriority = -1;
@@ -1856,14 +1859,20 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       }
 
       LocalityLbEndpoints localityLbEndpoints = structOrError.getStruct();
-      maxPriority = Math.max(maxPriority, localityLbEndpoints.priority());
-      priorities.add(localityLbEndpoints.priority());
+      int priority = localityLbEndpoints.priority();
+      maxPriority = Math.max(maxPriority, priority);
       // Note endpoints with health status other than HEALTHY and UNKNOWN are still
       // handed over to watching parties. It is watching parties' responsibility to
       // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
-      localityLbEndpointsMap.put(
-          parseLocality(localityLbEndpointsProto.getLocality()),
-          localityLbEndpoints);
+      Locality locality =  parseLocality(localityLbEndpointsProto.getLocality());
+      localityLbEndpointsMap.put(locality, localityLbEndpoints);
+      if (!priorities.containsKey(priority)) {
+        priorities.put(priority, new HashSet<>());
+      }
+      if (!priorities.get(priority).add(locality)) {
+        throw new ResourceInvalidException("ClusterLoadAssignment has duplicate locality:"
+            + locality + " for priority:" + priority);
+      }
     }
     if (priorities.size() != maxPriority + 1) {
       throw new ResourceInvalidException("ClusterLoadAssignment has sparse priorities");
@@ -2084,9 +2093,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
               : getSubscribedResourcesMap(type).entrySet()) {
             metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
           }
-          metadataSnapshot.put(type, metadataMap.build());
+          metadataSnapshot.put(type, metadataMap.buildOrThrow());
         }
-        future.set(metadataSnapshot.build());
+        future.set(metadataSnapshot.buildOrThrow());
       }
     });
     return future;
@@ -2511,8 +2520,16 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         respTimer.cancel();
         respTimer = null;
       }
+
+      // Include node ID in xds failures to allow cross-referencing with control plane logs
+      // when debugging.
+      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+      Status errorAugmented = Status.fromCode(error.getCode())
+          .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())
+          .withCause(error.getCause());
+
       for (ResourceWatcher watcher : watchers) {
-        watcher.onError(error);
+        watcher.onError(errorAugmented);
       }
     }
 
