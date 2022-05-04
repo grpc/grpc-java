@@ -13,8 +13,6 @@ description = "gRPC: Services"
     // Without this workaround, the project can not compile.
     it.options.compilerArgs += [
         "-Xlint:-deprecation",
-        // only has AutoValue annotation processor
-        "-Xlint:-processing"
     ]
 }
 
@@ -29,7 +27,6 @@ dependencies {
 
     runtimeOnly libraries.errorprone
 
-    annotationProcessor libraries.autovalue
     compileOnly libraries.javax_annotation
     testImplementation project(':grpc-testing'),
             libraries.netty_epoll, // for DomainSocketAddress
