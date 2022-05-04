@@ -21,16 +21,19 @@ description = "gRPC: Google Cloud Platform Observability"
 
 dependencies {
     def cloudLoggingVersion = '3.6.1'
+    def opencensusExporterVersion = '0.31.0'
 
     annotationProcessor libraries.autovalue
     api project(':grpc-api')
-
+    
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-alts'),
+            project(':grpc-census'),
             libraries.google_auth_oauth2_http,
             libraries.autovalue_annotation,
             libraries.perfmark,
+            libraries.opencensus_contrib_grpc_metrics,
             ('com.google.guava:guava:31.0.1-jre'),
             ('com.google.errorprone:error_prone_annotations:2.11.0'),
             ('com.google.auth:google-auth-library-credentials:1.4.0'),
@@ -39,7 +42,11 @@ dependencies {
             ('com.google.http-client:google-http-client:1.41.0'),
             ('com.google.http-client:google-http-client-gson:1.41.0'),
             ('com.google.api.grpc:proto-google-common-protos:2.7.1'),
-            ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}")
+            ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}"),
+            ("io.opencensus:opencensus-exporter-stats-stackdriver:${opencensusExporterVersion}"),
+            ("io.opencensus:opencensus-exporter-trace-stackdriver:${opencensusExporterVersion}")
+
+    runtimeOnly libraries.opencensus_impl
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
