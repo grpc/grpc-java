@@ -23,39 +23,47 @@ import com.github.xds.service.orca.v3.OpenRcaServiceGrpc;
 import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.util.Durations;
+import io.grpc.BindableService;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.SynchronizationContext;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
+final class OrcaServiceImpl implements BindableService {
   private static final Logger logger = Logger.getLogger(OrcaServiceImpl.class.getName());
 
   private final long minReportIntervalNanos;
   private final ScheduledExecutorService timeService;
-  private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
-  private volatile double cpuUtilization;
-  private volatile double memoryUtilization;
   @VisibleForTesting
   final AtomicInteger clientCount = new AtomicInteger(0);
+  private OrcaMetrics orcaMetrics;
+  RealOrcaServiceImpl delegate = new RealOrcaServiceImpl();
 
-  public OrcaServiceImpl(long minReportIntervalNanos, ScheduledExecutorService timeService) {
+  public OrcaServiceImpl(long minReportIntervalNanos, ScheduledExecutorService timeService,
+                         OrcaMetrics orcaMetrics) {
     this.minReportIntervalNanos = minReportIntervalNanos;
-    this.timeService = checkNotNull(timeService);
+    this.timeService = checkNotNull(timeService, "timeService");
+    this.orcaMetrics = checkNotNull(orcaMetrics, "orcaMetrics");
   }
 
   @Override
-  public void streamCoreMetrics(
-      OrcaLoadReportRequest request, StreamObserver<OrcaLoadReport> responseObserver) {
-    OrcaClient client = new OrcaClient(request, responseObserver);
-    client.run();
-    clientCount.getAndIncrement();
+  public ServerServiceDefinition bindService() {
+    return delegate.bindService();
+  }
+
+  private final class RealOrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
+    @Override
+    public void streamCoreMetrics(
+        OrcaLoadReportRequest request, StreamObserver<OrcaLoadReport> responseObserver) {
+      OrcaClient client = new OrcaClient(request, responseObserver);
+      client.run();
+      clientCount.getAndIncrement();
+    }
   }
 
   private final class OrcaClient implements Runnable {
@@ -103,37 +111,9 @@ final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
   }
 
   private OrcaLoadReport generateMetricsReport() {
-    return OrcaLoadReport.newBuilder().setCpuUtilization(cpuUtilization)
-        .setMemUtilization(memoryUtilization)
-        .putAllUtilization(metricsData)
+    return OrcaLoadReport.newBuilder().setCpuUtilization(orcaMetrics.getCpuUtilization())
+        .setMemUtilization(orcaMetrics.getMemoryUtilization())
+        .putAllUtilization(orcaMetrics.getUtilizationMetrics())
         .build();
-  }
-
-  void setUtilizationMetric(String key, double value) {
-    metricsData.put(key, value);
-  }
-
-  void setAllUtilizationMetrics(Map<String, Double> metrics) {
-    metricsData = new ConcurrentHashMap<>(metrics);
-  }
-
-  void deleteUtilizationMetric(String key) {
-    metricsData.remove(key);
-  }
-
-  void setCpuUtilizationMetric(double value) {
-    cpuUtilization = value;
-  }
-
-  void deleteCpuUtilizationMetric() {
-    cpuUtilization = 0;
-  }
-
-  void setMemoryUtilizationMetric(double value) {
-    memoryUtilization = value;
-  }
-
-  void deleteMemoryUtilizationMetric() {
-    memoryUtilization = 0;
   }
 }
