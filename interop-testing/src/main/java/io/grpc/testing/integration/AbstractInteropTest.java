@@ -16,13 +16,8 @@
 
 package io.grpc.testing.integration;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
-import static io.grpc.ConnectivityState.SHUTDOWN;
-import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -51,13 +46,8 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
-import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
@@ -101,9 +91,6 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import io.grpc.xds.OrcaOobUtil;
-import io.grpc.xds.OrcaPerRequestUtil;
-import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
@@ -178,11 +165,6 @@ public abstract class AbstractInteropTest {
   private static final MeasureDouble RETRY_DELAY_PER_CALL =
       Measure.MeasureDouble.create(
           "grpc.io/client/retry_delay_per_call", "Retry delay per call", "ms");
-
-  protected static final String TEST_ORCA_LB_POLICY_NAME = "test_backend_metrics_load_balancer";
-  private final LinkedBlockingQueue<OrcaLoadReport> savedLoadReports = new LinkedBlockingQueue<>();
-  private final LinkedBlockingQueue<OrcaLoadReport> savedOobLoadReports =
-      new LinkedBlockingQueue<>();
 
   private static final FakeTagger tagger = new FakeTagger();
   private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
@@ -2028,18 +2010,6 @@ public abstract class AbstractInteropTest {
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
   }
 
-  /**
-   *  Test backend metrics reporting: expect the test client LB policy to receive load reports.
-   */
-  public void testOrca() {
-    blockingStub.emptyCall(EMPTY);
-    assertEquals(savedLoadReports.poll(), OrcaLoadReport.newBuilder()
-        .putRequestCost("queue", 2.0).build());
-    assertThat(savedLoadReports.isEmpty()).isTrue();
-    assertEquals(savedOobLoadReports.poll(), OrcaLoadReport.newBuilder()
-        .putUtilization("util", 0.4875).build());
-  }
-
   protected static void assertSuccess(StreamRecorder<?> recorder) {
     if (recorder.getError() != null) {
       throw new AssertionError(recorder.getError());
@@ -2477,138 +2447,6 @@ public abstract class AbstractInteropTest {
         throw new RuntimeException(e);
       }
       return delegate.parse(new ByteArrayInputStream(baos.toByteArray()));
-    }
-  }
-
-  protected class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvider {
-
-    @Override
-    public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-      return new CustomBackendMetricsLoadBalancer(helper);
-    }
-
-    @Override
-    public boolean isAvailable() {
-      return true;
-    }
-
-    @Override
-    public int getPriority() {
-      return 0;
-    }
-
-    @Override
-    public String getPolicyName() {
-      return TEST_ORCA_LB_POLICY_NAME;
-    }
-  }
-
-  class CustomBackendMetricsLoadBalancer extends LoadBalancer {
-    private final Helper helper;
-    private Subchannel subchannel;
-
-    public CustomBackendMetricsLoadBalancer(Helper helper) {
-      this.helper = checkNotNull(helper, "helper");
-    }
-
-    @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
-      if (subchannel == null) {
-        OrcaOobUtil.OrcaReportingHelperWrapper wrappedHelper =
-            OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(helper,
-                new OrcaOobUtil.OrcaOobReportListener() {
-                  @Override
-                  public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-                    savedOobLoadReports.add(orcaLoadReport);
-                  }
-                });
-        wrappedHelper.setReportingConfig(OrcaOobUtil.OrcaReportingConfig.newBuilder()
-            .setReportInterval(1, TimeUnit.SECONDS)
-            .build());
-        final Subchannel subchannel = wrappedHelper.asHelper().createSubchannel(
-            CreateSubchannelArgs.newBuilder()
-                .setAddresses(servers)
-                .build());
-        subchannel.start(new SubchannelStateListener() {
-          @Override
-          public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-            processSubchannelState(subchannel, stateInfo);
-          }
-        });
-        this.subchannel = subchannel;
-
-        helper.updateBalancingState(CONNECTING,
-            new MayReportLoadPicker(PickResult.withSubchannel(subchannel)));
-        subchannel.requestConnection();
-      } else {
-        subchannel.updateAddresses(servers);
-      }
-    }
-
-    private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-      ConnectivityState currentState = stateInfo.getState();
-      if (currentState == SHUTDOWN) {
-        return;
-      }
-      if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
-        helper.refreshNameResolution();
-      }
-
-      SubchannelPicker picker;
-      switch (currentState) {
-        case IDLE:
-          subchannel.requestConnection();
-          picker = new MayReportLoadPicker(PickResult.withNoResult());
-          break;
-        case CONNECTING:
-          picker = new MayReportLoadPicker(PickResult.withNoResult());
-          break;
-        case READY:
-          picker = new MayReportLoadPicker(PickResult.withSubchannel(subchannel));
-          break;
-        case TRANSIENT_FAILURE:
-          picker = new MayReportLoadPicker(PickResult.withError(stateInfo.getStatus()));
-          break;
-        default:
-          throw new IllegalArgumentException("Unsupported state:" + currentState);
-      }
-      helper.updateBalancingState(currentState, picker);
-    }
-
-    @Override
-    public void handleNameResolutionError(Status error) {
-    }
-
-    @Override
-    public void shutdown() {
-      if (subchannel != null) {
-        subchannel.shutdown();
-      }
-    }
-
-    private final class MayReportLoadPicker extends SubchannelPicker {
-      private PickResult result;
-
-      public MayReportLoadPicker(PickResult result) {
-        this.result = checkNotNull(result, "result");
-      }
-
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        if (result.getSubchannel() == null) {
-          return result;
-        }
-        return PickResult.withSubchannel(
-            result.getSubchannel(),
-            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
-                new OrcaPerRequestUtil.OrcaPerRequestReportListener() {
-                  @Override
-                  public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-                    savedLoadReports.add(orcaLoadReport);
-                  }
-                }));
-      }
     }
   }
 }

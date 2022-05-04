@@ -169,7 +169,7 @@ public class TestServiceServer {
       orcaOobService = new OrcaOobService(1, TimeUnit.SECONDS, executor);
       builder.addService(orcaOobService.getService());
     }
-    TestServiceImpl testService = new TestServiceImpl(executor, orcaOobService);
+    OrcaTestServiceImpl testService = new OrcaTestServiceImpl(executor, orcaOobService);
     if (useOrca) {
       optionalInterceptors.add(testService.reportQueryMetricsInterceptor());
       optionalInterceptors.add(OrcaMetricReportingServerInterceptor.getInstance());

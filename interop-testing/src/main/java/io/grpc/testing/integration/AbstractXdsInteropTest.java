@@ -18,12 +18,12 @@ package io.grpc.testing.integration;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
-import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertEquals;
+
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -36,15 +36,13 @@ import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 /**
  * Abstract base class for all GRPC transport tests.
  *
  * <p> New tests should avoid using Mockito to support running on AppEngine.</p>
  */
-public abstract class NewAbstractInteropTest extends AbstractInteropTest {
-  private static Logger logger = Logger.getLogger(NewAbstractInteropTest.class.getName());
+public abstract class AbstractXdsInteropTest extends AbstractInteropTest {
 
   protected static final String TEST_ORCA_LB_POLICY_NAME = "test_backend_metrics_load_balancer";
   private final LinkedBlockingQueue<OrcaLoadReport> savedLoadReports = new LinkedBlockingQueue<>();
@@ -62,7 +60,6 @@ public abstract class NewAbstractInteropTest extends AbstractInteropTest {
     assertEquals(savedOobLoadReports.poll(), OrcaLoadReport.newBuilder()
         .putUtilization("util", 0.4875).build());
   }
-
 
   protected class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvider {
 
