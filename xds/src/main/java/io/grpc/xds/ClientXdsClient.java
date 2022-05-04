@@ -1843,7 +1843,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
       throws ResourceInvalidException {
-    Set<Integer> priorities = new HashSet<>();
+    Map<Integer, Set<Locality>> priorities = new HashMap<>();
     Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
     List<DropOverload> dropOverloads = new ArrayList<>();
     int maxPriority = -1;
@@ -1859,14 +1859,20 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       }
 
       LocalityLbEndpoints localityLbEndpoints = structOrError.getStruct();
-      maxPriority = Math.max(maxPriority, localityLbEndpoints.priority());
-      priorities.add(localityLbEndpoints.priority());
+      int priority = localityLbEndpoints.priority();
+      maxPriority = Math.max(maxPriority, priority);
       // Note endpoints with health status other than HEALTHY and UNKNOWN are still
       // handed over to watching parties. It is watching parties' responsibility to
       // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
-      localityLbEndpointsMap.put(
-          parseLocality(localityLbEndpointsProto.getLocality()),
-          localityLbEndpoints);
+      Locality locality =  parseLocality(localityLbEndpointsProto.getLocality());
+      localityLbEndpointsMap.put(locality, localityLbEndpoints);
+      if (!priorities.containsKey(priority)) {
+        priorities.put(priority, new HashSet<>());
+      }
+      if (!priorities.get(priority).add(locality)) {
+        throw new ResourceInvalidException("ClusterLoadAssignment has duplicate locality:"
+            + locality + " for priority:" + priority);
+      }
     }
     if (priorities.size() != maxPriority + 1) {
       throw new ResourceInvalidException("ClusterLoadAssignment has sparse priorities");
@@ -2087,9 +2093,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
               : getSubscribedResourcesMap(type).entrySet()) {
             metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
           }
-          metadataSnapshot.put(type, metadataMap.build());
+          metadataSnapshot.put(type, metadataMap.buildOrThrow());
         }
-        future.set(metadataSnapshot.build());
+        future.set(metadataSnapshot.buildOrThrow());
       }
     });
     return future;

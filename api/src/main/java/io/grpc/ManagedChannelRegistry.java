@@ -145,6 +145,11 @@ public final class ManagedChannelRegistry {
     } catch (ClassNotFoundException e) {
       logger.log(Level.FINE, "Unable to find NettyChannelProvider", e);
     }
+    try {
+      list.add(Class.forName("io.grpc.netty.UdsNettyChannelProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find UdsNettyChannelProvider", e);
+    }
     return Collections.unmodifiableList(list);
   }
 

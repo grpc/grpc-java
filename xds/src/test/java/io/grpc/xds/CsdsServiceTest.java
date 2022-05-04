@@ -330,7 +330,7 @@ public class CsdsServiceTest {
               .put(RDS, ImmutableMap.of("subscribedResourceName.RDS", METADATA_ACKED_RDS))
               .put(CDS, ImmutableMap.of("subscribedResourceName.CDS", METADATA_ACKED_CDS))
               .put(EDS, ImmutableMap.of("subscribedResourceName.EDS", METADATA_ACKED_EDS))
-              .build();
+              .buildOrThrow();
         }
       });
 

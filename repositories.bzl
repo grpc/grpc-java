@@ -20,7 +20,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auto.value:auto-value-annotations:1.7.4",
     "com.google.errorprone:error_prone_annotations:2.9.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:30.1.1-android",
+    "com.google.guava:guava:31.0.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.4",

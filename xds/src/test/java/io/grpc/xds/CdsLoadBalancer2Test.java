@@ -586,7 +586,7 @@ public class CdsLoadBalancer2Test {
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      FakeLoadBalancer balancer = new FakeLoadBalancer(policyName, helper);
+      FakeLoadBalancer balancer = new FakeLoadBalancer(policyName);
       childBalancers.add(balancer);
       return balancer;
     }
@@ -618,14 +618,12 @@ public class CdsLoadBalancer2Test {
 
   private final class FakeLoadBalancer extends LoadBalancer {
     private final String name;
-    private final Helper helper;
     private Object config;
     private Status upstreamError;
     private boolean shutdown;
 
-    FakeLoadBalancer(String name, Helper helper) {
+    FakeLoadBalancer(String name) {
       this.name = name;
-      this.helper = helper;
     }
 
     @Override
@@ -642,16 +640,6 @@ public class CdsLoadBalancer2Test {
     public void shutdown() {
       shutdown = true;
       childBalancers.remove(this);
-    }
-
-    void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
-      SubchannelPicker picker = new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withSubchannel(subchannel);
-        }
-      };
-      helper.updateBalancingState(state, picker);
     }
   }
 

@@ -21,13 +21,15 @@ dependencies {
     implementation libraries.netty_proxy_handler,
             libraries.guava,
             libraries.errorprone,
-            libraries.perfmark
+            libraries.perfmark,
+            libraries.netty_unix_common
 
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-testing-proto')
+            project(':grpc-testing-proto'),
+            libraries.netty_epoll_common
     testRuntimeOnly libraries.netty_tcnative,
             libraries.conscrypt,
             libraries.netty_epoll

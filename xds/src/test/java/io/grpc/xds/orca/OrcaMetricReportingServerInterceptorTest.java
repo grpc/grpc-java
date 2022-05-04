@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -69,7 +69,10 @@ public class OrcaMetricReportingServerInterceptorTest {
   private static final SimpleRequest REQUEST =
       SimpleRequest.newBuilder().setRequestMessage("Simple request").build();
 
-  private final Map<String, Double> applicationMetrics = new HashMap<>();
+  private final Map<String, Double> applicationUtilizationMetrics = new HashMap<>();
+  private final Map<String, Double> applicationCostMetrics = new HashMap<>();
+  private double cpuUtilizationMetrics = 0;
+  private double memoryUtilizationMetrics = 0;
 
   private final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
 
@@ -82,9 +85,16 @@ public class OrcaMetricReportingServerInterceptorTest {
           @Override
           public void unaryRpc(
               SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
-            for (Map.Entry<String, Double> entry : applicationMetrics.entrySet()) {
-              CallMetricRecorder.getCurrent().recordCallMetric(entry.getKey(), entry.getValue());
+            for (Map.Entry<String, Double> entry : applicationUtilizationMetrics.entrySet()) {
+              CallMetricRecorder.getCurrent().recordUtilizationMetric(entry.getKey(),
+                  entry.getValue());
             }
+            for (Map.Entry<String, Double> entry : applicationCostMetrics.entrySet()) {
+              CallMetricRecorder.getCurrent().recordCallMetric(entry.getKey(),
+                  entry.getValue());
+            }
+            CallMetricRecorder.getCurrent().recordCpuUtilizationMetric(cpuUtilizationMetrics);
+            CallMetricRecorder.getCurrent().recordMemoryUtilizationMetric(memoryUtilizationMetrics);
             SimpleResponse response =
                 SimpleResponse.newBuilder().setResponseMessage("Simple response").build();
             responseObserver.onNext(response);
@@ -111,8 +121,7 @@ public class OrcaMetricReportingServerInterceptorTest {
 
   @Test
   public void shareCallMetricRecorderInContext() throws IOException {
-    final CallMetricRecorder callMetricRecorder =
-        InternalCallMetricRecorder.newCallMetricRecorder();
+    final CallMetricRecorder callMetricRecorder = new CallMetricRecorder();
     ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory =
         new ServerStreamTracer.Factory() {
       @Override
@@ -169,15 +178,24 @@ public class OrcaMetricReportingServerInterceptorTest {
 
   @Test
   public void responseTrailersContainAllReportedMetrics() {
-    applicationMetrics.put("cost1", 1231.4543);
-    applicationMetrics.put("cost2", 0.1367);
-    applicationMetrics.put("cost3", 7614.145);
+    applicationCostMetrics.put("cost1", 1231.4543);
+    applicationCostMetrics.put("cost2", 0.1367);
+    applicationCostMetrics.put("cost3", 7614.145);
+    applicationUtilizationMetrics.put("util1", 0.1082);
+    applicationUtilizationMetrics.put("util2", 0.4936);
+    applicationUtilizationMetrics.put("util3", 0.5342);
+    cpuUtilizationMetrics = 0.3465;
+    memoryUtilizationMetrics = 0.764;
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =
         receivedTrailers.get(OrcaMetricReportingServerInterceptor.ORCA_ENDPOINT_LOAD_METRICS_KEY);
+    assertThat(report.getUtilizationMap())
+        .containsExactly("util1", 0.1082, "util2", 0.4936, "util3", 0.5342);
     assertThat(report.getRequestCostMap())
         .containsExactly("cost1", 1231.4543, "cost2", 0.1367, "cost3", 7614.145);
+    assertThat(report.getCpuUtilization()).isEqualTo(0.3465);
+    assertThat(report.getMemUtilization()).isEqualTo(0.764);
   }
 
   private static final class TrailersCapturingClientInterceptor implements ClientInterceptor {

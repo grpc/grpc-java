@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -61,10 +61,10 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
-import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
-import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
-import io.grpc.xds.OrcaOobUtil.SubchannelImpl;
+import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
+import io.grpc.xds.orca.OrcaOobUtil.OrcaReportingConfig;
+import io.grpc.xds.orca.OrcaOobUtil.OrcaReportingHelperWrapper;
+import io.grpc.xds.orca.OrcaOobUtil.SubchannelImpl;
 import java.net.SocketAddress;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
@@ -175,7 +175,6 @@ public class OrcaOobUtilTest {
   }
 
   @Before
-  @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
 
@@ -223,7 +222,6 @@ public class OrcaOobUtilTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void singlePolicyTypicalWorkflow() {
     setOrcaReportConfig(orcaHelperWrapper, SHORT_INTERVAL_CONFIG);
     verify(origHelper, atLeast(0)).getSynchronizationContext();
@@ -391,7 +389,6 @@ public class OrcaOobUtilTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void orcReportingDisabledWhenServiceNotImplemented() {
     setOrcaReportConfig(orcaHelperWrapper, SHORT_INTERVAL_CONFIG);
     createSubchannel(orcaHelperWrapper.asHelper(), 0, Attributes.EMPTY);

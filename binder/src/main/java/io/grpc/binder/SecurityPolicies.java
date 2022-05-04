@@ -25,12 +25,11 @@ import android.os.Build;
 import android.os.Process;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
-import javax.annotation.CheckReturnValue;
 
 /** Static factory methods for creating standard security policies. */
 @CheckReturnValue
@@ -186,5 +185,79 @@ public final class SecurityPolicies {
       return false;
     }
     return false;
+  }
+
+  /**
+   * Creates a {@link SecurityPolicy} that allows access if and only if *all* of the specified
+   * {@code securityPolicies} allow access.
+   *
+   * @param securityPolicies the security policies that all must allow access.
+   * @throws NullPointerException if any of the inputs are {@code null}.
+   * @throws IllegalArgumentException if {@code securityPolicies} is empty.
+   */
+  public static SecurityPolicy allOf(SecurityPolicy... securityPolicies) {
+    Preconditions.checkNotNull(securityPolicies, "securityPolicies");
+    Preconditions.checkArgument(securityPolicies.length > 0, "securityPolicies must not be empty");
+
+    return allOfSecurityPolicy(securityPolicies);
+  }
+
+  private static SecurityPolicy allOfSecurityPolicy(SecurityPolicy... securityPolicies) {
+    return new SecurityPolicy() {
+      @Override
+      public Status checkAuthorization(int uid) {
+        for (SecurityPolicy policy : securityPolicies) {
+          Status checkAuth = policy.checkAuthorization(uid);
+          if (!checkAuth.isOk()) {
+            return checkAuth;
+          }
+        }
+
+        return Status.OK;
+      }
+    };
+  }
+
+  /**
+   * Creates a {@link SecurityPolicy} which checks if the caller has all of the given permissions
+   * from {@code permissions}.
+   *
+   * @param permissions all permissions that the calling package needs to have
+   * @throws NullPointerException if any of the inputs are {@code null}
+   * @throws IllegalArgumentException if {@code permissions} is empty
+   */
+  public static SecurityPolicy hasPermissions(
+      PackageManager packageManager, ImmutableSet<String> permissions) {
+    Preconditions.checkNotNull(packageManager, "packageManager");
+    Preconditions.checkNotNull(permissions, "permissions");
+    Preconditions.checkArgument(!permissions.isEmpty(), "permissions");
+    return new SecurityPolicy() {
+      @Override
+      public Status checkAuthorization(int uid) {
+        return checkPermissions(uid, packageManager, permissions);
+      }
+    };
+  }
+
+  private static Status checkPermissions(
+      int uid, PackageManager packageManager, ImmutableSet<String> permissions) {
+    String[] packages = packageManager.getPackagesForUid(uid);
+    if (packages == null || packages.length == 0) {
+      return Status.UNAUTHENTICATED.withDescription(
+          "Rejected by permission check security policy. No packages found for uid");
+    }
+    for (String pkg : packages) {
+      for (String permission : permissions) {
+        if (packageManager.checkPermission(permission, pkg) != PackageManager.PERMISSION_GRANTED) {
+          return Status.PERMISSION_DENIED.withDescription(
+              "Rejected by permission check security policy. "
+                  + pkg
+                  + " does not have permission "
+                  + permission);
+        }
+      }
+    }
+
+    return Status.OK;
   }
 }
