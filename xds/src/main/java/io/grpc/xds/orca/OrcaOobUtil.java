@@ -61,7 +61,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -206,7 +205,7 @@ public abstract class OrcaOobUtil {
    * the reporting configuration such as reporting interval.
    */
   public abstract static class OrcaReportingHelperWrapper {
-    static final Attributes.Key<AtomicReference<OrcaReportingHelper.OrcaReportingState>>
+    static final Attributes.Key<OrcaReportingHelper.OrcaReportingState>
         ORCA_REPORTING_STATE_KEY =
         Attributes.Key.create("internal-orca-reporting-state");
 
@@ -233,10 +232,10 @@ public abstract class OrcaOobUtil {
      */
     public static void setListener(Subchannel subchannel, OrcaOobReportListener listener,
                                      OrcaReportingConfig config) {
-      AtomicReference<OrcaReportingHelper.OrcaReportingState> orcaStateRef =
+      OrcaReportingHelper.OrcaReportingState orcaState =
           subchannel.getAttributes().get(ORCA_REPORTING_STATE_KEY);
-      if (orcaStateRef != null && orcaStateRef.get() != null) {
-        orcaStateRef.get().setListener(listener, config);
+      if (orcaState != null) {
+        orcaState.setListener(listener, config);
       }
     }
     // public abstract void removeListener(Subchannel subchannel, OrcaOobReportListener listener);
@@ -278,22 +277,13 @@ public abstract class OrcaOobUtil {
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       syncContext.throwIfNotInThisSynchronizationContext();
-      AtomicReference<OrcaReportingState> orcaStateRef =
-          args.getAttributes().get(ORCA_REPORTING_STATE_KEY);
-      if (orcaStateRef == null) {
-        orcaStateRef = new AtomicReference<>();
-        Attributes attrs = args.getAttributes().toBuilder()
-            .set(ORCA_REPORTING_STATE_KEY, orcaStateRef).build();
-        args = args.toBuilder().setAttributes(attrs).build();
-      }
       Subchannel subchannel = super.createSubchannel(args);
-      if (orcaStateRef.get() == null) {
+      if (subchannel.getAttributes().get(ORCA_REPORTING_STATE_KEY) == null) {
         // Only the first load balancing policy requesting ORCA reports instantiates an
         // OrcaReportingState.
         OrcaReportingState orcaState = new OrcaReportingState(this, syncContext,
             delegate().getScheduledExecutorService());
         orcaStates.add(orcaState);
-        orcaStateRef.set(orcaState);
         subchannel = new SubchannelImpl(subchannel, orcaState);
       }
       return subchannel;
@@ -552,7 +542,6 @@ public abstract class OrcaOobUtil {
 
   @VisibleForTesting
   static final class SubchannelImpl extends ForwardingSubchannel {
-
     private final Subchannel delegate;
     private final OrcaReportingHelper.OrcaReportingState orcaState;
 
@@ -570,6 +559,11 @@ public abstract class OrcaOobUtil {
     public void start(SubchannelStateListener listener) {
       orcaState.init(this, listener);
       super.start(orcaState);
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return super.getAttributes().toBuilder().set(ORCA_REPORTING_STATE_KEY, orcaState).build();
     }
   }
 

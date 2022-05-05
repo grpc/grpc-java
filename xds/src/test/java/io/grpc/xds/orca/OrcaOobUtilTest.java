@@ -204,19 +204,16 @@ public class OrcaOobUtilTest {
     orcaHelperWrapper =
         OrcaOobUtil.newOrcaReportingHelperWrapper(
             origHelper,
-            // mockOrcaListener0,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     parentHelperWrapper =
         OrcaOobUtil.newOrcaReportingHelperWrapper(
             origHelper,
-            // mockOrcaListener1,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     childHelperWrapper =
         OrcaOobUtil.newOrcaReportingHelperWrapper(
             parentHelperWrapper.asHelper(),
-            // mockOrcaListener2,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
   }
@@ -233,9 +230,9 @@ public class OrcaOobUtilTest {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs =
           Attributes.newBuilder().set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
-      assertThat(unwrap(createSubchannel(orcaHelperWrapper.asHelper(), i, attrs)))
-          .isSameInstanceAs(subchannels[i]);
-      setOrcaReportConfig(subchannels[i], mockOrcaListener0, SHORT_INTERVAL_CONFIG);
+      Subchannel created = createSubchannel(orcaHelperWrapper.asHelper(), i, attrs);
+      assertThat(unwrap(created)).isSameInstanceAs(subchannels[i]);
+      setOrcaReportConfig(created, mockOrcaListener0, SHORT_INTERVAL_CONFIG);
       verify(origHelper, times(i + 1)).createSubchannel(createArgsCaptor.capture());
       assertThat(createArgsCaptor.getValue().getAddresses()).isEqualTo(eagLists[i]);
       assertThat(createArgsCaptor.getValue().getAttributes().get(SUBCHANNEL_ATTR_KEY))
@@ -314,12 +311,10 @@ public class OrcaOobUtilTest {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs =
           Attributes.newBuilder().set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
-      assertThat(unwrap(createSubchannel(childHelperWrapper.asHelper(), i, attrs)))
-          .isSameInstanceAs(subchannels[i]);
-      OrcaReportingHelperWrapper.setListener(subchannels[i], mockOrcaListener1,
-          SHORT_INTERVAL_CONFIG);
-      OrcaReportingHelperWrapper.setListener(subchannels[i], mockOrcaListener2,
-          SHORT_INTERVAL_CONFIG);
+      Subchannel created = createSubchannel(childHelperWrapper.asHelper(), i, attrs);
+      assertThat(unwrap(created)).isSameInstanceAs(subchannels[i]);
+      OrcaReportingHelperWrapper.setListener(created, mockOrcaListener1, SHORT_INTERVAL_CONFIG);
+      OrcaReportingHelperWrapper.setListener(created, mockOrcaListener2, SHORT_INTERVAL_CONFIG);
       verify(origHelper, times(i + 1)).createSubchannel(createArgsCaptor.capture());
       assertThat(createArgsCaptor.getValue().getAddresses()).isEqualTo(eagLists[i]);
       assertThat(createArgsCaptor.getValue().getAttributes().get(SUBCHANNEL_ATTR_KEY))
@@ -540,8 +535,8 @@ public class OrcaOobUtilTest {
   public void updateReportingIntervalWhenRpcActive() {
     // Sets report interval before creating a Subchannel, reporting starts right after suchannel
     // state becomes READY.
-    createSubchannel(orcaHelperWrapper.asHelper(), 0, Attributes.EMPTY);
-    OrcaReportingHelperWrapper.setListener(subchannels[0], mockOrcaListener0,
+    Subchannel created = createSubchannel(orcaHelperWrapper.asHelper(), 0, Attributes.EMPTY);
+    OrcaReportingHelperWrapper.setListener(created, mockOrcaListener0,
         MEDIUM_INTERVAL_CONFIG);
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
     verify(mockStateListeners[0]).onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));
@@ -553,7 +548,7 @@ public class OrcaOobUtilTest {
         .isEqualTo(buildOrcaRequestFromConfig(MEDIUM_INTERVAL_CONFIG));
 
     // Make reporting less frequent.
-    OrcaReportingHelperWrapper.setListener(subchannels[0], mockOrcaListener0, LONG_INTERVAL_CONFIG);
+    OrcaReportingHelperWrapper.setListener(created, mockOrcaListener0, LONG_INTERVAL_CONFIG);
     assertThat(orcaServiceImps[0].calls.poll().cancelled).isTrue();
     assertThat(orcaServiceImps[0].calls).hasSize(1);
     assertLog(subchannels[0].logs,
@@ -562,12 +557,12 @@ public class OrcaOobUtilTest {
         .isEqualTo(buildOrcaRequestFromConfig(LONG_INTERVAL_CONFIG));
 
     // Configuring with the same report interval again does not restart ORCA RPC.
-    OrcaReportingHelperWrapper.setListener(subchannels[0], mockOrcaListener0, LONG_INTERVAL_CONFIG);
+    OrcaReportingHelperWrapper.setListener(created, mockOrcaListener0, LONG_INTERVAL_CONFIG);
     assertThat(orcaServiceImps[0].calls.peek().cancelled).isFalse();
     assertThat(subchannels[0].logs).isEmpty();
 
     // Make reporting more frequent.
-    OrcaReportingHelperWrapper.setListener(subchannels[0], mockOrcaListener0,
+    OrcaReportingHelperWrapper.setListener(created, mockOrcaListener0,
         SHORT_INTERVAL_CONFIG);
     assertThat(orcaServiceImps[0].calls.poll().cancelled).isTrue();
     assertThat(orcaServiceImps[0].calls).hasSize(1);
