@@ -23,7 +23,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.services.CallMetricRecorder;
-import io.grpc.xds.OrcaOobService;
+import io.grpc.xds.orca.OrcaOobService;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
