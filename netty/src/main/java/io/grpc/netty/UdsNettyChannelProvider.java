@@ -16,15 +16,12 @@
 
 package io.grpc.netty;
 
-import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.internal.SharedResourcePool;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.SocketAddress;
-import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -44,47 +41,23 @@ public final class UdsNettyChannelProvider extends ManagedChannelProvider {
 
   @Override
   public NettyChannelBuilder builderForAddress(String name, int port) {
-    throw new UnsupportedOperationException("host:port not supported");
+    throw new AssertionError("NettyChannelProvider shadows this implementation");
   }
 
   @Override
   public NettyChannelBuilder builderForTarget(String target) {
-    ChannelCredentials creds = InsecureChannelCredentials.create();
-    ProtocolNegotiators.FromChannelCredentialsResult result = ProtocolNegotiators.from(creds);
-    if (result.error != null) {
-      throw new RuntimeException(result.error);
-    }
-    return getNettyChannelBuilder(target, creds, null, result.negotiator);
+    throw new AssertionError("NettyChannelProvider shadows this implementation");
   }
 
   @Override
   public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
-    ProtocolNegotiators.FromChannelCredentialsResult result = ProtocolNegotiators.from(creds);
-    if (result.error != null) {
-      return NewChannelBuilderResult.error(result.error);
+    NewChannelBuilderResult result = new NettyChannelProvider().newChannelBuilder(target, creds);
+    if (result.getChannelBuilder() != null) {
+      ((NettyChannelBuilder) result.getChannelBuilder())
+          .eventLoopGroupPool(SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP))
+          .channelType(Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE);
     }
-    return NewChannelBuilderResult.channelBuilder(
-        getNettyChannelBuilder(target, creds, result.callCredentials, result.negotiator));
-  }
-
-  private static NettyChannelBuilder getNettyChannelBuilder(
-      String target,
-      ChannelCredentials creds,
-      CallCredentials callCredentials,
-      ProtocolNegotiator.ClientFactory negotiator) {
-    if (Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE == null) {
-      throw new IllegalStateException("Epoll is not available");
-    }
-    String targetPath = UdsNameResolverProvider.getTargetPathFromUri(URI.create(target));
-    NettyChannelBuilder builder =
-        new NettyChannelBuilder(
-            new DomainSocketAddress(targetPath), creds, callCredentials, negotiator);
-    builder =
-        builder
-            .eventLoopGroupPool(
-                SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP))
-            .channelType(Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE);
-    return builder;
+    return result;
   }
 
   @Override
