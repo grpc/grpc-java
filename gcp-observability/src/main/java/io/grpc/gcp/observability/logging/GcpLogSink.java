@@ -38,7 +38,9 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** Sink for Google Cloud Logging. */
+/**
+ * Sink for Google Cloud Logging.
+ */
 @Internal
 public class GcpLogSink implements Sink {
   private final Logger logger = Logger.getLogger(GcpLogSink.class.getName());
@@ -48,9 +50,9 @@ public class GcpLogSink implements Sink {
   private static final String DEFAULT_LOG_NAME =
       "microservices.googleapis.com%2Fobservability%2Fgrpc";
   private static final String K8S_MONITORED_RESOURCE_TYPE = "k8s_container";
-  private static final Set<String> kubernetesResourceLabelSet =
-      ImmutableSet.of(
-          "project_id", "location", "cluster_name", "namespace_name", "pod_name", "container_name");
+  private static final Set<String> kubernetesResourceLabelSet
+      = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
+      "pod_name", "container_name");
   private static final long FALLBACK_FLUSH_LIMIT = 100L;
   private final Map<String, String> customTags;
   private final Logging gcpLoggingClient;
@@ -71,26 +73,16 @@ public class GcpLogSink implements Sink {
    *
    * @param destinationProjectId cloud project id to write logs
    */
-  public GcpLogSink(
-      String destinationProjectId,
-      Map<String, String> locationTags,
-      Map<String, String> customTags,
-      Long flushLimit) {
-    this(
-        createLoggingClient(destinationProjectId),
-        destinationProjectId,
-        locationTags,
-        customTags,
-        flushLimit);
+  public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Long flushLimit) {
+    this(createLoggingClient(destinationProjectId), destinationProjectId, locationTags,
+        customTags, flushLimit);
+
   }
 
   @VisibleForTesting
-  GcpLogSink(
-      Logging client,
-      String destinationProjectId,
-      Map<String, String> locationTags,
-      Map<String, String> customTags,
-      Long flushLimit) {
+  GcpLogSink(Logging client, String destinationProjectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Long flushLimit) {
     this.gcpLoggingClient = client;
     this.customTags = getCustomTags(customTags, locationTags, destinationProjectId);
     this.kubernetesResource = getResource(locationTags);
@@ -142,10 +134,8 @@ public class GcpLogSink implements Sink {
   }
 
   @VisibleForTesting
-  static Map<String, String> getCustomTags(
-      Map<String, String> customTags,
-      Map<String, String> locationTags,
-      String destinationProjectId) {
+  static Map<String, String> getCustomTags(Map<String, String> customTags,
+      Map<String, String> locationTags, String destinationProjectId) {
     ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
     String sourceProjectId = locationTags.get("project_id");
     if (!Strings.isNullOrEmpty(destinationProjectId)
@@ -173,7 +163,8 @@ public class GcpLogSink implements Sink {
   }
 
   @SuppressWarnings("unchecked")
-  private Map<String, Object> protoToMapConverter(GrpcLogRecord logProto) throws IOException {
+  private Map<String, Object> protoToMapConverter(GrpcLogRecord logProto)
+      throws IOException {
     JsonFormat.Printer printer = JsonFormat.printer().preservingProtoFieldNames();
     String recordJson = printer.print(logProto);
     return (Map<String, Object>) JsonParser.parse(recordJson);
@@ -197,7 +188,9 @@ public class GcpLogSink implements Sink {
     }
   }
 
-  /** Closes Cloud Logging Client. */
+  /**
+   * Closes Cloud Logging Client.
+   */
   @Override
   public synchronized void close() {
     if (gcpLoggingClient == null) {
