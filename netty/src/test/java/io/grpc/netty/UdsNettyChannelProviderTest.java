@@ -101,39 +101,11 @@ public class UdsNettyChannelProviderTest {
   }
 
   @Test
-  public void builderForTarget() {
-    Assume.assumeTrue(Utils.isEpollAvailable());
-    assertThat(provider.builderForTarget("unix:sock.sock")).isInstanceOf(NettyChannelBuilder.class);
-  }
-
-  @Test
-  public void builderForTarget_badScheme() {
-    Assume.assumeTrue(Utils.isEpollAvailable());
-    try {
-      provider.builderForTarget("dns:sock.sock");
-      fail("exception expected");
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().isEqualTo("scheme must be unix");
-    }
-  }
-
-  @Test
   public void newChannelBuilder_success() {
     Assume.assumeTrue(Utils.isEpollAvailable());
     NewChannelBuilderResult result =
         provider.newChannelBuilder("unix:sock.sock", TlsChannelCredentials.create());
     assertThat(result.getChannelBuilder()).isInstanceOf(NettyChannelBuilder.class);
-  }
-
-  @Test
-  public void newChannelBuilder_badScheme() {
-    Assume.assumeTrue(Utils.isEpollAvailable());
-    try {
-      provider.newChannelBuilder("dns:sock.sock", InsecureChannelCredentials.create());
-      fail("exception expected");
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().isEqualTo("scheme must be unix");
-    }
   }
 
   @Test
