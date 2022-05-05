@@ -60,7 +60,7 @@ subprojects {
         googleauthVersion = '1.4.0'
         protobufVersion = '3.19.2'
         protocVersion = protobufVersion
-        opencensusVersion = '0.28.0'
+        opencensusVersion = '0.31.0'
         autovalueVersion = '1.9'
 
         configureProtoCompilation = {
