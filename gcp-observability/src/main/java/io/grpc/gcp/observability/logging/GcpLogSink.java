@@ -47,7 +47,8 @@ public class GcpLogSink implements Sink {
 
   // TODO(DNVindhya): Make cloud logging service a configurable value
   private static final String SERVICE_TO_EXCLUDE = "google.logging.v2.LoggingServiceV2";
-  private static final String DEFAULT_LOG_NAME = "microservices.googleapis.com%2Fobservability%2Fgrpc";
+  private static final String DEFAULT_LOG_NAME =
+      "microservices.googleapis.com%2Fobservability%2Fgrpc";
   private static final String K8S_MONITORED_RESOURCE_TYPE = "k8s_container";
   private static final Set<String> kubernetesResourceLabelSet
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
