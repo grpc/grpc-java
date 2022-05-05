@@ -34,6 +34,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.Status;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -382,14 +383,64 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testAllOf_failsIfOneSecurityPoliciesNotAllowed() throws Exception {
+    final AtomicBoolean policyCalled = new AtomicBoolean(false);
     policy =
         SecurityPolicies.allOf(
             SecurityPolicies.internalOnly(),
-            SecurityPolicies.permissionDenied("Not allowed SecurityPolicy"));
+            SecurityPolicies.permissionDenied("Not allowed SecurityPolicy"),
+            new SecurityPolicy() {
+              @Override
+              public Status checkAuthorization(int uid) {
+                policyCalled.set(true);
+                throw new AssertionError();
+              }
+            });
 
     assertThat(policy.checkAuthorization(MY_UID).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
     assertThat(policy.checkAuthorization(MY_UID).getDescription())
         .contains("Not allowed SecurityPolicy");
+    assertThat(policyCalled.get()).isFalse();
+  }
+
+  @Test
+  public void testAnyOf_succeedsIfAnySecurityPoliciesAllowed() throws Exception {
+    final AtomicBoolean policyCalled = new AtomicBoolean(false);
+    policy =
+        SecurityPolicies.anyOf(
+            SecurityPolicies.internalOnly(),
+            new SecurityPolicy() {
+              @Override
+              public Status checkAuthorization(int uid) {
+                policyCalled.set(true);
+                throw new AssertionError();
+              }
+            });
+
+    assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policyCalled.get()).isFalse();
+  }
+
+  @Test
+  public void testAnyOf_failsIfNoSecurityPolicyIsAllowed() throws Exception {
+    policy =
+        SecurityPolicies.anyOf(
+            new SecurityPolicy() {
+              @Override
+              public Status checkAuthorization(int uid) {
+                return Status.PERMISSION_DENIED.withDescription("Not allowed: first");
+              }
+            },
+            new SecurityPolicy() {
+              @Override
+              public Status checkAuthorization(int uid) {
+                return Status.UNAUTHENTICATED.withDescription("Not allowed: second");
+              }
+            });
+
+    assertThat(policy.checkAuthorization(MY_UID).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(MY_UID).getDescription()).contains("Not allowed: first");
+    assertThat(policy.checkAuthorization(MY_UID).getDescription()).contains("Not allowed: second");
   }
 }

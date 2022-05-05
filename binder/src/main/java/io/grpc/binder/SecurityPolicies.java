@@ -29,7 +29,10 @@ import com.google.common.collect.ImmutableSet;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 
 /** Static factory methods for creating standard security policies. */
 @CheckReturnValue
@@ -191,6 +194,12 @@ public final class SecurityPolicies {
    * Creates a {@link SecurityPolicy} that allows access if and only if *all* of the specified
    * {@code securityPolicies} allow access.
    *
+   * <p>Policies will be checked in the order that they are passed. If a policy denies access,
+   * subsequent policies will not be checked.
+   *
+   * <p>If a policy denies access, the {@link io.grpc.Status} returned by {@code checkAuthorization}
+   * will be that of the failed policy.
+   *
    * @param securityPolicies the security policies that all must allow access.
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code securityPolicies} is empty.
@@ -214,6 +223,60 @@ public final class SecurityPolicies {
         }
 
         return Status.OK;
+      }
+    };
+  }
+
+  /**
+   * Creates a {@link SecurityPolicy} that allows access if *any* of the specified {@code
+   * securityPolicies} allow access.
+   *
+   * <p>Policies will be checked in the order that they are passed. If a policy allows access,
+   * subsequent policies will not be checked.
+   *
+   * <p>If all policies deny access, the {@link io.grpc.Status} returned by {@code
+   * checkAuthorization} will included the concatenated descriptions of the failed policies and
+   * attach any additional causes as suppressed throwables. The status code will be that of the
+   * first failed policy.
+   *
+   * @param securityPolicies the security policies that will be checked.
+   * @throws NullPointerException if any of the inputs are {@code null}.
+   * @throws IllegalArgumentException if {@code securityPolicies} is empty.
+   */
+  public static SecurityPolicy anyOf(SecurityPolicy... securityPolicies) {
+    Preconditions.checkNotNull(securityPolicies, "securityPolicies");
+    Preconditions.checkArgument(securityPolicies.length > 0, "securityPolicies must not be empty");
+
+    return anyOfSecurityPolicy(securityPolicies);
+  }
+
+  private static SecurityPolicy anyOfSecurityPolicy(SecurityPolicy... securityPolicies) {
+    return new SecurityPolicy() {
+      @Override
+      public Status checkAuthorization(int uid) {
+        List<Status> failed = new ArrayList<>();
+        for (SecurityPolicy policy : securityPolicies) {
+          Status checkAuth = policy.checkAuthorization(uid);
+          if (checkAuth.isOk()) {
+            return checkAuth;
+          }
+          failed.add(checkAuth);
+        }
+
+        Iterator<Status> iter = failed.iterator();
+        Status toReturn = iter.next();
+        while (iter.hasNext()) {
+          Status append = iter.next();
+          toReturn = toReturn.augmentDescription(append.getDescription());
+          if (append.getCause() != null) {
+            if (toReturn.getCause() != null) {
+              toReturn.getCause().addSuppressed(append.getCause());
+            } else {
+              toReturn = toReturn.withCause(append.getCause());
+            }
+          }
+        }
+        return toReturn;
       }
     };
   }
