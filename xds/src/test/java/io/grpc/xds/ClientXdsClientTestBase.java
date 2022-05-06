@@ -1630,9 +1630,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.edsServiceName()).isNull();
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -1657,9 +1656,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.edsServiceName()).isNull();
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -1689,9 +1687,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.edsServiceName()).isNull();
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
     assertThat(childConfigs.get(0).getRawConfigValue().get("choiceCount")).isEqualTo(3);
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
@@ -1750,9 +1747,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.AGGREGATE);
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.prioritizedClusterNames()).containsExactlyElementsIn(candidates).inOrder();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterAggregate, VERSION_1, TIME_INCREMENT);
@@ -1776,9 +1772,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.edsServiceName()).isNull();
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
@@ -1925,9 +1920,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.edsServiceName()).isNull();
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -1953,7 +1947,6 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void cdsResourceUpdated() {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
@@ -1974,7 +1967,7 @@ public abstract class ClientXdsClientTestBase {
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -1997,7 +1990,7 @@ public abstract class ClientXdsClientTestBase {
     lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
     childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -2068,9 +2061,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.edsServiceName()).isNull();
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -2088,7 +2080,6 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void multipleCdsWatchers() {
     String cdsResourceTwo = "cluster-bar.googleapis.com";
     CdsResourceWatcher watcher1 = mock(CdsResourceWatcher.class);
@@ -2127,7 +2118,7 @@ public abstract class ClientXdsClientTestBase {
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -2140,7 +2131,7 @@ public abstract class ClientXdsClientTestBase {
     lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
     childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -2153,7 +2144,7 @@ public abstract class ClientXdsClientTestBase {
     lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
     childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
