@@ -194,12 +194,6 @@ public final class SecurityPolicies {
    * Creates a {@link SecurityPolicy} that allows access if and only if *all* of the specified
    * {@code securityPolicies} allow access.
    *
-   * <p>Policies will be checked in the order that they are passed. If a policy denies access,
-   * subsequent policies will not be checked.
-   *
-   * <p>If a policy denies access, the {@link io.grpc.Status} returned by {@code checkAuthorization}
-   * will be that of the failed policy.
-   *
    * @param securityPolicies the security policies that all must allow access.
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code securityPolicies} is empty.

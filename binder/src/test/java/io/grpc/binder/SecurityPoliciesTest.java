@@ -383,42 +383,24 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testAllOf_failsIfOneSecurityPoliciesNotAllowed() throws Exception {
-    final AtomicBoolean policyCalled = new AtomicBoolean(false);
     policy =
         SecurityPolicies.allOf(
             SecurityPolicies.internalOnly(),
-            SecurityPolicies.permissionDenied("Not allowed SecurityPolicy"),
-            new SecurityPolicy() {
-              @Override
-              public Status checkAuthorization(int uid) {
-                policyCalled.set(true);
-                throw new AssertionError();
-              }
-            });
+            SecurityPolicies.permissionDenied("Not allowed SecurityPolicy"));
 
     assertThat(policy.checkAuthorization(MY_UID).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
     assertThat(policy.checkAuthorization(MY_UID).getDescription())
         .contains("Not allowed SecurityPolicy");
-    assertThat(policyCalled.get()).isFalse();
   }
 
   @Test
   public void testAnyOf_succeedsIfAnySecurityPoliciesAllowed() throws Exception {
-    final AtomicBoolean policyCalled = new AtomicBoolean(false);
-    policy =
-        SecurityPolicies.anyOf(
-            SecurityPolicies.internalOnly(),
-            new SecurityPolicy() {
-              @Override
-              public Status checkAuthorization(int uid) {
-                policyCalled.set(true);
-                throw new AssertionError();
-              }
-            });
+    RecordingPolicy recordingPolicy = new RecordingPolicy();
+    policy = SecurityPolicies.anyOf(SecurityPolicies.internalOnly(), recordingPolicy);
 
     assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
-    assertThat(policyCalled.get()).isFalse();
+    assertThat(recordingPolicy.numCalls.get()).isEqualTo(0);
   }
 
   @Test
@@ -442,5 +424,15 @@ public final class SecurityPoliciesTest {
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
     assertThat(policy.checkAuthorization(MY_UID).getDescription()).contains("Not allowed: first");
     assertThat(policy.checkAuthorization(MY_UID).getDescription()).contains("Not allowed: second");
+  }
+
+  private static final class RecordingPolicy extends SecurityPolicy {
+    private final AtomicInteger numCalls = new AtomicInteger(0);
+
+    @Override
+    public Status checkAuthorization(int uid) {
+      numCalls.incrementAndGet();
+      return Status.OK;
+    }
   }
 }
