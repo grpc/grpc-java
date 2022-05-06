@@ -72,8 +72,6 @@ class LoadBalancerConfigFactory {
   static final String WRR_LOCALITY_FIELD_NAME = "wrr_locality_experimental";
   static final String CHILD_POLICY_FIELD = "childPolicy";
 
-  static final String TYPE_URL_PREFIX_REGEX = "type\\.googleapis\\.com/";
-
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
    * Cluster}.
@@ -108,7 +106,7 @@ class LoadBalancerConfigFactory {
     if (maxRingSize != null) {
       configBuilder.put(MAX_RING_SIZE_FIELD_NAME, maxRingSize.doubleValue());
     }
-    return ImmutableMap.of(RING_HASH_FIELD_NAME, configBuilder.build());
+    return ImmutableMap.of(RING_HASH_FIELD_NAME, configBuilder.buildOrThrow());
   }
 
   /**
@@ -120,7 +118,7 @@ class LoadBalancerConfigFactory {
     if (choiceCount != null) {
       configBuilder.put(CHOICE_COUNT_FIELD_NAME, choiceCount.doubleValue());
     }
-    return ImmutableMap.of(LEAST_REQUEST_FIELD_NAME, configBuilder.build());
+    return ImmutableMap.of(LEAST_REQUEST_FIELD_NAME, configBuilder.buildOrThrow());
   }
 
   /**
@@ -129,7 +127,7 @@ class LoadBalancerConfigFactory {
   private static ImmutableMap<String, ?> buildWrrLocalityConfig(
       ImmutableMap<String, ?> childConfig) {
     return ImmutableMap.<String, Object>builder().put(WRR_LOCALITY_FIELD_NAME,
-        ImmutableMap.of(CHILD_POLICY_FIELD, ImmutableList.of(childConfig))).build();
+        ImmutableMap.of(CHILD_POLICY_FIELD, ImmutableList.of(childConfig))).buildOrThrow();
   }
 
   /**
@@ -152,7 +150,7 @@ class LoadBalancerConfigFactory {
      */
     private static ImmutableMap<String, ?> convertToServiceConfig(
         LoadBalancingPolicy loadBalancingPolicy, int recursionDepth)
-        throws ResourceInvalidException {
+        throws ResourceInvalidException, MaxRecursionReachedException {
       if (recursionDepth > MAX_RECURSION) {
         throw new MaxRecursionReachedException();
       }
@@ -162,13 +160,14 @@ class LoadBalancerConfigFactory {
         Any typedConfig = policy.getTypedExtensionConfig().getTypedConfig();
         try {
           if (typedConfig.is(RingHash.class)) {
-            serviceConfig = convertRingHashConfig(typedConfig);
+            serviceConfig = convertRingHashConfig(typedConfig.unpack(RingHash.class));
           } else if (typedConfig.is(WrrLocality.class)) {
-            serviceConfig = convertWrrLocalityConfig(typedConfig, recursionDepth);
+            serviceConfig = convertWrrLocalityConfig(typedConfig.unpack(WrrLocality.class),
+                recursionDepth);
           } else if (typedConfig.is(RoundRobin.class)) {
             serviceConfig = convertRoundRobinConfig();
           } else if (typedConfig.is(TypedStruct.class)) {
-            serviceConfig = convertCustomConfig(typedConfig);
+            serviceConfig = convertCustomConfig(typedConfig.unpack(TypedStruct.class));
           }
           // TODO: support least_request once it is added to the envoy protos.
         } catch (InvalidProtocolBufferException e) {
@@ -182,7 +181,7 @@ class LoadBalancerConfigFactory {
         }
         // The service config is expected to have a single root entry, where the name of that entry
         // is the name of the policy. A Load balancer with this name must exist in the registry.
-        if (LoadBalancerRegistry.getDefaultRegistry()
+        if (serviceConfig != null && LoadBalancerRegistry.getDefaultRegistry()
             .getProvider(Iterables.getOnlyElement(serviceConfig.keySet())) == null) {
           logger.log(XdsLogLevel.WARNING, "Policy {0} not found in the LB registry, skipping",
               typedConfig.getTypeUrl());
@@ -200,10 +199,8 @@ class LoadBalancerConfigFactory {
     /**
      * Converts a ring_hash {@link Any} configuration to service config format.
      */
-    private static ImmutableMap<String, ?> convertRingHashConfig(Any config)
+    private static ImmutableMap<String, ?> convertRingHashConfig(RingHash ringHash)
         throws InvalidProtocolBufferException, ResourceInvalidException {
-      RingHash ringHash = config.unpack(RingHash.class);
-
       // The hash function needs to be validated here as it is not exposed in the returned
       // configuration for later validation.
       if (RingHash.HashFunction.XX_HASH != ringHash.getHashFunction()) {
@@ -219,9 +216,9 @@ class LoadBalancerConfigFactory {
     /**
      * Converts a wrr_locality {@link Any} configuration to service config format.
      */
-    private static ImmutableMap<String, ?> convertWrrLocalityConfig(Any config, int recursionDepth)
-        throws InvalidProtocolBufferException, ResourceInvalidException {
-      WrrLocality wrrLocality = config.unpack(WrrLocality.class);
+    private static ImmutableMap<String, ?> convertWrrLocalityConfig(WrrLocality wrrLocality,
+        int recursionDepth) throws InvalidProtocolBufferException, ResourceInvalidException,
+        MaxRecursionReachedException {
       return buildWrrLocalityConfig(
           convertToServiceConfig(wrrLocality.getEndpointPickingPolicy(), recursionDepth + 1));
     }
@@ -237,9 +234,8 @@ class LoadBalancerConfigFactory {
      * Converts a custom LB config {@link Any} configuration to service config format.
      */
     @SuppressWarnings("unchecked")
-    private static ImmutableMap<String, ?> convertCustomConfig(Any config)
+    private static ImmutableMap<String, ?> convertCustomConfig(TypedStruct configTypedStruct)
         throws InvalidProtocolBufferException, ResourceInvalidException {
-      TypedStruct configTypedStruct = config.unpack(TypedStruct.class);
       Object rawJsonConfig = null;
       try {
         rawJsonConfig = JsonParser.parse(JsonFormat.printer().print(configTypedStruct.getValue()));
@@ -251,13 +247,17 @@ class LoadBalancerConfigFactory {
         throw new ResourceInvalidException("Custom LB config does not contain a JSON object");
       }
 
-      return ImmutableMap.of(
-          configTypedStruct.getTypeUrl().replaceFirst(TYPE_URL_PREFIX_REGEX, ""),
-          (Map<String, ?>) rawJsonConfig);
+      String customConfigTypeName = configTypedStruct.getTypeUrl();
+      if (customConfigTypeName.contains("/")) {
+        customConfigTypeName = customConfigTypeName.substring(
+            customConfigTypeName.lastIndexOf("/") + 1);
+      }
+
+      return ImmutableMap.of(customConfigTypeName, (Map<String, ?>) rawJsonConfig);
     }
 
     // Used to signal that the LB config goes too deep.
-    static class MaxRecursionReachedException extends RuntimeException {
+    static class MaxRecursionReachedException extends Exception {
       static final long serialVersionUID = 1L;
     }
   }

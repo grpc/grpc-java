@@ -105,6 +105,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
+import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.lookup.v1.GrpcKeyBuilder;
@@ -1761,9 +1762,8 @@ public class ClientXdsClientDataTest {
         LoadBalancerRegistry.getDefaultRegistry());
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
   }
 
