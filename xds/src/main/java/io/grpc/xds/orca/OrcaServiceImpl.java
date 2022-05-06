@@ -34,7 +34,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-final class OrcaServiceImpl implements BindableService {
+/**
+ * Implements a {@link BindableService} that generates Out-Of-Band server metrics.
+ */
+public final class OrcaServiceImpl implements BindableService {
   private static final Logger logger = Logger.getLogger(OrcaServiceImpl.class.getName());
 
   private final long minReportIntervalNanos;
@@ -42,8 +45,12 @@ final class OrcaServiceImpl implements BindableService {
   @VisibleForTesting
   final AtomicInteger clientCount = new AtomicInteger(0);
   private OrcaMetrics orcaMetrics;
-  RealOrcaServiceImpl delegate = new RealOrcaServiceImpl();
+  private final RealOrcaServiceImpl delegate = new RealOrcaServiceImpl();
 
+  /**
+   * Constructs a service to report server metrics. Config the report interval lower bound, the
+   * executor to run the timer, and a {@link OrcaMetrics} that contains metrics data.
+   */
   public OrcaServiceImpl(long minReportIntervalNanos, ScheduledExecutorService timeService,
                          OrcaMetrics orcaMetrics) {
     this.minReportIntervalNanos = minReportIntervalNanos;

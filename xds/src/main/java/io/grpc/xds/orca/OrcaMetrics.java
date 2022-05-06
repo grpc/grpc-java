@@ -28,10 +28,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Implements the service/APIs for Out-of-Band metrics reporting, only for utilization metrics.
- * Register the returned service
- * {@link #createService(long, TimeUnit, ScheduledExecutorService)} ()} to the server, then a
- * client can request for periodic load reports. A user should use the public set-APIs to update the
- * server machine's utilization metrics data.
+ * Register the returned service {@link #createService} to the server, then a client can request for
+ * periodic load reports. A user should use the public set-APIs to update the server machine's
+ * utilization metrics data.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9006")
 public final class OrcaMetrics {
@@ -45,7 +44,7 @@ public final class OrcaMetrics {
   private volatile double memoryUtilization;
 
   /**
-   * Construct an OOB metrics reporting service.
+   * Create an OOB metrics reporting service.
    *
    * @param minInterval configures the minimum metrics reporting interval for the service. Bad
    *        configuration (non-positive) will be overridden to service default (30s).
