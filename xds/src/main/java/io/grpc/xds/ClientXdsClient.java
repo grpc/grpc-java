@@ -1635,9 +1635,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     }
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
-    // TODO: If load_balancing_policy is set in Cluster use it for LB config, otherwise fall back
-    // to using the legacy lb_policy field.
-    ImmutableMap<String, ?> lbPolicyConfig = LegacyLoadBalancerConfigFactory.newConfig(cluster,
+    ImmutableMap<String, ?> lbPolicyConfig = LoadBalancerConfigFactory.newConfig(cluster,
         enableLeastRequest);
 
     // Validate the LB config by trying to parse it with the corresponding LB provider.
