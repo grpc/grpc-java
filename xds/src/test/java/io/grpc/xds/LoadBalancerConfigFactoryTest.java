@@ -177,7 +177,7 @@ public class LoadBalancerConfigFactoryTest {
       // With the new config mechanism we get a more generic error than with the old one because the
       // logic loops over potentially multiple configurations and only throws an exception at the
       // end if there was no valid policies found.
-      assertThat(e).hasMessageThat().contains("Invalid LoadBalancingPolicy");
+      assertThat(e).hasMessageThat().contains("Invalid ring hash function");
       return;
     }
     fail("ResourceInvalidException not thrown");
@@ -266,7 +266,9 @@ public class LoadBalancerConfigFactoryTest {
         LoadBalancerConfigFactory.newConfig(cluster, false)));
   }
 
-  // When a provider for the custom policy is NOT available, we fall back to the next available one.
+  // When a provider for the custom policy is NOT available, we still fail even if there is another
+  // round_robin configuration in the list as the wrr_locality the custom config is wrapped in is
+  // a recognized type and expected to have a valid config.
   @Test
   public void complexCustomConfig_customProviderNotRegistered() throws ResourceInvalidException {
     Cluster cluster = Cluster.newBuilder()
@@ -275,8 +277,14 @@ public class LoadBalancerConfigFactoryTest {
                 .addPolicies(buildWrrPolicy(ROUND_ROBIN_POLICY)))
         .build();
 
-    assertValidRoundRobin(ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LoadBalancerConfigFactory.newConfig(cluster, false)));
+    try {
+      ServiceConfigUtil.unwrapLoadBalancingConfig(
+          LoadBalancerConfigFactory.newConfig(cluster, false));
+    } catch (ResourceInvalidException e) {
+      assertThat(e).hasMessageThat().contains("Invalid LoadBalancingPolicy");
+      return;
+    }
+    fail("ResourceInvalidException not thrown");
   }
 
   private void assertValidCustomConfig(LbConfig lbConfig) {

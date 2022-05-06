@@ -171,17 +171,12 @@ class LoadBalancerConfigFactory {
           }
           // TODO: support least_request once it is added to the envoy protos.
         } catch (InvalidProtocolBufferException e) {
-          logger.log(XdsLogLevel.WARNING, "Invalid Any protobuf for policy {0}: {1}",
-              typedConfig.getTypeUrl(), e.getMessage());
-          continue;
-        } catch (ResourceInvalidException e) {
-          logger.log(XdsLogLevel.WARNING, "Invalid configuration for policy {0}: {1}",
-              typedConfig.getTypeUrl(), e.getMessage());
-          continue;
+          throw new ResourceInvalidException(
+              "Unable to unpack typedConfig for: " + typedConfig.getTypeUrl(), e);
         }
         // The service config is expected to have a single root entry, where the name of that entry
         // is the name of the policy. A Load balancer with this name must exist in the registry.
-        if (serviceConfig != null && LoadBalancerRegistry.getDefaultRegistry()
+        if (serviceConfig == null || LoadBalancerRegistry.getDefaultRegistry()
             .getProvider(Iterables.getOnlyElement(serviceConfig.keySet())) == null) {
           logger.log(XdsLogLevel.WARNING, "Policy {0} not found in the LB registry, skipping",
               typedConfig.getTypeUrl());
