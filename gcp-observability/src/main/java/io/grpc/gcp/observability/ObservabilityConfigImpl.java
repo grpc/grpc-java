@@ -57,7 +57,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   void parseFile(String configFile) throws IOException {
-    parse(new String(Files.readAllBytes(Paths.get(configFile)), Charsets.US_ASCII));
+    parse(new String(Files.readAllBytes(Paths.get(configFile)), Charsets.UTF_8));
   }
 
   @SuppressWarnings("unchecked")

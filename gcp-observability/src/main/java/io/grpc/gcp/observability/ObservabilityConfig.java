@@ -72,13 +72,17 @@ public interface ObservabilityConfig {
     }
   }
 
+  /** Corresponds to a {@link io.opencensus.trace.Sampler} type. */
   enum SamplerType {
     ALWAYS,
     NEVER,
     PROBABILISTIC;
   }
 
+  /** Represents a trace {@link io.opencensus.trace.Sampler} configuration. */
   class Sampler {
+    private SamplerType type;
+    private double probability;
 
     Sampler(double probability) {
       this.probability = probability;
@@ -96,8 +100,5 @@ public interface ObservabilityConfig {
     SamplerType getType() {
       return type;
     }
-
-    private SamplerType type;
-    private double probability;
   }
 }
