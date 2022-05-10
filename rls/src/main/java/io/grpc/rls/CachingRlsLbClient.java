@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Converter;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
+import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ChannelLogger;
@@ -41,7 +42,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.TimeProvider;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
@@ -92,7 +92,7 @@ final class CachingRlsLbClient {
 
   private final SynchronizationContext synchronizationContext;
   private final ScheduledExecutorService scheduledExecutorService;
-  private final TimeProvider timeProvider;
+  private final Ticker ticker;
   private final Throttler throttler;
 
   private final LbPolicyConfiguration lbPolicyConfig;
@@ -118,14 +118,14 @@ final class CachingRlsLbClient {
     maxAgeNanos = rlsConfig.maxAgeInNanos();
     staleAgeNanos = rlsConfig.staleAgeInNanos();
     callTimeoutNanos = rlsConfig.lookupServiceTimeoutInNanos();
-    timeProvider = checkNotNull(builder.timeProvider, "timeProvider");
+    ticker = checkNotNull(builder.ticker, "ticker");
     throttler = checkNotNull(builder.throttler, "throttler");
     linkedHashLruCache =
         new RlsAsyncLruCache(
             rlsConfig.cacheSizeBytes(),
             builder.evictionListener,
             scheduledExecutorService,
-            timeProvider,
+            ticker,
             lock);
     logger = helper.getChannelLogger();
     String serverHost = null;
@@ -229,7 +229,7 @@ final class CachingRlsLbClient {
         // cache hit, initiate async-refresh if entry is staled
         logger.log(ChannelLogLevel.DEBUG, "Cache hit for the request");
         DataCacheEntry dataEntry = ((DataCacheEntry) cacheEntry);
-        if (dataEntry.isStaled(timeProvider.currentTimeNanos())) {
+        if (dataEntry.isStaled(ticker.read())) {
           dataEntry.maybeRefresh();
         }
         return CachedRouteLookupResponse.dataEntry((DataCacheEntry) cacheEntry);
@@ -496,7 +496,7 @@ final class CachingRlsLbClient {
     abstract int getSizeBytes();
 
     final boolean isExpired() {
-      return isExpired(timeProvider.currentTimeNanos());
+      return isExpired(ticker.read());
     }
 
     abstract boolean isExpired(long now);
@@ -519,7 +519,7 @@ final class CachingRlsLbClient {
       childPolicyWrapper =
           refCountedChildPolicyWrapperFactory
               .createOrGet(response.targets().get(0));
-      long now = timeProvider.currentTimeNanos();
+      long now = ticker.read();
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
     }
@@ -581,11 +581,11 @@ final class CachingRlsLbClient {
 
     @Override
     boolean isExpired(long now) {
-      return expireTime <= now;
+      return expireTime - now <= 0;
     }
 
     boolean isStaled(long now) {
-      return staleTime <= now;
+      return staleTime - now <= 0;
     }
 
     @Override
@@ -624,7 +624,7 @@ final class CachingRlsLbClient {
       this.status = checkNotNull(status, "status");
       this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
       long delayNanos = backoffPolicy.nextBackoffNanos();
-      this.expireNanos = timeProvider.currentTimeNanos() + delayNanos;
+      this.expireNanos = ticker.read() + delayNanos;
       this.scheduledHandle =
           synchronizationContext.schedule(
               new Runnable() {
@@ -682,7 +682,7 @@ final class CachingRlsLbClient {
 
     @Override
     boolean isExpired(long now) {
-      return expireNanos <= now;
+      return expireNanos - now <= 0;
     }
 
     @Override
@@ -717,7 +717,7 @@ final class CachingRlsLbClient {
     private LbPolicyConfiguration lbPolicyConfig;
     private Throttler throttler = new HappyThrottler();
     private ResolvedAddressFactory resolvedAddressFactory;
-    private TimeProvider timeProvider = TimeProvider.SYSTEM_TIME_PROVIDER;
+    private Ticker ticker = Ticker.systemTicker();
     private EvictionListener<RouteLookupRequest, CacheEntry> evictionListener;
     private BackoffPolicy.Provider backoffProvider = new ExponentialBackoffPolicy.Provider();
 
@@ -746,8 +746,8 @@ final class CachingRlsLbClient {
       return this;
     }
 
-    Builder setTimeProvider(TimeProvider timeProvider) {
-      this.timeProvider = checkNotNull(timeProvider, "timeProvider");
+    Builder setTicker(Ticker ticker) {
+      this.ticker = checkNotNull(ticker, "ticker");
       return this;
     }
 
@@ -811,14 +811,14 @@ final class CachingRlsLbClient {
 
     RlsAsyncLruCache(long maxEstimatedSizeBytes,
         @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener,
-        ScheduledExecutorService ses, TimeProvider timeProvider, Object lock) {
+        ScheduledExecutorService ses, Ticker ticker, Object lock) {
       super(
           maxEstimatedSizeBytes,
           new AutoCleaningEvictionListener(evictionListener),
           1,
           TimeUnit.MINUTES,
           ses,
-          timeProvider,
+          ticker,
           lock);
     }
 

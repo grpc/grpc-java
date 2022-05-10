@@ -91,6 +91,8 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class XdsServerWrapperTest {
+  private static final int START_WAIT_AFTER_LISTENER_MILLIS = 100;
+
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -227,7 +229,8 @@ public class XdsServerWrapperTest {
     xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
-    start.get(5000, TimeUnit.MILLISECONDS);
+    verify(listener, timeout(5000)).onServing();
+    start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
     verify(mockServer).start();
     xdsServerWrapper.shutdown();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
@@ -296,8 +299,9 @@ public class XdsServerWrapperTest {
     });
     String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    verify(listener, timeout(5000)).onNotServing(any());
     try {
-      start.get(5000, TimeUnit.MILLISECONDS);
+      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
       fail("server should not start() successfully.");
     } catch (TimeoutException ex) {
       // expect to block here.
@@ -665,8 +669,9 @@ public class XdsServerWrapperTest {
     });
     String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    verify(listener, timeout(5000)).onNotServing(any());
     try {
-      start.get(5000, TimeUnit.MILLISECONDS);
+      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
       fail("server should not start()");
     } catch (TimeoutException ex) {
       // expect to block here.

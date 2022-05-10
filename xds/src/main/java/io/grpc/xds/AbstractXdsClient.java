@@ -470,14 +470,9 @@ final class AbstractXdsClient {
         // has never been initialized.
         retryBackoffPolicy = backoffPolicyProvider.get();
       }
-      long delayNanos = 0;
-      if (!responseReceived) {
-        delayNanos =
-            Math.max(
-                0,
-                retryBackoffPolicy.nextBackoffNanos()
-                    - stopwatch.elapsed(TimeUnit.NANOSECONDS));
-      }
+      long delayNanos = Math.max(
+          0,
+          retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS));
       logger.log(XdsLogLevel.INFO, "Retry ADS stream in {0} ns", delayNanos);
       rpcRetryTimer = syncContext.schedule(
           new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);

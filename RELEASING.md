@@ -193,7 +193,7 @@ $ git cherry-pick v$MAJOR.$MINOR.$PATCH^
 Update version referenced by tutorials
 --------------------------------------
 
-Update the `grpc_java_release_tag` in
+Update `params.grpc_vers.java` in
 [config.yaml](https://github.com/grpc/grpc.io/blob/master/config.yaml)
 of the grpc.io repository.
 

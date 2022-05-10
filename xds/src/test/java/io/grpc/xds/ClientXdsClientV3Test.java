@@ -86,6 +86,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContex
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
+import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -260,6 +261,13 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
   }
 
   private static class MessageFactoryV3 extends MessageFactory {
+
+    @Override
+    protected Any buildWrappedResource(Any originalResource) {
+      return Any.pack(Resource.newBuilder()
+          .setResource(originalResource)
+          .build());
+    }
 
     @SuppressWarnings("unchecked")
     @Override

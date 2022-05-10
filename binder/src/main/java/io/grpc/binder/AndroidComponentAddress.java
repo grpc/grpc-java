@@ -128,7 +128,14 @@ public class AndroidComponentAddress extends SocketAddress { // NOTE: Only tempo
 
   @Override
   public int hashCode() {
-    return bindIntent.filterHashCode();
+    Intent intentForHashCode = bindIntent;
+    // Clear a (usually redundant) package filter to work around an Android >= 31 bug where certain
+    // Intents compare filterEquals() but have different filterHashCode() values. It's always safe
+    // to include fewer fields in the hashCode() computation.
+    if (intentForHashCode.getPackage() != null) {
+      intentForHashCode = intentForHashCode.cloneFilter().setPackage(null);
+    }
+    return intentForHashCode.filterHashCode();
   }
 
   @Override

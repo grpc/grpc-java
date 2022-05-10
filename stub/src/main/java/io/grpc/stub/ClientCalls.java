@@ -161,6 +161,7 @@ public final class ClientCalls {
           // Now wait for onClose() to be called, so interceptors can clean up
         }
       }
+      executor.shutdown();
       return getUnchecked(responseFuture);
     } catch (RuntimeException e) {
       // Something very bad happened. All bets are off; it may be dangerous to wait for onClose().
@@ -169,7 +170,6 @@ public final class ClientCalls {
       // Something very bad happened. All bets are off; it may be dangerous to wait for onClose().
       throw cancelThrow(call, e);
     } finally {
-      executor.shutdown();
       if (interrupt) {
         Thread.currentThread().interrupt();
       }

@@ -33,8 +33,10 @@ import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
+import io.grpc.InternalManagedChannelProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.ManagedChannelProvider;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.GrpcUtil;
 import java.util.concurrent.TimeUnit;
@@ -55,14 +57,35 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   private static final String LOG_TAG = "AndroidChannelBuilder";
 
-  @Nullable private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS = findOkHttp();
+  @Nullable private static final ManagedChannelProvider OKHTTP_CHANNEL_PROVIDER = findOkHttp();
 
-  private static Class<?> findOkHttp() {
+  private static ManagedChannelProvider findOkHttp() {
+    Class<?> klassRaw;
     try {
-      return Class.forName("io.grpc.okhttp.OkHttpChannelBuilder");
+      klassRaw = Class.forName("io.grpc.okhttp.OkHttpChannelProvider");
     } catch (ClassNotFoundException e) {
+      Log.w(LOG_TAG, "Failed to find OkHttpChannelProvider", e);
       return null;
     }
+    Class<? extends ManagedChannelProvider> klass;
+    try {
+      klass = klassRaw.asSubclass(ManagedChannelProvider.class);
+    } catch (ClassCastException e) {
+      Log.w(LOG_TAG, "Couldn't cast OkHttpChannelProvider to ManagedChannelProvider", e);
+      return null;
+    }
+    ManagedChannelProvider provider;
+    try {
+      provider = klass.getConstructor().newInstance();
+    } catch (Exception e) {
+      Log.w(LOG_TAG, "Failed to construct OkHttpChannelProvider", e);
+      return null;
+    }
+    if (!InternalManagedChannelProvider.isAvailable(provider)) {
+      Log.w(LOG_TAG, "OkHttpChannelProvider.isAvailable() returned false");
+      return null;
+    }
+    return provider;
   }
 
   private final ManagedChannelBuilder<?> delegateBuilder;
@@ -113,18 +136,11 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   }
 
   private AndroidChannelBuilder(String target) {
-    if (OKHTTP_CHANNEL_BUILDER_CLASS == null) {
-      throw new UnsupportedOperationException("No ManagedChannelBuilder found on the classpath");
+    if (OKHTTP_CHANNEL_PROVIDER == null) {
+      throw new UnsupportedOperationException("Unable to load OkHttpChannelProvider");
     }
-    try {
-      delegateBuilder =
-          (ManagedChannelBuilder)
-              OKHTTP_CHANNEL_BUILDER_CLASS
-                  .getMethod("forTarget", String.class)
-                  .invoke(null, target);
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to create ManagedChannelBuilder", e);
-    }
+    delegateBuilder =
+        InternalManagedChannelProvider.builderForTarget(OKHTTP_CHANNEL_PROVIDER, target);
   }
 
   private AndroidChannelBuilder(ManagedChannelBuilder<?> delegateBuilder) {

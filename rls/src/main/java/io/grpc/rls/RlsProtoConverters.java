@@ -109,12 +109,12 @@ final class RlsProtoConverters {
 
     @Override
     protected RouteLookupConfig doForward(Map<String, ?> json) {
-      ImmutableList<GrpcKeyBuilder> grpcKeyBuilders =
+      ImmutableList<GrpcKeyBuilder> grpcKeybuilders =
           GrpcKeyBuilderConverter.covertAll(
-              checkNotNull(JsonUtil.getListOfObjects(json, "grpcKeyBuilders"), "grpcKeyBuilders"));
-      checkArgument(!grpcKeyBuilders.isEmpty(), "must have at least one GrpcKeyBuilder");
+              checkNotNull(JsonUtil.getListOfObjects(json, "grpcKeybuilders"), "grpcKeybuilders"));
+      checkArgument(!grpcKeybuilders.isEmpty(), "must have at least one GrpcKeyBuilder");
       Set<Name> names = new HashSet<>();
-      for (GrpcKeyBuilder keyBuilder : grpcKeyBuilders) {
+      for (GrpcKeyBuilder keyBuilder : grpcKeybuilders) {
         for (Name name : keyBuilder.names()) {
           checkArgument(names.add(name), "duplicate names in grpc_keybuilders: " + name);
         }
@@ -122,7 +122,7 @@ final class RlsProtoConverters {
       String lookupService = JsonUtil.getString(json, "lookupService");
       checkArgument(!Strings.isNullOrEmpty(lookupService), "lookupService must not be empty");
       try {
-        new URI(lookupService);
+        URI unused = new URI(lookupService);
       } catch (URISyntaxException e) {
         throw new IllegalArgumentException(
             "The lookupService field is not valid URI: " + lookupService, e);
@@ -147,7 +147,7 @@ final class RlsProtoConverters {
       cacheSize = Math.min(cacheSize, MAX_CACHE_SIZE);
       String defaultTarget = Strings.emptyToNull(JsonUtil.getString(json, "defaultTarget"));
       return RouteLookupConfig.builder()
-          .grpcKeyBuilders(grpcKeyBuilders)
+          .grpcKeybuilders(grpcKeybuilders)
           .lookupService(lookupService)
           .lookupServiceTimeoutInNanos(timeout)
           .maxAgeInNanos(maxAge)

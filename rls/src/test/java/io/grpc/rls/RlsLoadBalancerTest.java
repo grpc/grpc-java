@@ -21,7 +21,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -56,6 +55,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
@@ -98,8 +98,7 @@ public class RlsLoadBalancerTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private final RlsLoadBalancerProvider provider = new RlsLoadBalancerProvider();
-  private final DoNotUseDirectScheduledExecutorService fakeScheduledExecutorService =
-      mock(DoNotUseDirectScheduledExecutorService.class, CALLS_REAL_METHODS);
+  private final FakeClock fakeClock = new FakeClock();
   private final SynchronizationContext syncContext =
       new SynchronizationContext(new UncaughtExceptionHandler() {
         @Override
@@ -392,7 +391,7 @@ public class RlsLoadBalancerTest {
 
   private String getRlsConfigJsonStr() {
     return "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
@@ -501,7 +500,7 @@ public class RlsLoadBalancerTest {
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return fakeScheduledExecutorService;
+      return fakeClock.getScheduledExecutorService();
     }
 
     @Override

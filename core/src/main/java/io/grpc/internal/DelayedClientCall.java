@@ -141,15 +141,20 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    * <p>No-op if either this method or {@link #cancel} have already been called.
    */
   // When this method returns, passThrough is guaranteed to be true
-  public final void setCall(ClientCall<ReqT, RespT> call) {
+  public final Runnable setCall(ClientCall<ReqT, RespT> call) {
     synchronized (this) {
       // If realCall != null, then either setCall() or cancel() has been called.
       if (realCall != null) {
-        return;
+        return null;
       }
       setRealCall(checkNotNull(call, "call"));
     }
-    drainPendingCalls();
+    return new Runnable() {
+      @Override
+      public void run() {
+        drainPendingCalls();
+      }
+    };
   }
 
   @Override
