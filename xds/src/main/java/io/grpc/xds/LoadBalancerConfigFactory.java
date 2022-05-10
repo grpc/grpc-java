@@ -57,7 +57,7 @@ import java.util.Map;
  */
 class LoadBalancerConfigFactory {
 
-  private static XdsLogger logger = XdsLogger.withLogId(
+  private static final XdsLogger logger = XdsLogger.withLogId(
       InternalLogId.allocate("xds-client-lbconfig-factory", null));
 
   static final String ROUND_ROBIN_FIELD_NAME = "round_robin";
@@ -87,7 +87,7 @@ class LoadBalancerConfigFactory {
         return LoadBalancingPolicyConverter.convertToServiceConfig(cluster.getLoadBalancingPolicy(),
             0);
       } catch (MaxRecursionReachedException e) {
-        throw new ResourceInvalidException("Maximum LB config recursion depth reached");
+        throw new ResourceInvalidException("Maximum LB config recursion depth reached", e);
       }
     } else {
       return LegacyLoadBalancingPolicyConverter.convertToServiceConfig(cluster, enableLeastRequest);
@@ -195,7 +195,7 @@ class LoadBalancerConfigFactory {
      * Converts a ring_hash {@link Any} configuration to service config format.
      */
     private static ImmutableMap<String, ?> convertRingHashConfig(RingHash ringHash)
-        throws InvalidProtocolBufferException, ResourceInvalidException {
+        throws ResourceInvalidException {
       // The hash function needs to be validated here as it is not exposed in the returned
       // configuration for later validation.
       if (RingHash.HashFunction.XX_HASH != ringHash.getHashFunction()) {
@@ -212,7 +212,7 @@ class LoadBalancerConfigFactory {
      * Converts a wrr_locality {@link Any} configuration to service config format.
      */
     private static ImmutableMap<String, ?> convertWrrLocalityConfig(WrrLocality wrrLocality,
-        int recursionDepth) throws InvalidProtocolBufferException, ResourceInvalidException,
+        int recursionDepth) throws ResourceInvalidException,
         MaxRecursionReachedException {
       return buildWrrLocalityConfig(
           convertToServiceConfig(wrrLocality.getEndpointPickingPolicy(), recursionDepth + 1));
@@ -230,7 +230,7 @@ class LoadBalancerConfigFactory {
      */
     @SuppressWarnings("unchecked")
     private static ImmutableMap<String, ?> convertCustomConfig(TypedStruct configTypedStruct)
-        throws InvalidProtocolBufferException, ResourceInvalidException {
+        throws ResourceInvalidException {
       Object rawJsonConfig = null;
       try {
         rawJsonConfig = JsonParser.parse(JsonFormat.printer().print(configTypedStruct.getValue()));

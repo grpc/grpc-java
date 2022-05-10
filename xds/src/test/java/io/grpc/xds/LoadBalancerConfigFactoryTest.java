@@ -59,7 +59,7 @@ public class LoadBalancerConfigFactoryTest {
 
   private static final Policy ROUND_ROBIN_POLICY = Policy.newBuilder().setTypedExtensionConfig(
       TypedExtensionConfig.newBuilder().setTypedConfig(
-          Any.pack(RoundRobin.newBuilder().build()))).build();
+          Any.pack(RoundRobin.getDefaultInstance()))).build();
 
   private static final long RING_HASH_MIN_RING_SIZE = 1;
   private static final long RING_HASH_MAX_RING_SIZE = 2;
