@@ -5,6 +5,9 @@ java_library(
     srcs = glob([
         "src/main/java/io/grpc/grpclb/*.java",
     ]),
+    resources = glob([
+        "src/main/resources/**",
+    ]),
     visibility = ["//visibility:public"],
     deps = [
         ":load_balancer_java_grpc",
