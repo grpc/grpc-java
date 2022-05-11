@@ -25,6 +25,12 @@ public interface ObservabilityConfig {
   /** Is Cloud Logging enabled. */
   boolean isEnableCloudLogging();
 
+  /** Is Cloud Monitoring enabled. */
+  boolean isEnableCloudMonitoring();
+
+  /** Is Cloud Tracing enabled. */
+  boolean isEnableCloudTracing();
+
   /** Get destination project ID - where logs will go. */
   String getDestinationProjectId();
 
@@ -37,10 +43,12 @@ public interface ObservabilityConfig {
   /** Get event types to log. */
   List<EventType> getEventTypes();
 
+  Sampler getSampler();
+
   /**
    * POJO for representing a filter used in configuration.
    */
-  public static class LogFilter {
+  class LogFilter {
     /** Pattern indicating which service/method to log. */
     public final String pattern;
 
@@ -61,6 +69,36 @@ public interface ObservabilityConfig {
       this.pattern = pattern;
       this.headerBytes = headerBytes;
       this.messageBytes = messageBytes;
+    }
+  }
+
+  /** Corresponds to a {@link io.opencensus.trace.Sampler} type. */
+  enum SamplerType {
+    ALWAYS,
+    NEVER,
+    PROBABILISTIC;
+  }
+
+  /** Represents a trace {@link io.opencensus.trace.Sampler} configuration. */
+  class Sampler {
+    private SamplerType type;
+    private double probability;
+
+    Sampler(double probability) {
+      this.probability = probability;
+      this.type = SamplerType.PROBABILISTIC;
+    }
+
+    Sampler(SamplerType type) {
+      this.type = type;
+    }
+
+    double getProbability() {
+      return probability;
+    }
+
+    SamplerType getType() {
+      return type;
     }
   }
 }
