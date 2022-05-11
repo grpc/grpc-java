@@ -312,10 +312,9 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(wrrLocalityConfig.childPolicy.getProvider().getPolicyName()).isEqualTo(
         "least_request_experimental");
 
-    Map<Locality, Integer> localityWeights = childBalancer.attributes.get(
-        InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
-    assertThat(localityWeights).containsKey(locality1);
-    assertThat(localityWeights.get(locality1)).isEqualTo(100);
+    assertThat(
+        childBalancer.attributes.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).containsEntry(
+        locality1, 100);
   }
 
   @Test
@@ -412,12 +411,9 @@ public class ClusterResolverLoadBalancerTest {
 
     Map<Locality, Integer> localityWeights = childBalancer.attributes.get(
         InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
-    assertThat(localityWeights).containsKey(locality1);
-    assertThat(localityWeights.get(locality1)).isEqualTo(70);
-    assertThat(localityWeights).containsKey(locality2);
-    assertThat(localityWeights.get(locality2)).isEqualTo(10);
-    assertThat(localityWeights).containsKey(locality3);
-    assertThat(localityWeights.get(locality3)).isEqualTo(20);
+    assertThat(localityWeights).containsEntry(locality1, 70);
+    assertThat(localityWeights).containsEntry(locality2, 10);
+    assertThat(localityWeights).containsEntry(locality3, 20);
   }
 
   @Test
