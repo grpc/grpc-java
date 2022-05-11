@@ -26,6 +26,9 @@ import com.google.protobuf.util.Durations;
 import io.grpc.BindableService;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.SynchronizationContext;
+import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.InternalMetricRecorder;
+import io.grpc.services.MetricRecorder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import java.util.concurrent.ScheduledExecutorService;
@@ -36,26 +39,51 @@ import java.util.logging.Logger;
 
 /**
  * Implements a {@link BindableService} that generates Out-Of-Band server metrics.
+ * Register the returned service to the server, then a client can request for periodic load reports.
  */
 public final class OrcaServiceImpl implements BindableService {
   private static final Logger logger = Logger.getLogger(OrcaServiceImpl.class.getName());
+
+  /**
+   * Empty or invalid (non-positive) minInterval config in will be treated to this default value.
+   */
+  public static final long DEFAULT_MIN_REPORT_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
 
   private final long minReportIntervalNanos;
   private final ScheduledExecutorService timeService;
   @VisibleForTesting
   final AtomicInteger clientCount = new AtomicInteger(0);
-  private OrcaMetrics orcaMetrics;
+  private MetricRecorder metricRecorder;
   private final RealOrcaServiceImpl delegate = new RealOrcaServiceImpl();
 
   /**
    * Constructs a service to report server metrics. Config the report interval lower bound, the
-   * executor to run the timer, and a {@link OrcaMetrics} that contains metrics data.
+   * executor to run the timer, and a {@link MetricRecorder} that contains metrics data.
+   *
+   * @param minInterval configures the minimum metrics reporting interval for the
+   *        service. Bad configuration (non-positive) will be overridden to service default (30s).
+   *        Minimum metrics reporting interval means, if the setting in the client's
+   *        request is invalid (non-positive) or below this value, they will be treated
+   *        as this value.
    */
-  public OrcaServiceImpl(long minReportIntervalNanos, ScheduledExecutorService timeService,
-                         OrcaMetrics orcaMetrics) {
-    this.minReportIntervalNanos = minReportIntervalNanos;
+  public static BindableService createService(long minInterval, TimeUnit timeUnit,
+                                       ScheduledExecutorService timeService,
+                                       MetricRecorder metricsRecorder) {
+    return new OrcaServiceImpl(minInterval, timeUnit, timeService,  metricsRecorder);
+  }
+
+  public static BindableService createService(ScheduledExecutorService timeService,
+                                       MetricRecorder metricRecorder) {
+    return new OrcaServiceImpl(DEFAULT_MIN_REPORT_INTERVAL_NANOS, TimeUnit.NANOSECONDS,
+        timeService, metricRecorder);
+  }
+
+  private OrcaServiceImpl(long minInterval, TimeUnit timeUnit, ScheduledExecutorService timeService,
+                         MetricRecorder orcaMetrics) {
+    this.minReportIntervalNanos = minInterval > 0 ? timeUnit.toNanos(minInterval)
+        : DEFAULT_MIN_REPORT_INTERVAL_NANOS;
     this.timeService = checkNotNull(timeService, "timeService");
-    this.orcaMetrics = checkNotNull(orcaMetrics, "orcaMetrics");
+    this.metricRecorder = checkNotNull(orcaMetrics, "orcaMetrics");
   }
 
   @Override
@@ -118,9 +146,11 @@ public final class OrcaServiceImpl implements BindableService {
   }
 
   private OrcaLoadReport generateMetricsReport() {
-    return OrcaLoadReport.newBuilder().setCpuUtilization(orcaMetrics.getCpuUtilization())
-        .setMemUtilization(orcaMetrics.getMemoryUtilization())
-        .putAllUtilization(orcaMetrics.getUtilizationMetrics())
+    CallMetricRecorder.CallMetricReport internalReport =
+        InternalMetricRecorder.getMetricReport(metricRecorder);
+    return OrcaLoadReport.newBuilder().setCpuUtilization(internalReport.getCpuUtilization())
+        .setMemUtilization(internalReport.getMemoryUtilization())
+        .putAllUtilization(internalReport.getUtilizationMetrics())
         .build();
   }
 }

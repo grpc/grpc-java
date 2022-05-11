@@ -14,57 +14,28 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.orca;
+package io.grpc.services;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
-import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Implements the service/APIs for Out-of-Band metrics reporting, only for utilization metrics.
- * Register the returned service {@link #createService} to the server, then a client can request for
- * periodic load reports. A user should use the public set-APIs to update the server machine's
- * utilization metrics data.
+ * A user should use the public set-APIs to update the server machine's utilization metrics data.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9006")
-public final class OrcaMetrics {
-  /**
-   * Empty or invalid (non-positive) minInterval config in will be treated to this default value.
-   */
-  public static final long DEFAULT_MIN_REPORT_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
-
+public final class MetricRecorder {
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
   private volatile double cpuUtilization;
   private volatile double memoryUtilization;
 
-  /**
-   * Create an OOB metrics reporting service.
-   *
-   * @param minInterval configures the minimum metrics reporting interval for the service. Bad
-   *        configuration (non-positive) will be overridden to service default (30s).
-   *        Minimum metrics reporting interval means, if the setting in the client's
-   *        request is invalid (non-positive) or below this value, they will be treated
-   *        as this value.
-   *
-   * @return the service instance to be bound to the server for ORCA OOB functionality.
-   */
-  public BindableService createService(long minInterval, TimeUnit timeUnit,
-                                       ScheduledExecutorService timeService) {
-    return new OrcaServiceImpl(minInterval > 0 ? timeUnit.toNanos(minInterval)
-        : DEFAULT_MIN_REPORT_INTERVAL_NANOS, checkNotNull(timeService), this);
+  public static MetricRecorder newInstance() {
+    return new MetricRecorder();
   }
 
-  public BindableService createService(ScheduledExecutorService timeService) {
-    return createService(DEFAULT_MIN_REPORT_INTERVAL_NANOS, TimeUnit.NANOSECONDS, timeService);
-  }
-
-  public OrcaMetrics() {}
+  private MetricRecorder() {}
 
   /**
    * Update the metrics value corresponding to the specified key.
@@ -115,15 +86,8 @@ public final class OrcaMetrics {
     memoryUtilization = 0;
   }
 
-  Map<String, Double> getUtilizationMetrics() {
-    return Collections.unmodifiableMap(metricsData);
-  }
-
-  double getCpuUtilization() {
-    return cpuUtilization;
-  }
-
-  double getMemoryUtilization() {
-    return memoryUtilization;
+  CallMetricRecorder.CallMetricReport getMetricReport() {
+    return new CallMetricRecorder.CallMetricReport(cpuUtilization, memoryUtilization,
+        Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
   }
 }

@@ -39,6 +39,8 @@ import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
+import io.grpc.services.InternalMetricRecorder;
+import io.grpc.services.MetricRecorder;
 import io.grpc.testing.GrpcCleanupRule;
 import java.util.Iterator;
 import java.util.Random;
@@ -64,7 +66,7 @@ public class OrcaServiceImplTest {
   private ManagedChannel channel;
   private Server oobServer;
   private final FakeClock fakeClock = new FakeClock();
-  private OrcaMetrics defaultTestService;
+  private MetricRecorder defaultTestService;
   private BindableService orcaServiceImpl;
   private final Random random = new Random();
   @Mock
@@ -72,9 +74,9 @@ public class OrcaServiceImplTest {
 
   @Before
   public void setup() throws Exception {
-    defaultTestService = new OrcaMetrics();
-    orcaServiceImpl = defaultTestService.createService(1, TimeUnit.SECONDS,
-        fakeClock.getScheduledExecutorService());
+    defaultTestService = InternalMetricRecorder.newMetricRecorder();
+    orcaServiceImpl = OrcaServiceImpl.createService(1, TimeUnit.SECONDS,
+        fakeClock.getScheduledExecutorService(), defaultTestService);
     startServerAndGetChannel(orcaServiceImpl);
   }
 
@@ -183,10 +185,10 @@ public class OrcaServiceImplTest {
   @Test
   @SuppressWarnings("unchecked")
   public void testRequestIntervalDefault() throws Exception {
-    defaultTestService = new OrcaMetrics();
+    defaultTestService = InternalMetricRecorder.newMetricRecorder();
     oobServer.shutdownNow();
-    startServerAndGetChannel(defaultTestService.createService(
-        fakeClock.getScheduledExecutorService()));
+    startServerAndGetChannel(OrcaServiceImpl.createService(
+        fakeClock.getScheduledExecutorService(), defaultTestService));
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
     defaultTestService.setUtilizationMetric("buffer", 0.2);
