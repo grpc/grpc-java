@@ -66,9 +66,9 @@ public final class OrcaServiceImpl implements BindableService {
    *        request is invalid (non-positive) or below this value, they will be treated
    *        as this value.
    */
-  public static BindableService createService(long minInterval, TimeUnit timeUnit,
-                                       ScheduledExecutorService timeService,
-                                       MetricRecorder metricsRecorder) {
+  public static BindableService createService(ScheduledExecutorService timeService,
+                                              MetricRecorder metricsRecorder,
+                                              long minInterval, TimeUnit timeUnit) {
     return new OrcaServiceImpl(minInterval, timeUnit, timeService,  metricsRecorder);
   }
 

@@ -39,7 +39,6 @@ import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
-import io.grpc.services.InternalMetricRecorder;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.GrpcCleanupRule;
 import java.util.Iterator;
@@ -74,9 +73,9 @@ public class OrcaServiceImplTest {
 
   @Before
   public void setup() throws Exception {
-    defaultTestService = InternalMetricRecorder.newMetricRecorder();
-    orcaServiceImpl = OrcaServiceImpl.createService(1, TimeUnit.SECONDS,
-        fakeClock.getScheduledExecutorService(), defaultTestService);
+    defaultTestService = MetricRecorder.newInstance();
+    orcaServiceImpl = OrcaServiceImpl.createService(fakeClock.getScheduledExecutorService(),
+        defaultTestService, 1, TimeUnit.SECONDS);
     startServerAndGetChannel(orcaServiceImpl);
   }
 
@@ -185,7 +184,7 @@ public class OrcaServiceImplTest {
   @Test
   @SuppressWarnings("unchecked")
   public void testRequestIntervalDefault() throws Exception {
-    defaultTestService = InternalMetricRecorder.newMetricRecorder();
+    defaultTestService = MetricRecorder.newInstance();
     oobServer.shutdownNow();
     startServerAndGetChannel(OrcaServiceImpl.createService(
         fakeClock.getScheduledExecutorService(), defaultTestService));

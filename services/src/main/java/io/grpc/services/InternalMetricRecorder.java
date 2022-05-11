@@ -29,10 +29,6 @@ public final class InternalMetricRecorder {
   private InternalMetricRecorder() {
   }
 
-  public static MetricRecorder newMetricRecorder() {
-    return MetricRecorder.newInstance();
-  }
-
   public static CallMetricRecorder.CallMetricReport getMetricReport(MetricRecorder recorder) {
     return recorder.getMetricReport();
   }
