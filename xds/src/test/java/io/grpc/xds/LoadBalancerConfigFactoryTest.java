@@ -46,7 +46,6 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import java.util.List;
-import java.util.Map;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -59,8 +58,8 @@ import org.junit.runners.JUnit4;
 public class LoadBalancerConfigFactoryTest {
 
   private static final Policy ROUND_ROBIN_POLICY = Policy.newBuilder().setTypedExtensionConfig(
-          TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(RoundRobin.newBuilder().build())))
-      .build();
+      TypedExtensionConfig.newBuilder().setTypedConfig(
+          Any.pack(RoundRobin.getDefaultInstance()))).build();
 
   private static final long RING_HASH_MIN_RING_SIZE = 1;
   private static final long RING_HASH_MAX_RING_SIZE = 2;
@@ -149,8 +148,8 @@ public class LoadBalancerConfigFactoryTest {
     LbConfig lbConfig = newLbConfig(cluster, true);
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
 
-    @SuppressWarnings("unchecked") List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
     assertThat(
         JsonUtil.getNumberAsLong(childConfigs.get(0).getRawConfigValue(), "choiceCount")).isEqualTo(
@@ -263,8 +262,8 @@ public class LoadBalancerConfigFactoryTest {
   private void assertValidRoundRobin(LbConfig lbConfig) {
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
 
-    @SuppressWarnings("unchecked") List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs).hasSize(1);
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(childConfigs.get(0).getRawConfigValue()).isEmpty();
@@ -280,8 +279,8 @@ public class LoadBalancerConfigFactoryTest {
 
   private void assertValidWrrChildCustomLb(LbConfig lbConfig) {
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked") List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs).hasSize(1);
     assertValidCustomLb(childConfigs.get(0));
   }
