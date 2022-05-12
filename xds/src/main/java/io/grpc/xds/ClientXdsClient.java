@@ -981,12 +981,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   private static StructOrError<VirtualHost> parseVirtualHost(
       io.envoyproxy.envoy.config.route.v3.VirtualHost proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap,
+      Set<String> optionalPlugins) {
     String name = proto.getName();
     List<Route> routes = new ArrayList<>(proto.getRoutesCount());
     for (io.envoyproxy.envoy.config.route.v3.Route routeProto : proto.getRoutesList()) {
       StructOrError<Route> route = parseRoute(
-          routeProto, filterRegistry, parseHttpFilter, pluginConfigMap);
+          routeProto, filterRegistry, parseHttpFilter, pluginConfigMap, optionalPlugins);
       if (route == null) {
         continue;
       }
@@ -1071,7 +1072,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @Nullable
   static StructOrError<Route> parseRoute(
       io.envoyproxy.envoy.config.route.v3.Route proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap,
+      Set<String> optionalPlugins) {
     StructOrError<RouteMatch> routeMatch = parseRouteMatch(proto.getMatch());
     if (routeMatch == null) {
       return null;
@@ -1097,7 +1099,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     switch (proto.getActionCase()) {
       case ROUTE:
         StructOrError<RouteAction> routeAction =
-            parseRouteAction(proto.getRoute(), filterRegistry, parseHttpFilter, pluginConfigMap);
+            parseRouteAction(proto.getRoute(), filterRegistry, parseHttpFilter, pluginConfigMap,
+                optionalPlugins);
         if (routeAction == null) {
           return null;
         }
@@ -1250,7 +1253,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @Nullable
   static StructOrError<RouteAction> parseRouteAction(
       io.envoyproxy.envoy.config.route.v3.RouteAction proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap,
+      Set<String> optionalPlugins) {
     Long timeoutNano = null;
     if (proto.hasMaxStreamDuration()) {
       io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
@@ -1334,6 +1338,10 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           String pluginName = proto.getClusterSpecifierPlugin();
           PluginConfig pluginConfig = pluginConfigMap.get(pluginName);
           if (pluginConfig == null) {
+            // Skip route if the plugin is not registered, but it's optional.
+            if (optionalPlugins.contains(pluginName)) {
+              return null;
+            }
             return StructOrError.fromError(
                 "ClusterSpecifierPlugin for [" + pluginName + "] not found");
           }
@@ -1491,15 +1499,21 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       RouteConfiguration routeConfig, FilterRegistry filterRegistry, boolean parseHttpFilter)
       throws ResourceInvalidException {
     Map<String, PluginConfig> pluginConfigMap = new HashMap<>();
+    ImmutableSet.Builder<String> optionalPlugins = ImmutableSet.builder();
+
     if (enableRouteLookup) {
       List<ClusterSpecifierPlugin> plugins = routeConfig.getClusterSpecifierPluginsList();
       for (ClusterSpecifierPlugin plugin : plugins) {
-        PluginConfig existing = pluginConfigMap.put(
-            plugin.getExtension().getName(), parseClusterSpecifierPlugin(plugin));
-        if (existing != null) {
-          throw new ResourceInvalidException(
-              "Multiple ClusterSpecifierPlugins with the same name: "
-                  + plugin.getExtension().getName());
+        String pluginName = plugin.getExtension().getName();
+        PluginConfig pluginConfig = parseClusterSpecifierPlugin(plugin);
+        if (pluginConfig != null) {
+          if (pluginConfigMap.put(pluginName, pluginConfig) != null) {
+            throw new ResourceInvalidException(
+                "Multiple ClusterSpecifierPlugins with the same name: " + pluginName);
+          }
+        } else {
+          // The plugin parsed successfully, and it's not supported, but it's marked as optional.
+          optionalPlugins.add(pluginName);
         }
       }
     }
@@ -1507,7 +1521,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
         : routeConfig.getVirtualHostsList()) {
       StructOrError<VirtualHost> virtualHost =
-          parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter, pluginConfigMap);
+          parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter, pluginConfigMap,
+              optionalPlugins.build());
       if (virtualHost.getErrorDetail() != null) {
         throw new ResourceInvalidException(
             "RouteConfiguration contains invalid virtual host: " + virtualHost.getErrorDetail());
@@ -1517,12 +1532,14 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     return virtualHosts;
   }
 
+  @Nullable // null if the plugin is not supported, but it's marked as optional.
   private static PluginConfig parseClusterSpecifierPlugin(ClusterSpecifierPlugin pluginProto)
       throws ResourceInvalidException {
     return parseClusterSpecifierPlugin(
         pluginProto, ClusterSpecifierPluginRegistry.getDefaultRegistry());
   }
 
+  @Nullable // null if the plugin is not supported, but it's marked as optional.
   @VisibleForTesting
   static PluginConfig parseClusterSpecifierPlugin(
       ClusterSpecifierPlugin pluginProto, ClusterSpecifierPluginRegistry registry)
@@ -1545,7 +1562,10 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     }
     io.grpc.xds.ClusterSpecifierPlugin plugin = registry.get(typeUrl);
     if (plugin == null) {
-      throw new ResourceInvalidException("Unsupported ClusterSpecifierPlugin type: " + typeUrl);
+      if (!pluginProto.getIsOptional()) {
+        throw new ResourceInvalidException("Unsupported ClusterSpecifierPlugin type: " + typeUrl);
+      }
+      return null;
     }
     ConfigOrError<? extends PluginConfig> pluginConfigOrError = plugin.parsePlugin(rawConfig);
     if (pluginConfigOrError.errorDetail != null) {
