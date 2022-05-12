@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
-import static io.grpc.ConnectivityState.SHUTDOWN;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.github.xds.service.orca.v3.OpenRcaServiceGrpc;
@@ -55,9 +54,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -66,27 +63,16 @@ import javax.annotation.Nullable;
 
 /**
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
- * out-of-band backend cost metrics in the format of Open Request Cost Aggregation (ORCA).
+ * out-of-band backend metrics in the format of Open Request Cost Aggregation (ORCA).
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9129")
 public abstract class OrcaOobUtil {
   private static final Logger logger = Logger.getLogger(OrcaPerRequestUtil.class.getName());
-  private static final OrcaOobUtil DEFAULT_INSTANCE =
-      new OrcaOobUtil() {
-
-        @Override
-        public OrcaReportingHelper newOrcaReportingHelper(
-            LoadBalancer.Helper delegate) {
-          return newOrcaReportingHelper(
-              delegate,
-              new ExponentialBackoffPolicy.Provider(),
-              GrpcUtil.STOPWATCH_SUPPLIER);
-        }
-      };
+  private static final OrcaOobUtil DEFAULT_INSTANCE = new OrcaOobUtil() {};
 
   /**
-   * Gets an {@code OrcaOobUtil} instance that provides actual implementation of
-   * {@link #newOrcaReportingHelper}.
+   * Gets an {@code OrcaOobUtil} instance that provides implementation of
+   * {@link #newOrcaReportingHelper} and {@link #setListener}.
    */
   public static OrcaOobUtil getInstance() {
     return DEFAULT_INSTANCE;
@@ -112,13 +98,13 @@ public abstract class OrcaOobUtil {
    *               OrcaOobUtil.getInstance().newOrcaReportingHelper(originHelper);
    *           Subchannel subchannel =
    *               orcaHelper.createSubchannel(CreateSubchannelArgs.newBuilder()...);
-   *           OrcaOobUtil.updateListener(
+   *           OrcaOobUtil.setListener(
    *              subchannel,
    *              listener,
    *              OrcaRerportingConfig.newBuilder().setReportInterval(30, SECOND).build());
    *           ...
    *         }
-   *       }
+   *        }
    *       }
    *     </pre>
    *   </li>
@@ -140,20 +126,20 @@ public abstract class OrcaOobUtil {
    *           // Create an OrcaReportingHelperWrapper for each Locality.
    *           // listener implements the logic for locality-level backend metric aggregation.
    *           LoadBalancer childLb = childPolicyProvider.newLoadBalancer(
-   *           new ForwardingLoadBalancerHelper() {
-   *            public Subchannel createSubchannel(CreateSubchannelArgs args) {
-   *              Subchannel subchannel = super.createSubchannel(args);
-   *              OrcaOobUtil.updateListener(subchannel, listener,
-   *                OrcaReportingConfig.newBuilder().setReportInterval(30, SECOND).build());
-   *              return subchannel;
-   *            }
-   *            public LoadBalancer.Helper delegate() {
-   *               return orcaHelper;
-   *            }
-   *           });
-   *         }
-   *       }
-   *       }
+   *             new ForwardingLoadBalancerHelper() {
+   *               public Subchannel createSubchannel(CreateSubchannelArgs args) {
+   *                 Subchannel subchannel = super.createSubchannel(args);
+   *                 OrcaOobUtil.setListener(subchannel, listener,
+   *                 OrcaReportingConfig.newBuilder().setReportInterval(30, SECOND).build());
+   *                 return subchannel;
+   *               }
+   *               public LoadBalancer.Helper delegate() {
+   *                 return orcaHelper;
+   *               }
+   *          });
+   *        }
+   *      }
+   *      }
    *     </pre>
    *   </li>
    * </ul>
@@ -161,10 +147,15 @@ public abstract class OrcaOobUtil {
    * @param delegate the delegate helper that provides essentials for establishing subchannels to
    *     backends.
    */
-  public abstract OrcaReportingHelper newOrcaReportingHelper(LoadBalancer.Helper delegate);
+  public static LoadBalancer.Helper newOrcaReportingHelper(LoadBalancer.Helper delegate) {
+    return newOrcaReportingHelper(
+        delegate,
+        new ExponentialBackoffPolicy.Provider(),
+        GrpcUtil.STOPWATCH_SUPPLIER);
+  }
 
   @VisibleForTesting
-  static OrcaReportingHelper newOrcaReportingHelper(
+  static LoadBalancer.Helper newOrcaReportingHelper(
       LoadBalancer.Helper delegate,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
@@ -214,16 +205,15 @@ public abstract class OrcaOobUtil {
    * @param config the configuration to be set.
    *
    */
-  public static void updateListener(Subchannel subchannel, OrcaOobReportListener listener,
-                                    OrcaReportingConfig config) {
+  public static void setListener(Subchannel subchannel, OrcaOobReportListener listener,
+                                 OrcaReportingConfig config) {
     SubchannelImpl orcaSubchannel = subchannel.getAttributes().get(ORCA_REPORTING_STATE_KEY);
     if (orcaSubchannel == null) {
-      throw new IllegalStateException("Subchannel does not have orca Out-Of-Band stream enabled. "
-          + "Try to use a subchannel created by OrcaOobUtil.OrcaHelper.");
+      throw new IllegalArgumentException("Subchannel does not have orca Out-Of-Band stream enabled."
+          + " Try to use a subchannel created by OrcaOobUtil.OrcaHelper.");
     }
     orcaSubchannel.orcaState.setListener(orcaSubchannel, listener, config);
   }
-  // public abstract void removeListener(Subchannel subchannel, OrcaOobReportListener listener);
 
   /**
    * An {@link OrcaReportingHelper} wraps a delegated {@link LoadBalancer.Helper} with additional
@@ -231,12 +221,11 @@ public abstract class OrcaOobUtil {
    * connection to. Subchannels created through it will retrieve ORCA load reports if the server
    * supports it.
    */
-  public static final class OrcaReportingHelper extends ForwardingLoadBalancerHelper {
+  static final class OrcaReportingHelper extends ForwardingLoadBalancerHelper {
     private final LoadBalancer.Helper delegate;
     private final SynchronizationContext syncContext;
     private final BackoffPolicy.Provider backoffPolicyProvider;
     private final Supplier<Stopwatch> stopwatchSupplier;
-    private final Set<OrcaReportingState> orcaStates = new HashSet<>();
 
     OrcaReportingHelper(
         LoadBalancer.Helper delegate,
@@ -258,16 +247,15 @@ public abstract class OrcaOobUtil {
       syncContext.throwIfNotInThisSynchronizationContext();
       Subchannel subchannel = super.createSubchannel(args);
       SubchannelImpl orcaSubchannel = subchannel.getAttributes().get(ORCA_REPORTING_STATE_KEY);
+      OrcaReportingState orcaState;
       if (orcaSubchannel == null) {
         // Only the first load balancing policy requesting ORCA reports instantiates an
         // OrcaReportingState.
-        OrcaReportingState orcaState = new OrcaReportingState(this, syncContext,
-            delegate().getScheduledExecutorService());
-        orcaStates.add(orcaState);
-        return new SubchannelImpl(subchannel, orcaState);
+        orcaState = new OrcaReportingState(syncContext, delegate().getScheduledExecutorService());
       } else {
-        return new SubchannelImpl(orcaSubchannel.delegate(), orcaSubchannel.orcaState);
+        orcaState = orcaSubchannel.orcaState;
       }
+      return new SubchannelImpl(subchannel, orcaState);
     }
 
     /**
@@ -277,7 +265,6 @@ public abstract class OrcaOobUtil {
      */
     private final class OrcaReportingState implements SubchannelStateListener {
 
-      private final OrcaReportingHelper orcaHelper;
       private final SynchronizationContext syncContext;
       private final ScheduledExecutorService timeService;
       private final Map<OrcaOobReportListener, OrcaReportingConfig> configs = new HashMap<>();
@@ -299,12 +286,11 @@ public abstract class OrcaOobUtil {
       private ConnectivityStateInfo state = ConnectivityStateInfo.forNonError(IDLE);
       // True if server returned UNIMPLEMENTED.
       private boolean disabled;
+      private boolean started;
 
       OrcaReportingState(
-          OrcaReportingHelper orcaHelper,
           SynchronizationContext syncContext,
           ScheduledExecutorService timeService) {
-        this.orcaHelper = checkNotNull(orcaHelper, "orcaHelper");
         this.syncContext = checkNotNull(syncContext, "syncContext");
         this.timeService = checkNotNull(timeService, "timeService");
       }
@@ -314,6 +300,7 @@ public abstract class OrcaOobUtil {
         this.subchannel = checkNotNull(subchannel, "subchannel");
         this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
         this.stateListener = checkNotNull(stateListener, "stateListener");
+        started = true;
       }
 
       void setListener(SubchannelImpl orcaSubchannel, OrcaOobReportListener listener,
@@ -364,9 +351,6 @@ public abstract class OrcaOobUtil {
           // A connection was lost.  We will reset disabled flag because ORCA service
           // may be available on the new connection.
           disabled = false;
-        }
-        if (Objects.equal(newState.getState(), SHUTDOWN)) {
-          orcaHelper.orcaStates.remove(this);
         }
         state = newState;
         adjustOrcaReporting();
@@ -545,8 +529,12 @@ public abstract class OrcaOobUtil {
 
     @Override
     public void start(SubchannelStateListener listener) {
-      orcaState.init(this, listener);
-      super.start(orcaState);
+      if (!orcaState.started) {
+        orcaState.init(this, listener);
+        super.start(orcaState);
+      } else {
+        super.start(listener);
+      }
     }
 
     @Override
