@@ -20,6 +20,9 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import com.github.xds.type.v3.TypedStruct;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.protobuf.Any;
 import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
@@ -45,7 +48,6 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import java.util.List;
-import java.util.Map;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -65,8 +67,7 @@ public class LoadBalancerConfigFactoryTest {
   private static final long RING_HASH_MAX_RING_SIZE = 2;
   private static final Policy RING_HASH_POLICY = Policy.newBuilder().setTypedExtensionConfig(
       TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
-          RingHash.newBuilder()
-              .setMinimumRingSize(UInt64Value.of(RING_HASH_MIN_RING_SIZE))
+          RingHash.newBuilder().setMinimumRingSize(UInt64Value.of(RING_HASH_MIN_RING_SIZE))
               .setMaximumRingSize(UInt64Value.of(RING_HASH_MAX_RING_SIZE))
               .setHashFunction(RingHash.HashFunction.XX_HASH).build()))).build();
 
@@ -74,21 +75,27 @@ public class LoadBalancerConfigFactoryTest {
   private static final String CUSTOM_POLICY_FIELD_KEY = "choiceCount";
   private static final double CUSTOM_POLICY_FIELD_VALUE = 2;
   private static final Policy CUSTOM_POLICY = Policy.newBuilder().setTypedExtensionConfig(
-      TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(TypedStruct.newBuilder()
-          .setTypeUrl("type.googleapis.com/" + CUSTOM_POLICY_NAME).setValue(
-              Struct.newBuilder()
-                  .putFields(CUSTOM_POLICY_FIELD_KEY,
-                      Value.newBuilder().setNumberValue(CUSTOM_POLICY_FIELD_VALUE).build()))
-          .build()))).build();
+          TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
+              TypedStruct.newBuilder().setTypeUrl(
+                      "type.googleapis.com/" + CUSTOM_POLICY_NAME).setValue(
+                      Struct.newBuilder().putFields(CUSTOM_POLICY_FIELD_KEY,
+                          Value.newBuilder().setNumberValue(CUSTOM_POLICY_FIELD_VALUE).build()))
+                  .build()))).build();
   private static final FakeCustomLoadBalancerProvider CUSTOM_POLICY_PROVIDER
       = new FakeCustomLoadBalancerProvider();
 
-  private static Policy buildWrrPolicy(Policy childPolicy) {
-    return Policy.newBuilder().setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
-        .setTypedConfig(Any.pack(WrrLocality.newBuilder()
-            .setEndpointPickingPolicy(LoadBalancingPolicy.newBuilder().addPolicies(childPolicy))
-            .build()))).build();
-  }
+  private static final LbConfig VALID_ROUND_ROBIN_CONFIG = new LbConfig("wrr_locality_experimental",
+      ImmutableMap.of("childPolicy",
+          ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of()))));
+  private static final LbConfig VALID_RING_HASH_CONFIG = new LbConfig("ring_hash_experimental",
+      ImmutableMap.of("minRingSize", (double) RING_HASH_MIN_RING_SIZE, "maxRingSize",
+          (double) RING_HASH_MAX_RING_SIZE));
+  private static final LbConfig VALID_CUSTOM_CONFIG = new LbConfig(CUSTOM_POLICY_NAME,
+      ImmutableMap.of(CUSTOM_POLICY_FIELD_KEY, CUSTOM_POLICY_FIELD_VALUE));
+  private static final LbConfig VALID_CUSTOM_CONFIG_IN_WRR = new LbConfig(
+      "wrr_locality_experimental", ImmutableMap.of("childPolicy", ImmutableList.of(
+      ImmutableMap.of(VALID_CUSTOM_CONFIG.getPolicyName(),
+          VALID_CUSTOM_CONFIG.getRawConfigValue()))));
 
   @After
   public void deregisterCustomProvider() {
@@ -97,32 +104,16 @@ public class LoadBalancerConfigFactoryTest {
 
   @Test
   public void roundRobin() throws ResourceInvalidException {
-    Cluster cluster = Cluster.newBuilder()
-        .setLoadBalancingPolicy(
-            LoadBalancingPolicy.newBuilder().addPolicies(buildWrrPolicy(ROUND_ROBIN_POLICY)))
-        .build();
+    Cluster cluster = newCluster(buildWrrPolicy(ROUND_ROBIN_POLICY));
 
-    assertValidRoundRobin(ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LoadBalancerConfigFactory.newConfig(cluster, true)));
+    assertThat(newLbConfig(cluster, true)).isEqualTo(VALID_ROUND_ROBIN_CONFIG);
   }
 
   @Test
   public void roundRobin_legacy() throws ResourceInvalidException {
     Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.ROUND_ROBIN).build();
 
-    assertValidRoundRobin(ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LoadBalancerConfigFactory.newConfig(cluster, true)));
-  }
-
-  private void assertValidRoundRobin(LbConfig lbConfig) {
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-
-    @SuppressWarnings("unchecked")
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
-    assertThat(childConfigs).hasSize(1);
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(childConfigs.get(0).getRawConfigValue()).isEmpty();
+    assertThat(newLbConfig(cluster, true)).isEqualTo(VALID_ROUND_ROBIN_CONFIG);
   }
 
   @Test
@@ -131,56 +122,29 @@ public class LoadBalancerConfigFactoryTest {
         .setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder().addPolicies(RING_HASH_POLICY))
         .build();
 
-    assertValidRingHash(ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LoadBalancerConfigFactory.newConfig(cluster, true)));
+    assertThat(newLbConfig(cluster, true)).isEqualTo(VALID_RING_HASH_CONFIG);
   }
 
   @Test
   public void ringHash_legacy() throws ResourceInvalidException {
-    Cluster cluster = Cluster.newBuilder()
-        .setLbPolicy(LbPolicy.RING_HASH)
-        .setRingHashLbConfig(
-            RingHashLbConfig.newBuilder()
-                .setMinimumRingSize(UInt64Value.of(RING_HASH_MIN_RING_SIZE))
-                .setMaximumRingSize(UInt64Value.of(RING_HASH_MAX_RING_SIZE))
-                .setHashFunction(HashFunction.XX_HASH))
-        .build();
+    Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.RING_HASH).setRingHashLbConfig(
+        RingHashLbConfig.newBuilder().setMinimumRingSize(UInt64Value.of(RING_HASH_MIN_RING_SIZE))
+            .setMaximumRingSize(UInt64Value.of(RING_HASH_MAX_RING_SIZE))
+            .setHashFunction(HashFunction.XX_HASH)).build();
 
-    assertValidRingHash(ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LoadBalancerConfigFactory.newConfig(cluster, true)));
-  }
-
-  private void assertValidRingHash(LbConfig lbConfig) {
-    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "minRingSize")).isEqualTo(
-        RING_HASH_MIN_RING_SIZE);
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "maxRingSize")).isEqualTo(
-        RING_HASH_MAX_RING_SIZE);
+    assertThat(newLbConfig(cluster, true)).isEqualTo(VALID_RING_HASH_CONFIG);
   }
 
   @Test
   public void ringHash_invalidHash() {
-    Cluster cluster = Cluster.newBuilder()
-        .setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder()
-            .addPolicies(Policy.newBuilder().setTypedExtensionConfig(
-                TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
-                    RingHash.newBuilder()
-                        .setMinimumRingSize(UInt64Value.of(RING_HASH_MIN_RING_SIZE))
-                        .setMaximumRingSize(UInt64Value.of(RING_HASH_MAX_RING_SIZE))
-                        .setHashFunction(RingHash.HashFunction.MURMUR_HASH_2).build()))).build()))
-        .build();
+    Cluster cluster = newCluster(
+        Policy.newBuilder().setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(Any.pack(
+                RingHash.newBuilder().setMinimumRingSize(UInt64Value.of(RING_HASH_MIN_RING_SIZE))
+                    .setMaximumRingSize(UInt64Value.of(RING_HASH_MAX_RING_SIZE))
+                    .setHashFunction(RingHash.HashFunction.MURMUR_HASH_2).build()))).build());
 
-    try {
-      ServiceConfigUtil.unwrapLoadBalancingConfig(
-          LoadBalancerConfigFactory.newConfig(cluster, true));
-    } catch (ResourceInvalidException e) {
-      // With the new config mechanism we get a more generic error than with the old one because the
-      // logic loops over potentially multiple configurations and only throws an exception at the
-      // end if there was no valid policies found.
-      assertThat(e).hasMessageThat().contains("Invalid ring hash function");
-      return;
-    }
-    fail("ResourceInvalidException not thrown");
+    assertResourceInvalidExceptionThrown(cluster, true, "Invalid ring hash function");
   }
 
   @Test
@@ -188,39 +152,27 @@ public class LoadBalancerConfigFactoryTest {
     Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.RING_HASH).setRingHashLbConfig(
         RingHashLbConfig.newBuilder().setHashFunction(HashFunction.MURMUR_HASH_2)).build();
 
-    try {
-      ServiceConfigUtil.unwrapLoadBalancingConfig(
-          LoadBalancerConfigFactory.newConfig(cluster, true));
-    } catch (ResourceInvalidException e) {
-      assertThat(e).hasMessageThat().contains("invalid ring hash function");
-      return;
-    }
-    fail("ResourceInvalidException not thrown");
+    assertResourceInvalidExceptionThrown(cluster, true, "invalid ring hash function");
   }
 
   @Test
-  public void leastRequest() throws ResourceInvalidException {
+  public void leastRequest_legacy() throws ResourceInvalidException {
     System.setProperty("io.grpc.xds.experimentalEnableLeastRequest", "true");
 
-    Cluster cluster = Cluster.newBuilder()
-        .setLbPolicy(LbPolicy.LEAST_REQUEST)
+    Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.LEAST_REQUEST)
         .setLeastRequestLbConfig(
-            LeastRequestLbConfig.newBuilder().setChoiceCount(UInt32Value.of(10)))
-        .build();
+            LeastRequestLbConfig.newBuilder().setChoiceCount(UInt32Value.of(10))).build();
 
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LoadBalancerConfigFactory.newConfig(cluster, true));
+    LbConfig lbConfig = newLbConfig(cluster, true);
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
 
-    @SuppressWarnings("unchecked")
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
     assertThat(
         JsonUtil.getNumberAsLong(childConfigs.get(0).getRawConfigValue(), "choiceCount")).isEqualTo(
         10);
   }
-
 
   @Test
   public void leastRequest_notEnabled() {
@@ -228,74 +180,55 @@ public class LoadBalancerConfigFactoryTest {
 
     Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.LEAST_REQUEST).build();
 
-    try {
-      ServiceConfigUtil.unwrapLoadBalancingConfig(
-          LoadBalancerConfigFactory.newConfig(cluster, false));
-    } catch (ResourceInvalidException e) {
-      assertThat(e).hasMessageThat().contains("unsupported lb policy");
-      return;
-    }
-    fail("ResourceInvalidException not thrown");
+    assertResourceInvalidExceptionThrown(cluster, false, "unsupported lb policy");
   }
 
   @Test
-  public void customConfiguration() throws ResourceInvalidException {
+  public void customRootLb_providerRegistered() throws ResourceInvalidException {
     LoadBalancerRegistry.getDefaultRegistry().register(CUSTOM_POLICY_PROVIDER);
 
-    Cluster cluster = Cluster.newBuilder()
-        .setLoadBalancingPolicy(
-            LoadBalancingPolicy.newBuilder().addPolicies(buildWrrPolicy(CUSTOM_POLICY)))
-        .build();
-
-    assertValidCustomConfig(ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LoadBalancerConfigFactory.newConfig(cluster, false)));
+    assertThat(newLbConfig(newCluster(CUSTOM_POLICY), false)).isEqualTo(VALID_CUSTOM_CONFIG);
   }
 
-  // When a provider for the custom policy is available, the configuration should use it.
   @Test
-  public void complexCustomConfig_customProviderRegistered() throws ResourceInvalidException {
+  public void customRootLb_providerNotRegistered() throws ResourceInvalidException {
+    Cluster cluster = Cluster.newBuilder()
+        .setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder().addPolicies(CUSTOM_POLICY))
+        .build();
+
+    assertResourceInvalidExceptionThrown(cluster, false, "Invalid LoadBalancingPolicy");
+  }
+
+  // When a provider for the endpoint picking custom policy is available, the configuration should
+  // use it.
+  @Test
+  public void customLbInWrr_providerRegistered() throws ResourceInvalidException {
     LoadBalancerRegistry.getDefaultRegistry().register(CUSTOM_POLICY_PROVIDER);
 
-    Cluster cluster = Cluster.newBuilder()
-        .setLoadBalancingPolicy(
-            LoadBalancingPolicy.newBuilder().addPolicies(buildWrrPolicy(CUSTOM_POLICY))
-                .addPolicies(buildWrrPolicy(ROUND_ROBIN_POLICY)))
-        .build();
+    Cluster cluster = Cluster.newBuilder().setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder()
+        .addPolicies(buildWrrPolicy(CUSTOM_POLICY, ROUND_ROBIN_POLICY))).build();
 
-    assertValidCustomConfig(ServiceConfigUtil.unwrapLoadBalancingConfig(
-        LoadBalancerConfigFactory.newConfig(cluster, false)));
+    assertThat(newLbConfig(cluster, false)).isEqualTo(VALID_CUSTOM_CONFIG_IN_WRR);
   }
 
-  // When a provider for the custom policy is NOT available, we still fail even if there is another
-  // round_robin configuration in the list as the wrr_locality the custom config is wrapped in is
-  // a recognized type and expected to have a valid config.
+  // When a provider for the custom wrr_locality child policy is NOT available, we should fall back
+  // to the round_robin that is also provided.
   @Test
-  public void complexCustomConfig_customProviderNotRegistered() throws ResourceInvalidException {
-    Cluster cluster = Cluster.newBuilder()
-        .setLoadBalancingPolicy(
-            LoadBalancingPolicy.newBuilder().addPolicies(buildWrrPolicy(CUSTOM_POLICY))
-                .addPolicies(buildWrrPolicy(ROUND_ROBIN_POLICY)))
-        .build();
+  public void customLbInWrr_providerNotRegistered() throws ResourceInvalidException {
+    Cluster cluster = Cluster.newBuilder().setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder()
+        .addPolicies(buildWrrPolicy(CUSTOM_POLICY, ROUND_ROBIN_POLICY))).build();
 
-    try {
-      ServiceConfigUtil.unwrapLoadBalancingConfig(
-          LoadBalancerConfigFactory.newConfig(cluster, false));
-    } catch (ResourceInvalidException e) {
-      assertThat(e).hasMessageThat().contains("Invalid LoadBalancingPolicy");
-      return;
-    }
-    fail("ResourceInvalidException not thrown");
+    assertThat(newLbConfig(cluster, false)).isEqualTo(VALID_ROUND_ROBIN_CONFIG);
   }
 
-  private void assertValidCustomConfig(LbConfig lbConfig) {
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    @SuppressWarnings("unchecked")
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        (List<Map<String, ?>>) lbConfig.getRawConfigValue().get("childPolicy"));
-    assertThat(childConfigs).hasSize(1);
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo(CUSTOM_POLICY_NAME);
-    assertThat(childConfigs.get(0).getRawConfigValue().get(CUSTOM_POLICY_FIELD_KEY)).isEqualTo(
-        CUSTOM_POLICY_FIELD_VALUE);
+  // When a provider for the custom wrr_locality child policy is NOT available and no alternative
+  // child policy is provided, the configuration is invalid.
+  @Test
+  public void customLbInWrr_providerNotRegistered_noFallback() throws ResourceInvalidException {
+    Cluster cluster = Cluster.newBuilder().setLoadBalancingPolicy(
+        LoadBalancingPolicy.newBuilder().addPolicies(buildWrrPolicy(CUSTOM_POLICY))).build();
+
+    assertResourceInvalidExceptionThrown(cluster, false, "Invalid LoadBalancingPolicy");
   }
 
   @Test
@@ -322,13 +255,37 @@ public class LoadBalancerConfigFactoryTest {
                                               buildWrrPolicy(
                                                 ROUND_ROBIN_POLICY))))))))))))))))))).build();
 
+    assertResourceInvalidExceptionThrown(cluster, false,
+        "Maximum LB config recursion depth reached");
+  }
+
+  private Cluster newCluster(Policy... policies) {
+    return Cluster.newBuilder().setLoadBalancingPolicy(
+        LoadBalancingPolicy.newBuilder().addAllPolicies(Lists.newArrayList(policies))).build();
+  }
+
+  private static Policy buildWrrPolicy(Policy... childPolicy) {
+    return Policy.newBuilder().setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+        .setTypedConfig(Any.pack(WrrLocality.newBuilder().setEndpointPickingPolicy(
+                LoadBalancingPolicy.newBuilder().addAllPolicies(Lists.newArrayList(childPolicy)))
+            .build()))).build();
+  }
+
+  private LbConfig newLbConfig(Cluster cluster, boolean enableLeastRequest)
+      throws ResourceInvalidException {
+    return ServiceConfigUtil.unwrapLoadBalancingConfig(
+        LoadBalancerConfigFactory.newConfig(cluster, enableLeastRequest));
+  }
+
+  private void assertResourceInvalidExceptionThrown(Cluster cluster, boolean enableLeastRequest,
+      String expectedMessage) {
     try {
-      LoadBalancerConfigFactory.newConfig(cluster, false);
+      newLbConfig(cluster, enableLeastRequest);
     } catch (ResourceInvalidException e) {
-      assertThat(e).hasMessageThat().contains("Maximum LB config recursion depth reached");
+      assertThat(e).hasMessageThat().contains(expectedMessage);
       return;
     }
-    fail("Expected a ResourceInvalidException because of max recursion exceeded");
+    fail("ResourceInvalidException not thrown");
   }
 
   private static class FakeCustomLoadBalancerProvider extends LoadBalancerProvider {
