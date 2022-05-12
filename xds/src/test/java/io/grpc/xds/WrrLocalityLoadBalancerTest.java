@@ -112,7 +112,6 @@ public class WrrLocalityLoadBalancerTest {
         new WeightedPolicySelection(1, childPolicy));
     assertThat(wtConfig.targets).containsEntry(localityTwo.toString(),
         new WeightedPolicySelection(2, childPolicy));
-
   }
 
   @Test
@@ -152,6 +151,22 @@ public class WrrLocalityLoadBalancerTest {
     verify(mockHelper, never()).updateBalancingState(isA(ConnectivityState.class),
         isA(ErrorPicker.class));
     verify(mockChildLb).handleNameResolutionError(Status.DEADLINE_EXCEEDED);
+  }
+
+  @Test
+  public void localityWeightAttributeNotPropagated() {
+    Locality locality = Locality.create("region1", "zone1", "subzone1");
+    PolicySelection childPolicy = new PolicySelection(mockProvider, null);
+
+    WrrLocalityConfig wlConfig = new WrrLocalityConfig(childPolicy);
+    Map<Locality, Integer> localityWeights = ImmutableMap.of(locality, 1);
+    deliverAddresses(wlConfig, localityWeights);
+
+    // Assert that the child policy and the locality weights were correctly mapped to a
+    // WeightedTargetConfig.
+    verify(mockChildLb).handleResolvedAddresses(resolvedAddressesCaptor.capture());
+    assertThat(resolvedAddressesCaptor.getValue().getAttributes()
+        .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).isNull();
   }
 
   @Test
