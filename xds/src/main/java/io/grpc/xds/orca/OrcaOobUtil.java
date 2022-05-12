@@ -66,17 +66,10 @@ import javax.annotation.Nullable;
  * out-of-band backend metrics in the format of Open Request Cost Aggregation (ORCA).
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9129")
-public abstract class OrcaOobUtil {
+public final class OrcaOobUtil {
   private static final Logger logger = Logger.getLogger(OrcaPerRequestUtil.class.getName());
-  private static final OrcaOobUtil DEFAULT_INSTANCE = new OrcaOobUtil() {};
 
-  /**
-   * Gets an {@code OrcaOobUtil} instance that provides implementation of
-   * {@link #newOrcaReportingHelper} and {@link #setListener}.
-   */
-  public static OrcaOobUtil getInstance() {
-    return DEFAULT_INSTANCE;
-  }
+  private OrcaOobUtil() {}
 
   /**
    * Creates a new {@link io.grpc.LoadBalancer.Helper} with provided
@@ -95,7 +88,7 @@ public abstract class OrcaOobUtil {
    *         public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
    *           // listener implements the logic for WRR's usage of backend metrics.
    *           OrcaReportingHelper orcaHelper =
-   *               OrcaOobUtil.getInstance().newOrcaReportingHelper(originHelper);
+   *               OrcaOobUtil.newOrcaReportingHelper(originHelper);
    *           Subchannel subchannel =
    *               orcaHelper.createSubchannel(CreateSubchannelArgs.newBuilder()...);
    *           OrcaOobUtil.setListener(
@@ -104,7 +97,7 @@ public abstract class OrcaOobUtil {
    *              OrcaRerportingConfig.newBuilder().setReportInterval(30, SECOND).build());
    *           ...
    *         }
-   *        }
+   *       }
    *       }
    *     </pre>
    *   </li>
@@ -114,9 +107,8 @@ public abstract class OrcaOobUtil {
    *       class XdsLoadBalancer extends LoadBalancer {
    *         private final Helper orcaHelper;  // the original Helper
    *
-   *
    *         public XdsLoadBalancer(LoadBalancer.Helper helper) {
-   *           this.orcaHelper = OrcaUtil.newOrcaHelper(helper);
+   *           this.orcaHelper = OrcaUtil.newOrcaReportingHelper(helper);
    *         }
    *         private void createChildPolicy(
    *             Locality locality, LoadBalancerProvider childPolicyProvider) {
@@ -136,10 +128,10 @@ public abstract class OrcaOobUtil {
    *               public LoadBalancer.Helper delegate() {
    *                 return orcaHelper;
    *               }
-   *          });
-   *        }
-   *      }
-   *      }
+   *             });
+   *         }
+   *       }
+   *       }
    *     </pre>
    *   </li>
    * </ul>
