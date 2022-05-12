@@ -1526,6 +1526,8 @@ public abstract class AbstractTransportTest {
     clientStream.writeMessage(methodDescriptor.streamRequest("MESSAGE"));
     clientStream.flush();
 
+    doPingPong(serverListener);
+
     // Verify server only receives one message if that's all it requests.
     serverStreamCreation.stream.request(1);
     verifyMessageCountAndClose(serverStreamCreation.listener.messageQueue, 1);
