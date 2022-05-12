@@ -1512,6 +1512,7 @@ public abstract class AbstractTransportTest {
         serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverTransport = serverTransportListener.transport;
 
+    // Start an RPC.
     ClientStream clientStream = client.newStream(
         methodDescriptor, new Metadata(), callOptions, tracers);
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
@@ -1519,17 +1520,15 @@ public abstract class AbstractTransportTest {
     StreamCreation serverStreamCreation =
         serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertEquals(methodDescriptor.getFullMethodName(), serverStreamCreation.method);
-    ServerStream serverStream = serverStreamCreation.stream;
-    ServerStreamListenerBase serverStreamListener = serverStreamCreation.listener;
 
+    // Have the client send two messages.
     clientStream.writeMessage(methodDescriptor.streamRequest("MESSAGE"));
     clientStream.writeMessage(methodDescriptor.streamRequest("MESSAGE"));
     clientStream.flush();
 
-    serverStream.request(1);
-
-    // Verify server only receives one message.
-    verifyMessageCountAndClose(serverStreamListener.messageQueue, 1);
+    // Verify server only receives one message if that's all it requests.
+    serverStreamCreation.stream.request(1);
+    verifyMessageCountAndClose(serverStreamCreation.listener.messageQueue, 1);
   }
 
   @Test
