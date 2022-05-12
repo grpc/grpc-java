@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
+import static org.junit.Assert.fail;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.collect.ImmutableMap;
@@ -25,6 +26,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
@@ -197,7 +199,7 @@ public class ClientXdsClientDataTest {
                     .setCluster("cluster-foo"))
             .build();
     StructOrError<Route> struct = ClientXdsClient.parseRoute(
-        proto, filterRegistry, false, ImmutableMap.<String, PluginConfig>of());
+        proto, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct())
         .isEqualTo(
@@ -220,7 +222,7 @@ public class ClientXdsClientDataTest {
             .setNonForwardingAction(NonForwardingAction.getDefaultInstance())
             .build();
     StructOrError<Route> struct = ClientXdsClient.parseRoute(
-        proto, filterRegistry, false, ImmutableMap.<String, PluginConfig>of());
+        proto, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct())
         .isEqualTo(
             Route.forNonForwardingAction(
@@ -239,7 +241,7 @@ public class ClientXdsClientDataTest {
             .setRedirect(RedirectAction.getDefaultInstance())
             .build();
     res = ClientXdsClient.parseRoute(
-        redirectRoute, filterRegistry, false, ImmutableMap.<String, PluginConfig>of());
+        redirectRoute, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unknown action type: REDIRECT");
@@ -251,7 +253,7 @@ public class ClientXdsClientDataTest {
             .setDirectResponse(DirectResponseAction.getDefaultInstance())
             .build();
     res = ClientXdsClient.parseRoute(
-        directResponseRoute, filterRegistry, false, ImmutableMap.<String, PluginConfig>of());
+        directResponseRoute, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unknown action type: DIRECT_RESPONSE");
@@ -263,7 +265,7 @@ public class ClientXdsClientDataTest {
             .setFilterAction(FilterAction.getDefaultInstance())
             .build();
     res = ClientXdsClient.parseRoute(
-        filterRoute, filterRegistry, false, ImmutableMap.<String, PluginConfig>of());
+        filterRoute, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unknown action type: FILTER_ACTION");
@@ -285,7 +287,7 @@ public class ClientXdsClientDataTest {
                     .setCluster("cluster-foo"))
             .build();
     assertThat(ClientXdsClient.parseRoute(
-            proto, filterRegistry, false, ImmutableMap.<String, PluginConfig>of()))
+            proto, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of()))
         .isNull();
   }
 
@@ -302,7 +304,7 @@ public class ClientXdsClientDataTest {
                     .setClusterHeader("cluster header"))  // cluster_header action not supported
             .build();
     assertThat(ClientXdsClient.parseRoute(
-            proto, filterRegistry, false, ImmutableMap.<String, PluginConfig>of()))
+            proto, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of()))
         .isNull();
   }
 
@@ -490,7 +492,7 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct =
         ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+          ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
     assertThat(struct.getStruct().weightedClusters()).isNull();
@@ -514,7 +516,7 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct =
         ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+          ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isNull();
     assertThat(struct.getStruct().weightedClusters()).containsExactly(
@@ -534,7 +536,7 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct =
         ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+            ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().timeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
 
@@ -549,7 +551,7 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct =
         ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+           ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().timeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
 
@@ -561,7 +563,7 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct =
         ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+          ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().timeoutNano()).isNull();
   }
 
@@ -584,7 +586,7 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct =
         ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+          ImmutableMap.of(), ImmutableSet.of());
     RouteAction.RetryPolicy retryPolicy = struct.getStruct().retryPolicy();
     assertThat(retryPolicy.maxAttempts()).isEqualTo(4);
     assertThat(retryPolicy.initialBackoff()).isEqualTo(Durations.fromMillis(500));
@@ -608,7 +610,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder.build())
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy()).isNotNull();
     assertThat(struct.getStruct().retryPolicy().retryableStatusCodes()).isEmpty();
 
@@ -621,7 +623,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isEqualTo("No base_interval specified in retry_backoff");
 
     // max_interval unset
@@ -631,7 +633,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     retryPolicy = struct.getStruct().retryPolicy();
     assertThat(retryPolicy.maxBackoff()).isEqualTo(Durations.fromMillis(500 * 10));
 
@@ -642,7 +644,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail())
         .isEqualTo("base_interval in retry_backoff must be positive");
 
@@ -655,7 +657,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail())
         .isEqualTo("max_interval in retry_backoff cannot be less than base_interval");
 
@@ -668,7 +670,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail())
         .isEqualTo("max_interval in retry_backoff cannot be less than base_interval");
 
@@ -681,7 +683,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy().initialBackoff())
         .isEqualTo(Durations.fromMillis(1));
     assertThat(struct.getStruct().retryPolicy().maxBackoff())
@@ -697,7 +699,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     retryPolicy = struct.getStruct().retryPolicy();
     assertThat(retryPolicy.initialBackoff()).isEqualTo(Durations.fromMillis(25));
     assertThat(retryPolicy.maxBackoff()).isEqualTo(Durations.fromMillis(250));
@@ -716,7 +718,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
         .containsExactly(Code.CANCELLED);
 
@@ -734,7 +736,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
         .containsExactly(Code.CANCELLED);
 
@@ -752,7 +754,7 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-        ImmutableMap.<String, PluginConfig>of());
+        ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
         .containsExactly(Code.CANCELLED);
   }
@@ -790,7 +792,7 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct =
         ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-            ImmutableMap.<String, PluginConfig>of());
+            ImmutableMap.of(), ImmutableSet.of());
     List<HashPolicy> policies = struct.getStruct().hashPolicies();
     assertThat(policies).hasSize(2);
     assertThat(policies.get(0).type()).isEqualTo(HashPolicy.Type.HEADER);
@@ -804,6 +806,17 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  public void parseRouteAction_custerSpecifierNotSet() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .build();
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
+            ImmutableMap.of(), ImmutableSet.of());
+    assertThat(struct).isNull();
+  }
+
+  @Test
   public void parseRouteAction_clusterSpecifier_routeLookupDisabled() {
     ClientXdsClient.enableRouteLookup = false;
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
@@ -812,18 +825,7 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct =
         ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-            ImmutableMap.<String, PluginConfig>of());
-    assertThat(struct).isNull();
-  }
-
-  @Test
-  public void parseRouteAction_custerSpecifierNotSet() {
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
-        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-            .build();
-    StructOrError<RouteAction> struct =
-        ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
-            ImmutableMap.<String, PluginConfig>of());
+            ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct).isNull();
   }
 
@@ -1586,6 +1588,85 @@ public class ClientXdsClientDataTest {
         true /* does not matter */);
   }
 
+
+  @Test
+  public void parseHttpConnectionManager_optionalPlugin() throws ResourceInvalidException {
+    ClientXdsClient.enableRouteLookup = true;
+
+    // RLS Plugin, and a route to it.
+    RouteLookupConfig routeLookupConfig = RouteLookupConfig.newBuilder()
+        .addGrpcKeybuilders(
+            GrpcKeyBuilder.newBuilder()
+                .addNames(Name.newBuilder().setService("service1"))
+                .addNames(Name.newBuilder().setService("service2"))
+                .addHeaders(
+                    NameMatcher.newBuilder().setKey("key1").addNames("v1").setRequiredMatch(true)))
+        .setLookupService("rls-cbt.googleapis.com")
+        .setLookupServiceTimeout(Durations.fromMillis(1234))
+        .setCacheSizeBytes(5000)
+        .addValidTargets("valid-target")
+        .build();
+    io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin rlsPlugin =
+        io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin.newBuilder()
+            .setExtension(
+                TypedExtensionConfig.newBuilder()
+                    .setName("rls-plugin-1")
+                    .setTypedConfig(Any.pack(
+                        RouteLookupClusterSpecifier.newBuilder()
+                            .setRouteLookupConfig(routeLookupConfig)
+                            .build())))
+            .build();
+    io.envoyproxy.envoy.config.route.v3.Route rlsRoute =
+        io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
+            .setName("rls-route-1")
+            .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPrefix(""))
+            .setRoute(io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+                .setClusterSpecifierPlugin("rls-plugin-1"))
+            .build();
+
+    // Unknown optional plugin, and a route to it.
+    io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin optionalPlugin =
+        io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin.newBuilder()
+            .setIsOptional(true)
+            .setExtension(
+                TypedExtensionConfig.newBuilder()
+                    .setName("optional-plugin-1")
+                    .setTypedConfig(Any.pack(StringValue.of("unregistered")))
+                    .build())
+            .build();
+    io.envoyproxy.envoy.config.route.v3.Route optionalRoute =
+        io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
+            .setName("optional-route-1")
+            .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPrefix(""))
+            .setRoute(io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+                .setClusterSpecifierPlugin("optional-plugin-1"))
+            .build();
+
+
+    // Build and parse the route.
+    RouteConfiguration routeConfig = RouteConfiguration.newBuilder()
+        .addClusterSpecifierPlugins(rlsPlugin)
+        .addClusterSpecifierPlugins(optionalPlugin)
+        .addVirtualHosts(
+            io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
+                .setName("virtual-host-1")
+                .addRoutes(rlsRoute)
+                .addRoutes(optionalRoute))
+        .build();
+    io.grpc.xds.HttpConnectionManager parsedHcm = ClientXdsClient.parseHttpConnectionManager(
+        HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build(),
+        new HashSet<>(),  filterRegistry, false /* parseHttpFilter */,  true /* does not matter */);
+
+    // Verify that the only route left is the one with the registered RLS plugin `rls-plugin-1`,
+    // while the route with unregistered optional `optional-plugin-`1 has been skipped.
+    VirtualHost virtualHost = Iterables.getOnlyElement(parsedHcm.virtualHosts());
+    Route parsedRoute = Iterables.getOnlyElement(virtualHost.routes());
+    NamedPluginConfig namedPluginConfig =
+        parsedRoute.routeAction().namedClusterSpecifierPluginConfig();
+    assertThat(namedPluginConfig.name()).isEqualTo("rls-plugin-1");
+    assertThat(namedPluginConfig.config()).isInstanceOf(RlsPluginConfig.class);
+  }
+
   @Test
   public void parseHttpConnectionManager_validateRdsConfigSource() throws Exception {
     ClientXdsClient.enableRouteLookup = true;
@@ -1719,6 +1800,77 @@ public class ClientXdsClientDataTest {
         "Unsupported ClusterSpecifierPlugin type: type.googleapis.com/google.protobuf.StringValue");
 
     ClientXdsClient.parseClusterSpecifierPlugin(pluginProto, registry);
+  }
+
+  @Test
+  public void parseClusterSpecifierPlugin_unregisteredPlugin_optional()
+      throws ResourceInvalidException {
+    ClusterSpecifierPluginRegistry registry = ClusterSpecifierPluginRegistry.newRegistry();
+    io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin pluginProto =
+        io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin.newBuilder()
+            .setExtension(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(StringValue.of("unregistered"))))
+            .setIsOptional(true)
+            .build();
+
+    PluginConfig pluginConfig = ClientXdsClient.parseClusterSpecifierPlugin(pluginProto, registry);
+    assertThat(pluginConfig).isNull();
+  }
+
+  @Test
+  public void parseClusterSpecifierPlugin_brokenPlugin() {
+    ClusterSpecifierPluginRegistry registry = ClusterSpecifierPluginRegistry.newRegistry();
+
+    Any failingAny = Any.newBuilder()
+        .setTypeUrl("type.googleapis.com/xds.type.v3.TypedStruct")
+        .setValue(ByteString.copyFromUtf8("fail"))
+        .build();
+
+    TypedExtensionConfig brokenPlugin = TypedExtensionConfig.newBuilder()
+          .setName("bad-plugin-1")
+          .setTypedConfig(failingAny)
+          .build();
+
+    try {
+      ClientXdsClient.parseClusterSpecifierPlugin(
+          io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin.newBuilder()
+              .setExtension(brokenPlugin)
+              .build(),
+          registry);
+      fail("Expected ResourceInvalidException");
+    } catch (ResourceInvalidException e) {
+      assertThat(e).hasMessageThat()
+          .startsWith("ClusterSpecifierPlugin [bad-plugin-1] contains invalid proto");
+    }
+  }
+
+  @Test
+  public void parseClusterSpecifierPlugin_brokenPlugin_optional() {
+    ClusterSpecifierPluginRegistry registry = ClusterSpecifierPluginRegistry.newRegistry();
+
+    Any failingAny = Any.newBuilder()
+        .setTypeUrl("type.googleapis.com/xds.type.v3.TypedStruct")
+        .setValue(ByteString.copyFromUtf8("fail"))
+        .build();
+
+    TypedExtensionConfig brokenPlugin = TypedExtensionConfig.newBuilder()
+          .setName("bad-plugin-1")
+          .setTypedConfig(failingAny)
+          .build();
+
+    // Despite being optional, still should fail.
+    try {
+      ClientXdsClient.parseClusterSpecifierPlugin(
+          io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin.newBuilder()
+              .setIsOptional(true)
+              .setExtension(brokenPlugin)
+              .build(),
+          registry);
+      fail("Expected ResourceInvalidException");
+    } catch (ResourceInvalidException e) {
+      assertThat(e).hasMessageThat()
+          .startsWith("ClusterSpecifierPlugin [bad-plugin-1] contains invalid proto");
+    }
   }
 
   @Test
