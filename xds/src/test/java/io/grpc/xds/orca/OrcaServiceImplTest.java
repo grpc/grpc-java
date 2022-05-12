@@ -19,10 +19,9 @@ package io.grpc.xds.orca;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.github.xds.service.orca.v3.OpenRcaServiceGrpc;
@@ -112,7 +111,6 @@ public class OrcaServiceImplTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void testReportingLifeCycle_serverShutdown() {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
@@ -125,7 +123,8 @@ public class OrcaServiceImplTest {
     OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
     assertThat(defaultTestService.getClientsCount()).isEqualTo(1);
     verify(listener).onMessage(eq(expect));
-    reset(listener);
+    verify(listener).onHeaders(any(Metadata.class));
+    verifyNoMoreInteractions(listener);
     oobServer.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
     assertThat(defaultTestService.getClientsCount()).isEqualTo(0);
@@ -135,7 +134,6 @@ public class OrcaServiceImplTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void testRequestIntervalLess() {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
@@ -147,17 +145,17 @@ public class OrcaServiceImplTest {
     call.request(1);
     OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
     verify(listener).onMessage(eq(expect));
-    reset(listener);
+    verify(listener).onHeaders(any(Metadata.class));
+    verifyNoMoreInteractions(listener);
     defaultTestService.deleteUtilizationMetric("buffer0");
     assertThat(fakeClock.forwardTime(500, TimeUnit.NANOSECONDS)).isEqualTo(0);
-    verifyNoInteractions(listener);
+    verifyNoMoreInteractions(listener);
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(1);
     call.request(1);
-    verify(listener).onMessage(eq(expect));
+    verify(listener, times(2)).onMessage(eq(expect));
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void testRequestIntervalGreater() {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
@@ -169,17 +167,17 @@ public class OrcaServiceImplTest {
     call.request(1);
     OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
     verify(listener).onMessage(eq(expect));
-    reset(listener);
+    verify(listener).onHeaders(any(Metadata.class));
+    verifyNoMoreInteractions(listener);
     defaultTestService.deleteUtilizationMetric("buffer0");
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
-    verifyNoInteractions(listener);
+    verifyNoMoreInteractions(listener);
     assertThat(fakeClock.forwardTime(9, TimeUnit.SECONDS)).isEqualTo(1);
     call.request(1);
-    verify(listener).onMessage(eq(expect));
+    verify(listener, times(2)).onMessage(eq(expect));
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void testRequestIntervalDefault() throws Exception {
     defaultTestService = new OrcaOobService(fakeClock.getScheduledExecutorService());
     oobServer.shutdownNow();
@@ -194,13 +192,14 @@ public class OrcaServiceImplTest {
     call.request(1);
     OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
     verify(listener).onMessage(eq(expect));
-    reset(listener);
+    verify(listener).onHeaders(any(Metadata.class));
+    verifyNoMoreInteractions(listener);
     defaultTestService.deleteUtilizationMetric("buffer0");
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(0);
-    verifyNoInteractions(listener);
+    verifyNoMoreInteractions(listener);
     assertThat(fakeClock.forwardTime(20, TimeUnit.SECONDS)).isEqualTo(1);
     call.request(1);
-    verify(listener).onMessage(eq(expect));
+    verify(listener, times(2)).onMessage(eq(expect));
   }
 
   @Test

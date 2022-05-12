@@ -1166,15 +1166,5 @@ public class ClusterResolverLoadBalancerTest {
       shutdown = true;
       childBalancers.remove(this);
     }
-
-    void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
-      SubchannelPicker picker = new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withSubchannel(subchannel);
-        }
-      };
-      helper.updateBalancingState(state, picker);
-    }
   }
 }
