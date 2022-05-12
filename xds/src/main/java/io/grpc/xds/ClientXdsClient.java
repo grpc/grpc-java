@@ -162,6 +162,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
+  @VisibleForTesting
+  static boolean enableCustomLbConfig =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_CUSTOM_LB_CONFIG"))
+          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_CUSTOM_LB_CONFIG"))
+          : Boolean.parseBoolean(
+              System.getProperty("io.grpc.xds.experimentalEnableCustomLbConfig"));
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -1636,7 +1642,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
     ImmutableMap<String, ?> lbPolicyConfig = LoadBalancerConfigFactory.newConfig(cluster,
-        enableLeastRequest);
+        enableLeastRequest, enableCustomLbConfig);
 
     // Validate the LB config by trying to parse it with the corresponding LB provider.
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbPolicyConfig);
