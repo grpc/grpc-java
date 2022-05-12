@@ -1504,6 +1504,35 @@ public abstract class AbstractTransportTest {
   }
 
   @Test
+  public void messageProducerOnlyProducesRequestedMessages() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    serverTransport = serverTransportListener.transport;
+
+    ClientStream clientStream = client.newStream(
+        methodDescriptor, new Metadata(), callOptions, tracers);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+    StreamCreation serverStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    assertEquals(methodDescriptor.getFullMethodName(), serverStreamCreation.method);
+    ServerStream serverStream = serverStreamCreation.stream;
+    ServerStreamListenerBase serverStreamListener = serverStreamCreation.listener;
+
+    clientStream.writeMessage(methodDescriptor.streamRequest("MESSAGE"));
+    clientStream.writeMessage(methodDescriptor.streamRequest("MESSAGE"));
+    clientStream.flush();
+
+    serverStream.request(1);
+
+    // Verify server only receives one message.
+    verifyMessageCountAndClose(serverStreamListener.messageQueue, 1);
+  }
+
+  @Test
   public void interactionsAfterServerStreamCloseAreNoops() throws Exception {
     server.start(serverListener);
     client = newClientTransport(server);
