@@ -127,8 +127,8 @@ public class AndroidComponentAddress extends SocketAddress { // NOTE: Only tempo
   public String asAndroidAppUri() {
     Intent intentForUri = bindIntent;
     if (intentForUri.getPackage() == null) {
-      // URI_ANDROID_APP_SCHEME requires an "explicit package name" add, oddly, our explicit
-      // ComponentName is not enough.
+      // URI_ANDROID_APP_SCHEME requires an "explicit package name" which isn't set by any of our
+      // factory methods. Oddly, our explicit ComponentName is not enough.
       intentForUri = intentForUri.cloneFilter().setPackage(getComponent().getPackageName());
     }
     return intentForUri.toUri(URI_ANDROID_APP_SCHEME);
