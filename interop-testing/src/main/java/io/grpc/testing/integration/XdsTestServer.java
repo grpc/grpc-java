@@ -59,9 +59,11 @@ public final class XdsTestServer {
       "succeed-on-retry-attempt-";
   private static final String CALL_BEHAVIOR_ERROR_CODE =
       "error-code-";
+  private static final String CALL_BEHAVIOR_HOSTNAME = "hostname=";
   private static final Splitter HEADER_VALUE_SPLITTER = Splitter.on(',')
       .trimResults()
       .omitEmptyStrings();
+  private static final Splitter HEADER_HOSTNAME_SPLITTER = Splitter.on(' ');
 
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
@@ -300,8 +302,44 @@ public final class XdsTestServer {
       };
       ServerCall.Listener<ReqT> noopListener = new ServerCall.Listener<ReqT>() {};
 
-      // sleep if instructed by rpc-behavior
-      for (String callBehavior : callBehaviors) {
+      int attemptNum = 0;
+      String attemptNumHeader = requestHeaders.get(ATTEMPT_NUM);
+      if (attemptNumHeader != null) {
+        try {
+          attemptNum = Integer.valueOf(attemptNumHeader);
+        } catch (NumberFormatException e) {
+          newCall.close(
+              Status.INVALID_ARGUMENT.withDescription(
+                  String.format(
+                      "Invalid format for grpc-previous-rpc-attempts header (%s)",
+                      attemptNumHeader)),
+              new Metadata());
+          return noopListener;
+        }
+      }
+
+      for (String callBehaviorEntry : callBehaviors) {
+        String callBehavior;
+        List<String> splitHeader = HEADER_HOSTNAME_SPLITTER.split(callBehaviorEntry);
+        if (splitHeader.size() > 1) {
+          String hostnameSpecifier = splitHeader[0];
+          if (hostnameSpecifier.startsWith(CALL_BEHAVIOR_HOSTNAME)) {
+            if (!hostnameSpecifier.substring(CALL_BEHAVIOR_HOSTNAME.length()).equals(host)) {
+              continue;
+            }
+          } else {
+            newCall.close(
+                Status.INVALID_ARGUMENT.withDescription(
+                    String.format("Invalid format for rpc-behavior header (%s)", callBehaviorEntry)),
+                new Metadata()
+            );
+            return noopListener;
+          }
+          callBehavior = splitHeader[1];
+        } else {
+          callBehavior = splitHeader[0];
+        }
+
         if (callBehavior.startsWith(CALL_BEHAVIOR_SLEEP_VALUE)) {
           try {
             int timeout = Integer.parseInt(
@@ -321,11 +359,8 @@ public final class XdsTestServer {
             return noopListener;
           }
         }
-      }
 
-      // succeed the retry attempt if instructed by rpc-behavior
-      int succeedOnAttemptNum = Integer.MAX_VALUE;
-      for (String callBehavior : callBehaviors) {
+        int succeedOnAttemptNum = Integer.MAX_VALUE;
         if (callBehavior.startsWith(CALL_BEHAVIOR_SUCCEED_ON_RETRY_ATTEMPT_VALUE)) {
           try {
             succeedOnAttemptNum = Integer.parseInt(
@@ -337,35 +372,16 @@ public final class XdsTestServer {
                 new Metadata());
             return noopListener;
           }
-          break;
         }
-      }
-      int attemptNum = 0;
-      String attemptNumHeader = requestHeaders.get(ATTEMPT_NUM);
-      if (attemptNumHeader != null) {
-        try {
-          attemptNum = Integer.valueOf(attemptNumHeader);
-        } catch (NumberFormatException e) {
-          newCall.close(
-              Status.INVALID_ARGUMENT.withDescription(
-                  String.format(
-                      "Invalid format for grpc-previous-rpc-attempts header (%s)",
-                      attemptNumHeader)),
-              new Metadata());
+        if (attemptNum == succeedOnAttemptNum) {
+          return next.startCall(newCall, requestHeaders);
+        }
+
+        // hang if instructed by rpc-behavior
+        if (callBehavior.equals(CALL_BEHAVIOR_KEEP_OPEN_VALUE)) {
           return noopListener;
         }
-      }
-      if (attemptNum == succeedOnAttemptNum) {
-        return next.startCall(newCall, requestHeaders);
-      }
 
-      // hang if instructed by rpc-behavior
-      if (callBehaviors.contains(CALL_BEHAVIOR_KEEP_OPEN_VALUE)) {
-        return noopListener;
-      }
-
-      // fail if instructed by rpc-behavior
-      for (String callBehavior : callBehaviors) {
         if (callBehavior.startsWith(CALL_BEHAVIOR_ERROR_CODE)) {
           try {
             int codeValue = Integer.valueOf(
