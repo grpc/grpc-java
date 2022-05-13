@@ -48,6 +48,7 @@ import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.Grpc;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
@@ -186,6 +187,9 @@ public abstract class AbstractInteropTest {
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
+
+  static final CallOptions.Key<AtomicReference<Double>> orcaReportKey =
+      CallOptions.Key.create("orca-rpc-report");
 
   private static final class ServerStreamTracerInfo {
     final String fullMethodName;
@@ -361,6 +365,10 @@ public abstract class AbstractInteropTest {
   }
 
   protected abstract ManagedChannelBuilder<?> createChannelBuilder();
+
+  protected LoadBalancerProvider getOrcaLoadBalancerProvider() {
+    return null;
+  }
 
   @Nullable
   protected ClientInterceptor[] getAdditionalInterceptors() {
@@ -1730,6 +1738,20 @@ public abstract class AbstractInteropTest {
   public void getServerAddressAndLocalAddressFromClient() {
     assertNotNull(obtainRemoteServerAddr());
     assertNotNull(obtainLocalClientAddr());
+  }
+
+  /**
+   *  Test backend metrics reporting: expect the test client LB policy to receive load reports.
+   */
+  public void testOrca() {
+    AtomicReference<Double> expectedMetricsFeedback = new AtomicReference<>();
+    blockingStub.withOption(orcaReportKey, expectedMetricsFeedback).unaryCall(
+        SimpleRequest.newBuilder().setResponseSize(10).build());
+    //assertEquals(savedLoadReports.poll(), OrcaLoadReport.newBuilder()
+    //    .putRequestCost("queue", 2.0).build());
+    //    assertThat(savedLoadReports.isEmpty()).isTrue();
+    //    assertEquals(savedOobLoadReports.poll(), OrcaLoadReport.newBuilder()
+    //        .putUtilization("util", 0.4875).build());
   }
 
   /** Sends a large unary rpc with service account credentials. */

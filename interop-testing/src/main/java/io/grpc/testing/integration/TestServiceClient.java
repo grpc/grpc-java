@@ -480,9 +480,14 @@ public class TestServiceClient {
     }
   }
 
-  private class Tester extends AbstractXdsInteropTest {
+  private class Tester extends AbstractInteropTest {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
+      customBackendMetricsLoadBalancerProvider = getOrcaLoadBalancerProvider();
+      if (customBackendMetricsLoadBalancerProvider != null) {
+        LoadBalancerRegistry.getDefaultRegistry()
+            .register(customBackendMetricsLoadBalancerProvider);
+      }
       boolean useGeneric = false;
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {
@@ -530,11 +535,6 @@ public class TestServiceClient {
           channelCredentials = InsecureChannelCredentials.create();
         }
       }
-      if (TestCases.ORCA.equals(testCase)) {
-        customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
-        LoadBalancerRegistry.getDefaultRegistry()
-            .register(customBackendMetricsLoadBalancerProvider);
-      }
       if (useGeneric) {
         ManagedChannelBuilder<?> channelBuilder;
         if (serverPort == 0) {
@@ -549,9 +549,6 @@ public class TestServiceClient {
         if (serviceConfig != null) {
           channelBuilder.disableServiceConfigLookUp();
           channelBuilder.defaultServiceConfig(serviceConfig);
-        }
-        if (TestCases.ORCA.equals(testCase)) {
-          channelBuilder.defaultLoadBalancingPolicy(TEST_ORCA_LB_POLICY_NAME);
         }
         return channelBuilder;
       }
@@ -574,9 +571,6 @@ public class TestServiceClient {
         if (serviceConfig != null) {
           nettyBuilder.disableServiceConfigLookUp();
           nettyBuilder.defaultServiceConfig(serviceConfig);
-        }
-        if (TestCases.ORCA.equals(testCase)) {
-          nettyBuilder.defaultLoadBalancingPolicy(TEST_ORCA_LB_POLICY_NAME);
         }
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
@@ -601,9 +595,6 @@ public class TestServiceClient {
         okBuilder.disableServiceConfigLookUp();
         okBuilder.defaultServiceConfig(serviceConfig);
       }
-      if (TestCases.ORCA.equals(testCase)) {
-        okBuilder.defaultLoadBalancingPolicy(TEST_ORCA_LB_POLICY_NAME);
-      }
       return okBuilder.intercept(createCensusStatsClientInterceptor());
     }
 
@@ -625,6 +616,11 @@ public class TestServiceClient {
       } else {
         return null;
       }
+    }
+
+    @Override
+    protected LoadBalancerProvider getOrcaLoadBalancerProvider() {
+      return new CustomBackendMetricsLoadBalancerProvider();
     }
   }
 

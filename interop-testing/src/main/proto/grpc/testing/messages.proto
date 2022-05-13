@@ -89,6 +89,10 @@ message SimpleRequest {
 
   // Whether SimpleResponse should include grpclb_route_type.
   bool fill_grpclb_route_type = 10;
+
+  bool orca_per_rpc = 11;
+
+  bool orca_oob = 12;
 }
 
 // Unary response, as configured by the request.

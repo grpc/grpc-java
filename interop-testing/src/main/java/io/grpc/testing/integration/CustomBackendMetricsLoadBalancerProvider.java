@@ -17,12 +17,10 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static org.junit.Assert.assertEquals;
 
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -42,46 +40,31 @@ import java.util.concurrent.TimeUnit;
  *
  * <p> New tests should avoid using Mockito to support running on AppEngine.</p>
  */
-public abstract class AbstractXdsInteropTest extends AbstractInteropTest {
+final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvider {
 
-  protected static final String TEST_ORCA_LB_POLICY_NAME = "test_backend_metrics_load_balancer";
+  static final String TEST_ORCA_LB_POLICY_NAME = "test_backend_metrics_load_balancer";
   private final LinkedBlockingQueue<OrcaLoadReport> savedLoadReports = new LinkedBlockingQueue<>();
   private final LinkedBlockingQueue<OrcaLoadReport> savedOobLoadReports =
       new LinkedBlockingQueue<>();
 
-  /**
-   *  Test backend metrics reporting: expect the test client LB policy to receive load reports.
-   */
-  public void testOrca() {
-    blockingStub.emptyCall(EMPTY);
-    assertEquals(savedLoadReports.poll(), OrcaLoadReport.newBuilder()
-        .putRequestCost("queue", 2.0).build());
-    assertThat(savedLoadReports.isEmpty()).isTrue();
-    assertEquals(savedOobLoadReports.poll(), OrcaLoadReport.newBuilder()
-        .putUtilization("util", 0.4875).build());
+  @Override
+  public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+    return new CustomBackendMetricsLoadBalancer(helper);
   }
 
-  protected class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvider {
+  @Override
+  public boolean isAvailable() {
+    return true;
+  }
 
-    @Override
-    public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-      return new CustomBackendMetricsLoadBalancer(helper);
-    }
+  @Override
+  public int getPriority() {
+    return 0;
+  }
 
-    @Override
-    public boolean isAvailable() {
-      return true;
-    }
-
-    @Override
-    public int getPriority() {
-      return 0;
-    }
-
-    @Override
-    public String getPolicyName() {
-      return TEST_ORCA_LB_POLICY_NAME;
-    }
+  @Override
+  public String getPolicyName() {
+    return TEST_ORCA_LB_POLICY_NAME;
   }
 
   class CustomBackendMetricsLoadBalancer extends LoadBalancer {
