@@ -121,9 +121,17 @@ public class AndroidComponentAddress extends SocketAddress { // NOTE: Only tempo
 
   /**
    * Returns this address as an "android-app://" uri.
+   *
+   * <p>See {@link Intent#URI_ANDROID_APP_SCHEME} for details.
    */
   public String asAndroidAppUri() {
-    return bindIntent.toUri(URI_ANDROID_APP_SCHEME);
+    Intent intentForUri = bindIntent;
+    if (intentForUri.getPackage() == null) {
+      // URI_ANDROID_APP_SCHEME requires an "explicit package name" add, oddly, our explicit
+      // ComponentName is not enough.
+      intentForUri = intentForUri.cloneFilter().setPackage(getComponent().getPackageName());
+    }
+    return intentForUri.toUri(URI_ANDROID_APP_SCHEME);
   }
 
   @Override
