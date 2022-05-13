@@ -318,26 +318,22 @@ public final class XdsTestServer {
         }
       }
 
-      for (String callBehaviorEntry : callBehaviors) {
-        String callBehavior;
-        List<String> splitHeader = HEADER_HOSTNAME_SPLITTER.split(callBehaviorEntry);
-        if (splitHeader.size() > 1) {
-          String hostnameSpecifier = splitHeader[0];
-          if (hostnameSpecifier.startsWith(CALL_BEHAVIOR_HOSTNAME)) {
-            if (!hostnameSpecifier.substring(CALL_BEHAVIOR_HOSTNAME.length()).equals(host)) {
+      for (String callBehavior : callBehaviors) {
+        if (callBehavior.startsWith(CALL_BEHAVIOR_HOSTNAME)) {
+          List<String> splitHeader = HEADER_HOSTNAME_SPLITTER.splitToList(callBehavior);
+          if (splitHeader.size() > 1) {
+            if (!splitHeader[0].substring(CALL_BEHAVIOR_HOSTNAME.length().equals(host))) {
               continue;
             }
+            callBehavior = splitHeader[1];
           } else {
             newCall.close(
                 Status.INVALID_ARGUMENT.withDescription(
-                    String.format("Invalid format for rpc-behavior header (%s)", callBehaviorEntry)),
+                    String.format("Invalid format for rpc-behavior header (%s)", callBehavior)),
                 new Metadata()
             );
             return noopListener;
           }
-          callBehavior = splitHeader[1];
-        } else {
-          callBehavior = splitHeader[0];
         }
 
         if (callBehavior.startsWith(CALL_BEHAVIOR_SLEEP_VALUE)) {
@@ -360,8 +356,8 @@ public final class XdsTestServer {
           }
         }
 
-        int succeedOnAttemptNum = Integer.MAX_VALUE;
         if (callBehavior.startsWith(CALL_BEHAVIOR_SUCCEED_ON_RETRY_ATTEMPT_VALUE)) {
+          int succeedOnAttemptNum = Integer.MAX_VALUE;
           try {
             succeedOnAttemptNum = Integer.parseInt(
                 callBehavior.substring(CALL_BEHAVIOR_SUCCEED_ON_RETRY_ATTEMPT_VALUE.length()));
@@ -372,9 +368,9 @@ public final class XdsTestServer {
                 new Metadata());
             return noopListener;
           }
-        }
-        if (attemptNum == succeedOnAttemptNum) {
-          return next.startCall(newCall, requestHeaders);
+          if (attemptNum == succeedOnAttemptNum) {
+            return next.startCall(newCall, requestHeaders);
+          }
         }
 
         // hang if instructed by rpc-behavior
