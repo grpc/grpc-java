@@ -322,7 +322,7 @@ public final class XdsTestServer {
         if (callBehavior.startsWith(CALL_BEHAVIOR_HOSTNAME)) {
           List<String> splitHeader = HEADER_HOSTNAME_SPLITTER.splitToList(callBehavior);
           if (splitHeader.size() > 1) {
-            if (!splitHeader.get(0).substring(CALL_BEHAVIOR_HOSTNAME.length().equals(host))) {
+            if (!splitHeader.get(0).substring(CALL_BEHAVIOR_HOSTNAME.length()).equals(host)) {
               continue;
             }
             callBehavior = splitHeader.get(1);
