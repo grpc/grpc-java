@@ -80,6 +80,14 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
               wrrLocalityConfig.childPolicy));
     }
 
+    // Remove the locality weights attribute now that we have consumed it. This is done simply for
+    // ease of debugging for the unsupported (and unlikely) scenario where WrrLocalityConfig has
+    // another wrr_locality as the child policy. The missing locality weight attribute would make
+    // the child wrr_locality fail early.
+    resolvedAddresses = resolvedAddresses.toBuilder()
+        .setAttributes(resolvedAddresses.getAttributes().toBuilder()
+            .discard(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS).build()).build();
+
     switchLb.switchTo(wrrLocalityConfig.childPolicy.getProvider());
     switchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()

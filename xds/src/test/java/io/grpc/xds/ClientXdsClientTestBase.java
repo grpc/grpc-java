@@ -1628,8 +1628,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1651,8 +1654,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1680,8 +1686,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("least_request_experimental");
-    assertThat(lbConfig.getRawConfigValue().get("choiceCount")).isEqualTo(3);
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
+    assertThat(childConfigs.get(0).getRawConfigValue().get("choiceCount")).isEqualTo(3);
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1736,8 +1745,11 @@ public abstract class ClientXdsClientTestBase {
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.AGGREGATE);
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.prioritizedClusterNames()).containsExactlyElementsIn(candidates).inOrder();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterAggregate, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -1758,8 +1770,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1903,8 +1918,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1946,8 +1964,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1966,8 +1987,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2035,8 +2059,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2088,8 +2115,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2098,8 +2128,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(cdsResourceTwo);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2108,8 +2141,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(cdsResourceTwo);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
-    assertThat(ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig())
-        .getPolicyName()).isEqualTo("round_robin");
+    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();

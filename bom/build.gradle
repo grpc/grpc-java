@@ -34,6 +34,12 @@ publishing {
           dependencyNode.appendNode('artifactId', subproject.name)
           dependencyNode.appendNode('version', subproject.version)
         }
+        // add protoc gen (produced by grpc-compiler with different artifact name)
+        def dependencyNode = dependencies.appendNode('dependency')
+        dependencyNode.appendNode('groupId', project.group)
+        dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
+        dependencyNode.appendNode('version', project.version)
+        dependencyNode.appendNode('type', 'pom')
       }
     }
   }
