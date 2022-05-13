@@ -164,8 +164,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
   @VisibleForTesting
   static boolean enableCustomLbConfig =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_CUSTOM_LB_CONFIG"))
-          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_CUSTOM_LB_CONFIG"))
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"))
+          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"))
           : Boolean.parseBoolean(
               System.getProperty("io.grpc.xds.experimentalEnableCustomLbConfig"));
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
