@@ -386,7 +386,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       FilterRegistry filterRegistry, Set<String> certProviderInstances, boolean parseHttpFilter)
       throws ResourceInvalidException {
     if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)
-      && !proto.getTrafficDirection().equals(TrafficDirection.UNSPECIFIED)) {
+        && !proto.getTrafficDirection().equals(TrafficDirection.UNSPECIFIED)) {
       throw new ResourceInvalidException(
           "Listener " + proto.getName() + " with invalid traffic direction: "
               + proto.getTrafficDirection());
