@@ -2007,6 +2007,16 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  public void parseServerSideListener_noTrafficDirection() throws ResourceInvalidException {
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .build();
+    ClientXdsClient.parseServerSideListener(
+        listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
+  }
+
+  @Test
   public void parseServerSideListener_listenerFiltersPresent() throws ResourceInvalidException {
     Listener listener =
         Listener.newBuilder()
