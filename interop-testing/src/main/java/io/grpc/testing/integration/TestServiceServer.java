@@ -18,20 +18,19 @@ package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.BindableService;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
-import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.services.MetricRecorder;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
-import io.grpc.xds.orca.OrcaOobService;
-import java.util.ArrayList;
-import java.util.List;
+import io.grpc.xds.orca.OrcaServiceImpl;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -161,21 +160,17 @@ public class TestServiceServer {
     } else {
       serverCreds = InsecureServerCredentials.create();
     }
-    List<ServerInterceptor> optionalInterceptors = new ArrayList<>();
     ServerBuilder<?> builder = Grpc.newServerBuilderForPort(port, serverCreds)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    OrcaOobService orcaOobService = null;
+    MetricRecorder metricRecorder = MetricRecorder.newInstance();
     if (useOrca) {
-      orcaOobService = new OrcaOobService(1, TimeUnit.SECONDS, executor);
-      builder.addService(orcaOobService.getService());
+      BindableService orcaOobService =
+          OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
+      builder.addService(orcaOobService);
+      builder.intercept(OrcaMetricReportingServerInterceptor.getInstance());
     }
-    TestServiceImpl testService = new TestServiceImpl(executor);
-    if (useOrca) {
-      optionalInterceptors.add(OrcaMetricReportingServerInterceptor.getInstance());
-    }
-    builder.addService(
-        ServerInterceptors.intercept(testService,
-            TestServiceImpl.interceptors(optionalInterceptors)));
+    TestServiceImpl testService = new TestServiceImpl(executor, metricRecorder);
+    builder.addService(ServerInterceptors.intercept(testService, TestServiceImpl.interceptors()));
     server = builder.build().start();
   }
 

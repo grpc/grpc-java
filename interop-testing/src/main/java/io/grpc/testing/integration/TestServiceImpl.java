@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -26,6 +27,8 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.MetricRecorder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
@@ -36,12 +39,12 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
@@ -59,13 +62,19 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
+  private final MetricRecorder metricRecorder;
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
    */
-  public TestServiceImpl(ScheduledExecutorService executor) {
+  public TestServiceImpl(ScheduledExecutorService executor, MetricRecorder metricRecorder) {
     this.executor = executor;
     this.compressableBuffer = ByteString.copyFrom(new byte[1024]);
+    this.metricRecorder = metricRecorder;
+  }
+
+  public TestServiceImpl(ScheduledExecutorService executor) {
+    this(executor, null);
   }
 
   @Override
@@ -114,8 +123,48 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       return;
     }
 
+    if (req.getOrcaPerRpc()) {
+      try {
+        echoCallMetricsFromPayload(req.getPayload());
+      } catch (InvalidProtocolBufferException ex) {
+        responseObserver.onError(ex);
+      }
+    }
+    if (req.getOrcaOob()) {
+      try {
+        echoMetricsFromPayload(req.getPayload());
+      } catch (InvalidProtocolBufferException ex) {
+        responseObserver.onError(ex);
+      }
+    }
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
+  }
+
+  private static OrcaLoadReport echoCallMetricsFromPayload(Payload payload)
+      throws InvalidProtocolBufferException {
+    OrcaLoadReport answer = OrcaLoadReport.parseFrom(payload.getBody());
+    CallMetricRecorder recorder = CallMetricRecorder.getCurrent()
+        .recordCpuUtilizationMetric(answer.getCpuUtilization())
+        .recordMemoryUtilizationMetric(answer.getMemUtilization());
+    for (Map.Entry<String, Double> entry : answer.getUtilizationMap().entrySet()) {
+      recorder.recordUtilizationMetric(entry.getKey(), entry.getValue());
+    }
+    for (Map.Entry<String, Double> entry : answer.getRequestCostMap().entrySet()) {
+      recorder.recordCallMetric(entry.getKey(), entry.getValue());
+    }
+    return answer;
+  }
+
+  private OrcaLoadReport echoMetricsFromPayload(Payload payload)
+      throws InvalidProtocolBufferException {
+    OrcaLoadReport answer = OrcaLoadReport.parseFrom(payload.getBody());
+    metricRecorder.setCpuUtilizationMetric(answer.getCpuUtilization());
+    metricRecorder.setMemoryUtilizationMetric(answer.getMemUtilization());
+    for (Map.Entry<String, Double> entry : answer.getUtilizationMap().entrySet()) {
+      metricRecorder.setUtilizationMetric(entry.getKey(), entry.getValue());
+    }
+    return answer;
   }
 
   /**
@@ -437,14 +486,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   }
 
   /** Returns interceptors necessary for full service implementation. */
-  public static List<ServerInterceptor> interceptors(
-      Collection<ServerInterceptor> optionalInterceptors) {
-    ArrayList<ServerInterceptor> interceptorList = new ArrayList<>(optionalInterceptors);
-    interceptorList.addAll(Arrays.asList(
+  public static List<ServerInterceptor> interceptors() {
+    return Arrays.asList(
         echoRequestHeadersInterceptor(Util.METADATA_KEY),
         echoRequestMetadataInHeaders(Util.ECHO_INITIAL_METADATA_KEY),
-        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY)));
-    return interceptorList;
+        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY));
   }
 
   /**

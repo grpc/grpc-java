@@ -21,6 +21,8 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.testing.integration.AbstractInteropTest.ORCA_OOB_REPORT_KEY;
+import static io.grpc.testing.integration.AbstractInteropTest.ORCA_RPC_REPORT_KEY;
 
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -32,8 +34,9 @@ import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.util.List;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Abstract base class for all GRPC transport tests.
@@ -43,9 +46,6 @@ import java.util.concurrent.TimeUnit;
 final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvider {
 
   static final String TEST_ORCA_LB_POLICY_NAME = "test_backend_metrics_load_balancer";
-  private final LinkedBlockingQueue<OrcaLoadReport> savedLoadReports = new LinkedBlockingQueue<>();
-  private final LinkedBlockingQueue<OrcaLoadReport> savedOobLoadReports =
-      new LinkedBlockingQueue<>();
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
@@ -72,25 +72,14 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
     private Subchannel subchannel;
 
     public CustomBackendMetricsLoadBalancer(Helper helper) {
-      this.helper = checkNotNull(helper, "helper");
+      this.helper = OrcaOobUtil.newOrcaReportingHelper(checkNotNull(helper, "helper"));
     }
 
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       if (subchannel == null) {
-        OrcaOobUtil.OrcaReportingHelperWrapper wrappedHelper =
-            OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(helper,
-                new OrcaOobUtil.OrcaOobReportListener() {
-                  @Override
-                  public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-                    savedOobLoadReports.add(orcaLoadReport);
-                  }
-                });
-        wrappedHelper.setReportingConfig(OrcaOobUtil.OrcaReportingConfig.newBuilder()
-            .setReportInterval(1, TimeUnit.SECONDS)
-            .build());
-        final Subchannel subchannel = wrappedHelper.asHelper().createSubchannel(
+        final Subchannel subchannel = helper.createSubchannel(
             CreateSubchannelArgs.newBuilder()
                 .setAddresses(servers)
                 .build());
@@ -101,7 +90,6 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
           }
         });
         this.subchannel = subchannel;
-
         helper.updateBalancingState(CONNECTING,
             new MayReportLoadPicker(PickResult.withSubchannel(subchannel)));
         subchannel.requestConnection();
@@ -163,13 +151,29 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
         if (result.getSubchannel() == null) {
           return result;
         }
+        OrcaOobUtil.setListener(result.getSubchannel(), new OrcaOobUtil.OrcaOobReportListener() {
+              @Override
+              public void onLoadReport(OrcaLoadReport orcaLoadReport) {
+                BlockingQueue<OrcaLoadReport> reportRef =
+                    args.getCallOptions().getOption(ORCA_OOB_REPORT_KEY);
+                if (reportRef != null) {
+                  reportRef.add(orcaLoadReport);
+                }
+              }
+            },
+            OrcaOobUtil.OrcaReportingConfig.newBuilder()
+                .setReportInterval(1, TimeUnit.SECONDS)
+                .build()
+        );
         return PickResult.withSubchannel(
             result.getSubchannel(),
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                 new OrcaPerRequestUtil.OrcaPerRequestReportListener() {
                   @Override
                   public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-                    savedLoadReports.add(orcaLoadReport);
+                    AtomicReference<OrcaLoadReport> reportRef =
+                        args.getCallOptions().getOption(ORCA_RPC_REPORT_KEY);
+                    reportRef.set(orcaLoadReport);
                   }
                 }));
       }

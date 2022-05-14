@@ -36,6 +36,7 @@ import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
@@ -92,6 +93,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
@@ -116,6 +118,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -188,8 +191,10 @@ public abstract class AbstractInteropTest {
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
 
-  static final CallOptions.Key<AtomicReference<Double>> orcaReportKey =
+  static final CallOptions.Key<AtomicReference<OrcaLoadReport>> ORCA_RPC_REPORT_KEY =
       CallOptions.Key.create("orca-rpc-report");
+  static final CallOptions.Key<BlockingQueue<OrcaLoadReport>> ORCA_OOB_REPORT_KEY =
+      CallOptions.Key.create("orca-oob-report");
 
   private static final class ServerStreamTracerInfo {
     final String fullMethodName;
@@ -252,7 +257,7 @@ public abstract class AbstractInteropTest {
         .add(recordServerCallInterceptor(serverCallCapture))
         .add(TestUtils.recordRequestHeadersInterceptor(requestHeadersCapture))
         .add(recordContextInterceptor(contextCapture))
-        .addAll(TestServiceImpl.interceptors(Collections.emptyList()))
+        .addAll(TestServiceImpl.interceptors())
         .build();
 
     builder
@@ -1743,15 +1748,32 @@ public abstract class AbstractInteropTest {
   /**
    *  Test backend metrics reporting: expect the test client LB policy to receive load reports.
    */
-  public void testOrca() {
-    AtomicReference<Double> expectedMetricsFeedback = new AtomicReference<>();
-    blockingStub.withOption(orcaReportKey, expectedMetricsFeedback).unaryCall(
-        SimpleRequest.newBuilder().setResponseSize(10).build());
-    //assertEquals(savedLoadReports.poll(), OrcaLoadReport.newBuilder()
-    //    .putRequestCost("queue", 2.0).build());
-    //    assertThat(savedLoadReports.isEmpty()).isTrue();
-    //    assertEquals(savedOobLoadReports.poll(), OrcaLoadReport.newBuilder()
-    //        .putUtilization("util", 0.4875).build());
+  public void testOrca() throws Exception {
+    AtomicReference<OrcaLoadReport> reportHolder = new AtomicReference<>();
+    OrcaLoadReport answer = OrcaLoadReport.newBuilder()
+        .setCpuUtilization(0.1976)
+        .setMemUtilization(0.8712)
+        .putAllUtilization(ImmutableMap.of("util", 0.2938))
+        .build();
+    Payload data = Payload.newBuilder().setBody(answer.toByteString()).build();
+    blockingStub.withOption(ORCA_RPC_REPORT_KEY, reportHolder).unaryCall(
+        SimpleRequest.newBuilder().setPayload(data).setOrcaPerRpc(true).build());
+    assertThat(reportHolder.get()).isEqualTo(answer);
+
+    BlockingQueue<OrcaLoadReport> oobReportHolder = new LinkedBlockingQueue<>();
+    blockingStub.withOption(ORCA_OOB_REPORT_KEY, oobReportHolder).unaryCall(
+        SimpleRequest.newBuilder().setOrcaOob(true).setPayload(data).build());
+    assertThat(oobReportHolder.poll(1, TimeUnit.SECONDS)).isEqualTo(answer);
+
+    answer = OrcaLoadReport.newBuilder()
+        .setCpuUtilization(0.8210)
+        .setMemUtilization(0.1119)
+        .putAllUtilization(ImmutableMap.of("util", 8948.01))
+        .build();
+    data = Payload.newBuilder().setBody(answer.toByteString()).build();
+    blockingStub.withOption(ORCA_OOB_REPORT_KEY, oobReportHolder).unaryCall(
+        SimpleRequest.newBuilder().setOrcaOob(true).setPayload(data).build());
+    assertThat(oobReportHolder.poll(1, TimeUnit.SECONDS)).isEqualTo(answer);
   }
 
   /** Sends a large unary rpc with service account credentials. */
