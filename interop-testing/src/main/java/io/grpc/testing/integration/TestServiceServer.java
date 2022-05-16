@@ -72,7 +72,6 @@ public class TestServiceServer {
   private int port = 8080;
   private boolean useTls = true;
   private boolean useAlts = false;
-  private boolean useOrca = false;
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -113,8 +112,6 @@ public class TestServiceServer {
           usage = true;
           break;
         }
-      } else if ("use_orca".equals(key)) {
-        useOrca = Boolean.parseBoolean(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -136,7 +133,6 @@ public class TestServiceServer {
               + "\n  --local_handshaker_port=PORT"
               + "\n                        Use local ALTS handshaker service on the specified port "
               + "\n                        for testing. Only effective when --use_alts=true."
-              + "\n  --use_orca=true|false  Whether to report backend metrics. Default " + s.useOrca
       );
       System.exit(1);
     }
@@ -163,12 +159,10 @@ public class TestServiceServer {
     ServerBuilder<?> builder = Grpc.newServerBuilderForPort(port, serverCreds)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
     MetricRecorder metricRecorder = MetricRecorder.newInstance();
-    if (useOrca) {
-      BindableService orcaOobService =
-          OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
-      builder.addService(orcaOobService);
-      builder.intercept(OrcaMetricReportingServerInterceptor.getInstance());
-    }
+    BindableService orcaOobService =
+        OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
+    builder.addService(orcaOobService);
+    builder.intercept(OrcaMetricReportingServerInterceptor.getInstance());
     TestServiceImpl testService = new TestServiceImpl(executor, metricRecorder);
     builder.addService(ServerInterceptors.intercept(testService, TestServiceImpl.interceptors()));
     server = builder.build().start();

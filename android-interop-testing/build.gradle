@@ -65,6 +65,7 @@ dependencies {
             project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            project(':grpc-services'),
             libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,

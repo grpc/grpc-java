@@ -20,6 +20,8 @@ package grpc.testing;
 
 option java_package = "io.grpc.testing.integration";
 
+import "grpc/testing/orca_report.proto";
+
 // TODO(jihuncho): Use well-known types once all languages are synced.
 message BoolValue {
   // The bool value.
@@ -93,6 +95,8 @@ message SimpleRequest {
   bool orca_per_rpc = 11;
 
   bool orca_oob = 12;
+
+  TestOrcaReport orca_report = 13;
 }
 
 // Unary response, as configured by the request.

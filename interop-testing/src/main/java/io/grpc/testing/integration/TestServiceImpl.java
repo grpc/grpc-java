@@ -39,9 +39,11 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
+import io.grpc.testing.integration.OrcaReport.TestOrcaReport;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -125,14 +127,14 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
     if (req.getOrcaPerRpc()) {
       try {
-        echoCallMetricsFromPayload(req.getPayload());
+        echoCallMetricsFromPayload(req.getOrcaReport());
       } catch (InvalidProtocolBufferException ex) {
         responseObserver.onError(ex);
       }
     }
     if (req.getOrcaOob()) {
       try {
-        echoMetricsFromPayload(req.getPayload());
+        echoMetricsFromPayload(req.getOrcaReport());
       } catch (InvalidProtocolBufferException ex) {
         responseObserver.onError(ex);
       }
@@ -141,30 +143,27 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     responseObserver.onCompleted();
   }
 
-  private static OrcaLoadReport echoCallMetricsFromPayload(Payload payload)
+  private static void echoCallMetricsFromPayload(TestOrcaReport report)
       throws InvalidProtocolBufferException {
-    OrcaLoadReport answer = OrcaLoadReport.parseFrom(payload.getBody());
     CallMetricRecorder recorder = CallMetricRecorder.getCurrent()
-        .recordCpuUtilizationMetric(answer.getCpuUtilization())
-        .recordMemoryUtilizationMetric(answer.getMemUtilization());
-    for (Map.Entry<String, Double> entry : answer.getUtilizationMap().entrySet()) {
+        .recordCpuUtilizationMetric(report.getCpuUtilization())
+        .recordMemoryUtilizationMetric(report.getMemoryUtilization());
+    for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
       recorder.recordUtilizationMetric(entry.getKey(), entry.getValue());
     }
-    for (Map.Entry<String, Double> entry : answer.getRequestCostMap().entrySet()) {
+    for (Map.Entry<String, Double> entry : report.getRequestCostMap().entrySet()) {
       recorder.recordCallMetric(entry.getKey(), entry.getValue());
     }
-    return answer;
   }
 
-  private OrcaLoadReport echoMetricsFromPayload(Payload payload)
+  private void echoMetricsFromPayload(TestOrcaReport report)
       throws InvalidProtocolBufferException {
-    OrcaLoadReport answer = OrcaLoadReport.parseFrom(payload.getBody());
-    metricRecorder.setCpuUtilizationMetric(answer.getCpuUtilization());
-    metricRecorder.setMemoryUtilizationMetric(answer.getMemUtilization());
-    for (Map.Entry<String, Double> entry : answer.getUtilizationMap().entrySet()) {
+    metricRecorder.setCpuUtilizationMetric(report.getCpuUtilization());
+    metricRecorder.setMemoryUtilizationMetric(report.getMemoryUtilization());
+    metricRecorder.setAllUtilizationMetrics(new HashMap<>());
+    for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
       metricRecorder.setUtilizationMetric(entry.getKey(), entry.getValue());
     }
-    return answer;
   }
 
   /**

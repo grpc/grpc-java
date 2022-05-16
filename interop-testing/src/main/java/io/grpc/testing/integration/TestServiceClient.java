@@ -39,11 +39,14 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
 import javax.annotation.Nullable;
 
 /**
@@ -75,7 +78,7 @@ public class TestServiceClient {
   private String serverHost = "localhost";
   private String serverHostOverride;
   private int serverPort = 8080;
-  private TestCases testCase = TestCases.fromString("empty_unary");
+  private String testCase = "empty_unary";
   private boolean useTls = true;
   private boolean useAlts = false;
   private boolean useH2cUpgrade = false;
@@ -125,7 +128,7 @@ public class TestServiceClient {
       } else if ("server_port".equals(key)) {
         serverPort = Integer.parseInt(value);
       } else if ("test_case".equals(key)) {
-        testCase = TestCases.fromString(value);
+        testCase = value;
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_upgrade".equals(key)) {
@@ -256,7 +259,7 @@ public class TestServiceClient {
   private void run() {
     System.out.println("Running test " + testCase);
     try {
-      runTest(testCase);
+      runTest(TestCases.fromString(testCase));
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -483,11 +486,10 @@ public class TestServiceClient {
   private class Tester extends AbstractInteropTest {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
-      customBackendMetricsLoadBalancerProvider = getOrcaLoadBalancerProvider();
-      if (customBackendMetricsLoadBalancerProvider != null) {
-        LoadBalancerRegistry.getDefaultRegistry()
-            .register(customBackendMetricsLoadBalancerProvider);
-      }
+      customBackendMetricsLoadBalancerProvider =
+          new CustomBackendMetricsLoadBalancerProvider(getOrcaOobReportRef());
+      LoadBalancerRegistry.getDefaultRegistry()
+          .register(customBackendMetricsLoadBalancerProvider);
       boolean useGeneric = false;
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {
@@ -616,11 +618,6 @@ public class TestServiceClient {
       } else {
         return null;
       }
-    }
-
-    @Override
-    protected LoadBalancerProvider getOrcaLoadBalancerProvider() {
-      return new CustomBackendMetricsLoadBalancerProvider();
     }
   }
 

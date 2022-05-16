@@ -21,7 +21,6 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.testing.integration.AbstractInteropTest.ORCA_OOB_REPORT_KEY;
 import static io.grpc.testing.integration.AbstractInteropTest.ORCA_RPC_REPORT_KEY;
 
 import io.grpc.ConnectivityState;
@@ -33,10 +32,11 @@ import io.grpc.Status;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
+import io.grpc.testing.integration.OrcaReport.TestOrcaReport;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 
 /**
  * Abstract base class for all GRPC transport tests.
@@ -46,10 +46,16 @@ import java.util.concurrent.atomic.AtomicReference;
 final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvider {
 
   static final String TEST_ORCA_LB_POLICY_NAME = "test_backend_metrics_load_balancer";
+  @Nullable private final AtomicReference<TestOrcaReport> oobReportListenerRef;
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
     return new CustomBackendMetricsLoadBalancer(helper);
+  }
+
+  public CustomBackendMetricsLoadBalancerProvider(
+      AtomicReference<TestOrcaReport> oobReportListenerRef) {
+     this.oobReportListenerRef = oobReportListenerRef;
   }
 
   @Override
@@ -154,10 +160,14 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
         OrcaOobUtil.setListener(result.getSubchannel(), new OrcaOobUtil.OrcaOobReportListener() {
               @Override
               public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-                BlockingQueue<OrcaLoadReport> reportRef =
-                    args.getCallOptions().getOption(ORCA_OOB_REPORT_KEY);
-                if (reportRef != null) {
-                  reportRef.add(orcaLoadReport);
+                if (oobReportListenerRef != null) {
+                  oobReportListenerRef
+                      .set(TestOrcaReport.newBuilder()
+                      .setCpuUtilization(orcaLoadReport.getCpuUtilization())
+                      .setMemoryUtilization(orcaLoadReport.getMemUtilization())
+                      .putAllRequestCost(orcaLoadReport.getRequestCostMap())
+                      .putAllUtilization(orcaLoadReport.getUtilizationMap())
+                      .build());
                 }
               }
             },
@@ -171,9 +181,14 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
                 new OrcaPerRequestUtil.OrcaPerRequestReportListener() {
                   @Override
                   public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-                    AtomicReference<OrcaLoadReport> reportRef =
+                    AtomicReference<TestOrcaReport> reportRef =
                         args.getCallOptions().getOption(ORCA_RPC_REPORT_KEY);
-                    reportRef.set(orcaLoadReport);
+                    reportRef.set(TestOrcaReport.newBuilder()
+                        .setCpuUtilization(orcaLoadReport.getCpuUtilization())
+                        .setMemoryUtilization(orcaLoadReport.getMemUtilization())
+                        .putAllRequestCost(orcaLoadReport.getRequestCostMap())
+                        .putAllUtilization(orcaLoadReport.getUtilizationMap())
+                        .build());
                   }
                 }));
       }
