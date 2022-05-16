@@ -122,15 +122,26 @@ final class ServiceProviders {
   static <T> Iterable<T> getCandidatesViaHardCoded(Class<T> klass, Iterable<Class<?>> hardcoded) {
     List<T> list = new ArrayList<>();
     for (Class<?> candidate : hardcoded) {
-      list.add(create(klass, candidate));
+      T t = createForHardCoded(klass, candidate);
+      if (t == null) {
+        continue;
+      }
+      list.add(t);
     }
     return list;
   }
 
-  @VisibleForTesting
-  static <T> T create(Class<T> klass, Class<?> rawClass) {
+  private static <T> T createForHardCoded(Class<T> klass, Class<?> rawClass) {
     try {
       return rawClass.asSubclass(klass).getConstructor().newInstance();
+    } catch (ClassCastException ex) {
+      // Tools like Proguard that perform obfuscation rewrite strings only when the class they
+      // reference is known, as otherwise they wouldn't know its new name. This means some
+      // hard-coded Class.forNames() won't be rewritten. This can cause ClassCastException at
+      // runtime if the class ends up appearing on the classpath but that class is part of a
+      // separate copy of grpc. With tools like Maven Shade Plugin the class wouldn't be found at
+      // all and so would be skipped. We want to skip in this case as well.
+      return null;
     } catch (Throwable t) {
       throw new ServiceConfigurationError(
           String.format("Provider %s could not be instantiated %s", rawClass.getName(), t), t);

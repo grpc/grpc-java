@@ -215,17 +215,33 @@ public class ServiceProvidersTest {
   }
 
   @Test
-  public void create_throwsErrorOnMisconfiguration() throws Exception {
-    class PrivateClass {}
+  public void getCandidatesViaHardCoded_throwsErrorOnMisconfiguration() throws Exception {
+    class PrivateClass extends BaseProvider {
+      private PrivateClass() {
+        super(true, 5);
+      }
+    }
 
     try {
-      ServiceProviders.create(
-          ServiceProvidersTestAbstractProvider.class, PrivateClass.class);
+      ServiceProviders.getCandidatesViaHardCoded(
+          ServiceProvidersTestAbstractProvider.class,
+          Collections.<Class<?>>singletonList(PrivateClass.class));
       fail("Expected exception");
     } catch (ServiceConfigurationError expected) {
-      assertTrue("Expected ClassCastException cause: " + expected.getCause(),
-          expected.getCause() instanceof ClassCastException);
+      assertTrue("Expected NoSuchMethodException cause: " + expected.getCause(),
+          expected.getCause() instanceof NoSuchMethodException);
     }
+  }
+
+  @Test
+  public void getCandidatesViaHardCoded_skipsWrongClassType() throws Exception {
+    class RandomClass {}
+
+    Iterable<ServiceProvidersTestAbstractProvider> candidates =
+        ServiceProviders.getCandidatesViaHardCoded(
+            ServiceProvidersTestAbstractProvider.class,
+            Collections.<Class<?>>singletonList(RandomClass.class));
+    assertFalse(candidates.iterator().hasNext());
   }
 
   private static class BaseProvider extends ServiceProvidersTestAbstractProvider {
