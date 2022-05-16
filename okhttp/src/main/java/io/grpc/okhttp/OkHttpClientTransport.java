@@ -105,10 +105,10 @@ import okio.Timeout;
 /**
  * A okhttp-based {@link ConnectionClientTransport} implementation.
  */
-class OkHttpClientTransport implements ConnectionClientTransport, TransportExceptionHandler {
+class OkHttpClientTransport implements ConnectionClientTransport, TransportExceptionHandler,
+      OutboundFlowController.Transport {
   private static final Map<ErrorCode, Status> ERROR_CODE_TO_STATUS = buildErrorCodeToStatusMap();
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
-  private static final OkHttpClientStream[] EMPTY_STREAM_ARRAY = new OkHttpClientStream[0];
 
   private static Map<ErrorCode, Status> buildErrorCodeToStatusMap() {
     Map<ErrorCode, Status> errorToStatus = new EnumMap<>(ErrorCode.class);
@@ -424,7 +424,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private void startStream(OkHttpClientStream stream) {
     Preconditions.checkState(
-        stream.id() == OkHttpClientStream.ABSENT_ID, "StreamId already assigned");
+        stream.transportState().id() == OkHttpClientStream.ABSENT_ID, "StreamId already assigned");
     streams.put(nextStreamId, stream);
     setInUse(stream);
     // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock'; instead
@@ -808,9 +808,16 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   /**
    * Gets all active streams as an array.
    */
-  OkHttpClientStream[] getActiveStreams() {
+  @Override
+  public OutboundFlowController.StreamState[] getActiveStreams() {
     synchronized (lock) {
-      return streams.values().toArray(EMPTY_STREAM_ARRAY);
+      OutboundFlowController.StreamState[] flowStreams =
+          new OutboundFlowController.StreamState[streams.size()];
+      int i = 0;
+      for (OkHttpClientStream stream : streams.values()) {
+        flowStreams[i++] = stream.transportState().getOutboundFlowState();
+      }
+      return flowStreams;
     }
   }
 
@@ -1125,7 +1132,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       if (stream == null) {
         if (mayHaveCreatedStream(streamId)) {
           synchronized (lock) {
-            frameWriter.rstStream(streamId, ErrorCode.INVALID_STREAM);
+            frameWriter.rstStream(streamId, ErrorCode.STREAM_CLOSED);
           }
           in.skip(length);
         } else {
@@ -1186,7 +1193,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         OkHttpClientStream stream = streams.get(streamId);
         if (stream == null) {
           if (mayHaveCreatedStream(streamId)) {
-            frameWriter.rstStream(streamId, ErrorCode.INVALID_STREAM);
+            frameWriter.rstStream(streamId, ErrorCode.STREAM_CLOSED);
           } else {
             unknownStream = true;
           }
@@ -1365,7 +1372,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
         OkHttpClientStream stream = streams.get(streamId);
         if (stream != null) {
-          outboundFlow.windowUpdate(stream, (int) delta);
+          outboundFlow.windowUpdate(stream.transportState().getOutboundFlowState(), (int) delta);
         } else if (!mayHaveCreatedStream(streamId)) {
           unknownStream = true;
         }

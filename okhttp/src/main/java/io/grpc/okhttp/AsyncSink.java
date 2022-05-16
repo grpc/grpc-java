@@ -164,6 +164,13 @@ final class AsyncSink implements Sink {
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
+        try {
+          if (buffer.size() > 0) {
+            sink.write(buffer, buffer.size());
+          }
+        } catch (IOException e) {
+          transportExceptionHandler.onException(e);
+        }
         buffer.close();
         try {
           if (sink != null) {

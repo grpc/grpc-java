@@ -108,10 +108,6 @@ class NettyServerStream extends AbstractServerStream {
 
     private void writeFrameInternal(WritableBuffer frame, boolean flush, final int numMessages) {
       Preconditions.checkArgument(numMessages >= 0);
-      if (frame == null) {
-        writeQueue.scheduleFlush();
-        return;
-      }
       ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf().touch();
       final int numBytes = bytebuf.readableBytes();
       // Add the bytes to outbound flow control.

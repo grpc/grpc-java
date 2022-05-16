@@ -799,6 +799,12 @@ public final class GrpcUtil {
     }
   }
 
+  /** Reads {@code in} until end of stream. */
+  public static void exhaust(InputStream in) throws IOException {
+    byte[] buf = new byte[256];
+    while (in.read(buf) != -1) {}
+  }
+
   /**
    * Checks whether the given item exists in the iterable.  This is copied from Guava Collect's
    * {@code Iterables.contains()} because Guava Collect is not Android-friendly thus core can't
