@@ -39,13 +39,11 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
-import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
 

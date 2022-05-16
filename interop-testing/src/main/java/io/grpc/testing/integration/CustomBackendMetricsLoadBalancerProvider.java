@@ -29,10 +29,10 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
+import io.grpc.testing.integration.OrcaReport.TestOrcaReport;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
-import io.grpc.testing.integration.OrcaReport.TestOrcaReport;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -55,7 +55,7 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
 
   public CustomBackendMetricsLoadBalancerProvider(
       AtomicReference<TestOrcaReport> oobReportListenerRef) {
-     this.oobReportListenerRef = oobReportListenerRef;
+    this.oobReportListenerRef = oobReportListenerRef;
   }
 
   @Override

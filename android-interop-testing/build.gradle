@@ -65,7 +65,6 @@ dependencies {
             project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             project(':grpc-testing'),
-            project(':grpc-services'),
             libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
@@ -73,6 +72,10 @@ dependencies {
 
     implementation (libraries.google_auth_oauth2_http) {
         exclude group: 'org.apache.httpcomponents'
+    }
+
+    implementation (project(':grpc-services')) {
+        exclude group: 'com.google.protobuf'
     }
 
     compileOnly libraries.javax_annotation
