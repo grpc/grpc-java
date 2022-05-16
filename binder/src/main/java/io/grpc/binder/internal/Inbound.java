@@ -468,7 +468,7 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
     if (firstMessage != null) {
       stream = firstMessage;
       firstMessage = null;
-    } else if (messageAvailable()) {
+    } else if (numRequestedMessages > 0 && messageAvailable()) {
       stream = assembleNextMessage();
     }
     if (stream != null) {
