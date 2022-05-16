@@ -139,7 +139,7 @@ public final class OkHttpChannelBuilder extends
           ((ExecutorService) executor).shutdown();
         }
       };
-  private static final ObjectPool<Executor> DEFAULT_TRANSPORT_EXECUTOR_POOL =
+  static final ObjectPool<Executor> DEFAULT_TRANSPORT_EXECUTOR_POOL =
       SharedResourcePool.forResource(SHARED_EXECUTOR);
 
   /** Creates a new builder for the given server host and port. */

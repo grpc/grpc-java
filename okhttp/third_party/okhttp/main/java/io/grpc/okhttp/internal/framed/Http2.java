@@ -231,6 +231,7 @@ public final class Http2 implements Variant {
       short padding = (flags & FLAG_PADDED) != 0 ? (short) (source.readByte() & 0xff) : 0;
       length = lengthWithoutPadding(length, flags, padding);
 
+      // FIXME: pass padding length to handler because it should be included for flow control
       handler.data(inFinished, streamId, source, length);
       source.skip(padding);
     }
