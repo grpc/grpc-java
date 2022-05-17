@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 The gRPC Authors
+ * Copyright 2022 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,9 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
- * Abstract base class for all GRPC transport tests.
- *
- * <p> New tests should avoid using Mockito to support running on AppEngine.</p>
+ * Implements a test LB policy that receives ORCA load reports.
  */
 final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvider {
 
@@ -73,7 +71,7 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
     return TEST_ORCA_LB_POLICY_NAME;
   }
 
-  class CustomBackendMetricsLoadBalancer extends LoadBalancer {
+  private final class CustomBackendMetricsLoadBalancer extends LoadBalancer {
     private final Helper helper;
     private Subchannel subchannel;
 
@@ -89,6 +87,18 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
             CreateSubchannelArgs.newBuilder()
                 .setAddresses(servers)
                 .build());
+        OrcaOobUtil.setListener(subchannel, new OrcaOobUtil.OrcaOobReportListener() {
+          @Override
+          public void onLoadReport(OrcaLoadReport orcaLoadReport) {
+            if (oobReportListenerRef != null) {
+              oobReportListenerRef.set(fromOrcaLoadReport(orcaLoadReport));
+            }
+          }
+        },
+            OrcaOobUtil.OrcaReportingConfig.newBuilder()
+                .setReportInterval(1, TimeUnit.SECONDS)
+                .build()
+        );
         subchannel.start(new SubchannelStateListener() {
           @Override
           public void onSubchannelState(ConnectivityStateInfo stateInfo) {
@@ -157,24 +167,6 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
         if (result.getSubchannel() == null) {
           return result;
         }
-        OrcaOobUtil.setListener(result.getSubchannel(), new OrcaOobUtil.OrcaOobReportListener() {
-              @Override
-              public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-                if (oobReportListenerRef != null) {
-                  oobReportListenerRef
-                      .set(TestOrcaReport.newBuilder()
-                      .setCpuUtilization(orcaLoadReport.getCpuUtilization())
-                      .setMemoryUtilization(orcaLoadReport.getMemUtilization())
-                      .putAllRequestCost(orcaLoadReport.getRequestCostMap())
-                      .putAllUtilization(orcaLoadReport.getUtilizationMap())
-                      .build());
-                }
-              }
-            },
-            OrcaOobUtil.OrcaReportingConfig.newBuilder()
-                .setReportInterval(1, TimeUnit.SECONDS)
-                .build()
-        );
         return PickResult.withSubchannel(
             result.getSubchannel(),
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
@@ -183,15 +175,19 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
                   public void onLoadReport(OrcaLoadReport orcaLoadReport) {
                     AtomicReference<TestOrcaReport> reportRef =
                         args.getCallOptions().getOption(ORCA_RPC_REPORT_KEY);
-                    reportRef.set(TestOrcaReport.newBuilder()
-                        .setCpuUtilization(orcaLoadReport.getCpuUtilization())
-                        .setMemoryUtilization(orcaLoadReport.getMemUtilization())
-                        .putAllRequestCost(orcaLoadReport.getRequestCostMap())
-                        .putAllUtilization(orcaLoadReport.getUtilizationMap())
-                        .build());
+                    reportRef.set(fromOrcaLoadReport(orcaLoadReport));
                   }
                 }));
       }
     }
+  }
+
+  private static TestOrcaReport fromOrcaLoadReport(OrcaLoadReport orcaLoadReport) {
+    return TestOrcaReport.newBuilder()
+        .setCpuUtilization(orcaLoadReport.getCpuUtilization())
+        .setMemoryUtilization(orcaLoadReport.getMemUtilization())
+        .putAllRequestCost(orcaLoadReport.getRequestCostMap())
+        .putAllUtilization(orcaLoadReport.getUtilizationMap())
+        .build();
   }
 }

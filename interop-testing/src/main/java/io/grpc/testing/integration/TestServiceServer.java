@@ -22,7 +22,6 @@ import io.grpc.BindableService;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
@@ -156,16 +155,18 @@ public class TestServiceServer {
     } else {
       serverCreds = InsecureServerCredentials.create();
     }
-    ServerBuilder<?> builder = Grpc.newServerBuilderForPort(port, serverCreds)
-        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
     MetricRecorder metricRecorder = MetricRecorder.newInstance();
     BindableService orcaOobService =
         OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
-    builder.addService(orcaOobService);
-    builder.intercept(OrcaMetricReportingServerInterceptor.getInstance());
-    TestServiceImpl testService = new TestServiceImpl(executor, metricRecorder);
-    builder.addService(ServerInterceptors.intercept(testService, TestServiceImpl.interceptors()));
-    server = builder.build().start();
+    server = Grpc.newServerBuilderForPort(port, serverCreds)
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+        .addService(
+            ServerInterceptors.intercept(
+                new TestServiceImpl(executor, metricRecorder), TestServiceImpl.interceptors()))
+        .addService(orcaOobService)
+        .intercept(OrcaMetricReportingServerInterceptor.getInstance())
+        .build()
+        .start();
   }
 
   @VisibleForTesting

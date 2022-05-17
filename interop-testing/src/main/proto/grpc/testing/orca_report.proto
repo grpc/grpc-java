@@ -14,16 +14,13 @@
 // Contains the definitions for a metrics service and the type of metrics
 // exposed by the service.
 //
-// Currently, 'Gauge' (i.e a metric that represents the measured value of
-// something at an instant of time) is the only metric type supported by the
-// service.
 syntax = "proto3";
 
 package grpc.testing;
 
 option java_package = "io.grpc.testing.integration";
 
-// Orca Load Report
+// TODO (@zivy): fix android-interop-testing dependency and then use orca proto
 message TestOrcaReport {
   double cpu_utilization = 1;
   double memory_utilization = 2;

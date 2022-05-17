@@ -345,7 +345,6 @@ public final class SecurityPoliciesTest {
       return this;
     }
 
-    @SuppressWarnings("deprecation")
     public PackageInfo build() {
       checkState(this.packageName != null, "packageName is a mandatory field");
 

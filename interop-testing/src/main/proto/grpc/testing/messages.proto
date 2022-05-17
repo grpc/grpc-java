@@ -92,10 +92,13 @@ message SimpleRequest {
   // Whether SimpleResponse should include grpclb_route_type.
   bool fill_grpclb_route_type = 10;
 
+  // Whether server should update per-rpc metrics.
   bool orca_per_rpc = 11;
 
+  // Whether server should update OOB metrics.
   bool orca_oob = 12;
 
+  // What metrics data the server should update to.
   TestOrcaReport orca_report = 13;
 }
 
