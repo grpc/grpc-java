@@ -16,6 +16,7 @@
 
 package io.grpc.binder;
 
+import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.content.ComponentName;
@@ -24,6 +25,7 @@ import android.content.Intent;
 import android.net.Uri;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.testing.EqualsTester;
+import java.net.URISyntaxException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -59,6 +61,30 @@ public final class AndroidComponentAddressTest {
             .addCategory("another-category");
     AndroidComponentAddress addr = AndroidComponentAddress.forBindIntent(bindIntent);
     assertThat(addr.asBindIntent().filterEquals(bindIntent)).isTrue();
+  }
+
+  @Test
+  @Config(sdk = 30)
+  public void testAsAndroidAppUriSdk30() throws URISyntaxException {
+    AndroidComponentAddress addr =
+        AndroidComponentAddress.forRemoteComponent("com.foo", "com.foo.Service");
+    AndroidComponentAddress addrClone =
+        AndroidComponentAddress.forBindIntent(
+            Intent.parseUri(addr.asAndroidAppUri(), URI_ANDROID_APP_SCHEME));
+    assertThat(addr).isEqualTo(addrClone);
+  }
+
+  @Test
+  @Config(sdk = 29)
+  public void testAsAndroidAppUriSdk29() throws URISyntaxException {
+    AndroidComponentAddress addr =
+        AndroidComponentAddress.forRemoteComponent("com.foo", "com.foo.Service");
+    AndroidComponentAddress addrClone =
+        AndroidComponentAddress.forBindIntent(
+            Intent.parseUri(addr.asAndroidAppUri(), URI_ANDROID_APP_SCHEME));
+    // Can't test for equality because URI_ANDROID_APP_SCHEME adds a (redundant) package filter.
+    assertThat(addr.getComponent()).isEqualTo(addrClone.getComponent());
+    assertThat(addr.getAuthority()).isEqualTo(addrClone.getAuthority());
   }
 
   @Test
