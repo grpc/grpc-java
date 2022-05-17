@@ -34,6 +34,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.Status;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -391,5 +392,47 @@ public final class SecurityPoliciesTest {
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
     assertThat(policy.checkAuthorization(MY_UID).getDescription())
         .contains("Not allowed SecurityPolicy");
+  }
+
+  @Test
+  public void testAnyOf_succeedsIfAnySecurityPoliciesAllowed() throws Exception {
+    RecordingPolicy recordingPolicy = new RecordingPolicy();
+    policy = SecurityPolicies.anyOf(SecurityPolicies.internalOnly(), recordingPolicy);
+
+    assertThat(policy.checkAuthorization(MY_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(recordingPolicy.numCalls.get()).isEqualTo(0);
+  }
+
+  @Test
+  public void testAnyOf_failsIfNoSecurityPolicyIsAllowed() throws Exception {
+    policy =
+        SecurityPolicies.anyOf(
+            new SecurityPolicy() {
+              @Override
+              public Status checkAuthorization(int uid) {
+                return Status.PERMISSION_DENIED.withDescription("Not allowed: first");
+              }
+            },
+            new SecurityPolicy() {
+              @Override
+              public Status checkAuthorization(int uid) {
+                return Status.UNAUTHENTICATED.withDescription("Not allowed: second");
+              }
+            });
+
+    assertThat(policy.checkAuthorization(MY_UID).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(policy.checkAuthorization(MY_UID).getDescription()).contains("Not allowed: first");
+    assertThat(policy.checkAuthorization(MY_UID).getDescription()).contains("Not allowed: second");
+  }
+
+  private static final class RecordingPolicy extends SecurityPolicy {
+    private final AtomicInteger numCalls = new AtomicInteger(0);
+
+    @Override
+    public Status checkAuthorization(int uid) {
+      numCalls.incrementAndGet();
+      return Status.OK;
+    }
   }
 }
