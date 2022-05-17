@@ -40,21 +40,21 @@ public final class MetricRecorder {
   /**
    * Update the metrics value corresponding to the specified key.
    */
-  public void setUtilizationMetric(String key, double value) {
+  public void putUtilizationMetric(String key, double value) {
     metricsData.put(key, value);
   }
 
   /**
    * Replace the whole metrics data using the specified map.
    */
-  public void setAllUtilizationMetrics(Map<String, Double> metrics) {
+  public void putAllUtilizationMetrics(Map<String, Double> metrics) {
     metricsData = new ConcurrentHashMap<>(metrics);
   }
 
   /**
    * Remove the metrics data entry corresponding to the specified key.
    */
-  public void deleteUtilizationMetric(String key) {
+  public void removeUtilizationMetric(String key) {
     metricsData.remove(key);
   }
 
@@ -68,7 +68,7 @@ public final class MetricRecorder {
   /**
    * Clear the CPU utilization metrics data.
    */
-  public void deleteCpuUtilizationMetric() {
+  public void clearCpuUtilizationMetric() {
     cpuUtilization = 0;
   }
 
@@ -82,7 +82,7 @@ public final class MetricRecorder {
   /**
    * Clear the memory utilization metrics data.
    */
-  public void deleteMemoryUtilizationMetric() {
+  public void clearMemoryUtilizationMetric() {
     memoryUtilization = 0;
   }
 
