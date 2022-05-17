@@ -33,6 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.io.CharStreams;
+import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
@@ -41,6 +42,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
@@ -351,6 +353,23 @@ public class ServerCallImplTest {
     assertNull(call.getAuthority());
     verify(stream).getAuthority();
   }
+
+  @Test
+  public void getSecurityLevel() {
+    Attributes attributes = Attributes.newBuilder()
+        .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.INTEGRITY).build();
+    when(stream.getAttributes()).thenReturn(attributes);
+    assertEquals(SecurityLevel.INTEGRITY, call.getSecurityLevel());
+    verify(stream).getAttributes();
+  }
+
+  @Test
+  public void getNullSecurityLevel() {
+    when(stream.getAttributes()).thenReturn(null);
+    assertEquals(SecurityLevel.NONE, call.getSecurityLevel());
+    verify(stream).getAttributes();
+  }
+
 
   @Test
   public void setMessageCompression() {
