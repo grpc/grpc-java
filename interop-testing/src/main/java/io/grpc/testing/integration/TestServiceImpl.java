@@ -39,7 +39,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import io.grpc.testing.integration.OrcaReport.TestOrcaReport;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -124,16 +124,14 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       return;
     }
 
-    if (req.getOrcaPerRpc()) {
-      try {
-        echoCallMetricsFromPayload(req.getOrcaReport());
-      } catch (InvalidProtocolBufferException ex) {
-        responseObserver.onError(ex);
-      }
+    try {
+      echoCallMetricsFromPayload(req.getOrcaPerRpcReport());
+    } catch (InvalidProtocolBufferException ex) {
+      responseObserver.onError(ex);
     }
-    if (req.getOrcaOob()) {
+    if (metricRecorder != null) {
       try {
-        echoMetricsFromPayload(req.getOrcaReport());
+        echoMetricsFromPayload(req.getOrcaOobReport());
       } catch (InvalidProtocolBufferException ex) {
         responseObserver.onError(ex);
       }

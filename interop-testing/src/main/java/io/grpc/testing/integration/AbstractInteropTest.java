@@ -91,7 +91,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import io.grpc.testing.integration.OrcaReport.TestOrcaReport;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
@@ -188,9 +188,10 @@ public abstract class AbstractInteropTest {
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
 
-  static final CallOptions.Key<AtomicReference<OrcaReport.TestOrcaReport>>
+  static final CallOptions.Key<AtomicReference<TestOrcaReport>>
       ORCA_RPC_REPORT_KEY = CallOptions.Key.create("orca-rpc-report");
-  static final AtomicReference<TestOrcaReport> orcaOobReportRef = new AtomicReference<>();
+  static final CallOptions.Key<AtomicReference<TestOrcaReport>>
+      ORCA_OOB_REPORT_KEY = CallOptions.Key.create("orca-oob-report");
 
   private static final class ServerStreamTracerInfo {
     final String fullMethodName;
@@ -366,10 +367,6 @@ public abstract class AbstractInteropTest {
   }
 
   protected abstract ManagedChannelBuilder<?> createChannelBuilder();
-
-  protected AtomicReference<TestOrcaReport> getOrcaOobReportRef() {
-    return orcaOobReportRef;
-  }
 
   @Nullable
   protected ClientInterceptor[] getAdditionalInterceptors() {
@@ -1753,24 +1750,24 @@ public abstract class AbstractInteropTest {
         .putUtilization("util", 0.30499)
         .build();
     blockingStub.withOption(ORCA_RPC_REPORT_KEY, reportHolder).unaryCall(
-        SimpleRequest.newBuilder().setOrcaPerRpc(true).setOrcaReport(answer).build());
+        SimpleRequest.newBuilder().setOrcaPerRpcReport(answer).build());
     assertThat(reportHolder.get()).isEqualTo(answer);
 
-    blockingStub.unaryCall(
-        SimpleRequest.newBuilder().setOrcaOob(true).setOrcaReport(answer).build());
+    blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
     answer = TestOrcaReport.newBuilder(answer).clearRequestCost().build();
     Thread.sleep(1000);
-    assertThat(orcaOobReportRef.get()).isEqualTo(answer);
+    blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+    assertThat(reportHolder.get()).isEqualTo(answer);
 
     answer = TestOrcaReport.newBuilder()
         .setCpuUtilization(293.093)
         .setMemoryUtilization(0.2)
         .putUtilization("util", 100.2039)
         .build();
-    blockingStub.unaryCall(
-        SimpleRequest.newBuilder().setOrcaOob(true).setOrcaReport(answer).build());
+    blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
     Thread.sleep(1000);
-    assertThat(orcaOobReportRef.get()).isEqualTo(answer);
+    blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+    assertThat(reportHolder.get()).isEqualTo(answer);
   }
 
   /** Sends a large unary rpc with service account credentials. */

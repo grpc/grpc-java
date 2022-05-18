@@ -21,6 +21,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.testing.integration.AbstractInteropTest.ORCA_OOB_REPORT_KEY;
 import static io.grpc.testing.integration.AbstractInteropTest.ORCA_RPC_REPORT_KEY;
 
 import io.grpc.ConnectivityState;
@@ -29,14 +30,13 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
-import io.grpc.testing.integration.OrcaReport.TestOrcaReport;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.Nullable;
 
 /**
  * Implements a test LB policy that receives ORCA load reports.
@@ -44,16 +44,11 @@ import javax.annotation.Nullable;
 final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvider {
 
   static final String TEST_ORCA_LB_POLICY_NAME = "test_backend_metrics_load_balancer";
-  @Nullable private final AtomicReference<TestOrcaReport> oobReportListenerRef;
+  private volatile TestOrcaReport latestOobReport;
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
     return new CustomBackendMetricsLoadBalancer(helper);
-  }
-
-  public CustomBackendMetricsLoadBalancerProvider(
-      AtomicReference<TestOrcaReport> oobReportListenerRef) {
-    this.oobReportListenerRef = oobReportListenerRef;
   }
 
   @Override
@@ -90,9 +85,7 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
         OrcaOobUtil.setListener(subchannel, new OrcaOobUtil.OrcaOobReportListener() {
           @Override
           public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-            if (oobReportListenerRef != null) {
-              oobReportListenerRef.set(fromOrcaLoadReport(orcaLoadReport));
-            }
+            latestOobReport = fromOrcaLoadReport(orcaLoadReport);
           }
         },
             OrcaOobUtil.OrcaReportingConfig.newBuilder()
@@ -167,6 +160,12 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
         if (result.getSubchannel() == null) {
           return result;
         }
+        AtomicReference<TestOrcaReport> reportRef =
+            args.getCallOptions().getOption(ORCA_OOB_REPORT_KEY);
+        if (reportRef != null) {
+          reportRef.set(latestOobReport);
+        }
+
         return PickResult.withSubchannel(
             result.getSubchannel(),
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(

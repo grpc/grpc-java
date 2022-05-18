@@ -62,6 +62,8 @@ public class TestServiceClient {
     TestUtils.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
+    customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
+    LoadBalancerRegistry.getDefaultRegistry().register(customBackendMetricsLoadBalancerProvider);
     client.setUp();
 
     try {
@@ -93,7 +95,7 @@ public class TestServiceClient {
   private int soakPerIterationMaxAcceptableLatencyMs = 1000;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
-  private LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
+  private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
 
@@ -483,10 +485,6 @@ public class TestServiceClient {
   private class Tester extends AbstractInteropTest {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
-      customBackendMetricsLoadBalancerProvider =
-          new CustomBackendMetricsLoadBalancerProvider(getOrcaOobReportRef());
-      LoadBalancerRegistry.getDefaultRegistry()
-          .register(customBackendMetricsLoadBalancerProvider);
       boolean useGeneric = false;
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {

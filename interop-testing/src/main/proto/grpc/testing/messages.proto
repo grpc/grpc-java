@@ -20,8 +20,6 @@ package grpc.testing;
 
 option java_package = "io.grpc.testing.integration";
 
-import "grpc/testing/orca_report.proto";
-
 // TODO(jihuncho): Use well-known types once all languages are synced.
 message BoolValue {
   // The bool value.
@@ -93,13 +91,17 @@ message SimpleRequest {
   bool fill_grpclb_route_type = 10;
 
   // Whether server should update per-rpc metrics.
-  bool orca_per_rpc = 11;
+  TestOrcaReport orca_per_rpc_report = 11;
 
   // Whether server should update OOB metrics.
-  bool orca_oob = 12;
+  TestOrcaReport orca_oob_report = 12;
+}
 
-  // What metrics data the server should update to.
-  TestOrcaReport orca_report = 13;
+message TestOrcaReport {
+  double cpu_utilization = 1;
+  double memory_utilization = 2;
+  map<string, double> request_cost = 3;
+  map<string, double> utilization = 4;
 }
 
 // Unary response, as configured by the request.
