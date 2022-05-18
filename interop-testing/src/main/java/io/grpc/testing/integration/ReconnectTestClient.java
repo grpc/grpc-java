@@ -25,6 +25,7 @@ import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.testing.integration.EmptyProtos.Empty;
 import io.grpc.testing.integration.Messages.ReconnectInfo;
+import io.grpc.testing.integration.Messages.ReconnectParams;
 
 /**
  * Verifies the client is reconnecting the server with correct backoffs
@@ -79,12 +80,12 @@ public class ReconnectTestClient {
             .negotiationType(NegotiationType.TLS).build();
       }
       retryStub = ReconnectServiceGrpc.newBlockingStub(retryChannel);
-      controlStub.start(Empty.getDefaultInstance());
+      controlStub.start(ReconnectParams.getDefaultInstance());
 
       long startTimeStamp = System.currentTimeMillis();
       while ((System.currentTimeMillis() - startTimeStamp) < TEST_TIME_MS) {
         try {
-          retryStub.start(Empty.getDefaultInstance());
+          retryStub.start(ReconnectParams.getDefaultInstance());
         } catch (StatusRuntimeException expected) {
           // Make CheckStyle happy.
         }
