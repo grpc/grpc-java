@@ -248,7 +248,7 @@ public class OrcaServiceImplTest {
         .build();
     defaultTestService.setCpuUtilizationMetric(goldenReport.getCpuUtilization());
     defaultTestService.setMemoryUtilizationMetric(goldenReport.getMemUtilization());
-    defaultTestService.putAllUtilizationMetrics(firstUtilization);
+    defaultTestService.setAllUtilizationMetrics(firstUtilization);
     defaultTestService.putUtilizationMetric("queue", 1.0);
     Iterator<OrcaLoadReport> reports = OpenRcaServiceGrpc.newBlockingStub(channel)
         .streamCoreMetrics(OrcaLoadReportRequest.newBuilder().build());
@@ -279,7 +279,7 @@ public class OrcaServiceImplTest {
         }
         defaultTestService.removeUtilizationMetric("util");
         defaultTestService.setMemoryUtilizationMetric(0.4);
-        defaultTestService.putAllUtilizationMetrics(firstUtilization);
+        defaultTestService.setAllUtilizationMetrics(firstUtilization);
         try {
           barrier.await();
         } catch (Exception ex) {
@@ -290,7 +290,7 @@ public class OrcaServiceImplTest {
     barrier.await();
     defaultTestService.setMemoryUtilizationMetric(0.4);
     defaultTestService.removeUtilizationMetric("util");
-    defaultTestService.putAllUtilizationMetrics(firstUtilization);
+    defaultTestService.setAllUtilizationMetrics(firstUtilization);
     barrier.await();
     goldenReport = OrcaLoadReport.newBuilder()
         .putAllUtilization(firstUtilization)

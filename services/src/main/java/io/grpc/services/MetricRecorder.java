@@ -47,7 +47,7 @@ public final class MetricRecorder {
   /**
    * Replace the whole metrics data using the specified map.
    */
-  public void putAllUtilizationMetrics(Map<String, Double> metrics) {
+  public void setAllUtilizationMetrics(Map<String, Double> metrics) {
     metricsData = new ConcurrentHashMap<>(metrics);
   }
 
