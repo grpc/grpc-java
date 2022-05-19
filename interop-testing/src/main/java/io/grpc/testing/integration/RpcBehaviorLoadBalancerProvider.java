@@ -62,7 +62,7 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
     return new RpcBehaviorLoadBalancer(helper,
-        LoadBalancerRegistry.getDefaultRegistry().getProvider("pick_first")
+        LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin")
             .newLoadBalancer(helper));
   }
 
