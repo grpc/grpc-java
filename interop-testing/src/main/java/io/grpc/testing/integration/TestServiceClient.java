@@ -91,6 +91,7 @@ public class TestServiceClient {
   private int soakPerIterationMaxAcceptableLatencyMs = 1000;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
+  private int numWarmupRpcs;
 
   private Tester tester = new Tester();
 
@@ -163,6 +164,8 @@ public class TestServiceClient {
         soakPerIterationMaxAcceptableLatencyMs = Integer.parseInt(value);
       } else if ("soak_overall_timeout_seconds".equals(key)) {
         soakOverallTimeoutSeconds = Integer.parseInt(value);
+      } else if ("num_warmup_rpcs".equals(key)) {
+        numWarmupRpcs = Integer.valueOf(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -226,6 +229,10 @@ public class TestServiceClient {
           + "\n                              should stop and fail, if the desired number of "
           + "\n                              iterations have not yet completed. Default "
             + c.soakOverallTimeoutSeconds
+          + "\n  --num_warmup_rpcs           Number of RPCs to perform on a separate warmup channel "
+          + "\n                              before the actual test runs (each warmup RPC uses a 1 "
+          + "\n                              second deadline). Default: "
+            + c.numWarmupRpcs
       );
       System.exit(1);
     }
@@ -247,6 +254,8 @@ public class TestServiceClient {
   }
 
   private void run() {
+    System.out.println("Running warmup before test");
+    tester.globalWarmup(numWarmupRpcs);
     System.out.println("Running test " + testCase);
     try {
       runTest(TestCases.fromString(testCase));

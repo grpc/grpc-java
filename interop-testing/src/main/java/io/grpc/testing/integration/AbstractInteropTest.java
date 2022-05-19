@@ -357,6 +357,32 @@ public abstract class AbstractInteropTest {
     stopServer();
   }
 
+  /* Run a configurable number of empty unary RPCs (each with 1 second timeouts), on a one-off
+   * channel (this channel will not be used by any tests). The purpose is to warmup global
+   * process state to make deadlines more reliable in actual tests. */
+  public void globalWarmup(int numWarmupRpcs) {
+    // Run some RPCs on a throwaway channel to warm up the JVM
+    logger.info("Begin warmup, performing " + numWarmupRpcs + " RPCs on the warmup channel");
+    ManagedChannel warmupChannel = createChannel();
+    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(warmupChannel);
+    for (int i = 0; i < numWarmupRpcs; i++) {
+      logger.info("Begin warmup RPC " + i);
+      try {
+        stub.withDeadlineAfter(1, TimeUnit.SECONDS).emptyCall(Empty.getDefaultInstance());
+      } catch (StatusRuntimeException ex) {
+        logger.warning("Warmup RPC " + i + " failed. Status: " + ex);
+      }
+    }
+    try {
+      warmupChannel.shutdownNow();
+      warmupChannel.awaitTermination(1, TimeUnit.SECONDS);
+    } catch (InterruptedException ie) {
+      logger.log(Level.FINE, "Interrupted while waiting for warmup channel termination", ie);
+      // Best effort. If there is an interruption, we want to continue cleaning up, but quickly
+      Thread.currentThread().interrupt();
+    }
+  }
+
   protected ManagedChannel createChannel() {
     return createChannelBuilder().build();
   }
