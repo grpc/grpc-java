@@ -17,7 +17,6 @@
 package io.grpc.testing.integration;
 
 import io.grpc.ConnectivityState;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -25,11 +24,12 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
+import io.grpc.util.ForwardingLoadBalancer;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.Map;
 import javax.annotation.Nonnull;
 
@@ -37,9 +37,12 @@ import javax.annotation.Nonnull;
  * Provides a xDS interop test {@link LoadBalancer} designed to work with {@link XdsTestServer}. It
  * looks for an "rpc_behavior" field in its configuration and includes the value in the
  * "rpc-behavior" metadata entry that is sent to the server. This will cause the test server to
- * behave in a predefined way.
+ * behave in a predefined way. Endpoint picking logic is delegated to the
+ * {@link PickFirstLoadBalancer}.
  *
- * <p>Endpoint picking logic is delegated to the {@link PickFirstLoadBalancer}.
+ * <p>Initial use case is to prove that a custom load balancer can be configured by the control
+ * plane via xDS. An interop test will configure this LB and then verify it has been correctly
+ * configured by observing a specific RPC behavior by the server(s).
  *
  * <p>For more details on what behaviors can be specified, please see:
  * https://github.com/grpc/grpc/blob/master/doc/xds-test-descriptions.md#server
@@ -91,7 +94,7 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
    * Delegates all calls to another LB and wraps the given helper in {@link RpcBehaviorHelper} that
    * assures that the rpc-behavior metadata header gets added to all calls.
    */
-  static class RpcBehaviorLoadBalancer extends LoadBalancer {
+  static class RpcBehaviorLoadBalancer extends ForwardingLoadBalancer {
 
     private final RpcBehaviorHelper helper;
     private final LoadBalancer delegateLb;
@@ -102,25 +105,15 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
     }
 
     @Override
+    protected LoadBalancer delegate() {
+      return delegateLb;
+    }
+
+    @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       helper.setRpcBehavior(
           ((RpcBehaviorConfig) resolvedAddresses.getLoadBalancingPolicyConfig()).rpcBehavior);
       delegateLb.handleResolvedAddresses(resolvedAddresses);
-    }
-
-    @Override
-    public void handleNameResolutionError(Status error) {
-      delegateLb.handleNameResolutionError(error);
-    }
-
-    @Override
-    public void shutdown() {
-      delegateLb.shutdown();
-    }
-
-    @Override
-    public void requestConnection() {
-      delegateLb.requestConnection();
     }
   }
 
@@ -128,7 +121,7 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
    * Wraps the picker that is provided when the balancing change updates with the {@link
    * RpcBehaviorPicker} that injects the rpc-behavior metadata entry.
    */
-  static class RpcBehaviorHelper extends Helper {
+  static class RpcBehaviorHelper extends ForwardingLoadBalancerHelper {
 
     private final Helper delegateHelper;
     private String rpcBehavior;
@@ -142,19 +135,14 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
     }
 
     @Override
-    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
-      return delegateHelper.createOobChannel(eag, authority);
+    protected Helper delegate() {
+      return delegateHelper;
     }
 
     @Override
     public void updateBalancingState(@Nonnull ConnectivityState newState,
         @Nonnull SubchannelPicker newPicker) {
       delegateHelper.updateBalancingState(newState, new RpcBehaviorPicker(newPicker, rpcBehavior));
-    }
-
-    @Override
-    public String getAuthority() {
-      return delegateHelper.getAuthority();
     }
   }
 
