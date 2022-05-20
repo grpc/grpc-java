@@ -16,25 +16,19 @@
 
 package io.grpc.testing.integration;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
-import static io.grpc.ConnectivityState.SHUTDOWN;
-import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.testing.integration.AbstractInteropTest.ORCA_OOB_REPORT_KEY;
 import static io.grpc.testing.integration.AbstractInteropTest.ORCA_RPC_REPORT_KEY;
 
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
-import io.grpc.Status;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
+import io.grpc.util.ForwardingLoadBalancer;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -66,97 +60,65 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
     return TEST_ORCA_LB_POLICY_NAME;
   }
 
-  private final class CustomBackendMetricsLoadBalancer extends LoadBalancer {
-    private final Helper helper;
-    private Subchannel subchannel;
+  private final class CustomBackendMetricsLoadBalancer extends ForwardingLoadBalancer {
+    private LoadBalancer delegate;
 
     public CustomBackendMetricsLoadBalancer(Helper helper) {
-      this.helper = OrcaOobUtil.newOrcaReportingHelper(checkNotNull(helper, "helper"));
+      this.delegate = LoadBalancerRegistry.getDefaultRegistry()
+          .getProvider("pick_first")
+          .newLoadBalancer(new CustomBackendMetricsLoadBalancerHelper(helper));
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
-      if (subchannel == null) {
-        final Subchannel subchannel = helper.createSubchannel(
-            CreateSubchannelArgs.newBuilder()
-                .setAddresses(servers)
-                .build());
+    public LoadBalancer delegate() {
+      return delegate;
+    }
+
+    private final class CustomBackendMetricsLoadBalancerHelper
+        extends ForwardingLoadBalancerHelper {
+      private final Helper orcaHelper;
+
+      public CustomBackendMetricsLoadBalancerHelper(Helper helper) {
+        this.orcaHelper = OrcaOobUtil.newOrcaReportingHelper(helper);
+      }
+
+      @Override
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        Subchannel subchannel = super.createSubchannel(args);
         OrcaOobUtil.setListener(subchannel, new OrcaOobUtil.OrcaOobReportListener() {
-          @Override
-          public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-            latestOobReport = fromOrcaLoadReport(orcaLoadReport);
-          }
-        },
+              @Override
+              public void onLoadReport(OrcaLoadReport orcaLoadReport) {
+                latestOobReport = fromOrcaLoadReport(orcaLoadReport);
+              }
+            },
             OrcaOobUtil.OrcaReportingConfig.newBuilder()
                 .setReportInterval(1, TimeUnit.SECONDS)
                 .build()
         );
-        subchannel.start(new SubchannelStateListener() {
-          @Override
-          public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-            processSubchannelState(subchannel, stateInfo);
-          }
-        });
-        this.subchannel = subchannel;
-        helper.updateBalancingState(CONNECTING,
-            new MayReportLoadPicker(PickResult.withSubchannel(subchannel)));
-        subchannel.requestConnection();
-      } else {
-        subchannel.updateAddresses(servers);
-      }
-    }
-
-    private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-      ConnectivityState currentState = stateInfo.getState();
-      if (currentState == SHUTDOWN) {
-        return;
-      }
-      if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
-        helper.refreshNameResolution();
+        return subchannel;
       }
 
-      SubchannelPicker picker;
-      switch (currentState) {
-        case IDLE:
-          subchannel.requestConnection();
-          picker = new MayReportLoadPicker(PickResult.withNoResult());
-          break;
-        case CONNECTING:
-          picker = new MayReportLoadPicker(PickResult.withNoResult());
-          break;
-        case READY:
-          picker = new MayReportLoadPicker(PickResult.withSubchannel(subchannel));
-          break;
-        case TRANSIENT_FAILURE:
-          picker = new MayReportLoadPicker(PickResult.withError(stateInfo.getStatus()));
-          break;
-        default:
-          throw new IllegalArgumentException("Unsupported state:" + currentState);
+      @Override
+      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+        delegate().updateBalancingState(newState, new MayReportLoadPicker(newPicker));
       }
-      helper.updateBalancingState(currentState, picker);
-    }
 
-    @Override
-    public void handleNameResolutionError(Status error) {
-    }
-
-    @Override
-    public void shutdown() {
-      if (subchannel != null) {
-        subchannel.shutdown();
+      @Override
+      public Helper delegate() {
+        return orcaHelper;
       }
     }
 
     private final class MayReportLoadPicker extends SubchannelPicker {
-      private PickResult result;
+      private SubchannelPicker delegate;
 
-      public MayReportLoadPicker(PickResult result) {
-        this.result = checkNotNull(result, "result");
+      public MayReportLoadPicker(SubchannelPicker delegate) {
+        this.delegate = delegate;
       }
 
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
+        PickResult result = delegate.pickSubchannel(args);
         if (result.getSubchannel() == null) {
           return result;
         }
