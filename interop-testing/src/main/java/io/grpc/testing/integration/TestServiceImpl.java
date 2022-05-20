@@ -159,7 +159,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     metricRecorder.setMemoryUtilizationMetric(report.getMemoryUtilization());
     metricRecorder.setAllUtilizationMetrics(new HashMap<>());
     for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
-      metricRecorder.setUtilizationMetric(entry.getKey(), entry.getValue());
+      metricRecorder.putUtilizationMetric(entry.getKey(), entry.getValue());
     }
   }
 
