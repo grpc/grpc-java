@@ -14,14 +14,15 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.api.grpc:proto-google-common-protos:2.0.1",
     "com.google.auth:google-auth-library-credentials:0.22.0",
     "com.google.auth:google-auth-library-oauth2-http:0.22.0",
+    "com.google.auto.value:auto-value-annotations:1.9",
+    "com.google.auto.value:auto-value:1.9",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:2.8.9",
-    "com.google.auto.value:auto-value:1.7.4",
-    "com.google.auto.value:auto-value-annotations:1.7.4",
     "com.google.errorprone:error_prone_annotations:2.9.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:31.0.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
+    "com.google.re2j:re2j:1.5",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.4",
     "com.squareup.okio:okio:1.17.5",
@@ -73,24 +74,73 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-census": "@io_grpc_grpc_java//census",
     "io.grpc:grpc-context": "@io_grpc_grpc_java//context",
     "io.grpc:grpc-core": "@io_grpc_grpc_java//core:core_maven",
+    "io.grpc:grpc-googleapis": "@io_grpc_grpc_java//googleapis",
     "io.grpc:grpc-grpclb": "@io_grpc_grpc_java//grpclb",
     "io.grpc:grpc-netty": "@io_grpc_grpc_java//netty",
     "io.grpc:grpc-netty-shaded": "@io_grpc_grpc_java//netty:shaded_maven",
     "io.grpc:grpc-okhttp": "@io_grpc_grpc_java//okhttp",
     "io.grpc:grpc-protobuf": "@io_grpc_grpc_java//protobuf",
     "io.grpc:grpc-protobuf-lite": "@io_grpc_grpc_java//protobuf-lite",
+    "io.grpc:grpc-rls": "@io_grpc_grpc_java//rls",
+    "io.grpc:grpc-services": "@io_grpc_grpc_java//services",
     "io.grpc:grpc-stub": "@io_grpc_grpc_java//stub",
     "io.grpc:grpc-testing": "@io_grpc_grpc_java//testing",
+    "io.grpc:grpc-xds": "@io_grpc_grpc_java//xds",
 }
 
 def grpc_java_repositories():
     """Imports dependencies for grpc-java."""
+    if not native.existing_rule("com_github_cncf_xds"):
+        http_archive(
+            name = "com_github_cncf_xds",
+            strip_prefix = "xds-d92e9ce0af512a73a3a126b32fa4920bee12e180",
+            sha256 = "27be88b1ff2844885d3b2d0d579546f3a8b3f26b4871eed89082c9709e49a4bd",
+            urls = [
+                "https://github.com/cncf/xds/archive/d92e9ce0af512a73a3a126b32fa4920bee12e180.tar.gz",
+            ],
+        )
+    if not native.existing_rule("com_github_grpc_grpc"):
+        http_archive(
+            name = "com_github_grpc_grpc",
+            strip_prefix = "grpc-1.46.0",
+            sha256 = "67423a4cd706ce16a88d1549297023f0f9f0d695a96dd684adc21e67b021f9bc",
+            urls = [
+                "https://github.com/grpc/grpc/archive/v1.46.0.tar.gz",
+            ],
+        )
     if not native.existing_rule("com_google_protobuf"):
         com_google_protobuf()
     if not native.existing_rule("com_google_protobuf_javalite"):
         com_google_protobuf_javalite()
+    if not native.existing_rule("com_google_googleapis"):
+        http_archive(
+            name = "com_google_googleapis",
+            sha256 = "49930468563dd48283e8301e8d4e71436bf6d27ac27c235224cc1a098710835d",
+            strip_prefix = "googleapis-ca1372c6d7bcb199638ebfdb40d2b2660bab7b88",
+            urls = [
+                "https://github.com/googleapis/googleapis/archive/ca1372c6d7bcb199638ebfdb40d2b2660bab7b88.tar.gz",
+            ],
+        )
+    if not native.existing_rule("io_bazel_rules_go"):
+        http_archive(
+            name = "io_bazel_rules_go",
+            sha256 = "ab21448cef298740765f33a7f5acee0607203e4ea321219f2a4c85a6e0fb0a27",
+            urls = [
+                "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.32.0/rules_go-v0.32.0.zip",
+                "https://github.com/bazelbuild/rules_go/releases/download/v0.32.0/rules_go-v0.32.0.zip",
+            ],
+        )
     if not native.existing_rule("io_grpc_grpc_proto"):
         io_grpc_grpc_proto()
+    if not native.existing_rule("envoy_api"):
+        http_archive(
+            name = "envoy_api",
+            sha256 = "621577591d48cee20b61d4e71466bf4019791f9991da4813ccf75f3b9898de5f",
+            strip_prefix = "data-plane-api-bb6d6abe8b4d035c2f4ba3acf924cec0cbec5f70",
+            urls = [
+                "https://github.com/envoyproxy/data-plane-api/archive/bb6d6abe8b4d035c2f4ba3acf924cec0cbec5f70.tar.gz",
+            ],
+        )
 
 def com_google_protobuf():
     # proto_library rules implicitly depend on @com_google_protobuf//:protoc,

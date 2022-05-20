@@ -149,6 +149,48 @@ public abstract class AbstractServerImplBuilder
   }
 
   @Override
+  public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    delegate().keepAliveTime(keepAliveTime, timeUnit);
+    return thisT();
+  }
+
+  @Override
+  public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
+    delegate().keepAliveTimeout(keepAliveTimeout, timeUnit);
+    return thisT();
+  }
+
+  @Override
+  public T maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
+    delegate().maxConnectionIdle(maxConnectionIdle, timeUnit);
+    return thisT();
+  }
+
+  @Override
+  public T maxConnectionAge(long maxConnectionAge, TimeUnit timeUnit) {
+    delegate().maxConnectionAge(maxConnectionAge, timeUnit);
+    return thisT();
+  }
+
+  @Override
+  public T maxConnectionAgeGrace(long maxConnectionAgeGrace, TimeUnit timeUnit) {
+    delegate().maxConnectionAgeGrace(maxConnectionAgeGrace, timeUnit);
+    return thisT();
+  }
+
+  @Override
+  public T permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    delegate().permitKeepAliveTime(keepAliveTime, timeUnit);
+    return thisT();
+  }
+
+  @Override
+  public T permitKeepAliveWithoutCalls(boolean permit) {
+    delegate().permitKeepAliveWithoutCalls(permit);
+    return thisT();
+  }
+
+  @Override
   public T maxInboundMessageSize(int bytes) {
     delegate().maxInboundMessageSize(bytes);
     return thisT();

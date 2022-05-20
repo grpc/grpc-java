@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import com.google.protobuf.MessageLite;
+import com.google.protobuf.StringValue;
 import io.grpc.Metadata;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import java.util.List;
@@ -27,10 +28,10 @@ import org.junit.Assert;
  */
 public class Util {
 
-  public static final Metadata.Key<Messages.SimpleContext> METADATA_KEY =
+  public static final Metadata.Key<StringValue> METADATA_KEY =
       Metadata.Key.of(
-          "grpc.testing.SimpleContext" + Metadata.BINARY_HEADER_SUFFIX,
-          ProtoLiteUtils.metadataMarshaller(Messages.SimpleContext.getDefaultInstance()));
+          "google.protobuf.StringValue" + Metadata.BINARY_HEADER_SUFFIX,
+          ProtoLiteUtils.metadataMarshaller(StringValue.getDefaultInstance()));
   public static final Metadata.Key<String> ECHO_INITIAL_METADATA_KEY
       = Metadata.Key.of("x-grpc-test-echo-initial", Metadata.ASCII_STRING_MARSHALLER);
   public static final Metadata.Key<byte[]> ECHO_TRAILING_METADATA_KEY

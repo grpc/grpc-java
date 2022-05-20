@@ -40,6 +40,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.MessageLite;
+import com.google.protobuf.StringValue;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -1064,10 +1065,9 @@ public abstract class AbstractInteropTest {
   public void exchangeMetadataUnaryCall() throws Exception {
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
-    // Send a context proto (as it's in the default extension registry)
-    Messages.SimpleContext contextValue =
-        Messages.SimpleContext.newBuilder().setValue("dog").build();
-    fixedHeaders.put(Util.METADATA_KEY, contextValue);
+    // Send a metadata proto
+    StringValue metadataValue = StringValue.newBuilder().setValue("dog").build();
+    fixedHeaders.put(Util.METADATA_KEY, metadataValue);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
@@ -1078,18 +1078,17 @@ public abstract class AbstractInteropTest {
     assertNotNull(stub.emptyCall(EMPTY));
 
     // Assert that our side channel object is echoed back in both headers and trailers
-    Assert.assertEquals(contextValue, headersCapture.get().get(Util.METADATA_KEY));
-    Assert.assertEquals(contextValue, trailersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, headersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, trailersCapture.get().get(Util.METADATA_KEY));
   }
 
   @Test
   public void exchangeMetadataStreamingCall() throws Exception {
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
-    // Send a context proto (as it's in the default extension registry)
-    Messages.SimpleContext contextValue =
-        Messages.SimpleContext.newBuilder().setValue("dog").build();
-    fixedHeaders.put(Util.METADATA_KEY, contextValue);
+    // Send a metadata proto
+    StringValue metadataValue = StringValue.newBuilder().setValue("dog").build();
+    fixedHeaders.put(Util.METADATA_KEY, metadataValue);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
@@ -1120,8 +1119,8 @@ public abstract class AbstractInteropTest {
     org.junit.Assert.assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
 
     // Assert that our side channel object is echoed back in both headers and trailers
-    Assert.assertEquals(contextValue, headersCapture.get().get(Util.METADATA_KEY));
-    Assert.assertEquals(contextValue, trailersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, headersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, trailersCapture.get().get(Util.METADATA_KEY));
   }
 
   @Test
