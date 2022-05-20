@@ -357,9 +357,11 @@ public abstract class AbstractInteropTest {
     stopServer();
   }
 
-  /* Run a configurable number of empty unary RPCs (each with 1 second timeouts), on a one-off
+  /**
+   * Run a configurable number of empty unary RPCs (each with 1 second timeouts), on a one-off
    * channel (this channel will not be used by any tests). The purpose is to warmup global
-   * process state to make deadlines more reliable in actual tests. */
+   * process state to make deadlines more reliable in actual tests.
+   */
   public void globalWarmup(int numWarmupRpcs) {
     // Run some RPCs on a throwaway channel to warm up the JVM
     logger.info("Begin warmup, performing " + numWarmupRpcs + " RPCs on the warmup channel");

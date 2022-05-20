@@ -229,9 +229,9 @@ public class TestServiceClient {
           + "\n                              should stop and fail, if the desired number of "
           + "\n                              iterations have not yet completed. Default "
             + c.soakOverallTimeoutSeconds
-          + "\n  --num_warmup_rpcs           Number of RPCs to perform on a separate warmup channel "
-          + "\n                              before the actual test runs (each warmup RPC uses a 1 "
-          + "\n                              second deadline). Default: "
+          + "\n  --num_warmup_rpcs           Number of RPCs to perform on a separate warmup "
+          + "\n                              channel before the actual test runs (each warmup RPC "
+          + "\n                              uses a 1 second deadline). Default: "
             + c.numWarmupRpcs
       );
       System.exit(1);
