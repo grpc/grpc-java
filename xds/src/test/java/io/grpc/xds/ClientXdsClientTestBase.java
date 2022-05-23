@@ -259,6 +259,7 @@ public abstract class ClientXdsClientTestBase {
   private boolean originalEnableFaultInjection;
   private boolean originalEnableRbac;
   private boolean originalEnableLeastRequest;
+  private boolean originalEnableFederation;
 
   @Before
   public void setUp() throws IOException {
@@ -275,6 +276,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(originalEnableRbac).isTrue();
     originalEnableLeastRequest = ClientXdsClient.enableLeastRequest;
     ClientXdsClient.enableLeastRequest = true;
+    originalEnableFederation = BootstrapperImpl.enableFederation;
     final String serverName = InProcessServerBuilder.generateName();
     cleanupRule.register(
         InProcessServerBuilder
@@ -349,6 +351,7 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClient.enableFaultInjection = originalEnableFaultInjection;
     ClientXdsClient.enableRbac = originalEnableRbac;
     ClientXdsClient.enableLeastRequest = originalEnableLeastRequest;
+    BootstrapperImpl.enableFederation = originalEnableFederation;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
@@ -760,6 +763,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName() {
+    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
@@ -780,6 +784,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withEmptyAuthority() {
+    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp:///envoy.config.listener.v3.Listener/listener1"
         : "xdstp:///envoy.api.v2.Listener/listener1";
@@ -800,6 +805,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_witUnorderedContextParams() {
+    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?bar=2&foo=1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?bar=2&foo=1";
@@ -819,6 +825,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withWrongType() {
+    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
@@ -839,6 +846,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void rdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    BootstrapperImpl.enableFederation = true;
     String rdsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/route1"
         : "xdstp://authority.xds.com/envoy.api.v2.RouteConfiguration/route1";
@@ -858,6 +866,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void cdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    BootstrapperImpl.enableFederation = true;
     String cdsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1"
         : "xdstp://authority.xds.com/envoy.api.v2.Cluster/cluster1";
@@ -878,6 +887,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void edsResourceUpdated_withXdstpResourceName_withWrongType() {
+    BootstrapperImpl.enableFederation = true;
     String edsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
         : "xdstp://authority.xds.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
