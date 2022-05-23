@@ -472,8 +472,13 @@ public class TestServiceClient {
 
       }
 
-      case ORCA: {
-        tester.testOrca();
+      case ORCA_PER_RPC: {
+        tester.testOrcaPerRpc();
+        break;
+      }
+
+      case ORCA_OOB: {
+        tester.testOrcaOob();
         break;
       }
 

@@ -1738,9 +1738,10 @@ public abstract class AbstractInteropTest {
   }
 
   /**
-   *  Test backend metrics reporting: expect the test client LB policy to receive load reports.
+   *  Test backend metrics per query reporting: expect the test client LB policy to receive load
+   *  reports.
    */
-  public void testOrca() throws Exception {
+  public void testOrcaPerRpc() throws Exception {
     AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
     TestOrcaReport answer = TestOrcaReport.newBuilder()
         .setCpuUtilization(0.8210)
@@ -1751,15 +1752,25 @@ public abstract class AbstractInteropTest {
     blockingStub.withOption(ORCA_RPC_REPORT_KEY, reportHolder).unaryCall(
         SimpleRequest.newBuilder().setOrcaPerRpcReport(answer).build());
     assertThat(reportHolder.get()).isEqualTo(answer);
+  }
 
+  /**
+   *  Test backend metrics OOB reporting: expect the test client LB policy to receive load reports.
+   */
+  public void testOrcaOob() throws Exception {
+    AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
+    TestOrcaReport answer = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.8210)
+        .setMemoryUtilization(0.5847)
+        .putUtilization("util", 0.30499)
+        .build();
     blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
-    answer = TestOrcaReport.newBuilder(answer).clearRequestCost().build();
     Thread.sleep(1000);
     blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
     assertThat(reportHolder.get()).isEqualTo(answer);
 
     answer = TestOrcaReport.newBuilder()
-        .setCpuUtilization(293.093)
+        .setCpuUtilization(0.29309)
         .setMemoryUtilization(0.2)
         .putUtilization("util", 100.2039)
         .build();
