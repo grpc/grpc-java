@@ -2436,7 +2436,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     }
 
     private ServerInfo getServerInfo(String resource) {
-      if (resource.startsWith(XDSTP_SCHEME)) {
+      if (BootstrapperImpl.enableFederation && resource.startsWith(XDSTP_SCHEME)) {
         URI uri = URI.create(resource);
         String authority = uri.getAuthority();
         if (authority == null) {
