@@ -74,6 +74,10 @@ dependencies {
         exclude group: 'org.apache.httpcomponents'
     }
 
+    implementation (project(':grpc-services')) {
+        exclude group: 'com.google.protobuf'
+    }
+
     compileOnly libraries.javax_annotation
 
     androidTestImplementation 'androidx.test.ext:junit:1.1.3',

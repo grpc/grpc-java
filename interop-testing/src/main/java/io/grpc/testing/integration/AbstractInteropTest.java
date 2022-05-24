@@ -91,6 +91,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
@@ -186,6 +187,11 @@ public abstract class AbstractInteropTest {
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
+
+  static final CallOptions.Key<AtomicReference<TestOrcaReport>>
+      ORCA_RPC_REPORT_KEY = CallOptions.Key.create("orca-rpc-report");
+  static final CallOptions.Key<AtomicReference<TestOrcaReport>>
+      ORCA_OOB_REPORT_KEY = CallOptions.Key.create("orca-oob-report");
 
   private static final class ServerStreamTracerInfo {
     final String fullMethodName;
@@ -1730,6 +1736,49 @@ public abstract class AbstractInteropTest {
   public void getServerAddressAndLocalAddressFromClient() {
     assertNotNull(obtainRemoteServerAddr());
     assertNotNull(obtainLocalClientAddr());
+  }
+
+  /**
+   *  Test backend metrics per query reporting: expect the test client LB policy to receive load
+   *  reports.
+   */
+  public void testOrcaPerRpc() throws Exception {
+    AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
+    TestOrcaReport answer = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.8210)
+        .setMemoryUtilization(0.5847)
+        .putRequestCost("cost", 3456.32)
+        .putUtilization("util", 0.30499)
+        .build();
+    blockingStub.withOption(ORCA_RPC_REPORT_KEY, reportHolder).unaryCall(
+        SimpleRequest.newBuilder().setOrcaPerRpcReport(answer).build());
+    assertThat(reportHolder.get()).isEqualTo(answer);
+  }
+
+  /**
+   *  Test backend metrics OOB reporting: expect the test client LB policy to receive load reports.
+   */
+  public void testOrcaOob() throws Exception {
+    AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
+    TestOrcaReport answer = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.8210)
+        .setMemoryUtilization(0.5847)
+        .putUtilization("util", 0.30499)
+        .build();
+    blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
+    Thread.sleep(1500);
+    blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+    assertThat(reportHolder.get()).isEqualTo(answer);
+
+    answer = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.29309)
+        .setMemoryUtilization(0.2)
+        .putUtilization("util", 100.2039)
+        .build();
+    blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
+    Thread.sleep(1500);
+    blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+    assertThat(reportHolder.get()).isEqualTo(answer);
   }
 
   /** Sends a large unary rpc with service account credentials. */
