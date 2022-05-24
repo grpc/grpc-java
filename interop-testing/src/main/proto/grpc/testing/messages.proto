@@ -89,6 +89,19 @@ message SimpleRequest {
 
   // Whether SimpleResponse should include grpclb_route_type.
   bool fill_grpclb_route_type = 10;
+
+  // Whether server should update per-rpc metrics.
+  TestOrcaReport orca_per_rpc_report = 11;
+
+  // Whether server should update OOB metrics.
+  TestOrcaReport orca_oob_report = 12;
+}
+
+message TestOrcaReport {
+  double cpu_utilization = 1;
+  double memory_utilization = 2;
+  map<string, double> request_cost = 3;
+  map<string, double> utilization = 4;
 }
 
 // Unary response, as configured by the request.
