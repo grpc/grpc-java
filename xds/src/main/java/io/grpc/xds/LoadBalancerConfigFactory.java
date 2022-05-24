@@ -243,7 +243,7 @@ class LoadBalancerConfigFactory {
     }
 
     /**
-     * Converts a custom LB config {@link Any} configuration to service config format (udpa).
+     * Converts a custom UDPA (legacy) TypedStruct LB config to service config format.
      */
     @SuppressWarnings("unchecked")
     private static ImmutableMap<String, ?> convertCustomConfig(
