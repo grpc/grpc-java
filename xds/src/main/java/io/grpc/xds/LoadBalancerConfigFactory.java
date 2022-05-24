@@ -232,7 +232,7 @@ class LoadBalancerConfigFactory {
     }
 
     /**
-     * Converts a custom LB config {@link Any} configuration to service config format (xds).
+     * Converts a custom TypedStruct LB config to service config format.
      */
     @SuppressWarnings("unchecked")
     private static ImmutableMap<String, ?> convertCustomConfig(
