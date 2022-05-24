@@ -66,7 +66,8 @@ public class TestCasesTest {
       "cancel_after_begin",
       "cancel_after_first_response",
       "timeout_on_sleeping_server",
-      "orca"
+      "orca_per_rpc",
+      "orca_oob"
     };
 
     // additional test cases

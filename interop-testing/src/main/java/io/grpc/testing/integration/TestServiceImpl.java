@@ -19,7 +19,6 @@ package io.grpc.testing.integration;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.InvalidProtocolBufferException;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -52,6 +51,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -75,7 +75,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   }
 
   public TestServiceImpl(ScheduledExecutorService executor) {
-    this(executor, null);
+    this(executor, MetricRecorder.newInstance());
   }
 
   @Override
@@ -124,24 +124,13 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       return;
     }
 
-    try {
-      echoCallMetricsFromPayload(req.getOrcaPerRpcReport());
-    } catch (InvalidProtocolBufferException ex) {
-      responseObserver.onError(ex);
-    }
-    if (metricRecorder != null) {
-      try {
-        echoMetricsFromPayload(req.getOrcaOobReport());
-      } catch (InvalidProtocolBufferException ex) {
-        responseObserver.onError(ex);
-      }
-    }
+    echoCallMetricsFromPayload(req.getOrcaPerRpcReport());
+    echoMetricsFromPayload(req.getOrcaOobReport());
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
   }
 
-  private static void echoCallMetricsFromPayload(TestOrcaReport report)
-      throws InvalidProtocolBufferException {
+  private static void echoCallMetricsFromPayload(TestOrcaReport report) {
     CallMetricRecorder recorder = CallMetricRecorder.getCurrent()
         .recordCpuUtilizationMetric(report.getCpuUtilization())
         .recordMemoryUtilizationMetric(report.getMemoryUtilization());
@@ -153,8 +142,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     }
   }
 
-  private void echoMetricsFromPayload(TestOrcaReport report)
-      throws InvalidProtocolBufferException {
+  private void echoMetricsFromPayload(TestOrcaReport report) {
     metricRecorder.setCpuUtilizationMetric(report.getCpuUtilization());
     metricRecorder.setMemoryUtilizationMetric(report.getMemoryUtilization());
     metricRecorder.setAllUtilizationMetrics(new HashMap<>());
