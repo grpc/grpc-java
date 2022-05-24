@@ -2137,9 +2137,15 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       @Override
       public void run() {
         ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
+
+
         if (subscriber == null) {
           logger.log(XdsLogLevel.INFO, "Subscribe LDS resource {0}", resourceName);
-          subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
+          try {
+            subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
+          } catch (Exception ex) {
+            watcher.onError();
+          }
           ldsResourceSubscribers.put(resourceName, subscriber);
           subscriber.xdsChannel.adjustResourceSubscription(ResourceType.LDS);
         }
