@@ -28,7 +28,6 @@ import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
@@ -61,7 +60,7 @@ public class RpcBehaviorLoadBalancerProviderTest {
   private LoadBalancer mockDelegateLb;
 
   @Mock
-  private Helper mockHelper;
+  private RpcBehaviorHelper mockHelper;
 
   @Mock
   private SubchannelPicker mockPicker;
