@@ -1765,7 +1765,7 @@ public abstract class AbstractInteropTest {
         .putUtilization("util", 0.30499)
         .build();
     blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
-    Thread.sleep(1000);
+    Thread.sleep(1500);
     blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
     assertThat(reportHolder.get()).isEqualTo(answer);
 
@@ -1775,7 +1775,7 @@ public abstract class AbstractInteropTest {
         .putUtilization("util", 100.2039)
         .build();
     blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
-    Thread.sleep(1000);
+    Thread.sleep(1500);
     blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
     assertThat(reportHolder.get()).isEqualTo(answer);
   }
