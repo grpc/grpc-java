@@ -81,6 +81,13 @@ public class LoadBalancerConfigFactoryTest {
                       Struct.newBuilder().putFields(CUSTOM_POLICY_FIELD_KEY,
                           Value.newBuilder().setNumberValue(CUSTOM_POLICY_FIELD_VALUE).build()))
                   .build()))).build();
+  private static final Policy CUSTOM_POLICY_UDPA = Policy.newBuilder().setTypedExtensionConfig(
+      TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
+          com.github.udpa.udpa.type.v1.TypedStruct.newBuilder().setTypeUrl(
+                  "type.googleapis.com/" + CUSTOM_POLICY_NAME).setValue(
+                  Struct.newBuilder().putFields(CUSTOM_POLICY_FIELD_KEY,
+                      Value.newBuilder().setNumberValue(CUSTOM_POLICY_FIELD_VALUE).build()))
+              .build()))).build();
   private static final FakeCustomLoadBalancerProvider CUSTOM_POLICY_PROVIDER
       = new FakeCustomLoadBalancerProvider();
 
@@ -207,6 +214,18 @@ public class LoadBalancerConfigFactoryTest {
 
     Cluster cluster = Cluster.newBuilder().setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder()
         .addPolicies(buildWrrPolicy(CUSTOM_POLICY, ROUND_ROBIN_POLICY))).build();
+
+    assertThat(newLbConfig(cluster, false, true)).isEqualTo(VALID_CUSTOM_CONFIG_IN_WRR);
+  }
+
+  // When a provider for the endpoint picking custom policy is available, the configuration should
+  // use it. This one uses the legacy UDPA TypedStruct that is also supported.
+  @Test
+  public void customLbInWrr_providerRegistered_udpa() throws ResourceInvalidException {
+    LoadBalancerRegistry.getDefaultRegistry().register(CUSTOM_POLICY_PROVIDER);
+
+    Cluster cluster = Cluster.newBuilder().setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder()
+        .addPolicies(buildWrrPolicy(CUSTOM_POLICY_UDPA, ROUND_ROBIN_POLICY))).build();
 
     assertThat(newLbConfig(cluster, false, true)).isEqualTo(VALID_CUSTOM_CONFIG_IN_WRR);
   }

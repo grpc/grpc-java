@@ -16,12 +16,12 @@
 
 package io.grpc.xds;
 
-import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Struct;
 import com.google.protobuf.util.JsonFormat;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
@@ -167,9 +167,14 @@ class LoadBalancerConfigFactory {
                 recursionDepth);
           } else if (typedConfig.is(RoundRobin.class)) {
             serviceConfig = convertRoundRobinConfig();
-          } else if (typedConfig.is(TypedStruct.class)) {
-            serviceConfig = convertCustomConfig(typedConfig.unpack(TypedStruct.class));
+          } else if (typedConfig.is(com.github.xds.type.v3.TypedStruct.class)) {
+            serviceConfig = convertCustomConfig(
+                typedConfig.unpack(com.github.xds.type.v3.TypedStruct.class));
+          } else if (typedConfig.is(com.github.udpa.udpa.type.v1.TypedStruct.class)) {
+            serviceConfig = convertCustomConfig(
+                typedConfig.unpack(com.github.udpa.udpa.type.v1.TypedStruct.class));
           }
+
           // TODO: support least_request once it is added to the envoy protos.
         } catch (InvalidProtocolBufferException e) {
           throw new ResourceInvalidException(
@@ -227,14 +232,35 @@ class LoadBalancerConfigFactory {
     }
 
     /**
-     * Converts a custom LB config {@link Any} configuration to service config format.
+     * Converts a custom LB config {@link Any} configuration to service config format (xds).
      */
     @SuppressWarnings("unchecked")
-    private static ImmutableMap<String, ?> convertCustomConfig(TypedStruct configTypedStruct)
+    private static ImmutableMap<String, ?> convertCustomConfig(
+        com.github.xds.type.v3.TypedStruct configTypedStruct)
+        throws ResourceInvalidException {
+      return ImmutableMap.of(parseCustomConfigTypeName(configTypedStruct.getTypeUrl()),
+          (Map<String, ?>) parseCustomConfigJson(configTypedStruct.getValue()));
+    }
+
+    /**
+     * Converts a custom LB config {@link Any} configuration to service config format (udpa).
+     */
+    @SuppressWarnings("unchecked")
+    private static ImmutableMap<String, ?> convertCustomConfig(
+        com.github.udpa.udpa.type.v1.TypedStruct configTypedStruct)
+        throws ResourceInvalidException {
+      return ImmutableMap.of(parseCustomConfigTypeName(configTypedStruct.getTypeUrl()),
+          (Map<String, ?>) parseCustomConfigJson(configTypedStruct.getValue()));
+    }
+
+    /**
+     * Print the config Struct into JSON and then parse that into our internal representation.
+     */
+    private static Object parseCustomConfigJson(Struct configStruct)
         throws ResourceInvalidException {
       Object rawJsonConfig = null;
       try {
-        rawJsonConfig = JsonParser.parse(JsonFormat.printer().print(configTypedStruct.getValue()));
+        rawJsonConfig = JsonParser.parse(JsonFormat.printer().print(configStruct));
       } catch (IOException e) {
         throw new ResourceInvalidException("Unable to parse custom LB config JSON", e);
       }
@@ -242,14 +268,16 @@ class LoadBalancerConfigFactory {
       if (!(rawJsonConfig instanceof Map)) {
         throw new ResourceInvalidException("Custom LB config does not contain a JSON object");
       }
+      return rawJsonConfig;
+    }
 
-      String customConfigTypeName = configTypedStruct.getTypeUrl();
+
+    private static String parseCustomConfigTypeName(String customConfigTypeName) {
       if (customConfigTypeName.contains("/")) {
         customConfigTypeName = customConfigTypeName.substring(
             customConfigTypeName.lastIndexOf("/") + 1);
       }
-
-      return ImmutableMap.of(customConfigTypeName, (Map<String, ?>) rawJsonConfig);
+      return customConfigTypeName;
     }
 
     // Used to signal that the LB config goes too deep.
