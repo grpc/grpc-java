@@ -18,10 +18,12 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 
 import com.google.common.base.MoreObjects;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.GracefulSwitchLoadBalancer;
@@ -43,9 +45,15 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
   private final GracefulSwitchLoadBalancer switchLb;
+  private final LoadBalancerRegistry lbRegistry;
 
   WrrLocalityLoadBalancer(Helper helper) {
+    this(helper, LoadBalancerRegistry.getDefaultRegistry());
+  }
+
+  WrrLocalityLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
+    this.lbRegistry = lbRegistry;
     switchLb = new GracefulSwitchLoadBalancer(helper);
     logger = XdsLogger.withLogId(
         InternalLogId.allocate("xds-wrr-locality-lb", helper.getAuthority()));
@@ -88,7 +96,7 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
         .setAttributes(resolvedAddresses.getAttributes().toBuilder()
             .discard(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS).build()).build();
 
-    switchLb.switchTo(wrrLocalityConfig.childPolicy.getProvider());
+    switchLb.switchTo(lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME));
     switchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(weightedPolicySelections))
