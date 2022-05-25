@@ -74,7 +74,7 @@ public class CustomBackendMetricsClient {
         System.err.println("Usage: [name [duration [target]]]");
         System.err.println("");
         System.err.println("  name    The name you wish to be greeted by. Defaults to " + user);
-        System.err.println("  duration  The time period in milliseconds that the server application " +
+        System.err.println("  duration  The time period in milliseconds that the client application " +
             "wait until shutdown. Defaults to " + timeBeforeShutdown);
         System.err.println("  target  The server to connect to. Defaults to " + target);
         System.exit(1);
