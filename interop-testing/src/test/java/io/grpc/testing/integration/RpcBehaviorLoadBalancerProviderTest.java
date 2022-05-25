@@ -28,6 +28,7 @@ import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
@@ -60,7 +61,7 @@ public class RpcBehaviorLoadBalancerProviderTest {
   private LoadBalancer mockDelegateLb;
 
   @Mock
-  private RpcBehaviorHelper mockHelper;
+  private Helper mockHelper;
 
   @Mock
   private SubchannelPicker mockPicker;
@@ -79,7 +80,8 @@ public class RpcBehaviorLoadBalancerProviderTest {
 
   @Test
   public void handleResolvedAddressesDelegated() {
-    RpcBehaviorLoadBalancer lb = new RpcBehaviorLoadBalancer(mockHelper, mockDelegateLb);
+    RpcBehaviorLoadBalancer lb = new RpcBehaviorLoadBalancer(new RpcBehaviorHelper(mockHelper),
+        mockDelegateLb);
     ResolvedAddresses resolvedAddresses = buildResolvedAddresses(buildConfig());
     lb.handleResolvedAddresses(resolvedAddresses);
     verify(mockDelegateLb).handleResolvedAddresses(resolvedAddresses);
