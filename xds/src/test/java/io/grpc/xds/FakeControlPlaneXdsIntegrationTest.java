@@ -300,10 +300,15 @@ public class FakeControlPlaneXdsIntegrationTest {
           Metadata requestHeaders, ServerCallHandler<ReqT, RespT> next) {
         logger.fine("Received following metadata: " + requestHeaders);
 
+        // Make a copy of the headers so that it can be read in a thread-safe manner when copying
+        // it to the response headers.
+        Metadata headersToReturn = new Metadata();
+        headersToReturn.merge(requestHeaders);
+
         return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void sendHeaders(Metadata responseHeaders) {
-            responseHeaders.merge(requestHeaders);
+            responseHeaders.merge(headersToReturn);
             super.sendHeaders(responseHeaders);
           }
 
