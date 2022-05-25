@@ -26,8 +26,6 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.internal.JsonParser;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -94,7 +92,7 @@ public class CustomBackendMetricsClient {
     LoadBalancerRegistry.getDefaultRegistry().register(
         new CustomBackendMetricsLoadBalancerProvider());
     ManagedChannel channel = ManagedChannelBuilder.forTarget(target)
-        .defaultServiceConfig(serviceConfig())
+        .defaultLoadBalancingPolicy(EXAMPLE_LOAD_BALANCER)
         .usePlaintext()
         .build();
     try {
@@ -104,12 +102,5 @@ public class CustomBackendMetricsClient {
     } finally {
       channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
     }
-  }
-
-  @SuppressWarnings("unchecked")
-  private static Map<String, Object> serviceConfig() throws Exception {
-    return (Map<String, Object>) JsonParser.parse(
-        String.format("{\"loadBalancingConfig\": [{\"%s\": {}}]}", EXAMPLE_LOAD_BALANCER)
-        );
   }
 }
