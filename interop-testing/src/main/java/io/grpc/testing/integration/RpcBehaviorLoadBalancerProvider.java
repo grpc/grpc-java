@@ -61,9 +61,10 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new RpcBehaviorLoadBalancer(helper,
+    RpcBehaviorHelper rpcBehaviorHelper = new RpcBehaviorHelper(helper);
+    return new RpcBehaviorLoadBalancer(rpcBehaviorHelper,
         LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin")
-            .newLoadBalancer(helper));
+            .newLoadBalancer(rpcBehaviorHelper));
   }
 
   @Override
@@ -99,8 +100,8 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
     private final RpcBehaviorHelper helper;
     private final LoadBalancer delegateLb;
 
-    RpcBehaviorLoadBalancer(Helper helper, LoadBalancer delegateLb) {
-      this.helper = new RpcBehaviorHelper(helper);
+    RpcBehaviorLoadBalancer(RpcBehaviorHelper helper, LoadBalancer delegateLb) {
+      this.helper = helper;
       this.delegateLb = delegateLb;
     }
 
