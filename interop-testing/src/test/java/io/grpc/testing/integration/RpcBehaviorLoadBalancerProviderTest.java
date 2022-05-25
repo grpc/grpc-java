@@ -80,7 +80,8 @@ public class RpcBehaviorLoadBalancerProviderTest {
 
   @Test
   public void handleResolvedAddressesDelegated() {
-    RpcBehaviorLoadBalancer lb = new RpcBehaviorLoadBalancer(mockHelper, mockDelegateLb);
+    RpcBehaviorLoadBalancer lb = new RpcBehaviorLoadBalancer(new RpcBehaviorHelper(mockHelper),
+        mockDelegateLb);
     ResolvedAddresses resolvedAddresses = buildResolvedAddresses(buildConfig());
     lb.handleResolvedAddresses(resolvedAddresses);
     verify(mockDelegateLb).handleResolvedAddresses(resolvedAddresses);
