@@ -158,7 +158,6 @@ public class FakeControlPlaneXdsIntegrationTest {
    */
   @Before
   public void setUp() throws Exception {
-    ClientXdsClient.enableCustomLbConfig = true;
     startControlPlane();
     nameResolverProvider = XdsNameResolverProvider.createForTest(SCHEME,
         defaultBootstrapOverride());
