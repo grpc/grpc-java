@@ -248,6 +248,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * value might be increased, and {@code Long.MAX_VALUE} nano seconds or an unreasonably large
    * value will disable keepalive. The typical default is infinite when supported.
    *
+   * @throws IllegalArgumentException if time is not positive
    * @throws UnsupportedOperationException if unsupported
    * @since 1.47.0
    */
@@ -263,6 +264,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * <p>This value should be at least multiple times the RTT to allow for lost packets.
    *
+   * @throws IllegalArgumentException if timeout is not positive
    * @throws UnsupportedOperationException if unsupported
    * @since 1.47.0
    */
@@ -278,6 +280,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * be increased. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
    * max connection idle.
    *
+   * @throws IllegalArgumentException if idle is not positive
    * @throws UnsupportedOperationException if unsupported
    * @since 1.47.0
    */
@@ -292,6 +295,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * added to it. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
    * max connection age.
    *
+   * @throws IllegalArgumentException if age is not positive
    * @throws UnsupportedOperationException if unsupported
    * @since 1.47.0
    */
@@ -306,6 +310,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * cancelled, allowing the connection to terminate. {@code Long.MAX_VALUE} nano seconds or an
    * unreasonably large value are considered infinite.
    *
+   * @throws IllegalArgumentException if grace is negative
    * @throws UnsupportedOperationException if unsupported
    * @see #maxConnectionAge(long, TimeUnit)
    * @since 1.47.0
@@ -326,6 +331,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * significant amount of traffic and CPU usage, so clients and servers should be conservative in
    * what they use and accept.
    *
+   * @throws IllegalArgumentException if time is negative
    * @throws UnsupportedOperationException if unsupported
    * @see #permitKeepAliveWithoutCalls(boolean)
    * @since 1.47.0
