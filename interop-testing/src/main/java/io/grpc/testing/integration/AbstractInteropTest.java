@@ -2081,7 +2081,7 @@ public abstract class AbstractInteropTest {
   }
 
   protected int operationTimeoutMillis() {
-    return 15000;
+    return 5000;
   }
 
   /**

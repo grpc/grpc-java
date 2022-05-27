@@ -599,6 +599,11 @@ public class TestServiceClient {
         return null;
       }
     }
+
+    @Override
+    protected int operationTimeoutMillis() {
+      return 15000;
+    }
   }
 
   private static String validTestCasesHelpText() {
