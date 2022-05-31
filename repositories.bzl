@@ -17,7 +17,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auto.value:auto-value-annotations:1.9",
     "com.google.auto.value:auto-value:1.9",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:2.8.9",
+    "com.google.code.gson:gson:2.9.0",
     "com.google.errorprone:error_prone_annotations:2.9.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:31.0.1-android",
