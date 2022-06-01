@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import static io.grpc.testing.integration.AbstractInteropTest.ORCA_OOB_REPORT_KEY;
 import static io.grpc.testing.integration.AbstractInteropTest.ORCA_RPC_REPORT_KEY;
 
+import com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -28,7 +29,6 @@ import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
-import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 

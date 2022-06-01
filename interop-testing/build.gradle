@@ -3,6 +3,7 @@ plugins {
     id "java"
     id "maven-publish"
 
+    id "com.github.johnrengelman.shadow"
     id "com.google.protobuf"
 }
 
@@ -26,13 +27,15 @@ dependencies {
             project(':grpc-services'),
             project(':grpc-stub'),
             project(':grpc-testing'),
-            project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
             libraries.opencensus_contrib_grpc_metrics,
             libraries.google_auth_oauth2_http
+
     compileOnly libraries.javax_annotation
+    def xdsDependency = implementation project(':grpc-xds')
+    shadow configurations.implementation.getDependencies().minus(xdsDependency)
     // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
     // Used instead of google-cloud-logging because it's failing
     // due to a circular dependency on grpc.
@@ -59,6 +62,28 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 compileJava {
     // This isn't a library; it can use beta APIs
     options.errorprone.check("BetaApi", CheckSeverity.OFF)
+}
+jar {
+    // Must use a different archiveClassifier to avoid conflicting with shadowJar
+    archiveClassifier = 'original'
+}
+
+def xdsPrefixName = 'io.grpc.xds'
+shadowJar {
+    archiveClassifier = null
+    dependencies {
+        exclude(dependency {true})
+    }
+    relocate 'com.github.udpa', "${xdsPrefixName}.shaded.com.github.udpa"
+    relocate 'com.github.xds', "${xdsPrefixName}.shaded.com.github.xds"
+    relocate 'com.google.api.expr', "${xdsPrefixName}.shaded.com.google.api.expr"
+    relocate 'com.google.security', "${xdsPrefixName}.shaded.com.google.security"
+    relocate 'envoy.annotations', "${xdsPrefixName}.shaded.envoy.annotations"
+    relocate 'io.envoyproxy', "${xdsPrefixName}.shaded.io.envoyproxy"
+    relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
+    relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
+    relocate 'udpa.annotations', "${xdsPrefixName}.shaded.udpa.annotations"
+    relocate 'xds.annotations', "${xdsPrefixName}.shaded.xds.annotations"
 }
 
 test {
@@ -165,6 +190,9 @@ applicationDistribution.into("bin") {
 applicationDistribution.into("lib") {
     from(configurations.alpnagent)
 }
+// to please shadowJar
+mainClassName = 'io.grpc.testing.integration.TestServiceClient"'
+
 
 publishing {
     publications {
