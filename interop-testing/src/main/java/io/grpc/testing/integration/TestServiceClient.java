@@ -22,8 +22,6 @@ import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
-import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
@@ -62,8 +60,6 @@ public class TestServiceClient {
     TestUtils.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
-    customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
-    LoadBalancerRegistry.getDefaultRegistry().register(customBackendMetricsLoadBalancerProvider);
     client.setUp();
 
     try {
@@ -95,7 +91,6 @@ public class TestServiceClient {
   private int soakPerIterationMaxAcceptableLatencyMs = 1000;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
-  private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
 
@@ -244,10 +239,6 @@ public class TestServiceClient {
   private synchronized void tearDown() {
     try {
       tester.tearDown();
-      if (customBackendMetricsLoadBalancerProvider != null) {
-        LoadBalancerRegistry.getDefaultRegistry()
-            .deregister(customBackendMetricsLoadBalancerProvider);
-      }
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -468,17 +459,6 @@ public class TestServiceClient {
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakOverallTimeoutSeconds);
-        break;
-
-      }
-
-      case ORCA_PER_RPC: {
-        tester.testOrcaPerRpc();
-        break;
-      }
-
-      case ORCA_OOB: {
-        tester.testOrcaOob();
         break;
       }
 

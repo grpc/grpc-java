@@ -56,8 +56,8 @@ public final class CallMetricRecorder {
      * Create a report for all backend metrics.
      */
     CallMetricReport(double cpuUtilization, double memoryUtilization,
-                            Map<String, Double> requestCostMetrics,
-                            Map<String, Double> utilizationMetrics) {
+                                   Map<String, Double> requestCostMetrics,
+                                   Map<String, Double> utilizationMetrics) {
       this.cpuUtilization = cpuUtilization;
       this.memoryUtilization = memoryUtilization;
       this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
