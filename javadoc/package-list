@@ -15,3 +15,4 @@ io.grpc.stub.annotations
 io.grpc.testing
 io.grpc.util
 io.grpc.xds
+io.grpc.xds.orca
