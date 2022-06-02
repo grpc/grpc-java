@@ -58,10 +58,11 @@ public final class AltsProtocolNegotiator {
   private static final AsyncSemaphore handshakeSemaphore = new AsyncSemaphore(32);
 
   @Grpc.TransportAttr
-  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
+  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY =
+      Attributes.Key.create("internal:TSI_PEER");
   @Grpc.TransportAttr
   public static final Attributes.Key<Object> AUTH_CONTEXT_KEY =
-      Attributes.Key.create("AUTH_CONTEXT_KEY");
+      Attributes.Key.create("internal:AUTH_CONTEXT_KEY");
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
