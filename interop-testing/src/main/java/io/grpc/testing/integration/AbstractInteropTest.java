@@ -1750,7 +1750,7 @@ public abstract class AbstractInteropTest {
         .putUtilization("util", 0.30499)
         .build();
     blockingStub.withOption(ORCA_RPC_REPORT_KEY, reportHolder).unaryCall(
-        SimpleRequest.newBuilder().setOrcaPerRpcReport(answer).build());
+        SimpleRequest.newBuilder().setOrcaPerQueryReport(answer).build());
     assertThat(reportHolder.get()).isEqualTo(answer);
   }
 
