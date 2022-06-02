@@ -44,7 +44,7 @@ public final class EquivalentAddressGroup {
   @Attr
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6138")
   public static final Attributes.Key<String> ATTR_AUTHORITY_OVERRIDE =
-      Attributes.Key.create("io.grpc.EquivalentAddressGroup.authorityOverride");
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE");
   private final List<SocketAddress> addrs;
   private final Attributes attrs;
 

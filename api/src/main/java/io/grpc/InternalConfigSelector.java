@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
 public abstract class InternalConfigSelector {
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<io.grpc.InternalConfigSelector> KEY
-      = Attributes.Key.create("io.grpc.config-selector");
+      = Attributes.Key.create("internal:io.grpc.config-selector");
 
   // Use PickSubchannelArgs for SelectConfigArgs for now. May change over time.
   /** Selects the config for an PRC. */
