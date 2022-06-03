@@ -19,13 +19,20 @@ package io.grpc;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
-import io.grpc.ClientStreamTracer.StreamInfo;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.Test;
 
 public class GlobalInterceptorsTest {
+
+  private static final ServerStreamTracer.Factory DUMMY_SERVER_TRACER =
+      new ServerStreamTracer.Factory() {
+        @Override
+        public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+          throw new UnsupportedOperationException();
+        }
+      };
 
   @Test
   public void setClientInterceptors() {
@@ -34,39 +41,8 @@ public class GlobalInterceptorsTest {
     clientInterceptors.add(new NoopClientInterceptor());
     clientInterceptors.add(new NoopClientInterceptor());
 
-    instance.setGlobalClientInterceptors(clientInterceptors);
+    instance.setGlobalInterceptorsTracers(clientInterceptors, null, null);
     assertThat(instance.getGlobalClientInterceptors()).hasSize(2);
-  }
-
-  @Test
-  public void setClientInterceptors_twice() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ClientInterceptor> clientInterceptors = new ArrayList<>();
-    clientInterceptors.add(new NoopClientInterceptor());
-    clientInterceptors.add(new NoopClientInterceptor());
-
-    instance.setGlobalClientInterceptors(clientInterceptors);
-    try {
-      instance.setGlobalClientInterceptors(clientInterceptors);
-      fail("should have failed for calling setClientInterceptors() again");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Client interceptors are already set");
-    }
-  }
-
-  @Test
-  public void getBeforeSet_clientInterceptors() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ClientInterceptor> clientInterceptors = instance.getGlobalClientInterceptors();
-    assertThat(clientInterceptors).isEmpty();
-
-    try {
-      instance.setGlobalClientInterceptors(
-          new ArrayList<>(Arrays.asList(new NoopClientInterceptor())));
-      fail("should have failed for invoking set call after get is already called");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after corresponding Get call");
-    }
   }
 
   @Test
@@ -75,81 +51,8 @@ public class GlobalInterceptorsTest {
     List<ServerInterceptor> serverInterceptors = new ArrayList<>();
     serverInterceptors.add(new NoopServerInterceptor());
 
-    instance.setGlobalServerInterceptors(serverInterceptors);
+    instance.setGlobalInterceptorsTracers(null, serverInterceptors, null);
     assertThat(instance.getGlobalServerInterceptors()).hasSize(1);
-  }
-
-  @Test
-  public void setServerInterceptors_twice() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ServerInterceptor> serverInterceptors = new ArrayList<>();
-    serverInterceptors.add(new NoopServerInterceptor());
-    serverInterceptors.add(new NoopServerInterceptor());
-
-    instance.setGlobalServerInterceptors(serverInterceptors);
-    try {
-      instance.setGlobalServerInterceptors(serverInterceptors);
-      fail("should have failed for calling setClientInterceptors() again");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Server interceptors are already set");
-    }
-  }
-
-  @Test
-  public void getBeforeSet_serverInterceptors() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ServerInterceptor> serverInterceptors = instance.getGlobalServerInterceptors();
-    assertThat(serverInterceptors).isEmpty();
-
-    try {
-      instance.setGlobalServerInterceptors(
-          new ArrayList<>(Arrays.asList(new NoopServerInterceptor())));
-      fail("should have failed for invoking set call after get is already called");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after corresponding Get call");
-    }
-  }
-
-  @Test
-  public void setClientStreamTracerFactories() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ClientStreamTracer.Factory> clientStreamTracerFactories = new ArrayList<>();
-    clientStreamTracerFactories.add(DUMMY_CLIENT_TRACER);
-
-    instance.setGlobalClientStreamTracerFactories(clientStreamTracerFactories);
-    assertThat(instance.getGlobalClientStreamTracerFactories()).hasSize(1);
-  }
-
-  @Test
-  public void setClientStreamTracerFactories_twice() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ClientStreamTracer.Factory> clientStreamTracerFactories = new ArrayList<>();
-    clientStreamTracerFactories.add(DUMMY_CLIENT_TRACER);
-    clientStreamTracerFactories.add(DUMMY_CLIENT_TRACER);
-
-    instance.setGlobalClientStreamTracerFactories(clientStreamTracerFactories);
-    try {
-      instance.setGlobalClientStreamTracerFactories(clientStreamTracerFactories);
-      fail("should have failed for calling setClientInterceptors() again");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("ClientStreamTracer factories are already set");
-    }
-  }
-
-  @Test
-  public void getBeforeSet_clientStreamTracerFactories() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ClientStreamTracer.Factory> clientStreamTracerFactories =
-        instance.getGlobalClientStreamTracerFactories();
-    assertThat(clientStreamTracerFactories).isEmpty();
-
-    try {
-      instance.setGlobalClientStreamTracerFactories(
-          new ArrayList<>(Arrays.asList(DUMMY_CLIENT_TRACER)));
-      fail("should have failed for invoking set call after get is already called");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after corresponding Get call");
-    }
   }
 
   @Test
@@ -158,23 +61,69 @@ public class GlobalInterceptorsTest {
     List<ServerStreamTracer.Factory> serverStreamTracerFactories = new ArrayList<>();
     serverStreamTracerFactories.add(DUMMY_SERVER_TRACER);
 
-    instance.setGlobalServerStreamTracerFactories(serverStreamTracerFactories);
+    instance.setGlobalInterceptorsTracers(null, null, serverStreamTracerFactories);
     assertThat(instance.getGlobalServerStreamTracerFactories()).hasSize(1);
   }
 
   @Test
-  public void setServerStreamTracerFactories_twice() {
+  public void setInterceptorsTracers() {
     GlobalInterceptors instance = new GlobalInterceptors();
-    List<ServerStreamTracer.Factory> serverStreamTracerFactories = new ArrayList<>();
-    serverStreamTracerFactories.add(DUMMY_SERVER_TRACER);
-    serverStreamTracerFactories.add(DUMMY_SERVER_TRACER);
+    instance.setGlobalInterceptorsTracers(
+        new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
+        new ArrayList<>(Arrays.asList(new NoopServerInterceptor())),
+        new ArrayList<>(Arrays.asList(DUMMY_SERVER_TRACER, DUMMY_SERVER_TRACER)));
+    assertThat(instance.getGlobalClientInterceptors()).hasSize(1);
+    assertThat(instance.getGlobalServerInterceptors()).hasSize(1);
+    assertThat(instance.getGlobalServerStreamTracerFactories()).hasSize(2);
+  }
 
-    instance.setGlobalServerStreamTracerFactories(serverStreamTracerFactories);
+  @Test
+  public void setGlobalInterceptorsTracers_twice() {
+    GlobalInterceptors instance = new GlobalInterceptors();
+    instance.setGlobalInterceptorsTracers(
+        new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
+        null,
+        new ArrayList<>(Arrays.asList(DUMMY_SERVER_TRACER)));
     try {
-      instance.setGlobalServerStreamTracerFactories(serverStreamTracerFactories);
-      fail("should have failed for calling setClientInterceptors() again");
+      instance.setGlobalInterceptorsTracers(
+          null, new ArrayList<>(Arrays.asList(new NoopServerInterceptor())), null);
+      fail("should have failed for calling setGlobalInterceptorsTracers() again");
     } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("ServerStreamTracer factories are already set");
+      assertThat(e).hasMessageThat().isEqualTo("Global interceptors and tracers are already set");
+    }
+  }
+
+  @Test
+  public void getBeforeSet_clientInterceptors() {
+    GlobalInterceptors instance = new GlobalInterceptors();
+    List<ClientInterceptor> clientInterceptors = instance.getGlobalClientInterceptors();
+    assertThat(clientInterceptors).isNull();
+
+    try {
+      instance.setGlobalInterceptorsTracers(
+          new ArrayList<>(Arrays.asList(new NoopClientInterceptor())), null, null);
+      fail("should have failed for invoking set call after get is already called");
+    } catch (IllegalStateException e) {
+      assertThat(e)
+          .hasMessageThat()
+          .isEqualTo("Set cannot be called after any corresponding get call");
+    }
+  }
+
+  @Test
+  public void getBeforeSet_serverInterceptors() {
+    GlobalInterceptors instance = new GlobalInterceptors();
+    List<ServerInterceptor> serverInterceptors = instance.getGlobalServerInterceptors();
+    assertThat(serverInterceptors).isNull();
+
+    try {
+      instance.setGlobalInterceptorsTracers(
+          null, new ArrayList<>(Arrays.asList(new NoopServerInterceptor())), null);
+      fail("should have failed for invoking set call after get is already called");
+    } catch (IllegalStateException e) {
+      assertThat(e)
+          .hasMessageThat()
+          .isEqualTo("Set cannot be called after any corresponding get call");
     }
   }
 
@@ -183,14 +132,16 @@ public class GlobalInterceptorsTest {
     GlobalInterceptors instance = new GlobalInterceptors();
     List<ServerStreamTracer.Factory> serverStreamTracerFactories =
         instance.getGlobalServerStreamTracerFactories();
-    assertThat(serverStreamTracerFactories).isEmpty();
+    assertThat(serverStreamTracerFactories).isNull();
 
     try {
-      instance.setGlobalServerStreamTracerFactories(
-          new ArrayList<>(Arrays.asList(DUMMY_SERVER_TRACER)));
+      instance.setGlobalInterceptorsTracers(
+          null, null, new ArrayList<>(Arrays.asList(DUMMY_SERVER_TRACER)));
       fail("should have failed for invoking set call after get is already called");
     } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after corresponding Get call");
+      assertThat(e)
+          .hasMessageThat()
+          .isEqualTo("Set cannot be called after any corresponding get call");
     }
   }
 
@@ -209,20 +160,4 @@ public class GlobalInterceptorsTest {
       return next.startCall(call, headers);
     }
   }
-
-  private static final ClientStreamTracer.Factory DUMMY_CLIENT_TRACER =
-      new ClientStreamTracer.Factory() {
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          throw new UnsupportedOperationException();
-        }
-      };
-
-  private static final ServerStreamTracer.Factory DUMMY_SERVER_TRACER =
-      new ServerStreamTracer.Factory() {
-        @Override
-        public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-          throw new UnsupportedOperationException();
-        }
-      };
 }
