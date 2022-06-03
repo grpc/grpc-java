@@ -123,7 +123,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       return;
     }
 
-    echoCallMetricsFromPayload(req.getOrcaPerRpcReport());
+    echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
     echoMetricsFromPayload(req.getOrcaOobReport());
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
