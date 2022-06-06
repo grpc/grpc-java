@@ -524,6 +524,23 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void ldsResourceUpdated_withXdstpResourceName_withUnknownAuthority() {
+    BootstrapperImpl.enableFederation = true;
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1"
+        : "xdstp://unknown.example.com/envoy.api.v2.Listener/listener1";
+    xdsClient.watchLdsResource(ldsResourceName, ldsResourceWatcher);
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(error.getDescription()).isEqualTo(
+        "Wrong configuration: xds server does not exist for resource " + ldsResourceName);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    xdsClient.cancelLdsResourceWatch(ldsResourceName, ldsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+  }
+
+  @Test
   public void ldsResponseErrorHandling_allResourcesFailedUnpack() {
     DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
     verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
@@ -893,6 +910,23 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void rdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
+    BootstrapperImpl.enableFederation = true;
+    String rdsResourceName = useProtocolV3()
+        ? "xdstp://unknown.example.com/envoy.config.route.v3.RouteConfiguration/route1"
+        : "xdstp://unknown.example.com/envoy.api.v2.RouteConfiguration/route1";
+    xdsClient.watchRdsResource(rdsResourceName, rdsResourceWatcher);
+    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(error.getDescription()).isEqualTo(
+        "Wrong configuration: xds server does not exist for resource " + rdsResourceName);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    xdsClient.cancelRdsResourceWatch(rdsResourceName, rdsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+  }
+
+  @Test
   public void cdsResourceUpdated_withXdstpResourceName_withWrongType() {
     BootstrapperImpl.enableFederation = true;
     String cdsResourceName = useProtocolV3()
@@ -911,6 +945,23 @@ public abstract class ClientXdsClientTestBase {
         CDS, cdsResourceName, "", "0000", NODE,
         ImmutableList.of(
             "Unsupported resource name: " + cdsResourceNameWithWrongType + " for type: CDS"));
+  }
+
+  @Test
+  public void cdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
+    BootstrapperImpl.enableFederation = true;
+    String cdsResourceName = useProtocolV3()
+        ? "xdstp://unknown.example.com/envoy.config.cluster.v3.Cluster/cluster1"
+        : "xdstp://unknown.example.com/envoy.api.v2.Cluster/cluster1";
+    xdsClient.watchCdsResource(cdsResourceName, cdsResourceWatcher);
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(error.getDescription()).isEqualTo(
+        "Wrong configuration: xds server does not exist for resource " + cdsResourceName);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    xdsClient.cancelCdsResourceWatch(cdsResourceName, cdsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
 
   @Test
@@ -935,6 +986,23 @@ public abstract class ClientXdsClientTestBase {
         EDS, edsResourceName, "", "0000", NODE,
         ImmutableList.of(
             "Unsupported resource name: " + edsResourceNameWithWrongType + " for type: EDS"));
+  }
+
+  @Test
+  public void edsResourceUpdated_withXdstpResourceName_unknownAuthority() {
+    BootstrapperImpl.enableFederation = true;
+    String edsResourceName = useProtocolV3()
+        ? "xdstp://unknown.example.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
+        : "xdstp://unknown.example.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
+    xdsClient.watchEdsResource(edsResourceName, edsResourceWatcher);
+    verify(edsResourceWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(error.getDescription()).isEqualTo(
+        "Wrong configuration: xds server does not exist for resource " + edsResourceName);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    xdsClient.cancelEdsResourceWatch(edsResourceName, edsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
 
   @Test

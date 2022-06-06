@@ -2135,17 +2135,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       @Override
       public void run() {
         ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
-
-
         if (subscriber == null) {
           logger.log(XdsLogLevel.INFO, "Subscribe LDS resource {0}", resourceName);
-          try {
-            subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
-          } catch (Exception ex) {
-            watcher.onError();
-          }
+          subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
           ldsResourceSubscribers.put(resourceName, subscriber);
-          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.LDS);
+          if (subscriber.xdsChannel != null) {
+            subscriber.xdsChannel.adjustResourceSubscription(ResourceType.LDS);
+          }
         }
         subscriber.addWatcher(watcher);
       }
@@ -2163,7 +2159,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           subscriber.stopTimer();
           logger.log(XdsLogLevel.INFO, "Unsubscribe LDS resource {0}", resourceName);
           ldsResourceSubscribers.remove(resourceName);
-          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.LDS);
+          if (subscriber.xdsChannel != null) {
+            subscriber.xdsChannel.adjustResourceSubscription(ResourceType.LDS);
+          }
         }
       }
     });
@@ -2179,7 +2177,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           logger.log(XdsLogLevel.INFO, "Subscribe RDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.RDS, resourceName);
           rdsResourceSubscribers.put(resourceName, subscriber);
-          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.RDS);
+          if (subscriber.xdsChannel != null) {
+            subscriber.xdsChannel.adjustResourceSubscription(ResourceType.RDS);
+          }
         }
         subscriber.addWatcher(watcher);
       }
@@ -2197,7 +2197,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           subscriber.stopTimer();
           logger.log(XdsLogLevel.INFO, "Unsubscribe RDS resource {0}", resourceName);
           rdsResourceSubscribers.remove(resourceName);
-          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.RDS);
+          if (subscriber.xdsChannel != null) {
+            subscriber.xdsChannel.adjustResourceSubscription(ResourceType.RDS);
+          }
         }
       }
     });
@@ -2213,7 +2215,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           logger.log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.CDS, resourceName);
           cdsResourceSubscribers.put(resourceName, subscriber);
-          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.CDS);
+          if (subscriber.xdsChannel != null) {
+            subscriber.xdsChannel.adjustResourceSubscription(ResourceType.CDS);
+          }
         }
         subscriber.addWatcher(watcher);
       }
@@ -2231,7 +2235,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           subscriber.stopTimer();
           logger.log(XdsLogLevel.INFO, "Unsubscribe CDS resource {0}", resourceName);
           cdsResourceSubscribers.remove(resourceName);
-          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.CDS);
+          if (subscriber.xdsChannel != null) {
+            subscriber.xdsChannel.adjustResourceSubscription(ResourceType.CDS);
+          }
         }
       }
     });
@@ -2247,7 +2253,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           logger.log(XdsLogLevel.INFO, "Subscribe EDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.EDS, resourceName);
           edsResourceSubscribers.put(resourceName, subscriber);
-          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.EDS);
+          if (subscriber.xdsChannel != null) {
+            subscriber.xdsChannel.adjustResourceSubscription(ResourceType.EDS);
+          }
         }
         subscriber.addWatcher(watcher);
       }
@@ -2265,7 +2273,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           subscriber.stopTimer();
           logger.log(XdsLogLevel.INFO, "Unsubscribe EDS resource {0}", resourceName);
           edsResourceSubscribers.remove(resourceName);
-          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.EDS);
+          if (subscriber.xdsChannel != null) {
+            subscriber.xdsChannel.adjustResourceSubscription(ResourceType.EDS);
+          }
         }
       }
     });
@@ -2422,7 +2432,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
    */
   private final class ResourceSubscriber {
     private final ServerInfo serverInfo;
-    private final AbstractXdsClient xdsChannel;
+    @Nullable private final AbstractXdsClient xdsChannel;
     private final ResourceType type;
     private final String resource;
     private final Set<ResourceWatcher> watchers = new HashSet<>();
@@ -2430,12 +2440,19 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     private boolean absent;
     private ScheduledHandle respTimer;
     private ResourceMetadata metadata;
+    @Nullable private String errorDescription;
 
     ResourceSubscriber(ResourceType type, String resource) {
       syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
       this.resource = resource;
       this.serverInfo = getServerInfo(resource);
+      if (serverInfo == null) {
+        errorDescription = "Wrong configuration: xds server does not exist for resource "
+            + resource;
+        this.xdsChannel = null;
+        return;
+      }
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
       // is created but not yet requested because the client is in backoff.
       this.metadata = ResourceMetadata.newResourceMetadataUnknown();
@@ -2447,6 +2464,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       restartTimer();
     }
 
+    @Nullable
     private ServerInfo getServerInfo(String resource) {
       if (BootstrapperImpl.enableFederation && resource.startsWith(XDSTP_SCHEME)) {
         URI uri = URI.create(resource);
@@ -2455,6 +2473,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           authority = "";
         }
         AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(authority);
+        if (authorityInfo == null || authorityInfo.xdsServers().size() < 1) {
+          return null;
+        }
         return authorityInfo.xdsServers().get(0);
       }
       return bootstrapInfo.servers().get(0); // use first server
@@ -2463,6 +2484,10 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     void addWatcher(ResourceWatcher watcher) {
       checkArgument(!watchers.contains(watcher), "watcher %s already registered", watcher);
       watchers.add(watcher);
+      if (errorDescription != null) {
+        watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
+        return;
+      }
       if (data != null) {
         notifyWatcher(watcher, data);
       } else if (absent) {
