@@ -35,7 +35,6 @@ dependencies {
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
             libraries.re2j,
-            libraries.bouncycastle,
             libraries.autovalue_annotation,
             libraries.opencensus_proto,
             libraries.protobuf_util
