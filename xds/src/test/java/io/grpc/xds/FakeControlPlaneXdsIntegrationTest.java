@@ -17,23 +17,30 @@
 
 package io.grpc.xds;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static org.junit.Assert.assertEquals;
 
+import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
+import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
+import com.google.protobuf.Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
+import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
@@ -53,12 +60,27 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener;
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.NameResolverRegistry;
 import io.grpc.Server;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.Status;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -100,6 +122,7 @@ public class FakeControlPlaneXdsIntegrationTest {
   private Server controlPlane;
   private XdsTestControlPlaneService controlPlaneService;
   private XdsNameResolverProvider nameResolverProvider;
+  private MetadataLoadBalancerProvider metadataLoadBalancerProvider;
 
   protected int testServerPort = 0;
   protected int controlPlaneServicePort;
@@ -139,6 +162,8 @@ public class FakeControlPlaneXdsIntegrationTest {
     nameResolverProvider = XdsNameResolverProvider.createForTest(SCHEME,
         defaultBootstrapOverride());
     NameResolverRegistry.getDefaultRegistry().register(nameResolverProvider);
+    metadataLoadBalancerProvider = new MetadataLoadBalancerProvider();
+    LoadBalancerRegistry.getDefaultRegistry().register(metadataLoadBalancerProvider);
   }
 
   @After
@@ -156,6 +181,7 @@ public class FakeControlPlaneXdsIntegrationTest {
       }
     }
     NameResolverRegistry.getDefaultRegistry().deregister(nameResolverProvider);
+    LoadBalancerRegistry.getDefaultRegistry().deregister(metadataLoadBalancerProvider);
   }
 
   @Test
@@ -186,7 +212,113 @@ public class FakeControlPlaneXdsIntegrationTest {
     assertEquals(goldenResponse, blockingStub.unaryRpc(request));
   }
 
+  @Test
+  public void pingPong_metadataLoadBalancer() throws Exception {
+    String tcpListenerName = SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT;
+    String serverHostName = "test-server";
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.of(
+        tcpListenerName, serverListener(tcpListenerName),
+        serverHostName, clientListener(serverHostName)
+    ));
+    startServer(defaultBootstrapOverride());
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_RDS,
+        ImmutableMap.of(RDS_NAME, rds(serverHostName)));
+
+    // Use the LoadBalancingPolicy to configure a custom LB that adds a header to server calls.
+    Policy metadataLbPolicy = Policy.newBuilder().setTypedExtensionConfig(
+        TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
+            TypedStruct.newBuilder().setTypeUrl("type.googleapis.com/test.MetadataLoadBalancer")
+                .setValue(Struct.newBuilder()
+                    .putFields("metadataKey", Value.newBuilder().setStringValue("foo").build())
+                    .putFields("metadataValue", Value.newBuilder().setStringValue("bar").build()))
+                .build()))).build();
+    Policy wrrLocalityPolicy = Policy.newBuilder()
+        .setTypedExtensionConfig(TypedExtensionConfig.newBuilder().setTypedConfig(
+            Any.pack(WrrLocality.newBuilder().setEndpointPickingPolicy(
+                LoadBalancingPolicy.newBuilder().addPolicies(metadataLbPolicy)).build()))).build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS,
+        ImmutableMap.<String, Message>of(CLUSTER_NAME, cds().toBuilder().setLoadBalancingPolicy(
+            LoadBalancingPolicy.newBuilder()
+                .addPolicies(wrrLocalityPolicy)).build()));
+
+    InetSocketAddress edsInetSocketAddress = (InetSocketAddress) server.getListenSockets().get(0);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
+        ImmutableMap.<String, Message>of(EDS_NAME, eds(edsInetSocketAddress.getHostName(),
+            edsInetSocketAddress.getPort())));
+    ManagedChannel channel = Grpc.newChannelBuilder(SCHEME + ":///" + serverHostName,
+        InsecureChannelCredentials.create()).build();
+    ResponseHeaderClientInterceptor responseHeaderInterceptor
+        = new ResponseHeaderClientInterceptor();
+
+    // We add an interceptor to catch the response headers from the server.
+    blockingStub = SimpleServiceGrpc.newBlockingStub(channel)
+        .withInterceptors(responseHeaderInterceptor);
+    SimpleRequest request = SimpleRequest.newBuilder()
+        .build();
+    SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setResponseMessage("Hi, xDS!")
+        .build();
+    assertEquals(goldenResponse, blockingStub.unaryRpc(request));
+
+    // Make sure we got back the header we configured the LB with.
+    assertThat(responseHeaderInterceptor.reponseHeaders.get(
+        Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER))).isEqualTo("bar");
+  }
+
+  // Captures response headers from the server.
+  private class ResponseHeaderClientInterceptor implements ClientInterceptor {
+    Metadata reponseHeaders;
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
+        CallOptions callOptions, Channel next) {
+
+      return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+        @Override
+        public void start(ClientCall.Listener<RespT> responseListener, Metadata headers) {
+          super.start(new ForwardingClientCallListener<RespT>() {
+            @Override
+            protected ClientCall.Listener<RespT> delegate() {
+              return responseListener;
+            }
+
+            @Override
+            public void onHeaders(Metadata headers) {
+              reponseHeaders = headers;
+            }
+          }, headers);
+        }
+      };
+    }
+  }
+
   private void startServer(Map<String, ?> bootstrapOverride) throws Exception {
+    ServerInterceptor metadataInterceptor = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+          Metadata requestHeaders, ServerCallHandler<ReqT, RespT> next) {
+        logger.fine("Received following metadata: " + requestHeaders);
+
+        // Make a copy of the headers so that it can be read in a thread-safe manner when copying
+        // it to the response headers.
+        Metadata headersToReturn = new Metadata();
+        headersToReturn.merge(requestHeaders);
+
+        return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
+          @Override
+          public void sendHeaders(Metadata responseHeaders) {
+            responseHeaders.merge(headersToReturn);
+            super.sendHeaders(responseHeaders);
+          }
+
+          @Override
+          public void close(Status status, Metadata trailers) {
+            super.close(status, trailers);
+          }
+        }, requestHeaders);
+      }
+    };
+
     SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =
         new SimpleServiceGrpc.SimpleServiceImplBase() {
           @Override
@@ -202,6 +334,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     XdsServerBuilder serverBuilder = XdsServerBuilder.forPort(
             0, InsecureServerCredentials.create())
         .addService(simpleServiceImpl)
+        .intercept(metadataInterceptor)
         .overrideBootstrapForTest(bootstrapOverride);
     server = serverBuilder.build().start();
     testServerPort = server.getPort();

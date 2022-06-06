@@ -114,7 +114,7 @@ public abstract class LoadBalancer {
   @Internal
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
-      Attributes.Key.create("health-checking-config");
+      Attributes.Key.create("internal:health-checking-config");
   private int recursionCount;
 
   /**

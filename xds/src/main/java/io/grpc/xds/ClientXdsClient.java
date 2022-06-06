@@ -164,10 +164,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
   @VisibleForTesting
   static boolean enableCustomLbConfig =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"))
-          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"))
-          : Boolean.parseBoolean(
-              System.getProperty("io.grpc.xds.experimentalEnableCustomLbConfig"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"))
+          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"));
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -2450,7 +2448,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     }
 
     private ServerInfo getServerInfo(String resource) {
-      if (resource.startsWith(XDSTP_SCHEME)) {
+      if (BootstrapperImpl.enableFederation && resource.startsWith(XDSTP_SCHEME)) {
         URI uri = URI.create(resource);
         String authority = uri.getAuthority();
         if (authority == null) {

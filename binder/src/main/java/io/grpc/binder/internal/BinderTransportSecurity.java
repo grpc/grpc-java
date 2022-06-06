@@ -40,7 +40,7 @@ import javax.annotation.CheckReturnValue;
 public final class BinderTransportSecurity {
 
   private static final Attributes.Key<TransportAuthorizationState> TRANSPORT_AUTHORIZATION_STATE =
-      Attributes.Key.create("transport-authorization-state");
+      Attributes.Key.create("internal:transport-authorization-state");
 
   private BinderTransportSecurity() {}
 

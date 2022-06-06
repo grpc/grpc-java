@@ -26,6 +26,8 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.MetricRecorder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
@@ -36,10 +38,13 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
@@ -57,13 +62,19 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
+  private final MetricRecorder metricRecorder;
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
    */
-  public TestServiceImpl(ScheduledExecutorService executor) {
+  public TestServiceImpl(ScheduledExecutorService executor, MetricRecorder metricRecorder) {
     this.executor = executor;
     this.compressableBuffer = ByteString.copyFrom(new byte[1024]);
+    this.metricRecorder = metricRecorder;
+  }
+
+  public TestServiceImpl(ScheduledExecutorService executor) {
+    this(executor, MetricRecorder.newInstance());
   }
 
   @Override
@@ -112,8 +123,31 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       return;
     }
 
+    echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
+    echoMetricsFromPayload(req.getOrcaOobReport());
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
+  }
+
+  private static void echoCallMetricsFromPayload(TestOrcaReport report) {
+    CallMetricRecorder recorder = CallMetricRecorder.getCurrent()
+        .recordCpuUtilizationMetric(report.getCpuUtilization())
+        .recordMemoryUtilizationMetric(report.getMemoryUtilization());
+    for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
+      recorder.recordUtilizationMetric(entry.getKey(), entry.getValue());
+    }
+    for (Map.Entry<String, Double> entry : report.getRequestCostMap().entrySet()) {
+      recorder.recordCallMetric(entry.getKey(), entry.getValue());
+    }
+  }
+
+  private void echoMetricsFromPayload(TestOrcaReport report) {
+    metricRecorder.setCpuUtilizationMetric(report.getCpuUtilization());
+    metricRecorder.setMemoryUtilizationMetric(report.getMemoryUtilization());
+    metricRecorder.setAllUtilizationMetrics(new HashMap<>());
+    for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
+      metricRecorder.putUtilizationMetric(entry.getKey(), entry.getValue());
+    }
   }
 
   /**

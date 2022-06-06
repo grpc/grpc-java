@@ -109,17 +109,18 @@ public abstract class BinderTransport
    * active transport.
    */
   @Internal
-  public static final Attributes.Key<Integer> REMOTE_UID = Attributes.Key.create("remote-uid");
+  public static final Attributes.Key<Integer> REMOTE_UID =
+      Attributes.Key.create("internal:remote-uid");
 
   /** The authority of the server. */
   @Internal
   public static final Attributes.Key<String> SERVER_AUTHORITY =
-      Attributes.Key.create("server-authority");
+      Attributes.Key.create("internal:server-authority");
 
   /** A transport attribute to hold the {@link InboundParcelablePolicy}. */
   @Internal
   public static final Attributes.Key<InboundParcelablePolicy> INBOUND_PARCELABLE_POLICY =
-      Attributes.Key.create("inbound-parcelable-policy");
+      Attributes.Key.create("internal:inbound-parcelable-policy");
 
   /**
    * Version code for this wire format.

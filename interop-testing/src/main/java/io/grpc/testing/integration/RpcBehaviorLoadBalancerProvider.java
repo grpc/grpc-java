@@ -38,7 +38,7 @@ import javax.annotation.Nonnull;
  * looks for an "rpc_behavior" field in its configuration and includes the value in the
  * "rpc-behavior" metadata entry that is sent to the server. This will cause the test server to
  * behave in a predefined way. Endpoint picking logic is delegated to the
- * {@link PickFirstLoadBalancer}.
+ * {@link RoundRobinLoadBalancer}.
  *
  * <p>Initial use case is to prove that a custom load balancer can be configured by the control
  * plane via xDS. An interop test will configure this LB and then verify it has been correctly
@@ -61,9 +61,10 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new RpcBehaviorLoadBalancer(helper,
+    RpcBehaviorHelper rpcBehaviorHelper = new RpcBehaviorHelper(helper);
+    return new RpcBehaviorLoadBalancer(rpcBehaviorHelper,
         LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin")
-            .newLoadBalancer(helper));
+            .newLoadBalancer(rpcBehaviorHelper));
   }
 
   @Override
@@ -99,8 +100,8 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
     private final RpcBehaviorHelper helper;
     private final LoadBalancer delegateLb;
 
-    RpcBehaviorLoadBalancer(Helper helper, LoadBalancer delegateLb) {
-      this.helper = new RpcBehaviorHelper(helper);
+    RpcBehaviorLoadBalancer(RpcBehaviorHelper helper, LoadBalancer delegateLb) {
+      this.helper = helper;
       this.delegateLb = delegateLb;
     }
 

@@ -65,7 +65,9 @@ public class TestCasesTest {
       "unimplemented_service",
       "cancel_after_begin",
       "cancel_after_first_response",
-      "timeout_on_sleeping_server"
+      "timeout_on_sleeping_server",
+      "orca_per_rpc",
+      "orca_oob"
     };
 
     // additional test cases
