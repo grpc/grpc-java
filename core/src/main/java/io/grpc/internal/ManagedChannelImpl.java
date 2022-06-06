@@ -349,6 +349,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void run() {
+      // Workaround timer scheduled while in idle mode. This can happen from handleNotInUse() after
+      // an explicit enterIdleMode() by the user. Protecting here as other locations are a bit too
+      // subtle to change rapidly to resolve the channel panic. See #8714
       if (lbHelper == null) {
         return;
       }
