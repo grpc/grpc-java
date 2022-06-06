@@ -2448,7 +2448,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       this.resource = resource;
       this.serverInfo = getServerInfo(resource);
       if (serverInfo == null) {
-        errorDescription = "Wrong configuration: xds server does not exist for resource "
+        this.errorDescription = "Wrong configuration: xds server does not exist for resource "
             + resource;
         this.xdsChannel = null;
         return;
@@ -2473,7 +2473,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           authority = "";
         }
         AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(authority);
-        if (authorityInfo == null || authorityInfo.xdsServers().size() < 1) {
+        if (authorityInfo == null || authorityInfo.xdsServers().isEmpty()) {
           return null;
         }
         return authorityInfo.xdsServers().get(0);
