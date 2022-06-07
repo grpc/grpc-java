@@ -189,7 +189,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
     @Test
     public void altsHandler_googleCfe_federation() {
       Attributes attrs = Attributes.newBuilder().set(
-          XDS_CLUSTER_NAME_ATTR_KEY, "xdstp://").build();
+          XDS_CLUSTER_NAME_ATTR_KEY, "xdstp1://").build();
       subtest_altsHandler(attrs);
     }
 
@@ -197,7 +197,8 @@ public final class GoogleDefaultProtocolNegotiatorTest {
     public void tlsHanlder_googleCfe() {
       Attributes attrs = Attributes.newBuilder().set(
           XDS_CLUSTER_NAME_ATTR_KEY,
-          "//traffic-director-c2p.xds.googleapis.com/envoy.config.cluster.v3.Cluster/google_cfe_")
+          "xdstp://traffic-director-c2p.xds.googleapis.com/"
+              + "envoy.config.cluster.v3.Cluster/google_cfe_")
           .build();
       subtest_tlsHandler(attrs);
     }

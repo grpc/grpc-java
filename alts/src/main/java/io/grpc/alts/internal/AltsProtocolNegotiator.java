@@ -322,7 +322,7 @@ public final class AltsProtocolNegotiator {
       if (clusterName.startsWith(DIRECT_PATH_SERVICE_CFE_CLUSTER_PREFIX)) {
         return false;
       }
-      if (clusterName.startsWith("xdstp:")) {
+      if (!clusterName.startsWith("xdstp:")) {
         return true;
       }
       try {
