@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <uses-sdk android:minSdkVersion="19" />
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
