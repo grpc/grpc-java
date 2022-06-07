@@ -23,7 +23,7 @@ import java.util.List;
 /** The collection of global interceptors and global server stream tracers. */
 @Internal
 public final class GlobalInterceptors {
-  private static volatile GlobalInterceptors instance = null;
+  private static GlobalInterceptors instance = null;
   private List<ClientInterceptor> clientInterceptors;
   private List<ServerInterceptor> serverInterceptors;
   private List<ServerStreamTracer.Factory> serverStreamTracerFactories;
@@ -36,11 +36,7 @@ public final class GlobalInterceptors {
   /** Returns the GlobalInterceptors instance. */
   private static synchronized GlobalInterceptors getInstance() {
     if (instance == null) {
-      synchronized (GlobalInterceptors.class) {
-        if (instance == null) {
-          instance = new GlobalInterceptors();
-        }
-      }
+      instance = new GlobalInterceptors();
     }
     return instance;
   }
@@ -48,15 +44,20 @@ public final class GlobalInterceptors {
   /**
    * Sets the list of global interceptors and global server stream tracers.
    *
+   * <p>If {@code setInterceptorsTracers()} is called again, this method will throw {@link
+   * IllegalStateException}.
+   *
+   * <p>It is only safe to call early. This method throws {@link IllegalStateException} after any of
+   * the get calls [{@link #getClientInterceptors()}, {@link #getServerInterceptors()} or {@link
+   * #getServerStreamTracerFactories()}] has been called, in order to limit changes to the result of
+   * {@code setInterceptorsTracers()}.
+   *
    * @param clientInterceptorList list of {@link ClientInterceptor} that make up global Client
    *     Interceptors.
    * @param serverInterceptorList list of {@link ServerInterceptor} that make up global Server
    *     Interceptors.
    * @param serverStreamTracerFactoryList list of {@link ServerStreamTracer.Factory} that make up
    *     global ServerStreamTracer factories.
-   * @throws IllegalStateException if setInterceptorsTracers is called twice.
-   * @throws IllegalStateException if setInterceptorsTracers is called after any of the
-   *     corresponding get call.
    */
   public static void setInterceptorsTracers(
       List<ClientInterceptor> clientInterceptorList,
@@ -71,23 +72,17 @@ public final class GlobalInterceptors {
     }
   }
 
-  /**
-   * Returns the list of global {@link ClientInterceptor}. If not set, this returns null.
-   */
+  /** Returns the list of global {@link ClientInterceptor}. If not set, this returns null. */
   public static List<ClientInterceptor> getClientInterceptors() {
     return GlobalInterceptors.getInstance().getGlobalClientInterceptors();
   }
 
-  /**
-   * Returns list of global {@link ServerInterceptor}. If not set, this returns null.
-   */
+  /** Returns list of global {@link ServerInterceptor}. If not set, this returns null. */
   public static List<ServerInterceptor> getServerInterceptors() {
     return GlobalInterceptors.getInstance().getGlobalServerInterceptors();
   }
 
-  /**
-   * Returns list of global {@link ServerStreamTracer.Factory}. If not set, this returns null.
-   */
+  /** Returns list of global {@link ServerStreamTracer.Factory}. If not set, this returns null. */
   public static List<ServerStreamTracer.Factory> getServerStreamTracerFactories() {
     return GlobalInterceptors.getInstance().getGlobalServerStreamTracerFactories();
   }
