@@ -354,12 +354,6 @@ public class AltsProtocolNegotiatorTest {
         .isEqualTo(SecurityLevel.PRIVACY_AND_INTEGRITY);
   }
 
-  @Test
-  public void directPathCluster() {
-
-  }
-
-
   private void doHandshake() throws Exception {
     // Capture the client frame and add to the server.
     assertEquals(1, channel.outboundMessages().size());
