@@ -34,7 +34,7 @@ public final class GlobalInterceptors {
   GlobalInterceptors() {}
 
   /** Returns the GlobalInterceptors instance. */
-  private static synchronized GlobalInterceptors getInstance() {
+  private static GlobalInterceptors getInstance() {
     if (instance == null) {
       instance = new GlobalInterceptors();
     }
@@ -59,7 +59,7 @@ public final class GlobalInterceptors {
    * @param serverStreamTracerFactoryList list of {@link ServerStreamTracer.Factory} that make up
    *     global ServerStreamTracer factories.
    */
-  public static void setInterceptorsTracers(
+  public static synchronized void setInterceptorsTracers(
       List<ClientInterceptor> clientInterceptorList,
       List<ServerInterceptor> serverInterceptorList,
       List<ServerStreamTracer.Factory> serverStreamTracerFactoryList) {
@@ -73,27 +73,27 @@ public final class GlobalInterceptors {
   }
 
   /** Returns the list of global {@link ClientInterceptor}. If not set, this returns null. */
-  public static List<ClientInterceptor> getClientInterceptors() {
+  public static synchronized List<ClientInterceptor> getClientInterceptors() {
     return GlobalInterceptors.getInstance().getGlobalClientInterceptors();
   }
 
   /** Returns list of global {@link ServerInterceptor}. If not set, this returns null. */
-  public static List<ServerInterceptor> getServerInterceptors() {
+  public static synchronized List<ServerInterceptor> getServerInterceptors() {
     return GlobalInterceptors.getInstance().getGlobalServerInterceptors();
   }
 
   /** Returns list of global {@link ServerStreamTracer.Factory}. If not set, this returns null. */
-  public static List<ServerStreamTracer.Factory> getServerStreamTracerFactories() {
+  public static synchronized List<ServerStreamTracer.Factory> getServerStreamTracerFactories() {
     return GlobalInterceptors.getInstance().getGlobalServerStreamTracerFactories();
   }
 
   @VisibleForTesting
-  synchronized void setGlobalInterceptorsTracers(
+  void setGlobalInterceptorsTracers(
       List<ClientInterceptor> clientInterceptorList,
       List<ServerInterceptor> serverInterceptorList,
       List<ServerStreamTracer.Factory> serverStreamTracerFactoryList) {
     if (isGlobalInterceptorsTracersGet) {
-      throw new IllegalStateException("Set cannot be called after any corresponding get call");
+      throw new IllegalStateException("Set cannot be called after any get call");
     }
     if (isGlobalInterceptorsTracersSet) {
       throw new IllegalStateException("Global interceptors and tracers are already set");
@@ -119,26 +119,20 @@ public final class GlobalInterceptors {
   }
 
   @VisibleForTesting
-  synchronized List<ClientInterceptor> getGlobalClientInterceptors() {
-    if (!isGlobalInterceptorsTracersGet) {
-      isGlobalInterceptorsTracersGet = true;
-    }
+  List<ClientInterceptor> getGlobalClientInterceptors() {
+    isGlobalInterceptorsTracersGet = true;
     return clientInterceptors;
   }
 
   @VisibleForTesting
-  synchronized List<ServerInterceptor> getGlobalServerInterceptors() {
-    if (!isGlobalInterceptorsTracersGet) {
-      isGlobalInterceptorsTracersGet = true;
-    }
+  List<ServerInterceptor> getGlobalServerInterceptors() {
+    isGlobalInterceptorsTracersGet = true;
     return serverInterceptors;
   }
 
   @VisibleForTesting
-  synchronized List<ServerStreamTracer.Factory> getGlobalServerStreamTracerFactories() {
-    if (!isGlobalInterceptorsTracersGet) {
-      isGlobalInterceptorsTracersGet = true;
-    }
+  List<ServerStreamTracer.Factory> getGlobalServerStreamTracerFactories() {
+    isGlobalInterceptorsTracersGet = true;
     return serverStreamTracerFactories;
   }
 }
