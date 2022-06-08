@@ -185,5 +185,47 @@ public final class GoogleDefaultProtocolNegotiatorTest {
           XDS_CLUSTER_NAME_ATTR_KEY, "google_cfe_api.googleapis.com").build();
       subtest_tlsHandler(attrs);
     }
+
+    @Test
+    public void altsHandler_googleCfe_federation() {
+      Attributes attrs = Attributes.newBuilder().set(
+          XDS_CLUSTER_NAME_ATTR_KEY, "xdstp1://").build();
+      subtest_altsHandler(attrs);
+    }
+
+    @Test
+    public void tlsHanlder_googleCfe() {
+      Attributes attrs = Attributes.newBuilder().set(
+          XDS_CLUSTER_NAME_ATTR_KEY,
+          "xdstp://traffic-director-c2p.xds.googleapis.com/"
+              + "envoy.config.cluster.v3.Cluster/google_cfe_example/apis")
+          .build();
+      subtest_tlsHandler(attrs);
+    }
+
+    @Test
+    public void altsHanlder_nonGoogleCfe_authorityNotMatch() {
+      Attributes attrs = Attributes.newBuilder().set(
+              XDS_CLUSTER_NAME_ATTR_KEY,
+              "//example.com/envoy.config.cluster.v3.Cluster/google_cfe_")
+          .build();
+      subtest_altsHandler(attrs);
+    }
+
+    @Test
+    public void altsHanlder_nonGoogleCfe_pathNotMatch() {
+      Attributes attrs = Attributes.newBuilder().set(
+          XDS_CLUSTER_NAME_ATTR_KEY,
+          "//traffic-director-c2p.xds.googleapis.com/envoy.config.cluster.v3.Cluster/google_gfe")
+          .build();
+      subtest_altsHandler(attrs);
+    }
+
+    @Test
+    public void altsHandler_googleCfe_invalidUri() {
+      Attributes attrs = Attributes.newBuilder().set(
+          XDS_CLUSTER_NAME_ATTR_KEY, "//").build();
+      subtest_altsHandler(attrs);
+    }
   }
 }
