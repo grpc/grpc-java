@@ -20,9 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine;
 import java.io.IOException;
-import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -66,7 +64,6 @@ public class AuthorizationServerInterceptorTest {
         + " ]"
         + "}";
     AuthorizationServerInterceptor interceptor = AuthorizationServerInterceptor.create(policy);
-    List<GrpcAuthorizationEngine> engines = interceptor.getEngines();
-    assertEquals(engines.size(), 2);
+    assertEquals(interceptor.getInterceptorsCount(), 2);
   }
 }

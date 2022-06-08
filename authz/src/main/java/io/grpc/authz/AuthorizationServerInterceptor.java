@@ -19,14 +19,14 @@ package io.grpc.authz;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.envoyproxy.envoy.config.rbac.v3.RBAC;
+import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
-import io.grpc.Status;
-import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine;
-import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthDecision;
-import io.grpc.xds.internal.rbac.engine.RbacParser;
+import io.grpc.xds.ConfigOrError;
+import io.grpc.xds.RbacConfig;
+import io.grpc.xds.RbacFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,10 +35,10 @@ import java.util.List;
  * Authorization server interceptor for static policy.
  */
 public final class AuthorizationServerInterceptor implements ServerInterceptor {
-  private final List<GrpcAuthorizationEngine> rbacEngines = new ArrayList<>();
+  private final List<ServerInterceptor> interceptors = new ArrayList<>();
 
-  List<GrpcAuthorizationEngine> getEngines() {
-    return rbacEngines;
+  int getInterceptorsCount() {
+    return interceptors.size();
   }
 
   private AuthorizationServerInterceptor(String authorizationPolicy) 
@@ -48,7 +48,13 @@ public final class AuthorizationServerInterceptor implements ServerInterceptor {
       throw new IllegalArgumentException("Failed to create authorization engines");
     }
     for (RBAC rbac: rbacs) {
-      rbacEngines.add(new GrpcAuthorizationEngine(RbacParser.parseRbac(rbac)));
+      ConfigOrError<RbacConfig> filterConfig = new RbacFilter().parseRbacConfig(
+          io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
+          .setRules(rbac).build());
+      if (filterConfig.errorDetail != null) {
+        throw new IllegalArgumentException("Rbac config is invalid");
+      }
+      interceptors.add(new RbacFilter().buildServerInterceptor(filterConfig.config, null));
     }
   }
 
@@ -56,14 +62,8 @@ public final class AuthorizationServerInterceptor implements ServerInterceptor {
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, 
       ServerCallHandler<ReqT, RespT> next) {
-    for (GrpcAuthorizationEngine rbacEngine: rbacEngines) {
-      AuthDecision authDecision = rbacEngine.evaluate(headers, call);
-      if (GrpcAuthorizationEngine.Action.DENY.equals(authDecision.decision())) {
-        Status status = 
-            Status.PERMISSION_DENIED.withDescription("Unauthorized RPC request rejected");
-        call.close(status, new Metadata());
-        return new ServerCall.Listener<ReqT>(){};
-      } 
+    for (ServerInterceptor interceptor: interceptors) {
+      next = InternalServerInterceptors.interceptCallHandlerCreate(interceptor, next);
     }
     return next.startCall(call, headers);
   }

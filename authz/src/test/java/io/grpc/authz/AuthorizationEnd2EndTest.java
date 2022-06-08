@@ -146,7 +146,7 @@ public class AuthorizationEnd2EndTest {
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
-          "PERMISSION_DENIED: Unauthorized RPC request rejected");
+          "PERMISSION_DENIED: Access Denied");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -194,7 +194,7 @@ public class AuthorizationEnd2EndTest {
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
-          "PERMISSION_DENIED: Unauthorized RPC request rejected");
+          "PERMISSION_DENIED: Access Denied");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -242,7 +242,7 @@ public class AuthorizationEnd2EndTest {
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
-          "PERMISSION_DENIED: Unauthorized RPC request rejected");
+          "PERMISSION_DENIED: Access Denied");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -310,7 +310,7 @@ public class AuthorizationEnd2EndTest {
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
-          "PERMISSION_DENIED: Unauthorized RPC request rejected");
+          "PERMISSION_DENIED: Access Denied");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -347,7 +347,7 @@ public class AuthorizationEnd2EndTest {
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
-          "PERMISSION_DENIED: Unauthorized RPC request rejected");
+          "PERMISSION_DENIED: Access Denied");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
