@@ -97,7 +97,7 @@ public final class RbacFilter implements Filter, ServerInterceptorBuilder {
     return parseRbacConfig(rbacProto);
   }
 
-  public ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
+  public static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
     if (!rbac.hasRules()) {
       return ConfigOrError.fromConfig(RbacConfig.create(null));
     }

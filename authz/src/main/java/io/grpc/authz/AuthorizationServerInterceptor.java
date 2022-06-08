@@ -18,6 +18,7 @@ package io.grpc.authz;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.config.rbac.v3.RBAC;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
@@ -37,6 +38,7 @@ import java.util.List;
 public final class AuthorizationServerInterceptor implements ServerInterceptor {
   private final List<ServerInterceptor> interceptors = new ArrayList<>();
 
+  @VisibleForTesting
   int getInterceptorsCount() {
     return interceptors.size();
   }
@@ -48,7 +50,7 @@ public final class AuthorizationServerInterceptor implements ServerInterceptor {
       throw new IllegalArgumentException("Failed to create authorization engines");
     }
     for (RBAC rbac: rbacs) {
-      ConfigOrError<RbacConfig> filterConfig = new RbacFilter().parseRbacConfig(
+      ConfigOrError<RbacConfig> filterConfig = RbacFilter.parseRbacConfig(
           io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
           .setRules(rbac).build());
       if (filterConfig.errorDetail != null) {
