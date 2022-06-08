@@ -17,7 +17,7 @@
 package io.grpc.authz;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -63,7 +63,6 @@ public class AuthorizationServerInterceptorTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor interceptor = AuthorizationServerInterceptor.create(policy);
-    assertEquals(interceptor.getInterceptorsCount(), 2);
+    assertNotNull(AuthorizationServerInterceptor.create(policy));
   }
 }
