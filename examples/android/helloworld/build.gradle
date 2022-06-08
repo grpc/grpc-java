@@ -21,3 +21,9 @@ allprojects {
         mavenLocal()
     }
 }
+
+android {
+    defaultConfig {
+        minSdkVersion 19
+    }
+}
