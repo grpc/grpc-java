@@ -198,7 +198,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
       Attributes attrs = Attributes.newBuilder().set(
           XDS_CLUSTER_NAME_ATTR_KEY,
           "xdstp://traffic-director-c2p.xds.googleapis.com/"
-              + "envoy.config.cluster.v3.Cluster/google_cfe_")
+              + "envoy.config.cluster.v3.Cluster/google_cfe_example/apis")
           .build();
       subtest_tlsHandler(attrs);
     }
