@@ -22,81 +22,149 @@ import static org.junit.Assert.fail;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.Test;
 
 public class GlobalInterceptorsTest {
 
   @Test
-  public void setInterceptorsTracers() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    instance.setGlobalInterceptorsTracers(
-        new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
-        new ArrayList<>(Arrays.asList(new NoopServerInterceptor())),
-        new ArrayList<>(Arrays.asList(new NoopServerTracer(), new NoopServerTracer())));
-    assertThat(instance.getGlobalClientInterceptors()).hasSize(1);
-    assertThat(instance.getGlobalServerInterceptors()).hasSize(1);
-    assertThat(instance.getGlobalServerStreamTracerFactories()).hasSize(2);
+  public void setInterceptorsTracers() throws Exception {
+    StaticTestingClassLoader classLoader =
+        new StaticTestingClassLoader(
+            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
+    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSet.class.getName());
+
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
   @Test
-  public void setGlobalInterceptorsTracers_twice() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    instance.setGlobalInterceptorsTracers(
-        new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
-        null,
-        new ArrayList<>(Arrays.asList(new NoopServerTracer())));
-    try {
-      instance.setGlobalInterceptorsTracers(
-          null, new ArrayList<>(Arrays.asList(new NoopServerInterceptor())), null);
-      fail("should have failed for calling setGlobalInterceptorsTracers() again");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Global interceptors and tracers are already set");
+  public void setGlobalInterceptorsTracers_twice() throws Exception {
+    StaticTestingClassLoader classLoader =
+        new StaticTestingClassLoader(
+            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
+    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSetTwice.class.getName());
+
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  @Test
+  public void getBeforeSet_clientInterceptors() throws Exception {
+    StaticTestingClassLoader classLoader =
+        new StaticTestingClassLoader(
+            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
+    Class<?> runnable =
+        classLoader.loadClass(
+            StaticTestingClassLoaderGetBeforeSetClientInterceptor.class.getName());
+
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  @Test
+  public void getBeforeSet_serverInterceptors() throws Exception {
+    StaticTestingClassLoader classLoader =
+        new StaticTestingClassLoader(
+            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
+    Class<?> runnable =
+        classLoader.loadClass(
+            StaticTestingClassLoaderGetBeforeSetServerInterceptor.class.getName());
+
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  @Test
+  public void getBeforeSet_serverStreamTracerFactories() throws Exception {
+    StaticTestingClassLoader classLoader =
+        new StaticTestingClassLoader(
+            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
+    Class<?> runnable =
+        classLoader.loadClass(
+            StaticTestingClassLoaderGetBeforeSetServerStreamTracerFactory.class.getName());
+
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  // UsedReflectively
+  public static final class StaticTestingClassLoaderSet implements Runnable {
+    @Override
+    public void run() {
+      GlobalInterceptors.setInterceptorsTracers(
+          new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
+          new ArrayList<>(Arrays.asList(new NoopServerInterceptor())),
+          new ArrayList<>(
+              Arrays.asList(
+                  new NoopServerStreamTracerFactory(), new NoopServerStreamTracerFactory())));
+      assertThat(GlobalInterceptors.getClientInterceptors()).hasSize(1);
+      assertThat(GlobalInterceptors.getServerInterceptors()).hasSize(1);
+      assertThat(GlobalInterceptors.getServerStreamTracerFactories()).hasSize(2);
     }
   }
 
-  @Test
-  public void getBeforeSet_clientInterceptors() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ClientInterceptor> clientInterceptors = instance.getGlobalClientInterceptors();
-    assertThat(clientInterceptors).isNull();
-
-    try {
-      instance.setGlobalInterceptorsTracers(
-          new ArrayList<>(Arrays.asList(new NoopClientInterceptor())), null, null);
-      fail("should have failed for invoking set call after get is already called");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+  public static final class StaticTestingClassLoaderSetTwice implements Runnable {
+    @Override
+    public void run() {
+      GlobalInterceptors.setInterceptorsTracers(
+          new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
+          null,
+          new ArrayList<>(Arrays.asList(new NoopServerStreamTracerFactory())));
+      try {
+        GlobalInterceptors.setInterceptorsTracers(
+            null, new ArrayList<>(Arrays.asList(new NoopServerInterceptor())), null);
+        fail("should have failed for calling setGlobalInterceptorsTracers() again");
+      } catch (IllegalStateException e) {
+        assertThat(e).hasMessageThat().isEqualTo("Global interceptors and tracers are already set");
+      }
     }
   }
 
-  @Test
-  public void getBeforeSet_serverInterceptors() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ServerInterceptor> serverInterceptors = instance.getGlobalServerInterceptors();
-    assertThat(serverInterceptors).isNull();
+  public static final class StaticTestingClassLoaderGetBeforeSetClientInterceptor
+      implements Runnable {
+    @Override
+    public void run() {
+      List<ClientInterceptor> clientInterceptors = GlobalInterceptors.getClientInterceptors();
+      assertThat(clientInterceptors).isNull();
 
-    try {
-      instance.setGlobalInterceptorsTracers(
-          null, new ArrayList<>(Arrays.asList(new NoopServerInterceptor())), null);
-      fail("should have failed for invoking set call after get is already called");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+      try {
+        GlobalInterceptors.setInterceptorsTracers(
+            new ArrayList<>(Arrays.asList(new NoopClientInterceptor())), null, null);
+        fail("should have failed for invoking set call after get is already called");
+      } catch (IllegalStateException e) {
+        assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+      }
     }
   }
 
-  @Test
-  public void getBeforeSet_serverStreamTracerFactories() {
-    GlobalInterceptors instance = new GlobalInterceptors();
-    List<ServerStreamTracer.Factory> serverStreamTracerFactories =
-        instance.getGlobalServerStreamTracerFactories();
-    assertThat(serverStreamTracerFactories).isNull();
+  public static final class StaticTestingClassLoaderGetBeforeSetServerInterceptor
+      implements Runnable {
+    @Override
+    public void run() {
+      List<ServerInterceptor> serverInterceptors = GlobalInterceptors.getServerInterceptors();
+      assertThat(serverInterceptors).isNull();
 
-    try {
-      instance.setGlobalInterceptorsTracers(
-          null, null, new ArrayList<>(Arrays.asList(new NoopServerTracer())));
-      fail("should have failed for invoking set call after get is already called");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+      try {
+        GlobalInterceptors.setInterceptorsTracers(
+            null, new ArrayList<>(Arrays.asList(new NoopServerInterceptor())), null);
+        fail("should have failed for invoking set call after get is already called");
+      } catch (IllegalStateException e) {
+        assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+      }
+    }
+  }
+
+  public static final class StaticTestingClassLoaderGetBeforeSetServerStreamTracerFactory
+      implements Runnable {
+    @Override
+    public void run() {
+      List<ServerStreamTracer.Factory> serverStreamTracerFactories =
+          GlobalInterceptors.getServerStreamTracerFactories();
+      assertThat(serverStreamTracerFactories).isNull();
+
+      try {
+        GlobalInterceptors.setInterceptorsTracers(
+            null, null, new ArrayList<>(Arrays.asList(new NoopServerStreamTracerFactory())));
+        fail("should have failed for invoking set call after get is already called");
+      } catch (IllegalStateException e) {
+        assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+      }
     }
   }
 
@@ -115,8 +183,8 @@ public class GlobalInterceptorsTest {
       return next.startCall(call, headers);
     }
   }
-  
-  private static class NoopServerTracer extends ServerStreamTracer.Factory {
+
+  private static class NoopServerStreamTracerFactory extends ServerStreamTracer.Factory {
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
       throw new UnsupportedOperationException();
