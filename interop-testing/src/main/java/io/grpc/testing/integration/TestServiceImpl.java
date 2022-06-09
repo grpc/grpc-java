@@ -130,6 +130,9 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   }
 
   private static void echoCallMetricsFromPayload(TestOrcaReport report) {
+    if (TestOrcaReport.getDefaultInstance().equals(report)) {
+      return;
+    }
     CallMetricRecorder recorder = CallMetricRecorder.getCurrent()
         .recordCpuUtilizationMetric(report.getCpuUtilization())
         .recordMemoryUtilizationMetric(report.getMemoryUtilization());
@@ -142,6 +145,9 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   }
 
   private void echoMetricsFromPayload(TestOrcaReport report) {
+    if (TestOrcaReport.getDefaultInstance().equals(report)) {
+      return;
+    }
     metricRecorder.setCpuUtilizationMetric(report.getCpuUtilization());
     metricRecorder.setMemoryUtilizationMetric(report.getMemoryUtilization());
     metricRecorder.setAllUtilizationMetrics(new HashMap<>());
