@@ -123,16 +123,17 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       return;
     }
 
-    echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
-    echoMetricsFromPayload(req.getOrcaOobReport());
+    if (req.hasOrcaPerQueryReport()) {
+      echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
+    }
+    if (req.hasOrcaOobReport()) {
+      echoMetricsFromPayload(req.getOrcaOobReport());
+    }
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
   }
 
   private static void echoCallMetricsFromPayload(TestOrcaReport report) {
-    if (TestOrcaReport.getDefaultInstance().equals(report)) {
-      return;
-    }
     CallMetricRecorder recorder = CallMetricRecorder.getCurrent()
         .recordCpuUtilizationMetric(report.getCpuUtilization())
         .recordMemoryUtilizationMetric(report.getMemoryUtilization());
@@ -145,9 +146,6 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   }
 
   private void echoMetricsFromPayload(TestOrcaReport report) {
-    if (TestOrcaReport.getDefaultInstance().equals(report)) {
-      return;
-    }
     metricRecorder.setCpuUtilizationMetric(report.getCpuUtilization());
     metricRecorder.setMemoryUtilizationMetric(report.getMemoryUtilization());
     metricRecorder.setAllUtilizationMetrics(new HashMap<>());
