@@ -27,59 +27,43 @@ import org.junit.Test;
 
 public class GlobalInterceptorsTest {
 
+  private final StaticTestingClassLoader classLoader =
+      new StaticTestingClassLoader(
+          getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
+
   @Test
   public void setInterceptorsTracers() throws Exception {
-    StaticTestingClassLoader classLoader =
-        new StaticTestingClassLoader(
-            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSet.class.getName());
-
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
   @Test
   public void setGlobalInterceptorsTracers_twice() throws Exception {
-    StaticTestingClassLoader classLoader =
-        new StaticTestingClassLoader(
-            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSetTwice.class.getName());
-
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
   @Test
   public void getBeforeSet_clientInterceptors() throws Exception {
-    StaticTestingClassLoader classLoader =
-        new StaticTestingClassLoader(
-            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
     Class<?> runnable =
         classLoader.loadClass(
             StaticTestingClassLoaderGetBeforeSetClientInterceptor.class.getName());
-
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
   @Test
   public void getBeforeSet_serverInterceptors() throws Exception {
-    StaticTestingClassLoader classLoader =
-        new StaticTestingClassLoader(
-            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
     Class<?> runnable =
         classLoader.loadClass(
             StaticTestingClassLoaderGetBeforeSetServerInterceptor.class.getName());
-
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
   @Test
   public void getBeforeSet_serverStreamTracerFactories() throws Exception {
-    StaticTestingClassLoader classLoader =
-        new StaticTestingClassLoader(
-            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
     Class<?> runnable =
         classLoader.loadClass(
             StaticTestingClassLoaderGetBeforeSetServerStreamTracerFactory.class.getName());
-
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
@@ -87,15 +71,22 @@ public class GlobalInterceptorsTest {
   public static final class StaticTestingClassLoaderSet implements Runnable {
     @Override
     public void run() {
-      GlobalInterceptors.setInterceptorsTracers(
-          new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
-          new ArrayList<>(Arrays.asList(new NoopServerInterceptor())),
+      List<ClientInterceptor> clientInterceptorList =
+          new ArrayList<>(Arrays.asList(new NoopClientInterceptor()));
+      List<ServerInterceptor> serverInterceptorList =
+          new ArrayList<>(Arrays.asList(new NoopServerInterceptor()));
+      List<ServerStreamTracer.Factory> serverStreamTracerFactoryList =
           new ArrayList<>(
               Arrays.asList(
-                  new NoopServerStreamTracerFactory(), new NoopServerStreamTracerFactory())));
-      assertThat(GlobalInterceptors.getClientInterceptors()).hasSize(1);
-      assertThat(GlobalInterceptors.getServerInterceptors()).hasSize(1);
-      assertThat(GlobalInterceptors.getServerStreamTracerFactories()).hasSize(2);
+                  new NoopServerStreamTracerFactory(), new NoopServerStreamTracerFactory()));
+
+      GlobalInterceptors.setInterceptorsTracers(
+          clientInterceptorList, serverInterceptorList, serverStreamTracerFactoryList);
+
+      assertThat(GlobalInterceptors.getClientInterceptors()).isEqualTo(clientInterceptorList);
+      assertThat(GlobalInterceptors.getServerInterceptors()).isEqualTo(serverInterceptorList);
+      assertThat(GlobalInterceptors.getServerStreamTracerFactories())
+          .isEqualTo(serverStreamTracerFactoryList);
     }
   }
 
@@ -121,7 +112,7 @@ public class GlobalInterceptorsTest {
     @Override
     public void run() {
       List<ClientInterceptor> clientInterceptors = GlobalInterceptors.getClientInterceptors();
-      assertThat(clientInterceptors).isNull();
+      assertThat(clientInterceptors).isEmpty();
 
       try {
         GlobalInterceptors.setInterceptorsTracers(
@@ -138,7 +129,7 @@ public class GlobalInterceptorsTest {
     @Override
     public void run() {
       List<ServerInterceptor> serverInterceptors = GlobalInterceptors.getServerInterceptors();
-      assertThat(serverInterceptors).isNull();
+      assertThat(serverInterceptors).isEmpty();
 
       try {
         GlobalInterceptors.setInterceptorsTracers(
@@ -156,7 +147,7 @@ public class GlobalInterceptorsTest {
     public void run() {
       List<ServerStreamTracer.Factory> serverStreamTracerFactories =
           GlobalInterceptors.getServerStreamTracerFactories();
-      assertThat(serverStreamTracerFactories).isNull();
+      assertThat(serverStreamTracerFactories).isEmpty();
 
       try {
         GlobalInterceptors.setInterceptorsTracers(
