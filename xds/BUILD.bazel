@@ -83,6 +83,7 @@ java_proto_library(
         "@envoy_api//envoy/extensions/filters/http/rbac/v3:pkg",
         "@envoy_api//envoy/extensions/filters/http/router/v3:pkg",
         "@envoy_api//envoy/extensions/filters/network/http_connection_manager/v3:pkg",
+        "@envoy_api//envoy/extensions/load_balancing_policies/least_request/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/ring_hash/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/round_robin/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/wrr_locality/v3:pkg",

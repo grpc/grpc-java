@@ -36,6 +36,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFuncti
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
 import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.least_request.v3.LeastRequest;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.ring_hash.v3.RingHash;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.round_robin.v3.RoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
@@ -71,6 +72,12 @@ public class LoadBalancerConfigFactoryTest {
               .setMaximumRingSize(UInt64Value.of(RING_HASH_MAX_RING_SIZE))
               .setHashFunction(RingHash.HashFunction.XX_HASH).build()))).build();
 
+  private static final int LEAST_REQUEST_CHOICE_COUNT = 10;
+  private static final Policy LEAST_REQUEST_POLICY = Policy.newBuilder().setTypedExtensionConfig(
+      TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
+          LeastRequest.newBuilder().setChoiceCount(UInt32Value.of(LEAST_REQUEST_CHOICE_COUNT))
+              .build()))).build();
+
   private static final String CUSTOM_POLICY_NAME = "myorg.MyCustomLeastRequestPolicy";
   private static final String CUSTOM_POLICY_FIELD_KEY = "choiceCount";
   private static final double CUSTOM_POLICY_FIELD_VALUE = 2;
@@ -103,6 +110,9 @@ public class LoadBalancerConfigFactoryTest {
       "wrr_locality_experimental", ImmutableMap.of("childPolicy", ImmutableList.of(
       ImmutableMap.of(VALID_CUSTOM_CONFIG.getPolicyName(),
           VALID_CUSTOM_CONFIG.getRawConfigValue()))));
+  private static final LbConfig VALID_LEAST_REQUEST_CONFIG = new LbConfig(
+      "least_request_experimental",
+      ImmutableMap.of("choiceCount", (double) LEAST_REQUEST_CHOICE_COUNT));
 
   @After
   public void deregisterCustomProvider() {
@@ -163,12 +173,22 @@ public class LoadBalancerConfigFactoryTest {
   }
 
   @Test
+  public void leastRequest() throws ResourceInvalidException {
+    Cluster cluster = Cluster.newBuilder()
+        .setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder().addPolicies(LEAST_REQUEST_POLICY))
+        .build();
+
+    assertThat(newLbConfig(cluster, true, true)).isEqualTo(VALID_LEAST_REQUEST_CONFIG);
+  }
+
+  @Test
   public void leastRequest_legacy() throws ResourceInvalidException {
     System.setProperty("io.grpc.xds.experimentalEnableLeastRequest", "true");
 
     Cluster cluster = Cluster.newBuilder().setLbPolicy(LbPolicy.LEAST_REQUEST)
         .setLeastRequestLbConfig(
-            LeastRequestLbConfig.newBuilder().setChoiceCount(UInt32Value.of(10))).build();
+            LeastRequestLbConfig.newBuilder()
+                .setChoiceCount(UInt32Value.of(LEAST_REQUEST_CHOICE_COUNT))).build();
 
     LbConfig lbConfig = newLbConfig(cluster, true, true);
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
@@ -178,7 +198,7 @@ public class LoadBalancerConfigFactoryTest {
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
     assertThat(
         JsonUtil.getNumberAsLong(childConfigs.get(0).getRawConfigValue(), "choiceCount")).isEqualTo(
-        10);
+        LEAST_REQUEST_CHOICE_COUNT);
   }
 
   @Test
