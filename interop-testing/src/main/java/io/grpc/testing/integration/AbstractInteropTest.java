@@ -117,6 +117,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -1759,40 +1760,74 @@ public abstract class AbstractInteropTest {
    */
   public void testOrcaOob() throws Exception {
     AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
-    TestOrcaReport answer = TestOrcaReport.newBuilder()
+    final TestOrcaReport answer = TestOrcaReport.newBuilder()
         .setCpuUtilization(0.8210)
         .setMemoryUtilization(0.5847)
         .putUtilization("util", 0.30499)
         .build();
-    String lock = blockingStub.unaryCall(
-        SimpleRequest.newBuilder().setOobLock("").setOrcaOobReport(answer).build())
-        .getOobLock();
-    int i;
-    int retryLimit = 5;
-    for (i = 0; i < retryLimit; i++) {
-      Thread.sleep(1000);
-      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
-      if (reportHolder.get().equals(answer)) {
-        break;
-      }
-    }
-    assertThat(i).isLessThan(retryLimit);
-
-    answer = TestOrcaReport.newBuilder()
+    final TestOrcaReport answer2 = TestOrcaReport.newBuilder()
         .setCpuUtilization(0.29309)
         .setMemoryUtilization(0.2)
         .putUtilization("util", 100.2039)
         .build();
-    blockingStub.unaryCall(
-        SimpleRequest.newBuilder().setOobLock(lock).setOrcaOobReport(answer).build());
-    for (i = 0; i < retryLimit; i++) {
-      Thread.sleep(1000);
-      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
-      if (reportHolder.get().equals(answer)) {
-        break;
-      }
+
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    final int retryLimit = 5;
+    AtomicReference<String> lock = new AtomicReference<>("");
+
+    StreamObserver<StreamingOutputCallRequest> streamObserver =
+        asyncStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
+
+          @Override
+          public void onNext(StreamingOutputCallResponse value) {
+            try {
+              int i = 0;
+              for (; i < retryLimit; i++) {
+                Thread.sleep(1000);
+                blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+                if (reportHolder.get().equals(answer)) {
+                  break;
+                }
+              }
+              assertThat(i).isLessThan(retryLimit);
+              lock.set(value.getOobLock());
+              barrier.await(10, TimeUnit.SECONDS);
+              for (i = 0; i < retryLimit; i++) {
+                Thread.sleep(1000);
+                blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+                if (reportHolder.get().equals(answer2)) {
+                  break;
+                }
+              }
+              assertThat(i).isLessThan(retryLimit);
+              barrier.await(10, TimeUnit.SECONDS);
+            } catch (Exception ex) {
+              throw new RuntimeException(ex);
+            }
+          }
+
+          @Override
+          public void onError(Throwable t) {
+          }
+
+          @Override
+          public void onCompleted() {
+
+          }
+        });
+
+    try {
+      streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
+          .setOobLock("").setOrcaOobReport(answer).build());
+      barrier.await(10, TimeUnit.SECONDS);
+      streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
+          .setOobLock(lock.get()).setOrcaOobReport(answer2).build());
+      barrier.await(10, TimeUnit.SECONDS);
+      streamObserver.onCompleted();
+    } catch (Exception ex) {
+      streamObserver.onError(ex);
+      throw ex;
     }
-    assertThat(i).isLessThan(retryLimit);
   }
 
   /** Sends a large unary rpc with service account credentials. */

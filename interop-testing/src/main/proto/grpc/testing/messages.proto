@@ -103,12 +103,6 @@ message SimpleRequest {
 
   // If set the server should record this metrics report data for the current RPC.
   TestOrcaReport orca_per_query_report = 11;
-
-  // If set the server should update this metrics report data at the OOB server.
-  TestOrcaReport orca_oob_report = 12;
-
-  // Allow only one test client at a time to perform orca_oob test;
-  string oob_lock = 13;
 }
 
 // Unary response, as configured by the request.
@@ -129,10 +123,6 @@ message SimpleResponse {
 
   // Server hostname.
   string hostname = 6;
-
-  // Allow only one test client at a time to perform orca_oob test.
-  // Set this value to the next request oob_lock field to acquire lock.
-  string oob_lock = 7;
 }
 
 // Client-streaming request.
@@ -187,12 +177,22 @@ message StreamingOutputCallRequest {
 
   // Whether server should return a given status
   EchoStatus response_status = 7;
+
+  // If set the server should update this metrics report data at the OOB server.
+  TestOrcaReport orca_oob_report = 8;
+
+  // Allow only one test client at a time to perform orca_oob test;
+  string oob_lock = 9;
 }
 
 // Server-streaming response, as configured by the request and parameters.
 message StreamingOutputCallResponse {
   // Payload to increase response size.
   Payload payload = 1;
+
+  // Allow only one test client at a time to perform orca_oob test;
+  // Set this value to the next request oob_lock field to acquire lock.
+  string oob_lock = 2;
 }
 
 // For reconnect interop test only.

@@ -127,22 +127,6 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     if (req.hasOrcaPerQueryReport()) {
       echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
     }
-    if (req.hasOrcaOobReport()) {
-      while (true) {
-        synchronized (this) {
-          if (orcaOobLock.equals(req.getOobLock())) {
-            echoMetricsFromPayload(req.getOrcaOobReport());
-            if (orcaOobLock.equals("")) {
-              orcaOobLock = "grpc";
-              responseBuilder.setOobLock(orcaOobLock);
-            } else {
-              orcaOobLock = "";
-            }
-            break;
-          }
-        }
-      }
-    }
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
   }
@@ -219,6 +203,29 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     return new StreamObserver<StreamingOutputCallRequest>() {
       @Override
       public void onNext(StreamingOutputCallRequest request) {
+
+        if (request.hasOrcaOobReport()) {
+          while (true) {
+            synchronized (this) {
+              try {
+                if (orcaOobLock.equals(request.getOobLock())) {
+                  echoMetricsFromPayload(request.getOrcaOobReport());
+                  if (orcaOobLock.equals("")) {
+                    orcaOobLock = "grpc";
+                    responseObserver.onNext(
+                        StreamingOutputCallResponse.newBuilder().setOobLock(orcaOobLock).build());
+                  }
+                  break;
+                }
+              } catch (Exception ex) {
+                responseObserver.onError(
+                    new IllegalStateException("failed to update oob report or send response"));
+                orcaOobLock = "";
+                break;
+              }
+            }
+          }
+        }
         if (request.hasResponseStatus()) {
           dispatcher.cancel();
           dispatcher.onError(Status.fromCodeValue(request.getResponseStatus().getCode())
@@ -231,6 +238,9 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onCompleted() {
+        synchronized (this) {
+          orcaOobLock = "";
+        }
         if (!dispatcher.isCancelled()) {
           // Tell the dispatcher that all input has been received.
           dispatcher.completeInput();
@@ -239,6 +249,9 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
+        synchronized (this) {
+          orcaOobLock = "";
+        }
         dispatcher.onError(cause);
       }
     };
