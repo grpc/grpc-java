@@ -172,8 +172,8 @@ public final class GrpcCleanupRule extends ExternalResource {
 
     InterruptedException interrupted = null;
     if (!abruptShutdown) {
-      for (int i = resources.size() - 1; i >= 0; i--) {
-        resources.get(i).cleanUp();
+      for (Resource resource : Lists.reverse(resources)) {
+        resource.cleanUp();
       }
 
       for (int i = resources.size() - 1; i >= 0; i--) {
@@ -192,7 +192,7 @@ public final class GrpcCleanupRule extends ExternalResource {
     }
 
     if (!resources.isEmpty()) {
-      for (GrpcCleanupRule.Resource resource : Lists.reverse(resources)) {
+      for (Resource resource : Lists.reverse(resources)) {
         resource.forceCleanUp();
       }
 
