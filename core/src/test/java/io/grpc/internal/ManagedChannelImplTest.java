@@ -278,8 +278,8 @@ public class ManagedChannelImplTest {
   private ObjectPool<Executor> balancerRpcExecutorPool;
   @Mock
   private CallCredentials creds;
-  @Mock
-  private Executor offloadExecutor;
+  private FakeClock offloadFakeClock = new FakeClock();
+  private Executor offloadExecutor = offloadFakeClock.getScheduledExecutorService();
   private ManagedChannelImplBuilder channelBuilder;
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
@@ -2394,11 +2394,15 @@ public class ManagedChannelImplTest {
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     updateBalancingStateSafely(helper, READY, mockPicker);
+    assertEquals(0, offloadFakeClock.numPendingTasks());
     executor.runDueTasks();
     ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Executor> executorArgumentCaptor = ArgumentCaptor.forClass(null);
     ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
     verify(creds).applyRequestMetadata(infoCaptor.capture(),
-        same(executor.getScheduledExecutorService()), applierCaptor.capture());
+        executorArgumentCaptor.capture(), applierCaptor.capture());
+    assertTrue(((ManagedChannelImpl.ExecutorHolder)executorArgumentCaptor.getValue())
+            .getExecutor() == offloadExecutor);
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
     assertEquals(SecurityLevel.NONE, infoCaptor.getValue().getSecurityLevel());
@@ -2423,7 +2427,9 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, new Metadata());
 
     verify(creds, times(2)).applyRequestMetadata(infoCaptor.capture(),
-        same(executor.getScheduledExecutorService()), applierCaptor.capture());
+            executorArgumentCaptor.capture(), applierCaptor.capture());
+    assertTrue(((ManagedChannelImpl.ExecutorHolder)executorArgumentCaptor.getValue())
+            .getExecutor() == offloadExecutor);
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
     assertEquals(SecurityLevel.NONE, infoCaptor.getValue().getSecurityLevel());
@@ -4053,15 +4059,6 @@ public class ManagedChannelImplTest {
     assertThat(args).isNotNull();
     assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
-
-    verify(offloadExecutor, never()).execute(any(Runnable.class));
-    args.getOffloadExecutor()
-        .execute(
-            new Runnable() {
-              @Override
-              public void run() {}
-            });
-    verify(offloadExecutor, times(1)).execute(any(Runnable.class));
   }
 
   @Test
