@@ -1765,9 +1765,16 @@ public abstract class AbstractInteropTest {
         .putUtilization("util", 0.30499)
         .build();
     blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
-    Thread.sleep(1500);
-    blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
-    assertThat(reportHolder.get()).isEqualTo(answer);
+    int i;
+    int retryLimit = 5;
+    for (i = 0; i < retryLimit; i++) {
+      Thread.sleep(1000);
+      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+      if (reportHolder.get().equals(answer)) {
+        break;
+      }
+    }
+    assertThat(i).isLessThan(retryLimit);
 
     answer = TestOrcaReport.newBuilder()
         .setCpuUtilization(0.29309)
@@ -1775,9 +1782,14 @@ public abstract class AbstractInteropTest {
         .putUtilization("util", 100.2039)
         .build();
     blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
-    Thread.sleep(1500);
-    blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
-    assertThat(reportHolder.get()).isEqualTo(answer);
+    for (i = 0; i < retryLimit; i++) {
+      Thread.sleep(1000);
+      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+      if (reportHolder.get().equals(answer)) {
+        break;
+      }
+    }
+    assertThat(i).isLessThan(retryLimit);
   }
 
   /** Sends a large unary rpc with service account credentials. */

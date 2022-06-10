@@ -175,6 +175,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       // TODO(chengyuanzhang): is using the list of socket address correct?
       StringBuilder sb = new StringBuilder(addrKey.getAddresses().toString());
       sb.append('_');
+      int lengthWithoutCounter = sb.length();
       targetHashes += scale * normalizedWeight;
       long i = 0L;
       while (currentHashes < targetHashes) {
@@ -183,7 +184,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
         ring.add(new RingEntry(hash, addrKey));
         i++;
         currentHashes++;
-        sb.setLength(sb.length() - 1);
+        sb.setLength(lengthWithoutCounter);
       }
     }
     Collections.sort(ring);

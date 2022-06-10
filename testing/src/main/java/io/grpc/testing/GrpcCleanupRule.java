@@ -26,20 +26,18 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.NotThreadSafe;
-import org.junit.rules.TestRule;
+import org.junit.rules.ExternalResource;
 import org.junit.runner.Description;
-import org.junit.runners.model.MultipleFailureException;
 import org.junit.runners.model.Statement;
 
 /**
- * A JUnit {@link TestRule} that can register gRPC resources and manages its automatic release at
- * the end of the test. If any of the resources registered to the rule can not be successfully
- * released, the test will fail.
+ * A JUnit {@link ExternalResource} that can register gRPC resources and manages its automatic
+ * release at the end of the test. If any of the resources registered to the rule can not be
+ * successfully released, the test will fail.
  *
  * <p>Example usage:
  * <pre>{@code @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
@@ -73,13 +71,13 @@ import org.junit.runners.model.Statement;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2488")
 @NotThreadSafe
-public final class GrpcCleanupRule implements TestRule {
+public final class GrpcCleanupRule extends ExternalResource {
 
   private final List<Resource> resources = new ArrayList<>();
   private long timeoutNanos = TimeUnit.SECONDS.toNanos(10L);
   private Stopwatch stopwatch = Stopwatch.createUnstarted();
 
-  private Throwable firstException;
+  private boolean abruptShutdown;
 
   /**
    * Sets a positive total time limit for the automatic resource cleanup. If any of the resources
@@ -144,71 +142,70 @@ public final class GrpcCleanupRule implements TestRule {
     resources.add(resource);
   }
 
+  // The class extends ExternalResource so it can be used in JUnit 5. But JUnit 5 will only call
+  // before() and after(), thus code cannot assume this method will be called.
   @Override
   public Statement apply(final Statement base, Description description) {
-    return new Statement() {
+    return super.apply(new Statement() {
       @Override
       public void evaluate() throws Throwable {
-        firstException = null;
+        abruptShutdown = false;
         try {
           base.evaluate();
         } catch (Throwable t) {
-          firstException = t;
-
-          try {
-            teardown();
-          } catch (Throwable t2) {
-            throw new MultipleFailureException(Arrays.asList(t, t2));
-          }
-
+          abruptShutdown = true;
           throw t;
         }
-
-        teardown();
-        if (firstException != null) {
-          throw firstException;
-        }
       }
-    };
+    }, description);
   }
 
   /**
    * Releases all the registered resources.
    */
-  private void teardown() {
+  @Override
+  protected void after() {
     stopwatch.reset();
     stopwatch.start();
 
-    if (firstException == null) {
+    InterruptedException interrupted = null;
+    if (!abruptShutdown) {
       for (int i = resources.size() - 1; i >= 0; i--) {
         resources.get(i).cleanUp();
       }
+
+      for (int i = resources.size() - 1; i >= 0; i--) {
+        try {
+          boolean released = resources.get(i).awaitReleased(
+              timeoutNanos - stopwatch.elapsed(TimeUnit.NANOSECONDS), TimeUnit.NANOSECONDS);
+          if (released) {
+            resources.remove(i);
+          }
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          interrupted = e;
+          break;
+        }
+      }
     }
 
-    for (int i = resources.size() - 1; i >= 0; i--) {
-      if (firstException != null) {
+    if (!resources.isEmpty()) {
+      for (int i = resources.size() - 1; i >= 0; i--) {
         resources.get(i).forceCleanUp();
-        continue;
       }
 
       try {
-        boolean released = resources.get(i).awaitReleased(
-            timeoutNanos - stopwatch.elapsed(TimeUnit.NANOSECONDS), TimeUnit.NANOSECONDS);
-        if (!released) {
-          firstException = new AssertionError(
-              "Resource " + resources.get(i) + " can not be released in time at the end of test");
+        if (interrupted != null) {
+          throw new AssertionError(
+              "Thread interrupted before resources gracefully released", interrupted);
+        } else if (!abruptShutdown) {
+          throw new AssertionError(
+            "Resources could not be released in time at the end of test: " + resources);
         }
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        firstException = e;
-      }
-
-      if (firstException != null) {
-        resources.get(i).forceCleanUp();
+      } finally {
+        resources.clear();
       }
     }
-
-    resources.clear();
   }
 
   @VisibleForTesting
