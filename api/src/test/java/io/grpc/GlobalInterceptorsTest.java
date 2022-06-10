@@ -24,7 +24,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class GlobalInterceptorsTest {
 
   private final StaticTestingClassLoader classLoader =
