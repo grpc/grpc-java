@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.least_request.v3.LeastRequest;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.ring_hash.v3.RingHash;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.round_robin.v3.RoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
@@ -167,6 +168,8 @@ class LoadBalancerConfigFactory {
                 recursionDepth);
           } else if (typedConfig.is(RoundRobin.class)) {
             serviceConfig = convertRoundRobinConfig();
+          } else if (typedConfig.is(LeastRequest.class)) {
+            serviceConfig = convertLeastRequestConfig(typedConfig.unpack(LeastRequest.class));
           } else if (typedConfig.is(com.github.xds.type.v3.TypedStruct.class)) {
             serviceConfig = convertCustomConfig(
                 typedConfig.unpack(com.github.xds.type.v3.TypedStruct.class));
@@ -229,6 +232,15 @@ class LoadBalancerConfigFactory {
      */
     private static ImmutableMap<String, ?> convertRoundRobinConfig() {
       return buildRoundRobinConfig();
+    }
+
+    /**
+     * Converts a least_request {@link Any} configuration to service config format.
+     */
+    private static ImmutableMap<String, ?> convertLeastRequestConfig(LeastRequest leastRequest)
+        throws ResourceInvalidException {
+      return buildLeastRequestConfig(
+          leastRequest.hasChoiceCount() ? leastRequest.getChoiceCount().getValue() : null);
     }
 
     /**
