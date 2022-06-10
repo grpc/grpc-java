@@ -76,7 +76,7 @@ public final class GrpcCleanupRule extends ExternalResource {
 
   private final List<Resource> resources = new ArrayList<>();
   private long timeoutNanos = TimeUnit.SECONDS.toNanos(10L);
-  @SuppressWarnings("SystemTickerUnreliable")
+
   private Stopwatch stopwatch = Stopwatch.createUnstarted();
 
   private boolean abruptShutdown;
