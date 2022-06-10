@@ -76,7 +76,6 @@ public final class GrpcCleanupRule extends ExternalResource {
 
   private final List<Resource> resources = new ArrayList<>();
   private long timeoutNanos = TimeUnit.SECONDS.toNanos(10L);
-
   private Stopwatch stopwatch = Stopwatch.createUnstarted();
 
   private boolean abruptShutdown;
