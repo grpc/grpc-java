@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Ticker;
+import com.google.common.collect.Lists;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -170,8 +171,8 @@ public final class GrpcCleanupRule extends ExternalResource {
 
     InterruptedException interrupted = null;
     if (!abruptShutdown) {
-      for (int i = resources.size() - 1; i >= 0; i--) {
-        resources.get(i).cleanUp();
+      for (Resource resource : Lists.reverse(resources)) {
+        resource.cleanUp();
       }
 
       for (int i = resources.size() - 1; i >= 0; i--) {
@@ -190,8 +191,8 @@ public final class GrpcCleanupRule extends ExternalResource {
     }
 
     if (!resources.isEmpty()) {
-      for (int i = resources.size() - 1; i >= 0; i--) {
-        resources.get(i).forceCleanUp();
+      for (Resource resource : Lists.reverse(resources)) {
+        resource.forceCleanUp();
       }
 
       try {
