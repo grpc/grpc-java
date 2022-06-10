@@ -1764,7 +1764,9 @@ public abstract class AbstractInteropTest {
         .setMemoryUtilization(0.5847)
         .putUtilization("util", 0.30499)
         .build();
-    blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
+    String lock = blockingStub.unaryCall(
+        SimpleRequest.newBuilder().setOobLock("").setOrcaOobReport(answer).build())
+        .getOobLock();
     int i;
     int retryLimit = 5;
     for (i = 0; i < retryLimit; i++) {
@@ -1781,7 +1783,8 @@ public abstract class AbstractInteropTest {
         .setMemoryUtilization(0.2)
         .putUtilization("util", 100.2039)
         .build();
-    blockingStub.unaryCall(SimpleRequest.newBuilder().setOrcaOobReport(answer).build());
+    blockingStub.unaryCall(
+        SimpleRequest.newBuilder().setOobLock(lock).setOrcaOobReport(answer).build());
     for (i = 0; i < retryLimit; i++) {
       Thread.sleep(1000);
       blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);

@@ -63,6 +63,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
   private final MetricRecorder metricRecorder;
+  private String orcaOobLock = "";
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
@@ -127,7 +128,20 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
     }
     if (req.hasOrcaOobReport()) {
-      echoMetricsFromPayload(req.getOrcaOobReport());
+      while (true) {
+        synchronized (this) {
+          if (orcaOobLock.equals(req.getOobLock())) {
+            echoMetricsFromPayload(req.getOrcaOobReport());
+            if (orcaOobLock.equals("")) {
+              orcaOobLock = "grpc";
+              responseBuilder.setOobLock(orcaOobLock);
+            } else {
+              orcaOobLock = "";
+            }
+            break;
+          }
+        }
+      }
     }
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();

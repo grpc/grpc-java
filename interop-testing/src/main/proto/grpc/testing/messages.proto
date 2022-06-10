@@ -106,6 +106,9 @@ message SimpleRequest {
 
   // If set the server should update this metrics report data at the OOB server.
   TestOrcaReport orca_oob_report = 12;
+
+  // Allow only one test client at a time to perform orca_oob test;
+  string oob_lock = 13;
 }
 
 // Unary response, as configured by the request.
@@ -126,6 +129,10 @@ message SimpleResponse {
 
   // Server hostname.
   string hostname = 6;
+
+  // Allow only one test client at a time to perform orca_oob test.
+  // Set this value to the next request oob_lock field to acquire lock.
+  string oob_lock = 7;
 }
 
 // Client-streaming request.
