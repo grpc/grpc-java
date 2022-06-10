@@ -1790,6 +1790,7 @@ public abstract class AbstractInteropTest {
                 }
               }
               assertThat(i).isLessThan(retryLimit);
+              System.out.println("\n" + reportHolder.get());
               lock.set(value.getOobLock());
               barrier.await(10, TimeUnit.SECONDS);
               for (i = 0; i < retryLimit; i++) {
@@ -1800,6 +1801,7 @@ public abstract class AbstractInteropTest {
                 }
               }
               assertThat(i).isLessThan(retryLimit);
+              System.out.println("\n" + reportHolder.get());
               barrier.await(10, TimeUnit.SECONDS);
             } catch (Exception ex) {
               throw new RuntimeException(ex);
