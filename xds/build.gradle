@@ -49,8 +49,12 @@ dependencies {
             libraries.netty_epoll
 
     testImplementation project(':grpc-testing'),
-            project(':grpc-testing-proto'),
-            libraries.netty_epoll
+            project(':grpc-testing-proto')
+    testImplementation (libraries.netty_epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
     testImplementation (libraries.guava_testlib) {
         exclude group: 'junit', module: 'junit'
     }

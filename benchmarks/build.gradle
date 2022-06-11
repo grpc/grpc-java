@@ -30,8 +30,12 @@ dependencies {
             project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.hdrhistogram,
             libraries.netty_tcnative,
-            libraries.netty_epoll,
             libraries.math
+    implementation (libraries.netty_epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
     compileOnly libraries.javax_annotation
     alpnagent libraries.jetty_alpn_agent
 
