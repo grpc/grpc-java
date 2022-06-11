@@ -29,10 +29,14 @@ dependencies {
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
-            libraries.netty_epoll_common
-    testRuntimeOnly libraries.netty_tcnative,
-            libraries.conscrypt,
             libraries.netty_epoll
+    testRuntimeOnly libraries.netty_tcnative,
+            libraries.conscrypt
+    testRuntimeOnly (libraries.netty_epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     alpnagent libraries.jetty_alpn_agent
 }
