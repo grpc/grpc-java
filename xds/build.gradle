@@ -11,24 +11,36 @@ plugins {
 
 description = "gRPC: XDS plugin"
 
-[compileJava].each() {
-    it.options.compilerArgs += [
-        // valueOf(int) in RoutingPriority has been deprecated
-        "-Xlint:-deprecation",
-        // only has AutoValue annotation processor
-        "-Xlint:-processing",
-    ]
-    appendToProperty(
-            it.options.errorprone.excludedPaths,
-            ".*/build/generated/sources/annotationProcessor/java/.*",
-            "|")
-}
-
 evaluationDependsOn(project(':grpc-core').path)
 
+sourceSets {
+    thirdparty {
+        java {
+            srcDir "${projectDir}/third_party/zero-allocation-hashing/main/java"
+        }
+        proto {
+            srcDir 'third_party/envoy/src/main/proto'
+            srcDir 'third_party/protoc-gen-validate/src/main/proto'
+            srcDir 'third_party/xds/src/main/proto'
+            srcDir 'third_party/googleapis/src/main/proto'
+            srcDir 'third_party/istio/src/main/proto'
+        }
+    }
+    test {
+        java {
+            srcDir "${projectDir}/third_party/zero-allocation-hashing/test/java"
+        }
+    }
+}
+
 dependencies {
-    implementation project(':grpc-protobuf'),
+    thirdpartyImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
+            libraries.protobuf,
+            libraries.google_api_protos,
+            libraries.opencensus.proto
+    implementation sourceSets.thirdparty.output
+    implementation project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-services'),
             project(':grpc-auth'),
@@ -36,7 +48,6 @@ dependencies {
             libraries.gson,
             libraries.re2j,
             libraries.auto.value.annotations,
-            libraries.opencensus.proto,
             libraries.protobuf.java.util
     def nettyDependency = implementation project(':grpc-netty')
 
@@ -92,30 +103,36 @@ dependencies {
     }
 }
 
-sourceSets {
-    main {
-        java {
-            srcDir "${projectDir}/third_party/zero-allocation-hashing/main/java"
-        }
-        proto {
-            srcDir 'third_party/envoy/src/main/proto'
-            srcDir 'third_party/protoc-gen-validate/src/main/proto'
-            srcDir 'third_party/xds/src/main/proto'
-            srcDir 'third_party/googleapis/src/main/proto'
-            srcDir 'third_party/istio/src/main/proto'
-        }
-    }
-    test {
-        java {
-            srcDir "${projectDir}/third_party/zero-allocation-hashing/test/java"
-        }
-    }
+configureProtoCompilation()
+
+compileThirdpartyJava {
+    options.errorprone.enabled = false
+    options.compilerArgs += [
+        // valueOf(int) in RoutingPriority has been deprecated
+        "-Xlint:-deprecation",
+    ]
 }
 
-configureProtoCompilation()
+checkstyleThirdparty {
+    enabled = false
+}
+
+[compileJava].each() {
+    it.options.compilerArgs += [
+        // TODO: remove
+        "-Xlint:-deprecation",
+        // only has AutoValue annotation processor
+        "-Xlint:-processing",
+    ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
+}
 
 jar {
     archiveClassifier = 'original'
+    from sourceSets.thirdparty.output
 }
 
 javadoc {
