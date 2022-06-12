@@ -480,8 +480,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       keepAliveManager.onTransportStarted();
     }
 
-    final AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this);
-    FrameWriter rawFrameWriter = variant.newWriter(Okio.buffer(asyncSink), true);
+    int maxQueuedControlFrames = 10000;
+    final AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this, maxQueuedControlFrames);
+    FrameWriter rawFrameWriter = asyncSink.limitControlFramesWriter(
+        variant.newWriter(Okio.buffer(asyncSink), true));
 
     synchronized (lock) {
       // Handle FrameWriter exceptions centrally, since there are many callers. Note that errors
