@@ -2394,14 +2394,13 @@ public class ManagedChannelImplTest {
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     updateBalancingStateSafely(helper, READY, mockPicker);
-    assertEquals(0, offloadFakeClock.numPendingTasks());
     executor.runDueTasks();
     ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
     ArgumentCaptor<Executor> executorArgumentCaptor = ArgumentCaptor.forClass(null);
     ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
     verify(creds).applyRequestMetadata(infoCaptor.capture(),
         executorArgumentCaptor.capture(), applierCaptor.capture());
-    assertTrue(((ManagedChannelImpl.ExecutorHolder)executorArgumentCaptor.getValue())
+    assertTrue(((ManagedChannelImpl.ExecutorHolder) executorArgumentCaptor.getValue())
             .getExecutor() == offloadExecutor);
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
@@ -2428,8 +2427,8 @@ public class ManagedChannelImplTest {
 
     verify(creds, times(2)).applyRequestMetadata(infoCaptor.capture(),
             executorArgumentCaptor.capture(), applierCaptor.capture());
-    assertTrue(((ManagedChannelImpl.ExecutorHolder)executorArgumentCaptor.getValue())
-            .getExecutor() == offloadExecutor);
+    assertSame(offloadExecutor,
+            ((ManagedChannelImpl.ExecutorHolder) executorArgumentCaptor.getValue()).getExecutor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
     assertEquals(SecurityLevel.NONE, infoCaptor.getValue().getSecurityLevel());
@@ -4059,6 +4058,8 @@ public class ManagedChannelImplTest {
     assertThat(args).isNotNull();
     assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
+
+    verify(offloadExecutor, never()).execute(any(Runnable.class));
   }
 
   @Test
