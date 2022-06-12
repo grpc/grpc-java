@@ -149,9 +149,11 @@ final class OkHttpServerTransport implements ServerTransport,
       Socket socket = result.socket;
       this.attributes = result.attributes;
 
-      AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this);
+      int maxQueuedControlFrames = 10000;
+      AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this, maxQueuedControlFrames);
       asyncSink.becomeConnected(Okio.sink(socket), socket);
-      FrameWriter rawFrameWriter = variant.newWriter(Okio.buffer(asyncSink), false);
+      FrameWriter rawFrameWriter = asyncSink.limitControlFramesWriter(
+          variant.newWriter(Okio.buffer(asyncSink), false));
       synchronized (lock) {
         this.securityInfo = result.securityInfo;
 
@@ -809,7 +811,6 @@ final class OkHttpServerTransport implements ServerTransport,
         // The changed settings are not finalized until SETTINGS acknowledgment frame is sent. Any
         // writes due to update in settings must be sent after SETTINGS acknowledgment frame,
         // otherwise it will cause a stream error (RST_STREAM).
-        // FIXME: limit number of queued control frames
         frameWriter.ackSettings(settings);
         frameWriter.flush();
         if (!receivedSettings) {
@@ -830,7 +831,6 @@ final class OkHttpServerTransport implements ServerTransport,
       if (!ack) {
         frameLogger.logPing(OkHttpFrameLogger.Direction.INBOUND, payload);
         synchronized (lock) {
-          // FIXME: limit number of queued control frames
           frameWriter.ping(true, payload1, payload2);
           frameWriter.flush();
         }
@@ -927,7 +927,6 @@ final class OkHttpServerTransport implements ServerTransport,
             Level.FINE, "Responding with RST_STREAM {0}: {1}", new Object[] {errorCode, reason});
       }
       synchronized (lock) {
-        // FIXME: limit number of queued control frames
         frameWriter.rstStream(streamId, errorCode);
         frameWriter.flush();
         StreamState stream = streams.get(streamId);
