@@ -1803,7 +1803,7 @@ public abstract class AbstractInteropTest {
         break;
       }
     }
-    boolean failed = i >= retryLimit;
+    assertThat(i).isLessThan(retryLimit);
     streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
         .setOobLock(lock.get()).setOrcaOobReport(answer2).build());
 
@@ -1815,7 +1815,6 @@ public abstract class AbstractInteropTest {
       }
     }
     streamObserver.onCompleted();
-    assertThat(failed).isFalse();
     assertThat(i).isLessThan(retryLimit);
   }
 
