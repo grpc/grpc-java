@@ -887,6 +887,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     updateSubchannelPicker(new PanicSubchannelPicker());
+    realChannel.updateConfigSelector(null);
     channelLogger.log(ChannelLogLevel.ERROR, "PANIC! Entering TRANSIENT_FAILURE");
     channelStateManager.gotoState(TRANSIENT_FAILURE);
   }
@@ -1755,6 +1756,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
+          if (ManagedChannelImpl.this.nameResolver != resolver) {
+            return;
+          }
 
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
           channelLogger.log(
