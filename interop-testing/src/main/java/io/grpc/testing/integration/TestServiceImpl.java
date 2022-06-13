@@ -243,7 +243,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       @Override
       public void onCompleted() {
         synchronized (this) {
-          if (orcaOobTest.get().equals(true) && !orcaOobLock.equals("")) {
+          if (orcaOobTest.get() && !orcaOobLock.equals("")) {
             orcaOobLock = "";
           }
         }
@@ -255,6 +255,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
+        synchronized (this) {
+          if (orcaOobTest.get() && !orcaOobLock.equals("")) {
+            orcaOobLock = "";
+          }
+        }
         dispatcher.onError(cause);
       }
     };

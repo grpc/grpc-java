@@ -1799,7 +1799,7 @@ public abstract class AbstractInteropTest {
     for (; i < retryLimit; i++) {
       Thread.sleep(1000);
       blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
-      if (reportHolder.get().equals(answer)) {
+      if (answer.equals(reportHolder.get())) {
         break;
       }
     }
