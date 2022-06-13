@@ -169,7 +169,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     try {
       InputStream resp = method.streamResponse(message);
       stream.writeMessage(resp);
-      stream.flush();
+      if (!getMethodDescriptor().getType().serverSendsOneMessage()) {
+        stream.flush();
+      }
     } catch (RuntimeException e) {
       close(Status.fromThrowable(e), new Metadata());
     } catch (Error e) {
