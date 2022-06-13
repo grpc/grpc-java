@@ -25,16 +25,16 @@ evaluationDependsOn(project(':grpc-api').path)
 dependencies {
     api project(':grpc-api')
     implementation libraries.gson,
-            libraries.android_annotations,
-            libraries.animalsniffer_annotations,
-            libraries.errorprone,
+            libraries.android.annotations,
+            libraries.animalsniffer.annotations,
+            libraries.errorprone.annotations,
             libraries.guava,
-            libraries.perfmark
+            libraries.perfmark.api
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava_testlib) {
+    testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
 

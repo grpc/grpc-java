@@ -13,13 +13,13 @@ evaluationDependsOn(project(':grpc-context').path)
 dependencies {
     api project(':grpc-context'),
             libraries.jsr305,
-            libraries.errorprone
+            libraries.errorprone.annotations
     implementation libraries.guava
 
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava_testlib) {
+    testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
     jmh project(':grpc-core')

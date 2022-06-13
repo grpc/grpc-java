@@ -35,27 +35,27 @@ dependencies {
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
             libraries.re2j,
-            libraries.autovalue_annotation,
-            libraries.opencensus_proto,
-            libraries.protobuf_util
+            libraries.auto.value.annotations,
+            libraries.opencensus.proto,
+            libraries.protobuf.java.util
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-rls')
     testImplementation project(':grpc-core').sourceSets.test.output
 
-    annotationProcessor libraries.autovalue
-    compileOnly libraries.javax_annotation,
+    annotationProcessor libraries.auto.value
+    compileOnly libraries.javax.annotation,
             // At runtime use the epoll included in grpc-netty-shaded
-            libraries.netty_epoll
+            libraries.netty.transport.epoll
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto')
-    testImplementation (libraries.netty_epoll) {
+    testImplementation (libraries.netty.transport.epoll) {
         artifact {
             classifier = "linux-x86_64"
         }
     }
-    testImplementation (libraries.guava_testlib) {
+    testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
 
@@ -63,7 +63,7 @@ dependencies {
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    testRuntimeOnly libraries.netty_tcnative
+    testRuntimeOnly libraries.netty.tcnative
 }
 
 sourceSets {

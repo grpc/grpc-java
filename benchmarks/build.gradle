@@ -29,18 +29,18 @@ dependencies {
             project(':grpc-testing'),
             project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.hdrhistogram,
-            libraries.netty_tcnative,
-            libraries.math
-    implementation (libraries.netty_epoll) {
+            libraries.netty.tcnative,
+            libraries.commons.math3
+    implementation (libraries.netty.transport.epoll) {
         artifact {
             classifier = "linux-x86_64"
         }
     }
-    compileOnly libraries.javax_annotation
-    alpnagent libraries.jetty_alpn_agent
+    compileOnly libraries.javax.annotation
+    alpnagent libraries.jetty.alpn.agent
 
     testImplementation libraries.junit,
-            libraries.mockito
+            libraries.mockito.core
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
