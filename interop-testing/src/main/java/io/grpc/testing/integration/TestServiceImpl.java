@@ -51,6 +51,8 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -200,18 +202,24 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   public StreamObserver<Messages.StreamingOutputCallRequest> fullDuplexCall(
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
     final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
+    final AtomicReference<Boolean> orcaOobTest = new AtomicReference<>(false);
     return new StreamObserver<StreamingOutputCallRequest>() {
       @Override
       public void onNext(StreamingOutputCallRequest request) {
 
+        // to facilitate multiple clients running orca_oob test in parallel, the server allows
+        // only one orca_oob test client to run at a time to avoid conflicts. This is done by
+        // sending a lock String token to the test client that wins the synchronization. The lock is
+        // guaranteed to be released when the current stream is closed.
         if (request.hasOrcaOobReport()) {
+          orcaOobTest.set(true);
           while (true) {
             synchronized (this) {
               try {
                 if (orcaOobLock.equals(request.getOobLock())) {
                   echoMetricsFromPayload(request.getOrcaOobReport());
                   if (orcaOobLock.equals("")) {
-                    orcaOobLock = "grpc";
+                    orcaOobLock = "grpc" + random.nextDouble();
                     responseObserver.onNext(
                         StreamingOutputCallResponse.newBuilder().setOobLock(orcaOobLock).build());
                   }
@@ -239,7 +247,9 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       @Override
       public void onCompleted() {
         synchronized (this) {
-          orcaOobLock = "";
+          if (orcaOobTest.get() && !orcaOobLock.isEmpty()) {
+            orcaOobLock = "";
+          }
         }
         if (!dispatcher.isCancelled()) {
           // Tell the dispatcher that all input has been received.
@@ -250,7 +260,9 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       @Override
       public void onError(Throwable cause) {
         synchronized (this) {
-          orcaOobLock = "";
+          if (orcaOobTest.get() && !orcaOobLock.isEmpty()) {
+            orcaOobLock = "";
+          }
         }
         dispatcher.onError(cause);
       }
