@@ -1814,8 +1814,8 @@ public abstract class AbstractInteropTest {
         break;
       }
     }
-    streamObserver.onCompleted();
     assertThat(i).isLessThan(retryLimit);
+    streamObserver.onCompleted();
   }
 
   /** Sends a large unary rpc with service account credentials. */
