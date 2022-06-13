@@ -229,6 +229,10 @@ publishing {
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')
                 project.configurations.shadow.allDependencies.each { dep ->
+                    if (dep.group == null && dep.name == 'unspecified') {
+                        // Ignore the thirdparty self-dependency
+                        return;
+                    }
                     def dependencyNode = dependenciesNode.appendNode('dependency')
                     dependencyNode.appendNode('groupId', dep.group)
                     dependencyNode.appendNode('artifactId', dep.name)
