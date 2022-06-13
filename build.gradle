@@ -295,6 +295,24 @@ subprojects {
         }
     }
 
+    plugins.withId("com.github.johnrengelman.shadow") {
+        tasks.named("shadowJar") {
+            // Do a dance to remove Class-Path. This needs to run after the doFirst() from the
+            // shadow plugin that adds Class-Path and before the core jar action. Using doFirst will
+            // have this run before the shadow plugin, and doLast will run after the core jar
+            // action. See #8606.
+            // The shadow plugin adds another doFirst when application is used for setting
+            // Main-Class. Ordering with it doesn't matter.
+            actions.add(plugins.hasPlugin("application") ? 2 : 1, new Action<Task>() {
+                @Override public void execute(Task task) {
+                    if (!task.manifest.attributes.remove("Class-Path")) {
+                        throw new AssertionError("Did not find Class-Path to remove from manifest")
+                    }
+                }
+            })
+        }
+    }
+
     plugins.withId("maven-publish") {
         publishing {
             publications {
