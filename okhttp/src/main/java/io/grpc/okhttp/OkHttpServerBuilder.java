@@ -37,14 +37,9 @@ import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.internal.Platform;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
-import java.security.KeyStore;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -57,8 +52,6 @@ import javax.net.ServerSocketFactory;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.security.auth.x500.X500Principal;
 
 /**
  * Build servers with the OkHttp transport.
@@ -287,15 +280,25 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
       if (tlsCreds.getKeyManagers() != null) {
         km = tlsCreds.getKeyManagers().toArray(new KeyManager[0]);
       } else if (tlsCreds.getPrivateKey() != null) {
-        return HandshakerSocketFactoryResult.error(
-            "byte[]-based private key unsupported. Use KeyManager");
+        if (tlsCreds.getPrivateKeyPassword() != null) {
+          return HandshakerSocketFactoryResult.error("byte[]-based private key with password "
+              + "unsupported. Use unencrypted file or KeyManager");
+        }
+        try {
+          km = OkHttpChannelBuilder.createKeyManager(
+              tlsCreds.getCertificateChain(), tlsCreds.getPrivateKey());
+        } catch (GeneralSecurityException gse) {
+          log.log(Level.FINE, "Exception loading private key from credential", gse);
+          return HandshakerSocketFactoryResult.error(
+              "Unable to load private key: " + gse.getMessage());
+        }
       } // else don't have a client cert
       TrustManager[] tm = null;
       if (tlsCreds.getTrustManagers() != null) {
         tm = tlsCreds.getTrustManagers().toArray(new TrustManager[0]);
       } else if (tlsCreds.getRootCertificates() != null) {
         try {
-          tm = createTrustManager(tlsCreds.getRootCertificates());
+          tm = OkHttpChannelBuilder.createTrustManager(tlsCreds.getRootCertificates());
         } catch (GeneralSecurityException gse) {
           log.log(Level.FINE, "Exception loading root certificates from credential", gse);
           return HandshakerSocketFactoryResult.error(
@@ -339,30 +342,6 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
       return HandshakerSocketFactoryResult.error(
           "Unsupported credential type: " + creds.getClass().getName());
     }
-  }
-
-  static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
-    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-    try {
-      ks.load(null, null);
-    } catch (IOException ex) {
-      // Shouldn't really happen, as we're not loading any data.
-      throw new GeneralSecurityException(ex);
-    }
-    CertificateFactory cf = CertificateFactory.getInstance("X.509");
-    ByteArrayInputStream in = new ByteArrayInputStream(rootCerts);
-    try {
-      X509Certificate cert = (X509Certificate) cf.generateCertificate(in);
-      X500Principal principal = cert.getSubjectX500Principal();
-      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
-    } finally {
-      GrpcUtil.closeQuietly(in);
-    }
-
-    TrustManagerFactory trustManagerFactory =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-    trustManagerFactory.init(ks);
-    return trustManagerFactory.getTrustManagers();
   }
 
   static final class HandshakerSocketFactoryResult {

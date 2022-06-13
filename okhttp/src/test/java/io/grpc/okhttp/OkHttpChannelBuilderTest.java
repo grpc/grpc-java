@@ -258,9 +258,62 @@ public class OkHttpChannelBuilderTest {
   }
 
   @Test
-  public void sslSocketFactoryFrom_tls_mtls_byteKeyUnsupported() throws Exception {
+  public void sslSocketFactoryFrom_tls_mtls_keyFile() throws Exception {
+    SelfSignedCertificate cert = new SelfSignedCertificate(TestUtils.TEST_SERVER_HOST);
+    KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    keyStore.load(null);
+    keyStore.setKeyEntry("mykey", cert.key(), new char[0], new Certificate[] {cert.cert()});
+    KeyManagerFactory keyManagerFactory =
+        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+    keyManagerFactory.init(keyStore, new char[0]);
+
+    KeyStore certStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    certStore.load(null);
+    certStore.setCertificateEntry("mycert", cert.cert());
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    trustManagerFactory.init(certStore);
+
+    SSLContext serverContext = SSLContext.getInstance("TLS");
+    serverContext.init(
+        keyManagerFactory.getKeyManagers(), trustManagerFactory.getTrustManagers(), null);
+    final SSLServerSocket serverListenSocket =
+        (SSLServerSocket) serverContext.getServerSocketFactory().createServerSocket(0);
+    serverListenSocket.setNeedClientAuth(true);
+    final SettableFuture<SSLSocket> serverSocket = SettableFuture.create();
+    new Thread(new Runnable() {
+      @Override public void run() {
+        try {
+          SSLSocket socket = (SSLSocket) serverListenSocket.accept();
+          socket.getSession(); // Force handshake
+          serverSocket.set(socket);
+          serverListenSocket.close();
+        } catch (Throwable t) {
+          serverSocket.setException(t);
+        }
+      }
+    }).start();
+
     ChannelCredentials creds = TlsChannelCredentials.newBuilder()
-        .keyManager(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
+        .keyManager(cert.certificate(), cert.privateKey())
+        .trustManager(cert.certificate())
+        .build();
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    SSLSocket socket =
+        (SSLSocket) result.factory.createSocket("localhost", serverListenSocket.getLocalPort());
+    socket.getSession(); // Force handshake
+    assertThat(((X500Principal) serverSocket.get().getSession().getPeerPrincipal()).getName())
+        .isEqualTo("CN=" + TestUtils.TEST_SERVER_HOST);
+    socket.close();
+    serverSocket.get().close();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_tls_mtls_passwordUnsupported() throws Exception {
+    ChannelCredentials creds = TlsChannelCredentials.newBuilder()
+        .keyManager(
+            TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"), "password")
         .build();
     OkHttpChannelBuilder.SslSocketFactoryResult result =
         OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
