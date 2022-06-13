@@ -34,6 +34,7 @@ sourceSets {
 }
 
 dependencies {
+    thirdpartyCompileOnly libraries.javax.annotation
     thirdpartyImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.protobuf,
@@ -55,9 +56,8 @@ dependencies {
     testImplementation project(':grpc-core').sourceSets.test.output
 
     annotationProcessor libraries.auto.value
-    compileOnly libraries.javax.annotation,
-            // At runtime use the epoll included in grpc-netty-shaded
-            libraries.netty.transport.epoll
+    // At runtime use the epoll included in grpc-netty-shaded
+    compileOnly libraries.netty.transport.epoll
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto')
