@@ -200,56 +200,6 @@ public class XdsClientWrapperForServerSdsTestMisc {
   }
 
   @Test
-  public void registerServerWatcher_notifyInternalError() throws Exception {
-    final SettableFuture<Server> start = SettableFuture.create();
-    Executors.newSingleThreadExecutor().execute(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          start.set(xdsServerWrapper.start());
-        } catch (Exception ex) {
-          start.setException(ex);
-        }
-      }
-    });
-    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    xdsClient.ldsWatcher.onError(Status.INTERNAL);
-    verify(listener, timeout(5000)).onNotServing(any());
-    try {
-      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
-      fail("Start should throw exception");
-    } catch (TimeoutException ex) {
-      assertThat(start.isDone()).isFalse();
-    }
-    assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
-  }
-
-  @Test
-  public void registerServerWatcher_notifyPermDeniedError() throws Exception {
-    final SettableFuture<Server> start = SettableFuture.create();
-    Executors.newSingleThreadExecutor().execute(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          start.set(xdsServerWrapper.start());
-        } catch (Exception ex) {
-          start.setException(ex);
-        }
-      }
-    });
-    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    xdsClient.ldsWatcher.onError(Status.PERMISSION_DENIED);
-    verify(listener, timeout(5000)).onNotServing(any());
-    try {
-      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
-      fail("Start should throw exception");
-    } catch (TimeoutException ex) {
-      assertThat(start.isDone()).isFalse();
-    }
-    assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
-  }
-
-  @Test
   public void releaseOldSupplierOnChanged_noCloseDueToLazyLoading() throws Exception {
     InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
     localAddress = new InetSocketAddress(ipLocalAddress, PORT);
@@ -324,23 +274,6 @@ public class XdsClientWrapperForServerSdsTestMisc {
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
     xdsClient.ldsWatcher.onResourceDoesNotExist("not-found Error");
-    verify(tlsContextManager, times(1)).releaseServerSslContextProvider(eq(sslContextProvider1));
-  }
-
-  @Test
-  public void releaseOldSupplierOnPermDeniedError_verifyClose() throws Exception {
-    SslContextProvider sslContextProvider1 = mock(SslContextProvider.class);
-    when(tlsContextManager.findOrCreateServerSslContextProvider(eq(tlsContext1)))
-            .thenReturn(sslContextProvider1);
-    InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
-    localAddress = new InetSocketAddress(ipLocalAddress, PORT);
-    sendListenerUpdate(localAddress, tlsContext1, null,
-            tlsContextManager);
-    SslContextProviderSupplier returnedSupplier =
-            getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
-    assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
-    callUpdateSslContext(returnedSupplier);
-    xdsClient.ldsWatcher.onError(Status.PERMISSION_DENIED);
     verify(tlsContextManager, times(1)).releaseServerSslContextProvider(eq(sslContextProvider1));
   }
 
