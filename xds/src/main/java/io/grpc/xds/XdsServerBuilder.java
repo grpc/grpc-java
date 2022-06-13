@@ -181,7 +181,6 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     DefaultListener(String prefix) {
       logger = Logger.getLogger(DefaultListener.class.getName());
       this.prefix = prefix;
-      notServingDueToError = false;
     }
 
     /** Log calls to onServing() following a call to onNotServing() at WARNING level. */
