@@ -32,11 +32,11 @@ dependencies {
             libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
-            libraries.opencensus_contrib_grpc_metrics,
-            libraries.google_auth_oauth2_http
+            libraries.opencensus.contrib.grpc.metrics,
+            libraries.google.auth.oauth2Http
     def xdsDependency = implementation project(':grpc-xds')
 
-    compileOnly libraries.javax_annotation
+    compileOnly libraries.javax.annotation
     shadow configurations.implementation.getDependencies().minus(xdsDependency)
     shadow project(path: ':grpc-xds', configuration: 'shadow')
     // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
@@ -46,16 +46,16 @@ dependencies {
     // Error example: "java.util.logging.ErrorManager: 1"
     // Latest failing version com.google.cloud:google-cloud-logging:2.1.2
     runtimeOnly group: 'io.github.devatherock', name: 'jul-jsonformatter', version: '1.1.0'
-    runtimeOnly libraries.opencensus_impl,
-            libraries.netty_tcnative,
+    runtimeOnly libraries.opencensus.impl,
+            libraries.netty.tcnative,
             project(':grpc-grpclb'),
             project(':grpc-rls')
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,
-            libraries.mockito,
+            libraries.mockito.core,
             libraries.okhttp
-    alpnagent libraries.jetty_alpn_agent
+    alpnagent libraries.jetty.alpn.agent
 }
 
 configureProtoCompilation()

@@ -17,13 +17,13 @@ sourceSets { testShadow {} }
 
 dependencies {
     implementation project(':grpc-netty')
-    runtimeOnly libraries.netty_tcnative
-    runtimeOnly (libraries.netty_epoll) {
+    runtimeOnly libraries.netty.tcnative
+    runtimeOnly (libraries.netty.transport.epoll) {
         artifact {
             classifier = "linux-x86_64"
         }
     }
-    runtimeOnly (libraries.netty_epoll) {
+    runtimeOnly (libraries.netty.transport.epoll) {
         artifact {
             classifier = "linux-aarch_64"
         }

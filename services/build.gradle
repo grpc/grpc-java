@@ -22,16 +22,16 @@ dependencies {
     api project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core')
-    implementation libraries.protobuf_util,
+    implementation libraries.protobuf.java.util,
             libraries.guava
 
-    runtimeOnly libraries.errorprone
+    runtimeOnly libraries.errorprone.annotations
 
-    compileOnly libraries.javax_annotation
+    compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),
-            libraries.netty_epoll, // for DomainSocketAddress
+            libraries.netty.transport.epoll, // for DomainSocketAddress
             project(':grpc-core').sourceSets.test.output  // for FakeClock
-    testCompileOnly libraries.javax_annotation
+    testCompileOnly libraries.javax.annotation
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 

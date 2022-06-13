@@ -51,8 +51,8 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
     implementation libraries.junit
-    implementation libraries.protobuf
-    runtimeOnly libraries.netty_tcnative
+    implementation libraries.protobuf.java
+    runtimeOnly libraries.netty.tcnative
 }
 
 compileJava {

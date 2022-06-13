@@ -14,10 +14,10 @@ dependencies {
             project(':grpc-stub'),
             libraries.junit
     // Only io.grpc.internal.testing.StatsTestUtils depends on opencensus_api, for internal use.
-    compileOnly libraries.opencensus_api
+    compileOnly libraries.opencensus.api
     runtimeOnly project(":grpc-context") // Pull in newer version than census-api
 
-    testImplementation (libraries.mockito) {
+    testImplementation (libraries.mockito.core) {
         // prefer our own versions instead of mockito's dependency
         exclude group: 'org.hamcrest', module: 'hamcrest-core'
     }

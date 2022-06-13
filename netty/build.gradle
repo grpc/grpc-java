@@ -17,28 +17,28 @@ evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     api project(':grpc-core'),
-            libraries.netty
-    implementation libraries.netty_proxy_handler,
+            libraries.netty.codec.http2
+    implementation libs.netty.handler.proxy,
             libraries.guava,
-            libraries.errorprone,
-            libraries.perfmark,
-            libraries.netty_unix_common
+            libraries.errorprone.annotations,
+            libraries.perfmark.api,
+            libraries.netty.unix.common
 
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
-            libraries.netty_epoll
-    testRuntimeOnly libraries.netty_tcnative,
+            libraries.netty.transport.epoll
+    testRuntimeOnly libraries.netty.tcnative,
             libraries.conscrypt
-    testRuntimeOnly (libraries.netty_epoll) {
+    testRuntimeOnly (libraries.netty.transport.epoll) {
         artifact {
             classifier = "linux-x86_64"
         }
     }
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    alpnagent libraries.jetty_alpn_agent
+    alpnagent libraries.jetty.alpn.agent
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
