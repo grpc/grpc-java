@@ -116,8 +116,8 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -1760,18 +1760,18 @@ public abstract class AbstractInteropTest {
    */
   public void testOrcaOob() throws Exception {
     AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
+    Random r = new Random();
     final TestOrcaReport answer = TestOrcaReport.newBuilder()
-        .setCpuUtilization(0.8210)
-        .setMemoryUtilization(0.5847)
-        .putUtilization("util", 0.30499)
+        .setCpuUtilization(r.nextDouble())
+        .setMemoryUtilization(r.nextDouble())
+        .putUtilization("util", r.nextDouble())
         .build();
     final TestOrcaReport answer2 = TestOrcaReport.newBuilder()
-        .setCpuUtilization(0.29309)
-        .setMemoryUtilization(0.2)
-        .putUtilization("util", 100.2039)
+        .setCpuUtilization(r.nextDouble())
+        .setMemoryUtilization(r.nextDouble())
+        .putUtilization("util", r.nextDouble())
         .build();
 
-    CyclicBarrier barrier = new CyclicBarrier(2);
     final int retryLimit = 5;
     AtomicReference<String> lock = new AtomicReference<>("");
 
@@ -1780,32 +1780,7 @@ public abstract class AbstractInteropTest {
 
           @Override
           public void onNext(StreamingOutputCallResponse value) {
-            try {
-              int i = 0;
-              for (; i < retryLimit; i++) {
-                Thread.sleep(1000);
-                blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
-                if (reportHolder.get().equals(answer)) {
-                  break;
-                }
-              }
-              assertThat(i).isLessThan(retryLimit);
-              System.out.println("\n" + reportHolder.get());
-              lock.set(value.getOobLock());
-              barrier.await(10, TimeUnit.SECONDS);
-              for (i = 0; i < retryLimit; i++) {
-                Thread.sleep(1000);
-                blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
-                if (reportHolder.get().equals(answer2)) {
-                  break;
-                }
-              }
-              assertThat(i).isLessThan(retryLimit);
-              System.out.println("\n" + reportHolder.get());
-              barrier.await(10, TimeUnit.SECONDS);
-            } catch (Exception ex) {
-              throw new RuntimeException(ex);
-            }
+            lock.set(value.getOobLock());
           }
 
           @Override
@@ -1818,18 +1793,30 @@ public abstract class AbstractInteropTest {
           }
         });
 
-    try {
-      streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
-          .setOobLock("").setOrcaOobReport(answer).build());
-      barrier.await(10, TimeUnit.SECONDS);
-      streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
-          .setOobLock(lock.get()).setOrcaOobReport(answer2).build());
-      barrier.await(10, TimeUnit.SECONDS);
-      streamObserver.onCompleted();
-    } catch (Exception ex) {
-      streamObserver.onError(ex);
-      throw ex;
+    streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
+        .setOobLock("").setOrcaOobReport(answer).build());
+    int i = 0;
+    for (; i < retryLimit; i++) {
+      Thread.sleep(1000);
+      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+      if (reportHolder.get().equals(answer)) {
+        break;
+      }
     }
+    boolean failed = i >= retryLimit;
+    streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
+        .setOobLock(lock.get()).setOrcaOobReport(answer2).build());
+
+    for (i = 0; i < retryLimit; i++) {
+      Thread.sleep(1000);
+      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+      if (reportHolder.get().equals(answer2)) {
+        break;
+      }
+    }
+    streamObserver.onCompleted();
+    assertThat(failed).isFalse();
+    assertThat(i).isLessThan(retryLimit);
   }
 
   /** Sends a large unary rpc with service account credentials. */

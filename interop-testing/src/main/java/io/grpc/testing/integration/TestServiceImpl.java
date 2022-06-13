@@ -51,6 +51,8 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -200,11 +202,13 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   public StreamObserver<Messages.StreamingOutputCallRequest> fullDuplexCall(
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
     final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
+    AtomicReference<Boolean> orcaOobTest = new AtomicReference<>(false);
     return new StreamObserver<StreamingOutputCallRequest>() {
       @Override
       public void onNext(StreamingOutputCallRequest request) {
 
         if (request.hasOrcaOobReport()) {
+          orcaOobTest.set(true);
           while (true) {
             synchronized (this) {
               try {
@@ -239,7 +243,9 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       @Override
       public void onCompleted() {
         synchronized (this) {
-          orcaOobLock = "";
+          if (orcaOobTest.get().equals(true) && !orcaOobLock.equals("")) {
+            orcaOobLock = "";
+          }
         }
         if (!dispatcher.isCancelled()) {
           // Tell the dispatcher that all input has been received.
@@ -249,9 +255,6 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
-        synchronized (this) {
-          orcaOobLock = "";
-        }
         dispatcher.onError(cause);
       }
     };
