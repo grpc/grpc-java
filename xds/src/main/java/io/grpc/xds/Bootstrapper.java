@@ -62,10 +62,21 @@ public abstract class Bootstrapper {
 
     abstract boolean useProtocolV3();
 
+    abstract boolean ignoreResourceDeletion();
+
     @VisibleForTesting
     static ServerInfo create(
         String target, ChannelCredentials channelCredentials, boolean useProtocolV3) {
-      return new AutoValue_Bootstrapper_ServerInfo(target, channelCredentials, useProtocolV3);
+      return new AutoValue_Bootstrapper_ServerInfo(target, channelCredentials, useProtocolV3,
+          false);
+    }
+
+    @VisibleForTesting
+    static ServerInfo create(
+        String target, ChannelCredentials channelCredentials, boolean useProtocolV3,
+        boolean ignoreResourceDeletion) {
+      return new AutoValue_Bootstrapper_ServerInfo(target, channelCredentials, useProtocolV3,
+          ignoreResourceDeletion);
     }
   }
 
