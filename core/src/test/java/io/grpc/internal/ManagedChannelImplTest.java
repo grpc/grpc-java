@@ -4064,8 +4064,7 @@ public class ManagedChannelImplTest {
         .execute(
             new Runnable() {
               @Override
-              public void run() {
-              }
+              public void run() {}
             });
     verify(offloadExecutor, times(1)).execute(any(Runnable.class));
   }
