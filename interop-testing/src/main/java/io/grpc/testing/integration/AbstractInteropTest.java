@@ -1799,6 +1799,9 @@ public abstract class AbstractInteropTest {
     streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
         .setOrcaOobReport(answer).build());
     queue.take();
+    if (closeFuture.isDone()) {
+      closeFuture.get();
+    }
     assertFalse(closeFuture.isDone());
     int i = 0;
     for (; i < retryLimit; i++) {
