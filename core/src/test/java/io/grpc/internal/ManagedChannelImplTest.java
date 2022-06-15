@@ -4061,12 +4061,12 @@ public class ManagedChannelImplTest {
 
     verify(offloadExecutor, never()).execute(any(Runnable.class));
     args.getOffloadExecutor()
-            .execute(
-                    new Runnable() {
-                      @Override
-                      public void run() {
-                      }
-                    });
+        .execute(
+                new Runnable() {
+                  @Override
+                  public void run() {
+                  }
+                });
     verify(offloadExecutor, times(1)).execute(any(Runnable.class));
   }
 
