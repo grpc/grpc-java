@@ -329,6 +329,8 @@ final class XdsServerWrapper extends Server {
       if (!initialStarted) {
         initialStarted = true;
         initialStartFuture.set(e);
+      } else {
+        listener.onNotServing(e);
       }
       restartTimer = syncContext.schedule(
         new RestartTask(), RETRY_DELAY_NANOS, TimeUnit.NANOSECONDS, timeService);
