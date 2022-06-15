@@ -61,7 +61,6 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -445,12 +444,8 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          boolean isPermanentError = isPermanentError(error);
-          logger.log(Level.FINE, "{0} error from XdsClient: {1}",
-                  new Object[]{isPermanentError ? "Permanent" : "Transient", error});
-          if (isPermanentError) {
-            handleConfigNotFound(error.asException());
-          } else if (!isServing) {
+          logger.log(Level.FINE, "Error from XdsClient", error);
+          if (!isServing) {
             listener.onNotServing(error.asException());
           }
         }
@@ -718,16 +713,6 @@ final class XdsServerWrapper extends Server {
           updateSelector();
         }
       }
-    }
-
-    private boolean isPermanentError(Status error) {
-      return EnumSet.of(
-              Status.Code.INTERNAL,
-              Status.Code.INVALID_ARGUMENT,
-              Status.Code.FAILED_PRECONDITION,
-              Status.Code.PERMISSION_DENIED,
-              Status.Code.UNAUTHENTICATED)
-              .contains(error.getCode());
     }
   }
 

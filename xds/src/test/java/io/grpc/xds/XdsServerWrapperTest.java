@@ -685,7 +685,7 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onError(Status.INTERNAL);
     assertThat(selectorManager.getSelectorToUpdateSelector())
         .isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
-    assertThat(xdsClient.rdsWatchers).isEmpty();
+    RdsResourceWatcher saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     verify(mockBuilder, times(1)).build();
     verify(listener, times(2)).onNotServing(any(StatusException.class));
     assertThat(sslSupplier0.isShutdown()).isFalse();
@@ -705,7 +705,6 @@ public class XdsServerWrapperTest {
       assertThat(ex.getCause()).isInstanceOf(IOException.class);
       assertThat(ex.getCause().getMessage()).isEqualTo("error!");
     }
-    RdsResourceWatcher saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     assertThat(executor.forwardNanos(RETRY_DELAY_NANOS)).isEqualTo(1);
     verify(mockBuilder, times(1)).build();
     verify(mockServer, times(2)).start();
@@ -739,7 +738,7 @@ public class XdsServerWrapperTest {
     // not serving after serving
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
     assertThat(xdsClient.rdsWatchers).isEmpty();
-    verify(mockServer, times(3)).shutdown();
+    verify(mockServer, times(2)).shutdown();
     when(mockServer.isShutdown()).thenReturn(true);
     assertThat(selectorManager.getSelectorToUpdateSelector())
         .isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
@@ -777,7 +776,7 @@ public class XdsServerWrapperTest {
 
     assertThat(executor.numPendingTasks()).isEqualTo(1);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
-    verify(mockServer, times(4)).shutdown();
+    verify(mockServer, times(3)).shutdown();
     verify(listener, times(4)).onNotServing(any(StatusException.class));
     when(mockServer.isShutdown()).thenReturn(true);
     assertThat(executor.numPendingTasks()).isEqualTo(0);
@@ -804,7 +803,7 @@ public class XdsServerWrapperTest {
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
 
     xdsServerWrapper.shutdown();
-    verify(mockServer, times(5)).shutdown();
+    verify(mockServer, times(4)).shutdown();
     assertThat(sslSupplier3.isShutdown()).isTrue();
     when(mockServer.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
     assertThat(xdsServerWrapper.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
