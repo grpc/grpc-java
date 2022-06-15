@@ -278,8 +278,8 @@ public class ManagedChannelImplTest {
   private ObjectPool<Executor> balancerRpcExecutorPool;
   @Mock
   private CallCredentials creds;
-  private FakeClock offloadFakeClock = new FakeClock();
-  private Executor offloadExecutor = offloadFakeClock.getScheduledExecutorService();
+  @Mock
+  private Executor offloadExecutor;
   private ManagedChannelImplBuilder channelBuilder;
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
@@ -2400,8 +2400,8 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
     verify(creds).applyRequestMetadata(infoCaptor.capture(),
         executorArgumentCaptor.capture(), applierCaptor.capture());
-    assertTrue(((ManagedChannelImpl.ExecutorHolder) executorArgumentCaptor.getValue())
-            .getExecutor() == offloadExecutor);
+    assertSame(offloadExecutor,
+            ((ManagedChannelImpl.ExecutorHolder) executorArgumentCaptor.getValue()).getExecutor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
     assertEquals(SecurityLevel.NONE, infoCaptor.getValue().getSecurityLevel());
@@ -4060,6 +4060,13 @@ public class ManagedChannelImplTest {
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
 
     verify(offloadExecutor, never()).execute(any(Runnable.class));
+    args.getOffloadExecutor()
+            .execute(
+                    new Runnable() {
+                      @Override
+                      public void run() {}
+                    });
+    verify(offloadExecutor, times(1)).execute(any(Runnable.class));
   }
 
   @Test
