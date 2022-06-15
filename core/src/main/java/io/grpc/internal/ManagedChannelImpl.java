@@ -622,8 +622,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.originalChannelCreds = builder.channelCredentials;
     this.originalTransportFactory = clientTransportFactory;
     this.offloadExecutorHolder =
-            new ExecutorHolder(
-                    checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
+        new ExecutorHolder(checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
         clientTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
     this.oobTransportFactory = new CallCredentialsApplyingTransportFactory(
