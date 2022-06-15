@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -458,6 +459,47 @@ public class XdsServerWrapperTest {
   }
 
   @Test
+  public void discoverState_restart_afterResourceNotExist() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsResource).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    VirtualHost virtualHost =
+            VirtualHost.create(
+                    "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
+                    ImmutableMap.<String, FilterConfig>of());
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
+    EnvoyServerProtoData.FilterChain filterChain = EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
+            mock(TlsContextManager.class));
+    xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
+    start.get(5000, TimeUnit.MILLISECONDS);
+    verify(listener).onServing();
+    verify(mockServer).start();
+
+    // server shutdown after resourceDoesNotExist
+    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    verify(mockServer).shutdown();
+
+    // re-deliver lds resource
+    reset(mockServer);
+    reset(listener);
+    xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
+    verify(listener).onServing();
+    verify(mockServer).start();
+  }
+
+  @Test
   public void discoverState_rds() throws Exception {
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
@@ -778,6 +820,7 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
     verify(mockServer, times(3)).shutdown();
     verify(listener, times(4)).onNotServing(any(StatusException.class));
+    verify(listener, times(1)).onNotServing(any(IOException.class));
     when(mockServer.isShutdown()).thenReturn(true);
     assertThat(executor.numPendingTasks()).isEqualTo(0);
     assertThat(sslSupplier2.isShutdown()).isTrue();
