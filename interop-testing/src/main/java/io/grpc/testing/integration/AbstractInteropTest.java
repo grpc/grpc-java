@@ -1966,15 +1966,9 @@ public abstract class AbstractInteropTest {
     private Status status = Status.OK;
   }
 
-  private SoakIterationResult performOneSoakIteration(boolean resetChannel) throws Exception {
+  private SoakIterationResult performOneSoakIteration(TestServiceGrpc.TestServiceBlockingStub soakStub) throws Exception {
     long startNs = System.nanoTime();
     Status status = Status.OK;
-    ManagedChannel soakChannel = channel;
-    TestServiceGrpc.TestServiceBlockingStub soakStub = blockingStub;
-    if (resetChannel) {
-      soakChannel = createChannel();
-      soakStub = TestServiceGrpc.newBlockingStub(soakChannel);
-    }
     try {
       final SimpleRequest request =
           SimpleRequest.newBuilder()
@@ -1990,10 +1984,6 @@ public abstract class AbstractInteropTest {
       status = e.getStatus();
     }
     long elapsedNs = System.nanoTime() - startNs;
-    if (resetChannel) {
-      soakChannel.shutdownNow();
-      soakChannel.awaitTermination(10, TimeUnit.SECONDS);
-    }
     return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
   }
 
@@ -2006,20 +1996,32 @@ public abstract class AbstractInteropTest {
       int soakIterations,
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
+      int minTimeMsBetweenRPCs,
       int overallTimeoutSeconds)
       throws Exception {
     int iterationsDone = 0;
     int totalFailures = 0;
     Histogram latencies = new Histogram(4 /* number of significant value digits */);
     long startNs = System.nanoTime();
+    ManagedChannel soakChannel = createChannel();
+    TestServiceGrpc.TestServiceBlockingStub soakStub = TestServiceGrpc.newBlockingStub(soakChannel).withInterceptors(recordClientCallInterceptor(clientCallCapture));
+    soakStub = soakStub.withInterceptors(recordClientCallInterceptor(clientCallCapture));
     for (int i = 0; i < soakIterations; i++) {
       if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
       }
-      SoakIterationResult result = performOneSoakIteration(resetChannelPerIteration);
+      long earliestNextStartNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRPCs);
+      if (resetChannelPerIteration) {
+        soakChannel.shutdownNow();
+        soakChannel.awaitTermination(10, TimeUnit.SECONDS);
+        soakChannel = createChannel();
+        soakStub = TestServiceGrpc.newBlockingStub(soakChannel).withInterceptors(recordClientCallInterceptor(clientCallCapture));
+      }
+      SoakIterationResult result = performOneSoakIteration(soakStub);
+      String peer = clientCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString();
       System.err.print(
           String.format(
-              "soak iteration: %d elapsed: %d ms", i, result.getLatencyMs()));
+              "soak iteration: %d elapsed_ms: %d peer: %s", i, result.getLatencyMs(), peer));
       if (!result.getStatus().equals(Status.OK)) {
         totalFailures++;
         System.err.println(String.format(" failed: %s", result.getStatus()));
@@ -2033,7 +2035,13 @@ public abstract class AbstractInteropTest {
       }
       iterationsDone++;
       latencies.recordValue(result.getLatencyMs());
+      long remainingNs = earliestNextStartNs - System.nanoTime();
+      if (remainingNs > 0) {
+        Thread.sleep(TimeUnit.MILLISECONDS.convert(remainingNs, TimeUnit.NANOSECONDS));
+      }
     }
+    soakChannel.shutdownNow();
+    soakChannel.awaitTermination(10, TimeUnit.SECONDS);
     System.err.println(
         String.format(
             "soak test ran: %d / %d iterations\n"
