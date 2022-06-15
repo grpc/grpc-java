@@ -116,7 +116,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
@@ -1761,20 +1760,19 @@ public abstract class AbstractInteropTest {
    */
   public void testOrcaOob() throws Exception {
     AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
-    Random r = new Random();
     final TestOrcaReport answer = TestOrcaReport.newBuilder()
-        .setCpuUtilization(r.nextDouble())
-        .setMemoryUtilization(r.nextDouble())
-        .putUtilization("util", r.nextDouble())
+        .setCpuUtilization(0.8210)
+        .setMemoryUtilization(0.5847)
+        .putUtilization("util", 0.30499)
         .build();
     final TestOrcaReport answer2 = TestOrcaReport.newBuilder()
-        .setCpuUtilization(r.nextDouble())
-        .setMemoryUtilization(r.nextDouble())
-        .putUtilization("util", r.nextDouble())
+        .setCpuUtilization(0.29309)
+        .setMemoryUtilization(0.2)
+        .putUtilization("util", 100.2039)
         .build();
 
     final int retryLimit = 5;
-    BlockingQueue<StreamingOutputCallResponse> queue = new LinkedBlockingQueue<>();
+    BlockingQueue<Integer> queue = new LinkedBlockingQueue<>();
     SettableFuture<Void> closeFuture = SettableFuture.create();
 
     StreamObserver<StreamingOutputCallRequest> streamObserver =
@@ -1782,16 +1780,18 @@ public abstract class AbstractInteropTest {
 
           @Override
           public void onNext(StreamingOutputCallResponse value) {
-            queue.add(value);
+            queue.add(0);
           }
 
           @Override
           public void onError(Throwable t) {
+            queue.add(1);
             closeFuture.setException(new IllegalStateException("unexpected stream error", t));
           }
 
           @Override
           public void onCompleted() {
+            queue.add(2);
             closeFuture.set(null);
           }
         });

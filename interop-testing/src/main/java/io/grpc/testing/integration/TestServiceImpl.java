@@ -25,6 +25,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.LogExceptionRunnable;
 import io.grpc.services.CallMetricRecorder;
 import io.grpc.services.MetricRecorder;
@@ -52,7 +53,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -202,8 +202,12 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   public StreamObserver<Messages.StreamingOutputCallRequest> fullDuplexCall(
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
     final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
-    return new StreamObserver<StreamingOutputCallRequest>() {
+    ServerCallStreamObserver<Messages.StreamingOutputCallResponse> autoUnlockResponseObserver =
+        (ServerCallStreamObserver<Messages.StreamingOutputCallResponse>) responseObserver;
+
+    class MayBlockStreamObserver implements StreamObserver<StreamingOutputCallRequest> {
       boolean oobTestLocked;
+
       @Override
       public void onNext(StreamingOutputCallRequest request) {
         // to facilitate multiple clients running orca_oob test in parallel, the server allows
@@ -213,7 +217,8 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
             try {
               lock.acquire();
             } catch (InterruptedException ex) {
-              throw new RuntimeException(ex);
+              autoUnlockResponseObserver.onError(new StatusRuntimeException(
+                  Status.ABORTED.withDescription("server service interrupted").withCause(ex)));
             }
             oobTestLocked = true;
           }
@@ -232,9 +237,6 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onCompleted() {
-        if (oobTestLocked) {
-          lock.release();
-        }
         if (!dispatcher.isCancelled()) {
           // Tell the dispatcher that all input has been received.
           dispatcher.completeInput();
@@ -243,12 +245,21 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
-        if (oobTestLocked) {
-          lock.release();
-        }
         dispatcher.onError(cause);
       }
-    };
+
+      void cleanup() {
+        if (oobTestLocked) {
+          lock.release();
+          oobTestLocked = true;
+        }
+      }
+    }
+
+    MayBlockStreamObserver mayBlockObserver = new MayBlockStreamObserver();
+    autoUnlockResponseObserver.setOnCancelHandler(mayBlockObserver::cleanup);
+    autoUnlockResponseObserver.setOnCloseHandler(mayBlockObserver::cleanup);
+    return mayBlockObserver;
   }
 
   /**
