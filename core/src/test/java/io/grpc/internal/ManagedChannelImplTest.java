@@ -2396,9 +2396,12 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
     ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Executor> executorArgumentCaptor = ArgumentCaptor.forClass(null);
     ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
     verify(creds).applyRequestMetadata(infoCaptor.capture(),
-        same(executor.getScheduledExecutorService()), applierCaptor.capture());
+        executorArgumentCaptor.capture(), applierCaptor.capture());
+    assertSame(offloadExecutor,
+            ((ManagedChannelImpl.ExecutorHolder) executorArgumentCaptor.getValue()).getExecutor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
     assertEquals(SecurityLevel.NONE, infoCaptor.getValue().getSecurityLevel());
@@ -2423,7 +2426,9 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, new Metadata());
 
     verify(creds, times(2)).applyRequestMetadata(infoCaptor.capture(),
-        same(executor.getScheduledExecutorService()), applierCaptor.capture());
+            executorArgumentCaptor.capture(), applierCaptor.capture());
+    assertSame(offloadExecutor,
+            ((ManagedChannelImpl.ExecutorHolder) executorArgumentCaptor.getValue()).getExecutor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
     assertEquals(SecurityLevel.NONE, infoCaptor.getValue().getSecurityLevel());
