@@ -50,8 +50,8 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -65,7 +65,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
   private final MetricRecorder metricRecorder;
-  private String orcaOobLock = "";
+  final Semaphore lock = new Semaphore(1);
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
@@ -202,37 +202,23 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   public StreamObserver<Messages.StreamingOutputCallRequest> fullDuplexCall(
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
     final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
-    final AtomicReference<Boolean> orcaOobTest = new AtomicReference<>(false);
     return new StreamObserver<StreamingOutputCallRequest>() {
+      boolean oobTestLocked;
       @Override
       public void onNext(StreamingOutputCallRequest request) {
-
         // to facilitate multiple clients running orca_oob test in parallel, the server allows
-        // only one orca_oob test client to run at a time to avoid conflicts. This is done by
-        // sending a lock String token to the test client that wins the synchronization. The lock is
-        // guaranteed to be released when the current stream is closed.
+        // only one orca_oob test client to run at a time to avoid conflicts.
         if (request.hasOrcaOobReport()) {
-          orcaOobTest.set(true);
-          while (true) {
-            synchronized (this) {
-              try {
-                if (orcaOobLock.equals(request.getOobLock())) {
-                  echoMetricsFromPayload(request.getOrcaOobReport());
-                  if (orcaOobLock.equals("")) {
-                    orcaOobLock = "grpc" + random.nextDouble();
-                    responseObserver.onNext(
-                        StreamingOutputCallResponse.newBuilder().setOobLock(orcaOobLock).build());
-                  }
-                  break;
-                }
-              } catch (Exception ex) {
-                responseObserver.onError(
-                    new IllegalStateException("failed to update oob report or send response"));
-                orcaOobLock = "";
-                break;
-              }
+          if (!oobTestLocked) {
+            try {
+              lock.acquire();
+            } catch (InterruptedException ex) {
+              throw new RuntimeException(ex);
             }
+            oobTestLocked = true;
           }
+          echoMetricsFromPayload(request.getOrcaOobReport());
+          responseObserver.onNext(StreamingOutputCallResponse.getDefaultInstance());
         }
         if (request.hasResponseStatus()) {
           dispatcher.cancel();
@@ -246,10 +232,8 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onCompleted() {
-        synchronized (this) {
-          if (orcaOobTest.get() && !orcaOobLock.isEmpty()) {
-            orcaOobLock = "";
-          }
+        if (oobTestLocked) {
+          lock.release();
         }
         if (!dispatcher.isCancelled()) {
           // Tell the dispatcher that all input has been received.
@@ -259,10 +243,8 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
-        synchronized (this) {
-          if (orcaOobTest.get() && !orcaOobLock.isEmpty()) {
-            orcaOobLock = "";
-          }
+        if (oobTestLocked) {
+          lock.release();
         }
         dispatcher.onError(cause);
       }

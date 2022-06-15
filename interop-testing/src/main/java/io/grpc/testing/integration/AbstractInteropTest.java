@@ -118,6 +118,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -1773,28 +1774,32 @@ public abstract class AbstractInteropTest {
         .build();
 
     final int retryLimit = 5;
-    AtomicReference<String> lock = new AtomicReference<>("");
+    BlockingQueue<StreamingOutputCallResponse> queue = new LinkedBlockingQueue<>();
+    SettableFuture<Void> closeFuture = SettableFuture.create();
 
     StreamObserver<StreamingOutputCallRequest> streamObserver =
         asyncStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
 
           @Override
           public void onNext(StreamingOutputCallResponse value) {
-            lock.set(value.getOobLock());
+            queue.add(value);
           }
 
           @Override
           public void onError(Throwable t) {
+            closeFuture.setException(new IllegalStateException("unexpected stream error", t));
           }
 
           @Override
           public void onCompleted() {
-
+            closeFuture.set(null);
           }
         });
 
     streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
-        .setOobLock("").setOrcaOobReport(answer).build());
+        .setOrcaOobReport(answer).build());
+    queue.take();
+    assertFalse(closeFuture.isDone());
     int i = 0;
     for (; i < retryLimit; i++) {
       Thread.sleep(1000);
@@ -1805,7 +1810,9 @@ public abstract class AbstractInteropTest {
     }
     assertThat(i).isLessThan(retryLimit);
     streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
-        .setOobLock(lock.get()).setOrcaOobReport(answer2).build());
+        .setOrcaOobReport(answer2).build());
+    queue.take();
+    assertFalse(closeFuture.isDone());
 
     for (i = 0; i < retryLimit; i++) {
       Thread.sleep(1000);
