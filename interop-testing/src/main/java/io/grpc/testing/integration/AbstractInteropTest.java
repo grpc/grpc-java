@@ -1772,37 +1772,30 @@ public abstract class AbstractInteropTest {
         .build();
 
     final int retryLimit = 5;
-    BlockingQueue<Integer> queue = new LinkedBlockingQueue<>();
-    SettableFuture<Void> closeFuture = SettableFuture.create();
-
+    BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
+    final Object lastItem = new Object();
     StreamObserver<StreamingOutputCallRequest> streamObserver =
         asyncStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
 
           @Override
           public void onNext(StreamingOutputCallResponse value) {
-            queue.add(0);
+            queue.add(value);
           }
 
           @Override
           public void onError(Throwable t) {
-            queue.add(1);
-            closeFuture.setException(new IllegalStateException("unexpected stream error", t));
+            queue.add(t);
           }
 
           @Override
           public void onCompleted() {
-            queue.add(2);
-            closeFuture.set(null);
+            queue.add(lastItem);
           }
         });
 
     streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
         .setOrcaOobReport(answer).build());
-    queue.take();
-    if (closeFuture.isDone()) {
-      closeFuture.get();
-    }
-    assertFalse(closeFuture.isDone());
+    assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
     int i = 0;
     for (; i < retryLimit; i++) {
       Thread.sleep(1000);
@@ -1814,8 +1807,7 @@ public abstract class AbstractInteropTest {
     assertThat(i).isLessThan(retryLimit);
     streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
         .setOrcaOobReport(answer2).build());
-    queue.take();
-    assertFalse(closeFuture.isDone());
+    assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
 
     for (i = 0; i < retryLimit; i++) {
       Thread.sleep(1000);
@@ -1826,6 +1818,7 @@ public abstract class AbstractInteropTest {
     }
     assertThat(i).isLessThan(retryLimit);
     streamObserver.onCompleted();
+    assertThat(queue.take()).isSameInstanceAs(lastItem);
   }
 
   /** Sends a large unary rpc with service account credentials. */
