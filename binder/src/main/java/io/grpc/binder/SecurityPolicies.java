@@ -70,8 +70,8 @@ public final class SecurityPolicies {
   }
 
   /**
-   * Creates a {@link SecurityPolicy} which checks if the package signature
-   * matches {@code requiredSignature}.
+   * Creates a {@link SecurityPolicy} which checks if the package signature matches {@code
+   * requiredSignature}.
    *
    * @param packageName the package name of the allowed package.
    * @param requiredSignature the allowed signature of the allowed package.
@@ -79,13 +79,17 @@ public final class SecurityPolicies {
    */
   public static SecurityPolicy hasSignature(
       PackageManager packageManager, String packageName, Signature requiredSignature) {
-    return oneOfSignatures(
-        packageManager, packageName, ImmutableList.of(requiredSignature));
+    return oneOfSignatures(packageManager, packageName, ImmutableList.of(requiredSignature));
+  }
+
+  public static SecurityPolicy hasSignatureSha256(
+      PackageManager packageManager, String packageName, Signature requiredSignature) {
+    return oneOfSignatures(packageManager, packageName, ImmutableList.of(requiredSignature));
   }
 
   /**
-   * Creates a {@link SecurityPolicy} which checks if the package signature
-   * matches any of {@code requiredSignatures}.
+   * Creates a {@link SecurityPolicy} which checks if the package signature matches any of {@code
+   * requiredSignatures}.
    *
    * @param packageName the package name of the allowed package.
    * @param requiredSignatures the allowed signatures of the allowed package.
@@ -93,14 +97,11 @@ public final class SecurityPolicies {
    * @throws IllegalArgumentException if {@code requiredSignatures} is empty.
    */
   public static SecurityPolicy oneOfSignatures(
-      PackageManager packageManager,
-      String packageName,
-      Collection<Signature> requiredSignatures) {
+      PackageManager packageManager, String packageName, Collection<Signature> requiredSignatures) {
     Preconditions.checkNotNull(packageManager, "packageManager");
     Preconditions.checkNotNull(packageName, "packageName");
     Preconditions.checkNotNull(requiredSignatures, "requiredSignatures");
-    Preconditions.checkArgument(!requiredSignatures.isEmpty(),
-        "requiredSignatures");
+    Preconditions.checkArgument(!requiredSignatures.isEmpty(), "requiredSignatures");
     ImmutableList<Signature> requiredSignaturesImmutable = ImmutableList.copyOf(requiredSignatures);
 
     for (Signature requiredSignature : requiredSignaturesImmutable) {
@@ -110,8 +111,7 @@ public final class SecurityPolicies {
     return new SecurityPolicy() {
       @Override
       public Status checkAuthorization(int uid) {
-        return checkUidSignature(
-            packageManager, uid, packageName, requiredSignaturesImmutable);
+        return checkUidSignature(packageManager, uid, packageName, requiredSignaturesImmutable);
       }
     };
   }
@@ -123,8 +123,7 @@ public final class SecurityPolicies {
       ImmutableList<Signature> requiredSignatures) {
     String[] packages = packageManager.getPackagesForUid(uid);
     if (packages == null) {
-      return Status.UNAUTHENTICATED.withDescription(
-          "Rejected by signature check security policy");
+      return Status.UNAUTHENTICATED.withDescription("Rejected by signature check security policy");
     }
     boolean packageNameMatched = false;
     for (String pkg : packages) {
@@ -137,8 +136,7 @@ public final class SecurityPolicies {
       }
     }
     return Status.PERMISSION_DENIED.withDescription(
-        "Rejected by signature check security policy. Package name matched: "
-            + packageNameMatched);
+        "Rejected by signature check security policy. Package name matched: " + packageNameMatched);
   }
 
   /**
