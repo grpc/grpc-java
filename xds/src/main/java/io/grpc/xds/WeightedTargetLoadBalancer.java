@@ -28,7 +28,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
@@ -49,13 +48,13 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   private final Map<String, GracefulSwitchLoadBalancer> childBalancers = new HashMap<>();
   private final Map<String, ChildHelper> childHelpers = new HashMap<>();
   private final Helper helper;
-  private final SynchronizationContext syncContext;
 
   private Map<String, WeightedPolicySelection> targets = ImmutableMap.of();
+  // Set to true if currently in the process of handling resolved addresses.
+  private boolean resolvingAddresses;
 
   WeightedTargetLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
-    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     logger = XdsLogger.withLogId(
         InternalLogId.allocate("weighted-target-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
@@ -63,6 +62,15 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    try {
+      resolvingAddresses = true;
+      handleResolvedAddressesInternal(resolvedAddresses);
+    } finally {
+      resolvingAddresses = false;
+    }
+  }
+
+  public void handleResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbConfig, "missing weighted_target lb config");
@@ -191,17 +199,14 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     @Override
     public void updateBalancingState(final ConnectivityState newState,
         final SubchannelPicker newPicker) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (!childBalancers.containsKey(name)) {
-            return;
-          }
-          currentState = newState;
-          currentPicker = newPicker;
-          updateOverallBalancingState();
-        }
-      });
+      currentState = newState;
+      currentPicker = newPicker;
+
+      // If we are already in the process of resolving addresses, the overall balancing state
+      // will be updated at the end of it, and we don't need to trigger that update here.
+      if (!resolvingAddresses && childBalancers.containsKey(name)) {
+        updateOverallBalancingState();
+      }
     }
 
     @Override
