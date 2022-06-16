@@ -1794,7 +1794,8 @@ public abstract class AbstractInteropTest {
         });
 
     streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
-        .setOrcaOobReport(answer).build());
+        .setOrcaOobReport(answer)
+        .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
     assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
     int i = 0;
     for (; i < retryLimit; i++) {
@@ -1806,7 +1807,8 @@ public abstract class AbstractInteropTest {
     }
     assertThat(i).isLessThan(retryLimit);
     streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
-        .setOrcaOobReport(answer2).build());
+        .setOrcaOobReport(answer2)
+        .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
     assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
 
     for (i = 0; i < retryLimit; i++) {

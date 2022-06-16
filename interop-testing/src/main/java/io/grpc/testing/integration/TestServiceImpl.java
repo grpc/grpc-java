@@ -219,11 +219,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
             } catch (InterruptedException ex) {
               autoUnlockResponseObserver.onError(new StatusRuntimeException(
                   Status.ABORTED.withDescription("server service interrupted").withCause(ex)));
+              return;
             }
             oobTestLocked = true;
           }
           echoMetricsFromPayload(request.getOrcaOobReport());
-          responseObserver.onNext(StreamingOutputCallResponse.getDefaultInstance());
         }
         if (request.hasResponseStatus()) {
           dispatcher.cancel();
@@ -251,7 +251,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       void cleanup() {
         if (oobTestLocked) {
           lock.release();
-          oobTestLocked = true;
+          oobTestLocked = false;
         }
       }
     }
