@@ -416,6 +416,81 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(localityWeights).containsEntry(locality3, 20);
   }
 
+  @SuppressWarnings("unchecked")
+  private void verifyEdsPriorityNames(List<String> want,
+                                      Map<Locality, LocalityLbEndpoints>... updates) {
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Arrays.asList(edsDiscoveryMechanism2), roundRobin);
+    deliverLbConfig(config);
+    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME2);
+    assertThat(childBalancers).isEmpty();
+
+    for (Map<Locality, LocalityLbEndpoints> update: updates) {
+      xdsClient.deliverClusterLoadAssignment(
+          EDS_SERVICE_NAME2,
+          update);
+    }
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+    PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
+    assertThat(priorityLbConfig.priorities).isEqualTo(want);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void edsUpdatePriorityName_twoPriorities() {
+    verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[priority1]", CLUSTER2 + "[priority2]"),
+        ImmutableMap.of(locality1, createEndpoints(1),
+            locality2, createEndpoints(2)
+        ));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void edsUpdatePriorityName_addOnePriority() {
+    verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[priority2]"),
+        ImmutableMap.of(locality1, createEndpoints(1)),
+        ImmutableMap.of(locality2, createEndpoints(1)
+        ));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void edsUpdatePriorityName_swapTwoPriorities() {
+    verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[priority2]", CLUSTER2 + "[priority1]",
+            CLUSTER2 + "[priority3]"),
+        ImmutableMap.of(locality1, createEndpoints(1),
+            locality2, createEndpoints(2),
+            locality3, createEndpoints(3)
+        ),
+        ImmutableMap.of(locality1, createEndpoints(2),
+            locality2, createEndpoints(1),
+            locality3, createEndpoints(3))
+    );
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void edsUpdatePriorityName_mergeTwoPriorities() {
+    verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[priority3]", CLUSTER2 + "[priority1]"),
+        ImmutableMap.of(locality1, createEndpoints(1),
+          locality3, createEndpoints(3),
+          locality2, createEndpoints(2)),
+        ImmutableMap.of(locality1, createEndpoints(2),
+            locality3, createEndpoints(1),
+            locality2, createEndpoints(1)
+        ));
+  }
+
+  private LocalityLbEndpoints createEndpoints(int priority) {
+    return LocalityLbEndpoints.create(
+        Arrays.asList(
+            LbEndpoint.create(makeAddress("endpoint-addr-1"), 100, true),
+            LbEndpoint.create(makeAddress("endpoint-addr-2"), 100, true)),
+        70 /* localityWeight */, priority /* priority */);
+  }
+
   @Test
   public void onlyEdsClusters_resourceNeverExist_returnErrorPicker() {
     ClusterResolverConfig config = new ClusterResolverConfig(
