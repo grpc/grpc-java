@@ -38,6 +38,7 @@ build_java_test_app() {
 #   SERVER_IMAGE_NAME: Test server Docker image name
 #   CLIENT_IMAGE_NAME: Test client Docker image name
 #   GIT_COMMIT: SHA-1 of git commit being built
+#   TESTING_VERSION: version branch under test, f.e. v1.42.x, master
 # Arguments:
 #   None
 # Outputs:
@@ -52,10 +53,15 @@ build_test_app_docker_images() {
   cp -v "${docker_dir}/"*.Dockerfile "${build_dir}"
   cp -v "${docker_dir}/"*.properties "${build_dir}"
   cp -rv "${SRC_DIR}/${BUILD_APP_PATH}" "${build_dir}"
+  # Pick a branch name for the built image
+  local branch_name='experimental'
+  if is_version_branch "${TESTING_VERSION}"; then
+    branch_name="${TESTING_VERSION}"
+  fi
   # Run Google Cloud Build
   gcloud builds submit "${build_dir}" \
     --config "${docker_dir}/cloudbuild.yaml" \
-    --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT}"
+    --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT},BRANCH_NAME=${branch_name}"
   # TODO(sergiitk): extra "cosmetic" tags for versioned branches, e.g. v1.34.x
   # TODO(sergiitk): do this when adding support for custom configs per version
 }
@@ -100,6 +106,8 @@ build_docker_images_if_needed() {
 #   SERVER_IMAGE_NAME: Test server Docker image name
 #   CLIENT_IMAGE_NAME: Test client Docker image name
 #   GIT_COMMIT: SHA-1 of git commit being built
+#   TESTING_VERSION: version branch under test: used by the framework to
+#                     determine the supported PSM features.
 # Arguments:
 #   Test case name
 # Outputs:
@@ -116,6 +124,7 @@ run_test() {
     --kube_context="${KUBE_CONTEXT}" \
     --server_image="${SERVER_IMAGE_NAME}:${GIT_COMMIT}" \
     --client_image="${CLIENT_IMAGE_NAME}:${GIT_COMMIT}" \
+    --testing_version="${TESTING_VERSION}" \
     --xml_output_file="${TEST_XML_OUTPUT_DIR}/${test_name}/sponge_log.xml" \
     --force_cleanup
   set +x
