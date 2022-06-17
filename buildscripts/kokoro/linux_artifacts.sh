@@ -49,3 +49,7 @@ cp -r "$LOCAL_MVN_TEMP"/* "$MVN_ARTIFACT_DIR"/
 # for aarch64 platform
 sudo apt-get install -y g++-aarch64-linux-gnu
 SKIP_TESTS=true ARCH=aarch_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
+
+# for ppc64le platform
+sudo apt-get install -y g++-10-powerpc64-linux-gnu
+SKIP_TESTS=true ARCH=ppcle_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
