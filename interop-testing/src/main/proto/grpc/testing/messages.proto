@@ -103,9 +103,6 @@ message SimpleRequest {
 
   // If set the server should record this metrics report data for the current RPC.
   TestOrcaReport orca_per_query_report = 11;
-
-  // If set the server should update this metrics report data at the OOB server.
-  TestOrcaReport orca_oob_report = 12;
 }
 
 // Unary response, as configured by the request.
@@ -180,6 +177,9 @@ message StreamingOutputCallRequest {
 
   // Whether server should return a given status
   EchoStatus response_status = 7;
+
+  // If set the server should update this metrics report data at the OOB server.
+  TestOrcaReport orca_oob_report = 8;
 }
 
 // Server-streaming response, as configured by the request and parameters.
