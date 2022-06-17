@@ -54,7 +54,7 @@ import java.util.logging.Logger;
 
 public class EchoTestServer {
 
-  private static Logger logger = Logger.getLogger(EchoTestServer.class.getName());
+  private static final Logger logger = Logger.getLogger(EchoTestServer.class.getName());
 
   /** 3333 is the magic port that the istio testing for k8s health checks. */
   private static final int ISTIO_K8S_HEALTH_CHECK_PORT = 3333;
@@ -132,20 +132,14 @@ public class EchoTestServer {
     String hostname = determineHostname();
     EchoTestServer echoTestServer = new EchoTestServer();
     echoTestServer.runServers(grpcPorts, hostname);
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread() {
-              @Override
-              @SuppressWarnings("CatchAndPrintStackTrace")
-              public void run() {
-                try {
-                  System.out.println("Shutting down");
-                  echoTestServer.stopServers();
-                } catch (Exception e) {
-                  e.printStackTrace();
-                }
-              }
-            });
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+      try {
+        System.out.println("Shutting down");
+        echoTestServer.stopServers();
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }));
     echoTestServer.blockUntilShutdown();
   }
 
@@ -247,7 +241,7 @@ public class EchoTestServer {
 
   private static class EchoTestServiceImpl extends EchoTestServiceImplBase {
 
-    private String hostname;
+    private final String hostname;
 
     EchoTestServiceImpl(String hostname) {
       this.hostname = hostname;
