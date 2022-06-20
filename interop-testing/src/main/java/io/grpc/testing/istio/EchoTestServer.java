@@ -138,7 +138,8 @@ public class EchoTestServer {
         System.out.println("Shutting down");
         echoTestServer.stopServers();
       } catch (Exception e) {
-        e.printStackTrace();
+        logger.log(Level.SEVERE, "stopServers", e);
+        throw e;
       }
     }));
     echoTestServer.blockUntilShutdown();
@@ -199,21 +200,13 @@ public class EchoTestServer {
                   (io.grpc.testing.istio.Istio.EchoResponse) message;
               String oldMessage = echoResponse.getMessage();
 
-              StringBuilder sb = new StringBuilder();
+              EchoMessage echoMessage = new EchoMessage();
 
               for (String key : requestHeaders.keys()) {
                 if (!key.endsWith("-bin")) {
 
-                  String value =
-                      requestHeaders.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
-                  if (value != null) {
-                    sb.append(REQUEST_HEADER)
-                        .append("=")
-                        .append(key)
-                        .append(":")
-                        .append(value)
-                        .append("\n");
-                  }
+                  echoMessage.writeKeyValueForRequest(REQUEST_HEADER, key,
+                      requestHeaders.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER)));
                 }
               }
               // This is not a complete list. May need to add/remove fields later,
@@ -222,17 +215,14 @@ public class EchoTestServer {
               // Only keep the fields needed for now.
               if (peerAddress instanceof InetSocketAddress) {
                 InetSocketAddress inetPeerAddress = (InetSocketAddress) peerAddress;
-                sb.append(IP)
-                    .append("=")
-                    .append(inetPeerAddress.getAddress().getHostAddress())
-                    .append("\n");
+                echoMessage.writeKeyValue(IP, inetPeerAddress.getAddress().getHostAddress());
               }
-              sb.append(STATUS_CODE + "=200\n");
-              sb.append(HOST + "=" + call.getAuthority() + "\n");
-              sb.append(oldMessage);
+              echoMessage.writeKeyValue(STATUS_CODE, "200");
+              echoMessage.writeKeyValue(HOST, call.getAuthority());
+              echoMessage.writeMessage(oldMessage);
               echoResponse =
                   io.grpc.testing.istio.Istio.EchoResponse.newBuilder()
-                      .setMessage(sb.toString())
+                      .setMessage(echoMessage.toString())
                       .build();
               super.sendMessage((RespT) echoResponse);
             }
@@ -350,6 +340,29 @@ public class EchoTestServer {
         logger.log(Level.INFO, "RPC failed " + count, e);
       }
       return "";
+    }
+  }
+
+  private static class EchoMessage {
+    private StringBuilder sb = new StringBuilder();
+
+    void writeKeyValue(String key, String value) {
+      sb.append(key).append("=").append(value).append("\n");
+    }
+
+    void writeKeyValueForRequest(String requestHeader, String key, String value) {
+      if (value != null) {
+        writeKeyValue(requestHeader, key + ":" + value);
+      }
+    }
+
+    void writeMessage(String message) {
+      sb.append(message);
+    }
+
+    @Override
+    public String toString() {
+      return sb.toString();
     }
   }
 }
