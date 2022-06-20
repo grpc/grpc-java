@@ -17,6 +17,7 @@
 package io.grpc.testing.istio;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.ForwardingServerCall;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -52,12 +53,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * This class implements the Istio echo server functionality similar to
+ * https://github.com/istio/istio/blob/master/pkg/test/echo/server/endpoint/grpc.go .
+ * Please see Istio framework docs https://github.com/istio/istio/wiki/Istio-Test-Framework .
+ */
 public class EchoTestServer {
 
   private static final Logger logger = Logger.getLogger(EchoTestServer.class.getName());
 
-  /** 3333 is the magic port that the istio testing for k8s health checks. */
-  private static final int ISTIO_K8S_HEALTH_CHECK_PORT = 3333;
   private static final String REQUEST_ID = "x-request-id";
   private static final String STATUS_CODE = "StatusCode";
   private static final String HOST = "Host";
@@ -94,7 +98,7 @@ public class EchoTestServer {
         argsMap.put(key, oldValue);
       }
     }
-    return argsMap;
+    return ImmutableMap.<String, List<String>>builder().putAll(argsMap).build();
   }
 
   /** Turn gRPC ports from a string list to an int list. */
@@ -126,9 +130,6 @@ public class EchoTestServer {
     Map<String, List<String>> processedArgs = preprocessArgs(args);
     List<Integer> grpcPorts = getGrpcPorts(processedArgs);
 
-    // 3333 is the magic port that the istio testing for k8s health checks. And
-    // it only needs TCP. So also make the gRPC server to listen on 3333.
-    grpcPorts.add(ISTIO_K8S_HEALTH_CHECK_PORT);
     String hostname = determineHostname();
     EchoTestServer echoTestServer = new EchoTestServer();
     echoTestServer.runServers(grpcPorts, hostname);
@@ -153,6 +154,7 @@ public class EchoTestServer {
   }
 
   void runServer(int port, ServerServiceDefinition service) throws IOException {
+    logger.log(Level.INFO, "Listening GRPC on " + port);
     servers.add(Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(service)
         .build().start());
@@ -180,7 +182,7 @@ public class EchoTestServer {
       final String methodName = call.getMethodDescriptor().getBareMethodName();
 
       // we need this processing only for Echo
-      if (!methodName.equals("Echo")) {
+      if (!"Echo".equals(methodName)) {
         return next.startCall(call, requestHeaders);
       }
 
