@@ -79,6 +79,26 @@ public final class SecurityPoliciesTest {
     shadowOf(packageManager).setPackagesForUid(uid, packageNames);
   }
 
+  private void installMyUIDPackageNotSettingPermission() {
+    PackageInfo info =
+        newBuilder().setPackageName(appContext.getPackageName()).setSignatures(SIG1).build();
+    installPackages(MY_UID, info);
+  }
+
+  private void installOtherUIDPackageNotSettingPermission() {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+    installPackages(OTHER_UID, info);
+  }
+  private void installOtherUIDSameSignaturePackageNotSettingPermission() {
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
+            .setSignatures(SIG1)
+            .build();
+    installPackages(OTHER_UID_SAME_SIGNATURE, info);
+  }
+
   @Test
   public void testInternalOnly() throws Exception {
     policy = SecurityPolicies.internalOnly();
@@ -104,10 +124,7 @@ public final class SecurityPoliciesTest {
   @Test
   public void testHasSignature_succeedsIfPackageNameAndSignaturesMatch()
       throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy = SecurityPolicies.hasSignature(packageManager, OTHER_UID_PACKAGE_NAME, SIG2);
 
@@ -117,13 +134,7 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testHasSignature_failsIfPackageNameDoesNotMatch() throws Exception {
-    PackageInfo info =
-        newBuilder()
-            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
-            .setSignatures(SIG1)
-            .build();
-
-    installPackages(OTHER_UID_SAME_SIGNATURE, info);
+    installOtherUIDSameSignaturePackageNotSettingPermission();
 
     policy = SecurityPolicies.hasSignature(packageManager, appContext.getPackageName(), SIG1);
 
@@ -134,10 +145,7 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testHasSignature_failsIfSignatureDoesNotMatch() throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy = SecurityPolicies.hasSignature(packageManager, OTHER_UID_PACKAGE_NAME, SIG1);
 
@@ -149,10 +157,7 @@ public final class SecurityPoliciesTest {
   @Test
   public void testOneOfSignatures_succeedsIfPackageNameAndSignaturesMatch()
       throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy =
         SecurityPolicies.oneOfSignatures(
@@ -164,13 +169,7 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testOneOfSignature_failsIfAllSignaturesDoNotMatch() throws Exception {
-    PackageInfo info =
-        newBuilder()
-            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
-            .setSignatures(SIG1)
-            .build();
-
-    installPackages(OTHER_UID_SAME_SIGNATURE, info);
+    installOtherUIDSameSignaturePackageNotSettingPermission();
 
     policy =
         SecurityPolicies.oneOfSignatures(
@@ -186,10 +185,7 @@ public final class SecurityPoliciesTest {
   @Test
   public void testOneOfSignature_succeedsIfPackageNameAndOneOfSignaturesMatch()
       throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy =
         SecurityPolicies.oneOfSignatures(
@@ -441,9 +437,7 @@ public final class SecurityPoliciesTest {
   @Test
   public void testHasSignatureSha256Hash_succeedsIfPackageNameAndSignatureHashMatch()
       throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy =
         SecurityPolicies.hasSignatureSha256Hash(
@@ -455,16 +449,8 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testHasSignatureSha256Hash_failsIfPackageNameDoesNotMatch() throws Exception {
-    PackageInfo info1 =
-        newBuilder().setPackageName(appContext.getPackageName()).setSignatures(SIG1).build();
-    installPackages(MY_UID, info1);
-
-    PackageInfo info2 =
-        newBuilder()
-            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
-            .setSignatures(SIG1)
-            .build();
-    installPackages(OTHER_UID_SAME_SIGNATURE, info2);
+    installMyUIDPackageNotSettingPermission();
+    installOtherUIDSameSignaturePackageNotSettingPermission();
 
     policy =
         SecurityPolicies.hasSignatureSha256Hash(
@@ -477,9 +463,7 @@ public final class SecurityPoliciesTest {
 
   @Test
   public void testHasSignatureSha256Hash_failsIfSignatureHashDoesNotMatch() throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy =
         SecurityPolicies.hasSignatureSha256Hash(
@@ -493,9 +477,7 @@ public final class SecurityPoliciesTest {
   @Test
   public void testOneOfSignatureSha256Hash_succeedsIfPackageNameAndSignatureHashMatch()
       throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy =
         SecurityPolicies.oneOfSignatureSha256Hash(
@@ -508,9 +490,7 @@ public final class SecurityPoliciesTest {
   @Test
   public void testOneOfSignatureSha256Hash_succeedsIfPackageNameAndOneOfSignatureHashesMatch()
       throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy =
         SecurityPolicies.oneOfSignatureSha256Hash(
@@ -526,9 +506,7 @@ public final class SecurityPoliciesTest {
   public void
       testOneOfSignatureSha256Hash_failsIfPackageNameDoNotMatchAndOneOfSignatureHashesMatch()
           throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-    installPackages(OTHER_UID, info);
+    installOtherUIDPackageNotSettingPermission();
 
     policy =
         SecurityPolicies.oneOfSignatureSha256Hash(
