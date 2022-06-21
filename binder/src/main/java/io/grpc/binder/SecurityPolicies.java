@@ -24,12 +24,15 @@ import android.content.pm.Signature;
 import android.os.Build;
 import android.os.Process;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.hash.Hashing;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -40,6 +43,7 @@ import java.util.List;
 public final class SecurityPolicies {
 
   private static final int MY_UID = Process.myUid();
+  private static final int SHA_256_BYTES_LENGTH = 32;
 
   private SecurityPolicies() {}
 
@@ -84,6 +88,21 @@ public final class SecurityPolicies {
   }
 
   /**
+   * Creates {@link SecurityPolicy} which checks if the SHA-256 hash of the package signature
+   * matches {@code requiredSignatureSha256Hash}.
+   *
+   * @param packageName the package name of the allowed package.
+   * @param requiredSignatureSha256Hash the SHA-256 digest of the signature of the allowed package.
+   * @throws NullPointerException if any of the inputs are {@code null}.
+   * @throws IllegalArgumentException if {@code requiredSignatureSha256Hash} is not of length 32.
+   */
+  public static SecurityPolicy hasSignatureSha256Hash(
+      PackageManager packageManager, String packageName, byte[] requiredSignatureSha256Hash) {
+    return oneOfSignatureSha256Hash(
+        packageManager, packageName, ImmutableList.of(requiredSignatureSha256Hash));
+  }
+
+  /**
    * Creates a {@link SecurityPolicy} which checks if the package signature
    * matches any of {@code requiredSignatures}.
    *
@@ -116,6 +135,39 @@ public final class SecurityPolicies {
     };
   }
 
+  /**
+   * Creates {@link SecurityPolicy} which checks if the SHA-256 hash of the package signature
+   * matches any of {@code requiredSignatureSha256Hashes}.
+   *
+   * @param packageName the package name of the allowed package.
+   * @param requiredSignatureSha256Hashes the SHA-256 digests of the signatures of the allowed
+   *     package.
+   * @throws NullPointerException if any of the inputs are {@code null}.
+   * @throws IllegalArgumentException if {@code requiredSignatureSha256Hashes} is empty, or if any
+   *     of the {@code requiredSignatureSha256Hashes} are not of length 32.
+   */
+  public static SecurityPolicy oneOfSignatureSha256Hash(
+      PackageManager packageManager,
+      String packageName,
+      ImmutableList<byte[]> requiredSignatureSha256Hashes) {
+    Preconditions.checkNotNull(packageManager);
+    Preconditions.checkNotNull(packageName);
+    Preconditions.checkNotNull(requiredSignatureSha256Hashes);
+    Preconditions.checkArgument(!requiredSignatureSha256Hashes.isEmpty());
+    for (byte[] requiredSignatureSha256Hash : requiredSignatureSha256Hashes) {
+      Preconditions.checkNotNull(requiredSignatureSha256Hash);
+      Preconditions.checkArgument(requiredSignatureSha256Hash.length == SHA_256_BYTES_LENGTH);
+    }
+
+    return new SecurityPolicy() {
+      @Override
+      public Status checkAuthorization(int uid) {
+        return checkUidSha256Signature(
+            packageManager, uid, packageName, requiredSignatureSha256Hashes);
+      }
+    };
+  }
+
   private static Status checkUidSignature(
       PackageManager packageManager,
       int uid,
@@ -132,7 +184,7 @@ public final class SecurityPolicies {
         continue;
       }
       packageNameMatched = true;
-      if (checkPackageSignature(packageManager, pkg, requiredSignatures)) {
+      if (checkPackageSignature(packageManager, pkg, requiredSignatures::contains)) {
         return Status.OK;
       }
     }
@@ -141,19 +193,50 @@ public final class SecurityPolicies {
             + packageNameMatched);
   }
 
+  private static Status checkUidSha256Signature(
+      PackageManager packageManager,
+      int uid,
+      String packageName,
+      ImmutableList<byte[]> requiredSignatureSha256Hashes) {
+    String[] packages = packageManager.getPackagesForUid(uid);
+    if (packages == null) {
+      return Status.UNAUTHENTICATED.withDescription(
+          "Rejected by (SHA-256 hash signature check) security policy");
+    }
+    boolean packageNameMatched = false;
+    for (String pkg : packages) {
+      if (!packageName.equals(pkg)) {
+        continue;
+      }
+      packageNameMatched = true;
+      if (checkPackageSignature(
+          packageManager,
+          pkg,
+          (signature) ->
+              checkSignatureSha256HashesMatch(signature, requiredSignatureSha256Hashes))) {
+        return Status.OK;
+      }
+    }
+    return Status.PERMISSION_DENIED.withDescription(
+        "Rejected by (SHA-256 hash signature check) security policy. Package name matched: "
+            + packageNameMatched);
+  }
+
   /**
    * Checks if the signature of {@code packageName} matches one of the given signatures.
    *
    * @param packageName the package to be checked
-   * @param requiredSignatures list of signatures.
-   * @return {@code true} if {@code packageName} has a matching signature.
+   * @param signatureCheckFunction {@link Function} that takes a signature and verifies if it
+   * satisfies any signature constraints
+   * return {@code true} if {@code packageName} has a signature that satisfies {@code
+   * signatureCheckFunction}.
    */
   @SuppressWarnings("deprecation") // For PackageInfo.signatures
   @SuppressLint("PackageManagerGetSignatures") // We only allow 1 signature.
   private static boolean checkPackageSignature(
       PackageManager packageManager,
       String packageName,
-      ImmutableList<Signature> requiredSignatures) {
+      Predicate<Signature> signatureCheckFunction) {
     PackageInfo packageInfo;
     try {
       if (Build.VERSION.SDK_INT >= 28) {
@@ -168,7 +251,7 @@ public final class SecurityPolicies {
                 : packageInfo.signingInfo.getSigningCertificateHistory();
 
         for (Signature signature : signatures) {
-          if (requiredSignatures.contains(signature)) {
+          if (signatureCheckFunction.apply(signature)) {
             return true;
           }
         }
@@ -180,7 +263,7 @@ public final class SecurityPolicies {
           return false;
         }
 
-        if (requiredSignatures.contains(packageInfo.signatures[0])) {
+        if (signatureCheckFunction.apply(packageInfo.signatures[0])) {
           return true;
         }
       }
@@ -316,5 +399,24 @@ public final class SecurityPolicies {
     }
 
     return Status.OK;
+  }
+
+  /**
+   * Checks if the SHA-256 hash of the {@code signature} matches one of the {@code
+   * expectedSignatureSha256Hashes}.
+   */
+  private static boolean checkSignatureSha256HashesMatch(
+      Signature signature, List<byte[]> expectedSignatureSha256Hashes) {
+    for (byte[] hash : expectedSignatureSha256Hashes) {
+      if (Arrays.equals(hash, getSha256Hash(signature))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Returns SHA-256 hash of the provided signature. */
+  private static byte[] getSha256Hash(Signature signature) {
+    return Hashing.sha256().hashBytes(signature.toByteArray()).asBytes();
   }
 }
