@@ -98,18 +98,8 @@ public final class SecurityPolicies {
    */
   public static SecurityPolicy hasSignatureSha256Hash(
       PackageManager packageManager, String packageName, byte[] requiredSignatureSha256Hash) {
-    Preconditions.checkNotNull(packageManager);
-    Preconditions.checkNotNull(packageName);
-    Preconditions.checkNotNull(requiredSignatureSha256Hash);
-    Preconditions.checkArgument(requiredSignatureSha256Hash.length == SHA_256_BYTES_LENGTH);
-
-    return new SecurityPolicy() {
-      @Override
-      public Status checkAuthorization(int uid) {
-        return checkUidSha256Signature(
-            packageManager, uid, packageName, ImmutableList.of(requiredSignatureSha256Hash));
-      }
-    };
+    return oneOfSignatureSha256Hash(
+        packageManager, packageName, ImmutableList.of(requiredSignatureSha256Hash));
   }
 
   /**
