@@ -1,6 +1,6 @@
 # Gradle
 build
-gradle.properties
+binder/src/gradle.properties
 .gradle
 local.properties
 out

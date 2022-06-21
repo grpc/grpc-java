@@ -32,6 +32,7 @@ import android.os.Process;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.hash.Hashing;
 import io.grpc.Status;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -434,5 +435,107 @@ public final class SecurityPoliciesTest {
       numCalls.incrementAndGet();
       return Status.OK;
     }
+  }
+
+  @Test
+  public void testHasSignatureSha256Hash_succeedsIfPackageNameAndSignatureHashMatch()
+      throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG1).build();
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.hasSignatureSha256Hash(
+            packageManager, OTHER_UID_PACKAGE_NAME, getSha256Hash(SIG1));
+
+    // THEN UID for package that has SIG2 will be authorized
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  public void testHasSignatureSha256Hash_failsIfPackageNameDoesNotMatch() throws Exception {
+    PackageInfo info1 =
+        newBuilder().setPackageName(appContext.getPackageName()).setSignatures(SIG1).build();
+    installPackages(MY_UID, info1);
+
+    PackageInfo info2 =
+        newBuilder().setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME).setSignatures(SIG1).build();
+    installPackages(OTHER_UID_SAME_SIGNATURE, info2);
+
+    policy =
+        SecurityPolicies.hasSignatureSha256Hash(
+            packageManager, appContext.getPackageName(), getSha256Hash(SIG1));
+
+    // THEN UID for package that has SIG1 but different package name will not be authorized
+    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  public void testHasSignatureSha256Hash_failsIfSignatureHashDoesNotMatch() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.hasSignatureSha256Hash(
+            packageManager, OTHER_UID_PACKAGE_NAME, getSha256Hash(SIG1));
+
+    // THEN UID for package that doesn't have SIG1 will not be authorized
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  public void testOneOfSignatureSha256Hash_succeedsIfPackageNameAndSignatureHashMatch()
+      throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.oneOfSignatureSha256Hash(
+            packageManager, OTHER_UID_PACKAGE_NAME, ImmutableList.of(getSha256Hash(SIG2)));
+
+    // THEN UID for package that has SIG2 will be authorized
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  public void testOneOfSignatureSha256Hash_failsIfAllHashesDoNotMatch() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME).setSignatures(SIG1).build();
+    installPackages(OTHER_UID_SAME_SIGNATURE, info);
+    policy =
+        SecurityPolicies.oneOfSignatureSha256Hash(
+            packageManager,
+            appContext.getPackageName(),
+            ImmutableList.of(getSha256Hash(SIG1), getSha256Hash(new Signature("1314"))));
+
+    // THEN UID for package that has SIG1 but different package name will not be authorized
+    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  public void testOneOfSignatureSha256Hash_succeedsIfPackageNameAndOneOfSignatureHashesMatch()
+      throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.oneOfSignatureSha256Hash(
+            packageManager,
+            OTHER_UID_PACKAGE_NAME,
+            ImmutableList.of(getSha256Hash(SIG1), getSha256Hash(SIG2)));
+
+    // THEN UID for package that has SIG2 will be authorized
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+
+  private static byte[] getSha256Hash(Signature signature) {
+    return Hashing.sha256().hashBytes(signature.toByteArray()).asBytes();
   }
 }

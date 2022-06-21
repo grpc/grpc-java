@@ -19,13 +19,12 @@ package io.grpc.binder;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
-import android.app.Service;
 import android.content.Context;
-import android.content.Intent;
-import android.os.IBinder;
+import android.content.pm.Signature;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.base.Function;
+import com.google.common.hash.Hashing;
 import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
@@ -38,7 +37,6 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +49,11 @@ import org.junit.runner.RunWith;
 
 @RunWith(AndroidJUnit4.class)
 public final class BinderSecurityTest {
+  private static final String SIG1 = "1234";
+  private static final String SIG2 = "4321";
+
+  private static final String OTHER_UID_PACKAGE_NAME = "other.package";
+
   private final Context appContext = ApplicationProvider.getApplicationContext();
 
   String[] serviceNames = new String[] {"foo", "bar", "baz"};
@@ -103,15 +106,14 @@ public final class BinderSecurityTest {
   private void createChannel(ServerSecurityPolicy serverPolicy, SecurityPolicy channelPolicy)
       throws Exception {
     AndroidComponentAddress addr = HostServices.allocateService(appContext);
-    HostServices.configureService(addr,
+    HostServices.configureService(
+        addr,
         HostServices.serviceParamsBuilder()
-          .setServerFactory((service, receiver) -> buildServer(addr, receiver, serverPolicy))
-          .build());
+            .setServerFactory((service, receiver) -> buildServer(addr, receiver, serverPolicy))
+            .build());
 
     channel =
-        BinderChannelBuilder.forAddress(addr, appContext)
-            .securityPolicy(channelPolicy)
-            .build();
+        BinderChannelBuilder.forAddress(addr, appContext).securityPolicy(channelPolicy).build();
   }
 
   private Server buildServer(
