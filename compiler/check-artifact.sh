@@ -111,7 +111,7 @@ checkDependencies ()
       dump_cmd='aarch64-linux-gnu-objdump -x '"$1"' |grep "NEEDED"'
       white_list="linux-vdso\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld-linux-aarch64\.so\.1"
     elif [[ "$ARCH" == ppcle_64 ]]; then
-      dump_cmd='powerpc64-linux-gnu-objdump -x '"$1"' |grep "NEEDED"'
+      dump_cmd='powerpc64le-linux-gnu-objdump -x '"$1"' |grep "NEEDED"'
       white_list="linux-vdso64\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld64\.so\.2"
     fi
   elif [[ "$OS" == osx ]]; then
