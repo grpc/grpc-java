@@ -39,6 +39,8 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
 import java.util.List;
 import java.util.logging.Level;
@@ -58,14 +60,19 @@ public final class AltsProtocolNegotiator {
   private static final AsyncSemaphore handshakeSemaphore = new AsyncSemaphore(32);
 
   @Grpc.TransportAttr
-  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
+  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY =
+      Attributes.Key.create("internal:TSI_PEER");
   @Grpc.TransportAttr
   public static final Attributes.Key<Object> AUTH_CONTEXT_KEY =
-      Attributes.Key.create("AUTH_CONTEXT_KEY");
+      Attributes.Key.create("internal:AUTH_CONTEXT_KEY");
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
   private static final String DIRECT_PATH_SERVICE_CFE_CLUSTER_PREFIX = "google_cfe_";
+  private static final String CFE_CLUSTER_RESOURCE_NAME_PREFIX =
+      "/envoy.config.cluster.v3.Cluster/google_cfe_";
+  private static final String CFE_CLUSTER_AUTHORITY_NAME =
+      "traffic-director-c2p.xds.googleapis.com";
 
   /**
    * ClientAltsProtocolNegotiatorFactory is a factory for doing client side negotiation of an ALTS
@@ -287,11 +294,8 @@ public final class AltsProtocolNegotiator {
       ChannelHandler securityHandler;
       boolean isXdsDirectPath = false;
       if (clusterNameAttrKey != null) {
-        String clusterName = grpcHandler.getEagAttributes().get(clusterNameAttrKey);
-        if (clusterName != null
-            && !clusterName.startsWith(DIRECT_PATH_SERVICE_CFE_CLUSTER_PREFIX)) {
-          isXdsDirectPath = true;
-        }
+        isXdsDirectPath = isDirectPathCluster(
+            grpcHandler.getEagAttributes().get(clusterNameAttrKey));
       }
       if (grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY) != null
           || grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null
@@ -309,6 +313,26 @@ public final class AltsProtocolNegotiator {
       ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(securityHandler,
           negotiationLogger);
       return wuah;
+    }
+
+    private boolean isDirectPathCluster(String clusterName) {
+      if (clusterName == null) {
+        return false;
+      }
+      if (clusterName.startsWith(DIRECT_PATH_SERVICE_CFE_CLUSTER_PREFIX)) {
+        return false;
+      }
+      if (!clusterName.startsWith("xdstp:")) {
+        return true;
+      }
+      try {
+        URI uri = new URI(clusterName);
+        // If authority AND path match our CFE checks, use TLS; otherwise use ALTS.
+        return !CFE_CLUSTER_AUTHORITY_NAME.equals(uri.getHost())
+            || !uri.getPath().startsWith(CFE_CLUSTER_RESOURCE_NAME_PREFIX);
+      } catch (URISyntaxException e) {
+        return true; // Shouldn't happen, but assume ALTS.
+      }
     }
 
     @Override

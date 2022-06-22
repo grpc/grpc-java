@@ -66,7 +66,7 @@ final class MetadataConfig {
     } catch (IOException e) {
       logger.log(Level.FINE, "Calling HttpTransport.shutdown()", e);
     }
-    return builder.build();
+    return builder.buildOrThrow();
   }
 
   void addValueFor(ImmutableMap.Builder<String, String> builder, String attribute, String key) {

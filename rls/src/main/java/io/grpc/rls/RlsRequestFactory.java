@@ -89,7 +89,7 @@ final class RlsRequestFactory {
       rlsRequestHeaders.put(extraKeys.method(), method);
     }
     rlsRequestHeaders.putAll(constantKeys);
-    return RouteLookupRequest.create(rlsRequestHeaders.build());
+    return RouteLookupRequest.create(rlsRequestHeaders.buildOrThrow());
   }
 
   private ImmutableMap.Builder<String, String> createRequestHeaders(

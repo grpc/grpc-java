@@ -24,6 +24,7 @@ import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import java.util.Map;
 
 /**
  * Internal attributes used for xDS implementation. Do not use.
@@ -52,6 +53,13 @@ public final class InternalXdsAttributes {
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<CallCounterProvider> CALL_COUNTER_PROVIDER =
       Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.callCounterProvider");
+
+  /**
+   * Map from localities to their weights.
+   */
+  @NameResolver.ResolutionResultAttr
+  static final Attributes.Key<Map<Locality, Integer>> ATTR_LOCALITY_WEIGHTS =
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.localityWeights");
 
   /**
    * Name of the cluster that provides this EquivalentAddressGroup.

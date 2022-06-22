@@ -60,7 +60,6 @@ class BootstrapperImpl extends Bootstrapper {
       "envoy.lb.does_not_support_overprovisioning";
   @VisibleForTesting
   static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
-  @VisibleForTesting
   static boolean enableFederation =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
           && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
@@ -245,7 +244,7 @@ class BootstrapperImpl extends Bootstrapper {
         authorityInfoMapBuilder.put(
             authorityName, AuthorityInfo.create(clientListnerTemplate, authorityServers));
       }
-      builder.authorities(authorityInfoMapBuilder.build());
+      builder.authorities(authorityInfoMapBuilder.buildOrThrow());
     }
 
     return builder.build();

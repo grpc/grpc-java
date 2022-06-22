@@ -40,6 +40,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.MessageLite;
+import com.google.protobuf.StringValue;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -91,6 +92,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
@@ -100,7 +102,6 @@ import io.opencensus.tags.TagValue;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Tracing;
-import io.opencensus.trace.unsafe.ContextUtils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -116,6 +117,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -187,6 +189,11 @@ public abstract class AbstractInteropTest {
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
+
+  static final CallOptions.Key<AtomicReference<TestOrcaReport>>
+      ORCA_RPC_REPORT_KEY = CallOptions.Key.create("orca-rpc-report");
+  static final CallOptions.Key<AtomicReference<TestOrcaReport>>
+      ORCA_OOB_REPORT_KEY = CallOptions.Key.create("orca-oob-report");
 
   private static final class ServerStreamTracerInfo {
     final String fullMethodName;
@@ -1066,10 +1073,9 @@ public abstract class AbstractInteropTest {
   public void exchangeMetadataUnaryCall() throws Exception {
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
-    // Send a context proto (as it's in the default extension registry)
-    Messages.SimpleContext contextValue =
-        Messages.SimpleContext.newBuilder().setValue("dog").build();
-    fixedHeaders.put(Util.METADATA_KEY, contextValue);
+    // Send a metadata proto
+    StringValue metadataValue = StringValue.newBuilder().setValue("dog").build();
+    fixedHeaders.put(Util.METADATA_KEY, metadataValue);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
@@ -1080,18 +1086,17 @@ public abstract class AbstractInteropTest {
     assertNotNull(stub.emptyCall(EMPTY));
 
     // Assert that our side channel object is echoed back in both headers and trailers
-    Assert.assertEquals(contextValue, headersCapture.get().get(Util.METADATA_KEY));
-    Assert.assertEquals(contextValue, trailersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, headersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, trailersCapture.get().get(Util.METADATA_KEY));
   }
 
   @Test
   public void exchangeMetadataStreamingCall() throws Exception {
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
-    // Send a context proto (as it's in the default extension registry)
-    Messages.SimpleContext contextValue =
-        Messages.SimpleContext.newBuilder().setValue("dog").build();
-    fixedHeaders.put(Util.METADATA_KEY, contextValue);
+    // Send a metadata proto
+    StringValue metadataValue = StringValue.newBuilder().setValue("dog").build();
+    fixedHeaders.put(Util.METADATA_KEY, metadataValue);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
@@ -1122,8 +1127,8 @@ public abstract class AbstractInteropTest {
     org.junit.Assert.assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
 
     // Assert that our side channel object is echoed back in both headers and trailers
-    Assert.assertEquals(contextValue, headersCapture.get().get(Util.METADATA_KEY));
-    Assert.assertEquals(contextValue, trailersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, headersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, trailersCapture.get().get(Util.METADATA_KEY));
   }
 
   @Test
@@ -1554,6 +1559,7 @@ public abstract class AbstractInteropTest {
         Collections.singleton(streamingRequest), Collections.singleton(goldenStreamingResponse));
   }
 
+  @SuppressWarnings("deprecation")
   @Test(timeout = 10000)
   public void censusContextsPropagated() {
     Assume.assumeTrue("Skip the test because server is not in the same process.", server != null);
@@ -1568,7 +1574,7 @@ public abstract class AbstractInteropTest {
                 .emptyBuilder()
                 .putLocal(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
                 .build());
-    ctx = ContextUtils.withValue(ctx, clientParentSpan);
+    ctx = io.opencensus.trace.unsafe.ContextUtils.withValue(ctx, clientParentSpan);
     Context origCtx = ctx.attach();
     try {
       blockingStub.unaryCall(SimpleRequest.getDefaultInstance());
@@ -1588,7 +1594,7 @@ public abstract class AbstractInteropTest {
       }
       assertTrue("tag not found", tagFound);
 
-      Span span = ContextUtils.getValue(serverCtx);
+      Span span = io.opencensus.trace.unsafe.ContextUtils.getValue(serverCtx);
       assertNotNull(span);
       SpanContext spanContext = span.getContext();
       assertEquals(clientParentSpan.getContext().getTraceId(), spanContext.getTraceId());
@@ -1737,6 +1743,91 @@ public abstract class AbstractInteropTest {
   public void getServerAddressAndLocalAddressFromClient() {
     assertNotNull(obtainRemoteServerAddr());
     assertNotNull(obtainLocalClientAddr());
+  }
+
+  /**
+   *  Test backend metrics per query reporting: expect the test client LB policy to receive load
+   *  reports.
+   */
+  public void testOrcaPerRpc() throws Exception {
+    AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
+    TestOrcaReport answer = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.8210)
+        .setMemoryUtilization(0.5847)
+        .putRequestCost("cost", 3456.32)
+        .putUtilization("util", 0.30499)
+        .build();
+    blockingStub.withOption(ORCA_RPC_REPORT_KEY, reportHolder).unaryCall(
+        SimpleRequest.newBuilder().setOrcaPerQueryReport(answer).build());
+    assertThat(reportHolder.get()).isEqualTo(answer);
+  }
+
+  /**
+   *  Test backend metrics OOB reporting: expect the test client LB policy to receive load reports.
+   */
+  public void testOrcaOob() throws Exception {
+    AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
+    final TestOrcaReport answer = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.8210)
+        .setMemoryUtilization(0.5847)
+        .putUtilization("util", 0.30499)
+        .build();
+    final TestOrcaReport answer2 = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.29309)
+        .setMemoryUtilization(0.2)
+        .putUtilization("util", 100.2039)
+        .build();
+
+    final int retryLimit = 5;
+    BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
+    final Object lastItem = new Object();
+    StreamObserver<StreamingOutputCallRequest> streamObserver =
+        asyncStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
+
+          @Override
+          public void onNext(StreamingOutputCallResponse value) {
+            queue.add(value);
+          }
+
+          @Override
+          public void onError(Throwable t) {
+            queue.add(t);
+          }
+
+          @Override
+          public void onCompleted() {
+            queue.add(lastItem);
+          }
+        });
+
+    streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
+        .setOrcaOobReport(answer)
+        .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
+    assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
+    int i = 0;
+    for (; i < retryLimit; i++) {
+      Thread.sleep(1000);
+      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+      if (answer.equals(reportHolder.get())) {
+        break;
+      }
+    }
+    assertThat(i).isLessThan(retryLimit);
+    streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
+        .setOrcaOobReport(answer2)
+        .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
+    assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
+
+    for (i = 0; i < retryLimit; i++) {
+      Thread.sleep(1000);
+      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+      if (reportHolder.get().equals(answer2)) {
+        break;
+      }
+    }
+    assertThat(i).isLessThan(retryLimit);
+    streamObserver.onCompleted();
+    assertThat(queue.take()).isSameInstanceAs(lastItem);
   }
 
   /** Sends a large unary rpc with service account credentials. */

@@ -349,6 +349,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void run() {
+      // Workaround timer scheduled while in idle mode. This can happen from handleNotInUse() after
+      // an explicit enterIdleMode() by the user. Protecting here as other locations are a bit too
+      // subtle to change rapidly to resolve the channel panic. See #8714
       if (lbHelper == null) {
         return;
       }
@@ -618,10 +621,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.originalChannelCreds = builder.channelCredentials;
     this.originalTransportFactory = clientTransportFactory;
+    this.offloadExecutorHolder =
+        new ExecutorHolder(checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
-        clientTransportFactory, builder.callCredentials, this.executor);
+        clientTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
     this.oobTransportFactory = new CallCredentialsApplyingTransportFactory(
-        clientTransportFactory, null, this.executor);
+        clientTransportFactory, null, this.offloadExecutorHolder);
     this.scheduledExecutor =
         new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;
@@ -633,9 +638,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
     this.retryEnabled = builder.retryEnabled;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
-    this.offloadExecutorHolder =
-        new ExecutorHolder(
-            checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.nameResolverRegistry = builder.nameResolverRegistry;
     ScParser serviceConfigParser =
         new ScParser(
@@ -651,14 +653,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setScheduledExecutorService(scheduledExecutor)
             .setServiceConfigParser(serviceConfigParser)
             .setChannelLogger(channelLogger)
-            .setOffloadExecutor(
-                // Avoid creating the offloadExecutor until it is first used
-                new Executor() {
-                  @Override
-                  public void execute(Runnable command) {
-                    offloadExecutorHolder.getExecutor().execute(command);
-                  }
-                })
+            .setOffloadExecutor(this.offloadExecutorHolder)
             .build();
     this.authorityOverride = builder.authorityOverride;
     this.nameResolverFactory = builder.nameResolverFactory;
@@ -884,6 +879,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     updateSubchannelPicker(new PanicSubchannelPicker());
+    realChannel.updateConfigSelector(null);
     channelLogger.log(ChannelLogLevel.ERROR, "PANIC! Entering TRANSIENT_FAILURE");
     channelStateManager.gotoState(TRANSIENT_FAILURE);
   }
@@ -1752,6 +1748,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
+          if (ManagedChannelImpl.this.nameResolver != resolver) {
+            return;
+          }
 
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
           channelLogger.log(
@@ -2212,8 +2211,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   /**
    * Lazily request for Executor from an executor pool.
+   * Also act as an Executor directly to simply run a cmd
    */
-  private static final class ExecutorHolder {
+  @VisibleForTesting
+  static final class ExecutorHolder implements Executor {
     private final ObjectPool<? extends Executor> pool;
     private Executor executor;
 
@@ -2232,6 +2233,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
       if (executor != null) {
         executor = pool.returnObject(executor);
       }
+    }
+
+    @Override
+    public void execute(Runnable command) {
+      getExecutor().execute(command);
     }
   }
 

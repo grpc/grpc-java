@@ -24,6 +24,10 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelRegistry;
 import io.grpc.gcp.observability.interceptors.InternalLoggingChannelInterceptor;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.Collection;
+import java.util.Collections;
 
 /** A channel provider that injects logging interceptor. */
 final class LoggingChannelProvider extends ManagedChannelProvider {
@@ -89,5 +93,10 @@ final class LoggingChannelProvider extends ManagedChannelProvider {
     }
     checkNotNull(result.getError(), "Expected error to be set!");
     return result;
+  }
+
+  @Override
+  protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+    return Collections.singleton(InetSocketAddress.class);
   }
 }

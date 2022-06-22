@@ -1,4 +1,5 @@
-// Copyright 2015 The gRPC Authors
+
+// Copyright 2015-2016 gRPC authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,16 +21,24 @@ package grpc.testing;
 
 option java_package = "io.grpc.testing.integration";
 
-// TODO(jihuncho): Use well-known types once all languages are synced.
+// TODO(dgq): Go back to using well-known types once
+// https://github.com/grpc/grpc/issues/6980 has been fixed.
+// import "google/protobuf/wrappers.proto";
 message BoolValue {
   // The bool value.
   bool value = 1;
 }
 
+// The type of payload that should be returned.
+enum PayloadType {
+  // Compressable text format.
+  COMPRESSABLE = 0;
+}
+
 // A block of data, to simply increase gRPC message size.
 message Payload {
-  reserved 1;
-
+  // The type of data in body.
+  PayloadType type = 1;
   // Primary contents of payload.
   bytes body = 2;
 }
@@ -58,7 +67,9 @@ enum GrpclbRouteType {
 
 // Unary request.
 message SimpleRequest {
-  reserved 1;
+  // Desired payload type in the response from the server.
+  // If response_type is RANDOM, server randomly chooses one from other formats.
+  PayloadType response_type = 1;
 
   // Desired payload size in the response from the server.
   int32 response_size = 2;
@@ -89,6 +100,9 @@ message SimpleRequest {
 
   // Whether SimpleResponse should include grpclb_route_type.
   bool fill_grpclb_route_type = 10;
+
+  // If set the server should record this metrics report data for the current RPC.
+  TestOrcaReport orca_per_query_report = 11;
 }
 
 // Unary response, as configured by the request.
@@ -106,12 +120,9 @@ message SimpleResponse {
   string server_id = 4;
   // gRPCLB Path.
   GrpclbRouteType grpclb_route_type = 5;
+
   // Server hostname.
   string hostname = 6;
-}
-
-message SimpleContext {
-  string value = 1;
 }
 
 // Client-streaming request.
@@ -152,7 +163,11 @@ message ResponseParameters {
 
 // Server-streaming request.
 message StreamingOutputCallRequest {
-  reserved 1;
+  // Desired payload type in the response from the server.
+  // If response_type is RANDOM, the payload from each response in the stream
+  // might be of different types. This is to simulate a mixed type of payload
+  // stream.
+  PayloadType response_type = 1;
 
   // Configuration for each expected response message.
   repeated ResponseParameters response_parameters = 2;
@@ -162,6 +177,9 @@ message StreamingOutputCallRequest {
 
   // Whether server should return a given status
   EchoStatus response_status = 7;
+
+  // If set the server should update this metrics report data at the OOB server.
+  TestOrcaReport orca_oob_report = 8;
 }
 
 // Server-streaming response, as configured by the request and parameters.
@@ -258,3 +276,13 @@ message ClientConfigureRequest {
 
 // Response for updating a test client's configuration.
 message ClientConfigureResponse {}
+
+// Metrics data the server will update and send to the client. It mirrors orca load report
+// https://github.com/cncf/xds/blob/eded343319d09f30032952beda9840bbd3dcf7ac/xds/data/orca/v3/orca_load_report.proto#L15,
+// but avoids orca dependency. Used by both per-query and out-of-band reporting tests.
+message TestOrcaReport {
+  double cpu_utilization = 1;
+  double memory_utilization = 2;
+  map<string, double> request_cost = 3;
+  map<string, double> utilization = 4;
+}

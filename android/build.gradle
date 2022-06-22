@@ -33,7 +33,7 @@ dependencies {
     api project(':grpc-core')
     implementation libraries.guava
     testImplementation project('::grpc-okhttp')
-    testImplementation libraries.androidx_test
+    testImplementation libraries.androidx.test.core
     testImplementation libraries.junit
     testImplementation (libraries.robolectric) {
         // Unreleased change: https://github.com/robolectric/robolectric/pull/5432

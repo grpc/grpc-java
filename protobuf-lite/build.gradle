@@ -11,7 +11,7 @@ description = 'gRPC: Protobuf Lite'
 
 dependencies {
     api project(':grpc-api'),
-            libraries.protobuf_lite
+            libraries.protobuf.javalite
     implementation libraries.jsr305,
             libraries.guava
 
@@ -33,7 +33,7 @@ protobuf {
         if (project.hasProperty('protoc')) {
             path = project.protoc
         } else {
-            artifact = "com.google.protobuf:protoc:${protocVersion}"
+            artifact = libs.protobuf.protoc.get()
         }
     }
     generateProtoTasks {

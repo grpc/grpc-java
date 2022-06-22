@@ -18,7 +18,12 @@ package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import java.net.SocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -140,10 +145,37 @@ public final class ManagedChannelRegistry {
     } catch (ClassNotFoundException e) {
       logger.log(Level.FINE, "Unable to find NettyChannelProvider", e);
     }
+    try {
+      list.add(Class.forName("io.grpc.netty.UdsNettyChannelProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find UdsNettyChannelProvider", e);
+    }
     return Collections.unmodifiableList(list);
   }
 
   ManagedChannelBuilder<?> newChannelBuilder(String target, ChannelCredentials creds) {
+    return newChannelBuilder(NameResolverRegistry.getDefaultRegistry(), target, creds);
+  }
+
+  @VisibleForTesting
+  ManagedChannelBuilder<?> newChannelBuilder(NameResolverRegistry nameResolverRegistry,
+      String target, ChannelCredentials creds) {
+    NameResolverProvider nameResolverProvider = null;
+    try {
+      URI uri = new URI(target);
+      nameResolverProvider = nameResolverRegistry.providers().get(uri.getScheme());
+    } catch (URISyntaxException ignore) {
+      // bad URI found, just ignore and continue
+    }
+    if (nameResolverProvider == null) {
+      nameResolverProvider = nameResolverRegistry.providers().get(
+          nameResolverRegistry.asFactory().getDefaultScheme());
+    }
+    Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
+        = (nameResolverProvider != null)
+        ? nameResolverProvider.getProducedSocketAddressTypes() :
+        Collections.emptySet();
+
     List<ManagedChannelProvider> providers = providers();
     if (providers.isEmpty()) {
       throw new ProviderNotFoundException("No functional channel service provider found. "
@@ -152,6 +184,15 @@ public final class ManagedChannelRegistry {
     }
     StringBuilder error = new StringBuilder();
     for (ManagedChannelProvider provider : providers()) {
+      Collection<Class<? extends SocketAddress>> channelProviderSocketAddressTypes
+          = provider.getSupportedSocketAddressTypes();
+      if (!channelProviderSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+        error.append("; ");
+        error.append(provider.getClass().getName());
+        error.append(": does not support 1 or more of ");
+        error.append(Arrays.toString(nameResolverSocketAddressTypes.toArray()));
+        continue;
+      }
       ManagedChannelProvider.NewChannelBuilderResult result
           = provider.newChannelBuilder(target, creds);
       if (result.getChannelBuilder() != null) {

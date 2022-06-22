@@ -18,6 +18,7 @@ package io.grpc.services;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.truth.Truth;
 import io.grpc.Context;
 import java.util.Map;
 import org.junit.Test;
@@ -37,19 +38,28 @@ public class CallMetricRecorderTest {
 
   @Test
   public void dumpDumpsAllSavedMetricValues() {
-    recorder.recordCallMetric("cost1", 154353.423);
-    recorder.recordCallMetric("cost2", 0.1367);
-    recorder.recordCallMetric("cost3", 1437.34);
+    recorder.recordUtilizationMetric("util1", 154353.423);
+    recorder.recordUtilizationMetric("util2", 0.1367);
+    recorder.recordUtilizationMetric("util3", 1437.34);
+    recorder.recordCallMetric("cost1", 37465.12);
+    recorder.recordCallMetric("cost2", 10293.0);
+    recorder.recordCallMetric("cost3", 1.0);
+    recorder.recordCpuUtilizationMetric(0.1928);
+    recorder.recordMemoryUtilizationMetric(47.4);
 
-    Map<String, Double> dump = recorder.finalizeAndDump();
-    assertThat(dump)
-        .containsExactly("cost1", 154353.423, "cost2", 0.1367, "cost3", 1437.34);
+    CallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    Truth.assertThat(dump.getUtilizationMetrics())
+        .containsExactly("util1", 154353.423, "util2", 0.1367, "util3", 1437.34);
+    Truth.assertThat(dump.getRequestCostMetrics())
+        .containsExactly("cost1", 37465.12, "cost2", 10293.0, "cost3", 1.0);
+    Truth.assertThat(dump.getCpuUtilization()).isEqualTo(0.1928);
+    Truth.assertThat(dump.getMemoryUtilization()).isEqualTo(47.4);
   }
 
   @Test
   public void noMetricsRecordedAfterSnapshot() {
     Map<String, Double> initDump = recorder.finalizeAndDump();
-    recorder.recordCallMetric("cost", 154353.423);
+    recorder.recordUtilizationMetric("cost", 154353.423);
     assertThat(recorder.finalizeAndDump()).isEqualTo(initDump);
   }
 
@@ -60,9 +70,19 @@ public class CallMetricRecorderTest {
     recorder.recordCallMetric("cost1", 6441.341);
     recorder.recordCallMetric("cost1", 4654.67);
     recorder.recordCallMetric("cost2", 75.83);
-    Map<String, Double> dump = recorder.finalizeAndDump();
-    assertThat(dump)
+    recorder.recordMemoryUtilizationMetric(1.3);
+    recorder.recordMemoryUtilizationMetric(3.1);
+    recorder.recordUtilizationMetric("util1", 28374.21);
+    recorder.recordMemoryUtilizationMetric(9384.0);
+    recorder.recordUtilizationMetric("util1", 84323.3);
+
+    CallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    Truth.assertThat(dump.getRequestCostMetrics())
         .containsExactly("cost1", 4654.67, "cost2", 75.83);
+    Truth.assertThat(dump.getMemoryUtilization()).isEqualTo(9384.0);
+    Truth.assertThat(dump.getUtilizationMetrics())
+        .containsExactly("util1", 84323.3);
+    Truth.assertThat(dump.getCpuUtilization()).isEqualTo(0);
   }
 
   @Test

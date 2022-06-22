@@ -20,6 +20,7 @@ java_library(
         "@io_netty_netty_codec_http2//jar",
         "@io_netty_netty_codec_socks//jar",
         "@io_netty_netty_common//jar",
+        "@io_netty_netty_transport_native_unix_common//jar",
         "@io_netty_netty_handler//jar",
         "@io_netty_netty_handler_proxy//jar",
         "@io_netty_netty_resolver//jar",

@@ -2396,9 +2396,12 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
     ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Executor> executorArgumentCaptor = ArgumentCaptor.forClass(null);
     ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
     verify(creds).applyRequestMetadata(infoCaptor.capture(),
-        same(executor.getScheduledExecutorService()), applierCaptor.capture());
+        executorArgumentCaptor.capture(), applierCaptor.capture());
+    assertSame(offloadExecutor,
+            ((ManagedChannelImpl.ExecutorHolder) executorArgumentCaptor.getValue()).getExecutor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
     assertEquals(SecurityLevel.NONE, infoCaptor.getValue().getSecurityLevel());
@@ -2423,7 +2426,9 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, new Metadata());
 
     verify(creds, times(2)).applyRequestMetadata(infoCaptor.capture(),
-        same(executor.getScheduledExecutorService()), applierCaptor.capture());
+            executorArgumentCaptor.capture(), applierCaptor.capture());
+    assertSame(offloadExecutor,
+            ((ManagedChannelImpl.ExecutorHolder) executorArgumentCaptor.getValue()).getExecutor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
     assertEquals(AUTHORITY, infoCaptor.getValue().getAuthority());
     assertEquals(SecurityLevel.NONE, infoCaptor.getValue().getSecurityLevel());
@@ -2796,6 +2801,40 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
     verifyCallListenerClosed(mockCallListener, Status.Code.INTERNAL, panicReason);
     verifyCallListenerClosed(mockCallListener2, Status.Code.INTERNAL, panicReason);
+    panicExpected = true;
+  }
+
+  @Test
+  public void panic_atStart() {
+    final RuntimeException panicReason = new RuntimeException("Simulated NR exception");
+    final NameResolver failingResolver = new NameResolver() {
+      @Override public String getServiceAuthority() {
+        return "fake-authority";
+      }
+
+      @Override public void start(Listener2 listener) {
+        throw panicReason;
+      }
+
+      @Override public void shutdown() {}
+    };
+    channelBuilder.nameResolverFactory(new NameResolver.Factory() {
+      @Override public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return failingResolver;
+      }
+
+      @Override public String getDefaultScheme() {
+        return "fakescheme";
+      }
+    });
+    createChannel();
+
+    // RPCs fail immediately
+    ClientCall<String, Integer> call =
+        channel.newCall(method, CallOptions.DEFAULT.withoutWaitForReady());
+    call.start(mockCallListener, new Metadata());
+    executor.runDueTasks();
+    verifyCallListenerClosed(mockCallListener, Status.Code.INTERNAL, panicReason);
     panicExpected = true;
   }
 

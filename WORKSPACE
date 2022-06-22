@@ -21,6 +21,17 @@ load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
 
+load("@envoy_api//bazel:repositories.bzl", "api_dependencies")
+
+api_dependencies()
+
+load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
+
+switched_rules_by_language(
+    name = "com_google_googleapis_imports",
+    java = True,
+)
+
 maven_install(
     artifacts = IO_GRPC_GRPC_JAVA_ARTIFACTS + PROTOBUF_MAVEN_ARTIFACTS,
     generate_compat_repositories = True,
@@ -28,6 +39,7 @@ maven_install(
     repositories = [
         "https://repo.maven.apache.org/maven2/",
     ],
+    strict_visibility = True,
 )
 
 load("@maven//:compat.bzl", "compat_repositories")

@@ -37,6 +37,7 @@ $ VERSION_FILES=(
   examples/example-tls/build.gradle
   examples/example-tls/pom.xml
   examples/example-xds/build.gradle
+  examples/example-orca/build.gradle
   )
 ```
 

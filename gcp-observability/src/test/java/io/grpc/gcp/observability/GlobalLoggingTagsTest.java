@@ -57,7 +57,7 @@ public class GlobalLoggingTagsTest {
     GlobalLoggingTags.populateFromMap(
         ImmutableMap.of("GRPC_OBSERVABILITY_KEY1", "VALUE1", "ANOTHER_KEY2", "VALUE2",
             "GRPC_OBSERVABILITY_KEY3", "VALUE3"), customTags);
-    assertThat(customTags.build()).containsExactly("KEY1", "VALUE1", "KEY3", "VALUE3");
+    assertThat(customTags.buildOrThrow()).containsExactly("KEY1", "VALUE1", "KEY3", "VALUE3");
   }
 
   @Test
@@ -95,7 +95,7 @@ public class GlobalLoggingTagsTest {
     ImmutableMap.Builder<String, String> customTags = ImmutableMap.builder();
     GlobalLoggingTags.populateFromKubernetesValues(customTags, namespaceFile.getAbsolutePath(),
         hostnameFile.getAbsolutePath(), cgroupFile.getAbsolutePath());
-    assertThat(customTags.build()).containsExactly("container_id",
+    assertThat(customTags.buildOrThrow()).containsExactly("container_id",
         "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7", "namespace_name",
         "test-namespace1", "pod_name", "test-hostname2");
   }
@@ -112,7 +112,7 @@ public class GlobalLoggingTagsTest {
     ImmutableMap.Builder<String, String> customTags = ImmutableMap.builder();
     GlobalLoggingTags.populateFromKubernetesValues(customTags,
         namespaceFilePath, hostnameFile.getAbsolutePath(), cgroupFile.getAbsolutePath());
-    assertThat(customTags.build()).containsExactly("container_id",
+    assertThat(customTags.buildOrThrow()).containsExactly("container_id",
         "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7",
         "pod_name", "test-hostname2");
   }

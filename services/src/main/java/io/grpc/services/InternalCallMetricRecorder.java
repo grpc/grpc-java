@@ -40,4 +40,8 @@ public final class InternalCallMetricRecorder {
   public static Map<String, Double> finalizeAndDump(CallMetricRecorder recorder) {
     return recorder.finalizeAndDump();
   }
+
+  public static CallMetricRecorder.CallMetricReport finalizeAndDump2(CallMetricRecorder recorder) {
+    return recorder.finalizeAndDump2();
+  }
 }

@@ -13,12 +13,12 @@ dependencies {
     implementation project(':grpc-protobuf'),
             project(':grpc-core')
 
-    annotationProcessor libraries.autovalue
-    compileOnly libraries.javax_annotation
+    annotationProcessor libraries.auto.value
+    compileOnly libraries.javax.annotation
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto')
-    testImplementation (libraries.guava_testlib) {
+    testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
 
@@ -74,4 +74,4 @@ publishing {
     }
 }
 
-[publishMavenPublicationToMavenRepository]*.onlyIf {false}
+publishMavenPublicationToMavenRepository.enabled = false

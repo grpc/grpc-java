@@ -17,6 +17,10 @@
 package io.grpc;
 
 import io.grpc.NameResolver.Factory;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.Collection;
+import java.util.Collections;
 
 /**
  * Provider of name resolvers for name agnostic consumption.
@@ -61,5 +65,15 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    * */
   protected String getScheme() {
     return getDefaultScheme();
+  }
+
+  /**
+   * Returns the {@link SocketAddress} types this provider's name-resolver is capable of producing.
+   * This enables selection of the appropriate {@link ManagedChannelProvider} for a channel.
+   *
+   * @return the {@link SocketAddress} types this provider's name-resolver is capable of producing.
+   */
+  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+    return Collections.singleton(InetSocketAddress.class);
   }
 }

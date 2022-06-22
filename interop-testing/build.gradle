@@ -3,11 +3,14 @@ plugins {
     id "java"
     id "maven-publish"
 
+    id "com.github.johnrengelman.shadow"
     id "com.google.protobuf"
 }
 
 description = "gRPC: Integration Testing"
-startScripts.enabled = false
+startShadowScripts.enabled = false
+installDist.dependsOn(installShadowDist)
+installDist.enabled = false
 
 configurations {
     alpnagent
@@ -26,13 +29,16 @@ dependencies {
             project(':grpc-services'),
             project(':grpc-stub'),
             project(':grpc-testing'),
-            project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
-            libraries.opencensus_contrib_grpc_metrics,
-            libraries.google_auth_oauth2_http
-    compileOnly libraries.javax_annotation
+            libraries.opencensus.contrib.grpc.metrics,
+            libraries.google.auth.oauth2Http
+    def xdsDependency = implementation project(':grpc-xds')
+
+    compileOnly libraries.javax.annotation
+    shadow configurations.implementation.getDependencies().minus(xdsDependency)
+    shadow project(path: ':grpc-xds', configuration: 'shadow')
     // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
     // Used instead of google-cloud-logging because it's failing
     // due to a circular dependency on grpc.
@@ -40,16 +46,16 @@ dependencies {
     // Error example: "java.util.logging.ErrorManager: 1"
     // Latest failing version com.google.cloud:google-cloud-logging:2.1.2
     runtimeOnly group: 'io.github.devatherock', name: 'jul-jsonformatter', version: '1.1.0'
-    runtimeOnly libraries.opencensus_impl,
-            libraries.netty_tcnative,
+    runtimeOnly libraries.opencensus.impl,
+            libraries.netty.tcnative,
             project(':grpc-grpclb'),
             project(':grpc-rls')
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,
-            libraries.mockito,
+            libraries.mockito.core,
             libraries.okhttp
-    alpnagent libraries.jetty_alpn_agent
+    alpnagent libraries.jetty.alpn.agent
 }
 
 configureProtoCompilation()
@@ -60,6 +66,19 @@ compileJava {
     // This isn't a library; it can use beta APIs
     options.errorprone.check("BetaApi", CheckSeverity.OFF)
 }
+jar {
+    // Must use a different archiveClassifier to avoid conflicting with shadowJar
+    archiveClassifier = 'original'
+}
+
+def xdsPrefixName = 'io.grpc.xds'
+shadowJar {
+    archiveClassifier = null
+    dependencies {
+        exclude(dependency {true})
+    }
+    relocate 'com.github.xds', "${xdsPrefixName}.shaded.com.github.xds"
+}
 
 test {
     // For the automated tests, use Jetty ALPN.
@@ -69,6 +88,8 @@ test {
 // For the generated scripts, use Netty tcnative (i.e. OpenSSL).
 // Note that OkHttp currently only supports ALPN, so OpenSSL version >= 1.0.2 is required.
 
+var startScriptsClasspath = shadowJar.outputs.files + configurations.shadow
+
 task test_client(type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.TestServiceClient"
     applicationName = "test-client"
@@ -76,7 +97,7 @@ task test_client(type: CreateStartScripts) {
         "-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name
     ]
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
     doLast {
         unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\'"\$APP_HOME"\'/lib/')
         windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
@@ -87,21 +108,21 @@ task test_server(type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.TestServiceServer"
     applicationName = "test-server"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
 }
 
 task reconnect_test_client(type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.ReconnectTestClient"
     applicationName = "reconnect-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
 }
 
 task stresstest_client(type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.StressTestClient"
     applicationName = "stresstest-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
     defaultJvmOpts = [
         "-verbose:gc",
         "-XX:+PrintFlagsFinal"
@@ -112,14 +133,14 @@ task http2_client(type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.Http2Client"
     applicationName = "http2-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
 }
 
 task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
     applicationName = "grpclb-long-lived-affinity-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
     defaultJvmOpts = [
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
     ]
@@ -129,7 +150,7 @@ task grpclb_fallback_test_client (type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.GrpclbFallbackTestClient"
     applicationName = "grpclb-fallback-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
     defaultJvmOpts = [
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
     ]
@@ -139,17 +160,17 @@ task xds_test_client(type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
 }
 
 task xds_test_server(type: CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.XdsTestServer"
     applicationName = "xds-test-server"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+    classpath = startScriptsClasspath
 }
 
-applicationDistribution.into("bin") {
+distributions.shadow.contents.into("bin") {
     from(test_client)
     from(test_server)
     from(reconnect_test_client)
@@ -162,15 +183,23 @@ applicationDistribution.into("bin") {
     fileMode = 0755
 }
 
-applicationDistribution.into("lib") {
+distributions.shadow.contents.into("lib") {
     from(configurations.alpnagent)
 }
+
+distributions.shadow.distributionBaseName = project.name
+// to please shadowJar
+mainClassName = 'io.grpc.testing.integration.TestServiceClient'
 
 publishing {
     publications {
         maven(MavenPublication) {
-            artifact distZip
-            artifact distTar
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
+
+            artifact shadowDistZip
+            artifact shadowDistTar
         }
     }
 }

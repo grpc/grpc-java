@@ -23,6 +23,7 @@ import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -56,6 +57,9 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
+import io.grpc.internal.JsonUtil;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
@@ -73,7 +77,6 @@ import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
 import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
-import io.grpc.xds.XdsClient.CdsUpdate.LbPolicy;
 import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
@@ -126,7 +129,8 @@ public abstract class ClientXdsClientTestBase {
   private static final String VERSION_1 = "42";
   private static final String VERSION_2 = "43";
   private static final String VERSION_3 = "44";
-  private static final Node NODE = Node.newBuilder().build();
+  private static final String NODE_ID = "cool-node-id";
+  private static final Node NODE = Node.newBuilder().setId(NODE_ID).build();
   private static final Any FAILING_ANY = MessageFactory.FAILING_ANY;
   private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
   private final ServerInfo lrsServerInfo =
@@ -259,6 +263,7 @@ public abstract class ClientXdsClientTestBase {
   private boolean originalEnableFaultInjection;
   private boolean originalEnableRbac;
   private boolean originalEnableLeastRequest;
+  private boolean originalEnableFederation;
 
   @Before
   public void setUp() throws IOException {
@@ -275,6 +280,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(originalEnableRbac).isTrue();
     originalEnableLeastRequest = ClientXdsClient.enableLeastRequest;
     ClientXdsClient.enableLeastRequest = true;
+    originalEnableFederation = BootstrapperImpl.enableFederation;
     final String serverName = InProcessServerBuilder.generateName();
     cleanupRule.register(
         InProcessServerBuilder
@@ -314,7 +320,7 @@ public abstract class ClientXdsClientTestBase {
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
                 Bootstrapper.ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3())))
-            .node(EnvoyProtoData.Node.newBuilder().build())
+            .node(NODE)
             .authorities(ImmutableMap.of(
                 "authority.xds.com",
                 AuthorityInfo.create(
@@ -349,6 +355,7 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClient.enableFaultInjection = originalEnableFaultInjection;
     ClientXdsClient.enableRbac = originalEnableRbac;
     ClientXdsClient.enableLeastRequest = originalEnableLeastRequest;
+    BootstrapperImpl.enableFederation = originalEnableFederation;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
@@ -467,6 +474,15 @@ public abstract class ClientXdsClientTestBase {
     return metadata;
   }
 
+  private void verifyStatusWithNodeId(Status status, Code expectedCode, String expectedMsg) {
+    assertThat(status.getCode()).isEqualTo(expectedCode);
+    assertThat(status.getCause()).isNull();
+    // Watcher.onError propagates status description to the channel, and we want to
+    // augment the description with the node id.
+    String description = (expectedMsg.isEmpty() ? "" : expectedMsg + " ") + "nodeID: " + NODE_ID;
+    assertThat(status.getDescription()).isEqualTo(description);
+  }
+
   /**
    * Helper method to validate {@link XdsClient.EdsUpdate} created for the test CDS resource
    * {@link ClientXdsClientTestBase#testClusterLoadAssignment}.
@@ -505,6 +521,23 @@ public abstract class ClientXdsClientTestBase {
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_withUnknownAuthority() {
+    BootstrapperImpl.enableFederation = true;
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1"
+        : "xdstp://unknown.example.com/envoy.api.v2.Listener/listener1";
+    xdsClient.watchLdsResource(ldsResourceName, ldsResourceWatcher);
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(error.getDescription()).isEqualTo(
+        "Wrong configuration: xds server does not exist for resource " + ldsResourceName);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    xdsClient.cancelLdsResourceWatch(ldsResourceName, ldsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
 
   @Test
@@ -775,6 +808,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName() {
+    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
@@ -795,6 +829,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withEmptyAuthority() {
+    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp:///envoy.config.listener.v3.Listener/listener1"
         : "xdstp:///envoy.api.v2.Listener/listener1";
@@ -815,6 +850,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_witUnorderedContextParams() {
+    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?bar=2&foo=1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?bar=2&foo=1";
@@ -834,6 +870,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withWrongType() {
+    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
@@ -854,6 +891,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void rdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    BootstrapperImpl.enableFederation = true;
     String rdsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/route1"
         : "xdstp://authority.xds.com/envoy.api.v2.RouteConfiguration/route1";
@@ -872,7 +910,25 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void rdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
+    BootstrapperImpl.enableFederation = true;
+    String rdsResourceName = useProtocolV3()
+        ? "xdstp://unknown.example.com/envoy.config.route.v3.RouteConfiguration/route1"
+        : "xdstp://unknown.example.com/envoy.api.v2.RouteConfiguration/route1";
+    xdsClient.watchRdsResource(rdsResourceName, rdsResourceWatcher);
+    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(error.getDescription()).isEqualTo(
+        "Wrong configuration: xds server does not exist for resource " + rdsResourceName);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    xdsClient.cancelRdsResourceWatch(rdsResourceName, rdsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+  }
+
+  @Test
   public void cdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    BootstrapperImpl.enableFederation = true;
     String cdsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1"
         : "xdstp://authority.xds.com/envoy.api.v2.Cluster/cluster1";
@@ -892,7 +948,25 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void cdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
+    BootstrapperImpl.enableFederation = true;
+    String cdsResourceName = useProtocolV3()
+        ? "xdstp://unknown.example.com/envoy.config.cluster.v3.Cluster/cluster1"
+        : "xdstp://unknown.example.com/envoy.api.v2.Cluster/cluster1";
+    xdsClient.watchCdsResource(cdsResourceName, cdsResourceWatcher);
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(error.getDescription()).isEqualTo(
+        "Wrong configuration: xds server does not exist for resource " + cdsResourceName);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    xdsClient.cancelCdsResourceWatch(cdsResourceName, cdsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+  }
+
+  @Test
   public void edsResourceUpdated_withXdstpResourceName_withWrongType() {
+    BootstrapperImpl.enableFederation = true;
     String edsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
         : "xdstp://authority.xds.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
@@ -912,6 +986,23 @@ public abstract class ClientXdsClientTestBase {
         EDS, edsResourceName, "", "0000", NODE,
         ImmutableList.of(
             "Unsupported resource name: " + edsResourceNameWithWrongType + " for type: EDS"));
+  }
+
+  @Test
+  public void edsResourceUpdated_withXdstpResourceName_unknownAuthority() {
+    BootstrapperImpl.enableFederation = true;
+    String edsResourceName = useProtocolV3()
+        ? "xdstp://unknown.example.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
+        : "xdstp://unknown.example.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
+    xdsClient.watchEdsResource(edsResourceName, edsResourceWatcher);
+    verify(edsResourceWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(error.getDescription()).isEqualTo(
+        "Wrong configuration: xds server does not exist for resource " + edsResourceName);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    xdsClient.cancelEdsResourceWatch(edsResourceName, edsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
 
   @Test
@@ -1615,7 +1706,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1637,7 +1732,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1664,8 +1763,12 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.LEAST_REQUEST);
-    assertThat(cdsUpdate.choiceCount()).isEqualTo(3);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
+    assertThat(childConfigs.get(0).getRawConfigValue().get("choiceCount")).isEqualTo(3);
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1691,9 +1794,12 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.RING_HASH);
-    assertThat(cdsUpdate.minRingSize()).isEqualTo(10L);
-    assertThat(cdsUpdate.maxRingSize()).isEqualTo(100L);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
+    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "minRingSize")).isEqualTo(
+        10L);
+    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "maxRingSize")).isEqualTo(
+        100L);
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1717,7 +1823,11 @@ public abstract class ClientXdsClientTestBase {
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.AGGREGATE);
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.prioritizedClusterNames()).containsExactlyElementsIn(candidates).inOrder();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterAggregate, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -1738,7 +1848,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1840,11 +1954,8 @@ public abstract class ClientXdsClientTestBase {
             + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: "
             + "ca_certificate_provider_instance is required in upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(cdsResourceWatcher).onError(captor.capture());
-    Status errorStatus = captor.getValue();
-    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
-    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
   /**
@@ -1866,11 +1977,8 @@ public abstract class ClientXdsClientTestBase {
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
         + "transport-socket with name envoy.transport_sockets.bad not supported.";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(cdsResourceWatcher).onError(captor.capture());
-    Status errorStatus = captor.getValue();
-    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
-    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
   @Test
@@ -1888,7 +1996,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1930,7 +2042,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -1949,12 +2065,63 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_2, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+  }
+
+  // Assures that CDS updates identical to the current config are ignored.
+  @Test
+  public void cdsResourceUpdatedWithDuplicate() {
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+
+    String edsService = "eds-service-bar.googleapis.com";
+    String transportSocketName = "envoy.transport_sockets.tls";
+    Any roundRobinConfig = Any.pack(
+        mf.buildEdsCluster(CDS_RESOURCE, edsService, "round_robin", null, null, true, null,
+            transportSocketName, null
+        ));
+    Any ringHashConfig = Any.pack(
+        mf.buildEdsCluster(CDS_RESOURCE, edsService, "ring_hash_experimental",
+            mf.buildRingHashLbConfig("xx_hash", 1, 2), null, true, null,
+            transportSocketName, null
+        ));
+    Any leastRequestConfig = Any.pack(
+        mf.buildEdsCluster(CDS_RESOURCE, edsService, "least_request_experimental",
+            null, mf.buildLeastRequestLbConfig(2), true, null,
+            transportSocketName, null
+        ));
+
+    // Configure with round robin, the update should be sent to the watcher.
+    call.sendResponse(CDS, roundRobinConfig, VERSION_2, "0001");
+    verify(cdsResourceWatcher, times(1)).onChanged(isA(CdsUpdate.class));
+
+    // Second update is identical, watcher should not get an additional update.
+    call.sendResponse(CDS, roundRobinConfig, VERSION_2, "0002");
+    verify(cdsResourceWatcher, times(1)).onChanged(isA(CdsUpdate.class));
+
+    // Now we switch to ring hash so the watcher should be notified.
+    call.sendResponse(CDS, ringHashConfig, VERSION_2, "0003");
+    verify(cdsResourceWatcher, times(2)).onChanged(isA(CdsUpdate.class));
+
+    // Second update to ring hash should not result in watcher being notified.
+    call.sendResponse(CDS, ringHashConfig, VERSION_2, "0004");
+    verify(cdsResourceWatcher, times(2)).onChanged(isA(CdsUpdate.class));
+
+    // Now we switch to least request so the watcher should be notified.
+    call.sendResponse(CDS, leastRequestConfig, VERSION_2, "0005");
+    verify(cdsResourceWatcher, times(3)).onChanged(isA(CdsUpdate.class));
+
+    // Second update to least request should not result in watcher being notified.
+    call.sendResponse(CDS, leastRequestConfig, VERSION_2, "0006");
+    verify(cdsResourceWatcher, times(3)).onChanged(isA(CdsUpdate.class));
   }
 
   @Test
@@ -1970,7 +2137,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2022,7 +2193,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2031,7 +2206,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(cdsResourceTwo);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2040,7 +2219,11 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(cdsResourceTwo);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
-    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2274,6 +2457,29 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void edsDuplicateLocalityInTheSamePriority() {
+    DiscoveryRpcCall call = startResourceWatcher(EDS, EDS_RESOURCE, edsResourceWatcher);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+
+    // Updated EDS response.
+    Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+              mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 1),
+            mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                mf.buildLbEndpoint("172.44.2.3", 8080, "healthy", 10), 2, 1)
+            ),
+        ImmutableList.<Message>of()));
+    call.sendResponse(EDS, updatedClusterLoadAssignment, "0", "0001");
+    String errorMsg = "EDS response ClusterLoadAssignment"
+        + " \'cluster-load-assignment.googleapis.com\' "
+        + "validation error: ClusterLoadAssignment has duplicate "
+        + "locality:Locality{region=region2, zone=zone2, subZone=subzone2} for priority:1";
+    call.verifyRequestNack(EDS, EDS_RESOURCE, "", "0001", NODE, ImmutableList.of(
+        errorMsg));
+  }
+
+  @Test
   public void edsResourceDeletedByCds() {
     String resource = "backend-service.googleapis.com";
     CdsResourceWatcher cdsWatcher = mock(CdsResourceWatcher.class);
@@ -2461,13 +2667,13 @@ public abstract class ClientXdsClientTestBase {
     // Management server closes the RPC stream with an error.
     call.sendError(Status.UNKNOWN.asException());
     verify(ldsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNKNOWN);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNKNOWN);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNKNOWN);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
     verify(edsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNKNOWN);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
 
     // Retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -2483,15 +2689,16 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
     // Management server becomes unreachable.
-    call.sendError(Status.UNAVAILABLE.asException());
+    String errorMsg = "my fault";
+    call.sendError(Status.UNAVAILABLE.withDescription(errorMsg).asException());
     verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
     verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
     verify(cdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
     verify(edsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
@@ -2518,13 +2725,13 @@ public abstract class ClientXdsClientTestBase {
 
     call.sendError(Status.DEADLINE_EXCEEDED.asException());
     verify(ldsResourceWatcher, times(3)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
     verify(rdsResourceWatcher, times(3)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
     verify(cdsResourceWatcher, times(3)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
     verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -2542,13 +2749,13 @@ public abstract class ClientXdsClientTestBase {
     // Management server becomes unreachable again.
     call.sendError(Status.UNAVAILABLE.asException());
     verify(ldsResourceWatcher, times(4)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     verify(rdsResourceWatcher, times(4)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     verify(cdsResourceWatcher, times(4)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     verify(edsResourceWatcher, times(4)).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
@@ -2572,9 +2779,9 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.sendError(Status.UNAVAILABLE.asException());
     verify(ldsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     ScheduledTask retryTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
     assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(10L);
@@ -2621,6 +2828,14 @@ public abstract class ClientXdsClientTestBase {
     call.sendError(Status.UNAVAILABLE.asException());
     assertThat(cdsResourceTimeout.isCancelled()).isTrue();
     assertThat(edsResourceTimeout.isCancelled()).isTrue();
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
+    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
+    verify(edsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
 
     fakeClock.forwardNanos(10L);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);
@@ -2740,11 +2955,8 @@ public abstract class ClientXdsClientTestBase {
         + "0.0.0.0:7000\' validation error: "
         + "common-tls-context is required in downstream-tls-context";
     call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(ldsResourceWatcher).onError(captor.capture());
-    Status errorStatus = captor.getValue();
-    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
-    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
   @Test
@@ -2770,11 +2982,8 @@ public abstract class ClientXdsClientTestBase {
         + "transport-socket with name envoy.transport_sockets.bad1 not supported.";
     call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
         errorMsg));
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(ldsResourceWatcher).onError(captor.capture());
-    Status errorStatus = captor.getValue();
-    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
-    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
   private DiscoveryRpcCall startResourceWatcher(

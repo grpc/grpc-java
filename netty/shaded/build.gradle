@@ -17,9 +17,17 @@ sourceSets { testShadow {} }
 
 dependencies {
     implementation project(':grpc-netty')
-    runtimeOnly libraries.netty_tcnative,
-            libraries.netty_epoll,
-	    libraries.netty_epoll_arm64
+    runtimeOnly libraries.netty.tcnative
+    runtimeOnly (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    runtimeOnly (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-aarch_64"
+        }
+    }
     testShadowImplementation files(shadowJar),
             project(':grpc-testing-proto'),
             project(':grpc-testing'),

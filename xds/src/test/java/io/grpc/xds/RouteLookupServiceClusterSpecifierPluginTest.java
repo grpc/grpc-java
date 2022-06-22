@@ -89,7 +89,7 @@ public class RouteLookupServiceClusterSpecifierPluginTest {
             .put("cacheSizeBytes", "5000")
             .put("validTargets", ImmutableList.of("valid-target"))
             .put("defaultTarget","default-target")
-            .build());
+            .buildOrThrow());
   }
 
   @Test
@@ -131,6 +131,6 @@ public class RouteLookupServiceClusterSpecifierPluginTest {
             .put("lookupServiceTimeout", "1.234s")
             .put("cacheSizeBytes", "5000")
             .put("validTargets", ImmutableList.of("valid-target"))
-            .build());
+            .buildOrThrow());
   }
 }

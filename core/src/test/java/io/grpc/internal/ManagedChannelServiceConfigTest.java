@@ -163,7 +163,7 @@ public class ManagedChannelServiceConfigTest {
             .put("backoffMultiplier", 1.5D)
             .put("perAttemptRecvTimeout", "2.5s")
             .put("retryableStatusCodes", ImmutableList.of("UNAVAILABLE"))
-            .build());
+            .buildOrThrow());
     Map<String, ?> defaultMethodConfig = ImmutableMap.of(
         "name", ImmutableList.of(ImmutableMap.of()),
         "timeout", "4.321s");
@@ -225,7 +225,7 @@ public class ManagedChannelServiceConfigTest {
         .put("backoffMultiplier", 1.5D)
         .put("perAttemptRecvTimeout", "2.5s")
         .put("retryableStatusCodes", ImmutableList.of())
-        .build();
+        .buildOrThrow();
     Map<String, ?> methodConfig = ImmutableMap.of(
         "name", ImmutableList.of(ImmutableMap.of()), "retryPolicy", retryPolicy);
     Map<String, ?> rawServiceConfig =
@@ -242,7 +242,7 @@ public class ManagedChannelServiceConfigTest {
         .put("maxBackoff", "10s")
         .put("backoffMultiplier", 1.5D)
         .put("retryableStatusCodes", ImmutableList.of("UNAVAILABLE"))
-        .build();
+        .buildOrThrow();
     Map<String, ?> methodConfig = ImmutableMap.of(
         "name", ImmutableList.of(ImmutableMap.of()), "retryPolicy", retryPolicy);
     Map<String, ?> rawServiceConfig =
@@ -259,7 +259,7 @@ public class ManagedChannelServiceConfigTest {
         .put("maxBackoff", "10s")
         .put("backoffMultiplier", 1.5D)
         .put("retryableStatusCodes", ImmutableList.of())
-        .build();
+        .buildOrThrow();
     Map<String, ?> methodConfig = ImmutableMap.of(
         "name", ImmutableList.of(ImmutableMap.of()), "retryPolicy", retryPolicy);
     Map<String, ?> rawServiceConfig =
@@ -285,7 +285,7 @@ public class ManagedChannelServiceConfigTest {
         .put("backoffMultiplier", 1.5D)
         .put("perAttemptRecvTimeout", "0s")
         .put("retryableStatusCodes", ImmutableList.of())
-        .build();
+        .buildOrThrow();
     Map<String, ?> methodConfig = ImmutableMap.of(
         "name", ImmutableList.of(ImmutableMap.of()), "retryPolicy", retryPolicy);
     Map<String, ?> rawServiceConfig =

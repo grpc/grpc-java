@@ -134,10 +134,10 @@ configurations {
 dependencies {
     testImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
-            libraries.javax_annotation
+            libraries.javax.annotation
     testLiteImplementation project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
-            libraries.javax_annotation
+            libraries.javax.annotation
 }
 
 sourceSets {
@@ -163,7 +163,7 @@ protobuf {
         if (project.hasProperty('protoc')) {
             path = project.protoc
         } else {
-            artifact = "com.google.protobuf:protoc:${protocVersion}"
+            artifact = libs.protobuf.protoc.get()
         }
     }
     plugins {
@@ -186,7 +186,7 @@ protobuf {
     }
 }
 
-println "*** Building codegen requires Protobuf version ${protocVersion}"
+println "*** Building codegen requires Protobuf version ${libs.versions.protobuf.get()}"
 println "*** Please refer to https://github.com/grpc/grpc-java/blob/master/COMPILING.md#how-to-build-code-generation-plugin"
 
 task buildArtifacts(type: Copy) {

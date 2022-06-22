@@ -149,6 +149,7 @@ public class ServerSslContextProviderFactoryTest {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
             new CertificateProvider.DistributorWatcher[1];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
+    @SuppressWarnings("deprecation")
     CertificateValidationContext staticCertValidationContext =
             CertificateValidationContext.newBuilder()
                     .addAllMatchSubjectAltNames(
@@ -215,6 +216,7 @@ public class ServerSslContextProviderFactoryTest {
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
     createAndRegisterProviderProvider(
         certificateProviderRegistry, watcherCaptor, "file_watcher", 1);
+    @SuppressWarnings("deprecation")
     CertificateValidationContext staticCertValidationContext =
         CertificateValidationContext.newBuilder()
             .addAllMatchSubjectAltNames(

@@ -434,7 +434,7 @@ public class CachingRlsLbClientTest {
                 ExtraKeys.create("server", "service-key", "method-key"),
                 ImmutableMap.<String, String>of())))
         .lookupService("service1")
-        .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+        .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(10))
         .maxAgeInNanos(TimeUnit.SECONDS.toNanos(300))
         .staleAgeInNanos(TimeUnit.SECONDS.toNanos(240))
         .cacheSizeBytes(1000)

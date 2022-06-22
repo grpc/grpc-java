@@ -14,11 +14,11 @@ dependencies {
     implementation project(':grpc-core'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
-            libraries.protobuf,
-            libraries.protobuf_util,
+            libraries.protobuf.java,
+            libraries.protobuf.java.util,
             libraries.guava
-    runtimeOnly libraries.errorprone
-    compileOnly libraries.javax_annotation
+    runtimeOnly libraries.errorprone.annotations
+    compileOnly libraries.javax.annotation
     testImplementation libraries.truth,
             project(':grpc-core').sourceSets.test.output
 }

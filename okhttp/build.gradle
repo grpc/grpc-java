@@ -14,7 +14,7 @@ dependencies {
     api project(':grpc-core')
     implementation libraries.okio,
             libraries.guava,
-            libraries.perfmark
+            libraries.perfmark.api
     // Make okhttp dependencies compile only
     compileOnly libraries.okhttp
     // Tests depend on base class defined by core module.

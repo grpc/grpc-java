@@ -38,14 +38,14 @@ android {
 
 dependencies {
     api project(':grpc-core'),
-            libraries.cronet_api
+            libraries.cronet.api
     implementation libraries.guava
     testImplementation project(':grpc-testing')
 
-    testImplementation libraries.cronet_embedded
+    testImplementation libraries.cronet.embedded
 
     testImplementation libraries.junit
-    testImplementation libraries.mockito
+    testImplementation libraries.mockito.core
     testImplementation (libraries.robolectric) {
         // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
         exclude group: 'com.google.auto.service', module: 'auto-service'
