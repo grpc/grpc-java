@@ -72,7 +72,7 @@ tasks.withType(Checkstyle) {
 dependencies {
     api project(':grpc-api')
     compileOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0',
-            libraries.javax_annotation
+            libraries.javax.annotation
 
     implementation project(':grpc-core'),
             libraries.guava

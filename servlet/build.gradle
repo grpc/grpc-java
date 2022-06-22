@@ -32,7 +32,7 @@ sourceSets {
 dependencies {
     api project(':grpc-api')
     compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
-            libraries.javax_annotation // java 9, 10 needs it
+            libraries.javax.annotation // java 9, 10 needs it
 
     implementation project(':grpc-core'),
             libraries.guava
