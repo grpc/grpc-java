@@ -407,8 +407,9 @@ public final class SecurityPolicies {
    */
   private static boolean checkSignatureSha256HashesMatch(
       Signature signature, List<byte[]> expectedSignatureSha256Hashes) {
+    byte[] signatureHash = getSha256Hash(signature);
     for (byte[] hash : expectedSignatureSha256Hashes) {
-      if (Arrays.equals(hash, getSha256Hash(signature))) {
+      if (Arrays.equals(hash, signatureHash)) {
         return true;
       }
     }
