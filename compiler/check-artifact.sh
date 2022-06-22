@@ -62,6 +62,8 @@ checkArch ()
       elif [[ "$ARCH" == aarch_64 ]]; then
         assertEq "$format" "elf64-little" $LINENO
       elif [[ "$ARCH" == ppcle_64 ]]; then
+        format="$(powerpc64le-linux-gnu-objdump -f "$1" | grep -o "file format .*$" | grep -o "[^ ]*$")"
+        echo Format=$format
         assertEq "$format" "elf64-powerpcle" $LINENO
       else
         fail "Unsupported arch: $ARCH"
