@@ -42,7 +42,7 @@ public final class EquivalentAddressGroup {
    * authority override.
    *
    * <p>The authority <strong>must</strong> be from a trusted source, because if the authority is
-   * tampered with RPCs may be sent to attackers which may leak sensitive user data. If the
+   * tampered with, RPCs may be sent to attackers which may leak sensitive user data. If the
    * authority was acquired by doing I/O, the communication must be authenticated (e.g., via TLS).
    * Recognize that the server that provided the authority can trivially impersonate the service.
    */
