@@ -226,7 +226,7 @@ public final class SecurityPolicies {
    * Checks if the signature of {@code packageName} matches one of the given signatures.
    *
    * @param packageName the package to be checked
-   * @param signatureCheckFunction {@link Function} that takes a signature and verifies if it
+   * @param signatureCheckFunction {@link Predicate} that takes a signature and verifies if it
    * satisfies any signature constraints
    * return {@code true} if {@code packageName} has a signature that satisfies {@code
    * signatureCheckFunction}.
