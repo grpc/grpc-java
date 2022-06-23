@@ -114,7 +114,7 @@ public final class SecurityPolicies {
   public static SecurityPolicy oneOfSignatures(
       PackageManager packageManager,
       String packageName,
-      List<Signature> requiredSignatures) {
+      Collection<Signature> requiredSignatures) {
     Preconditions.checkNotNull(packageManager, "packageManager");
     Preconditions.checkNotNull(packageName, "packageName");
     Preconditions.checkNotNull(requiredSignatures, "requiredSignatures");
@@ -149,11 +149,14 @@ public final class SecurityPolicies {
   public static SecurityPolicy oneOfSignatureSha256Hash(
       PackageManager packageManager,
       String packageName,
-      ImmutableList<byte[]> requiredSignatureSha256Hashes) {
+      List<byte[]> requiredSignatureSha256Hashes) {
     Preconditions.checkNotNull(packageManager);
     Preconditions.checkNotNull(packageName);
     Preconditions.checkNotNull(requiredSignatureSha256Hashes);
     Preconditions.checkArgument(!requiredSignatureSha256Hashes.isEmpty());
+
+    ImmutableList<byte[]> requiredSignaturesHashesImmutable = ImmutableList.copyOf(requiredSignatureSha256Hashes);
+
     for (byte[] requiredSignatureSha256Hash : requiredSignatureSha256Hashes) {
       Preconditions.checkNotNull(requiredSignatureSha256Hash);
       Preconditions.checkArgument(requiredSignatureSha256Hash.length == SHA_256_BYTES_LENGTH);
@@ -163,7 +166,7 @@ public final class SecurityPolicies {
       @Override
       public Status checkAuthorization(int uid) {
         return checkUidSha256Signature(
-            packageManager, uid, packageName, requiredSignatureSha256Hashes);
+            packageManager, uid, packageName, requiredSignaturesHashesImmutable);
       }
     };
   }
