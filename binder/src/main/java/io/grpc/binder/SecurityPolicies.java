@@ -155,12 +155,14 @@ public final class SecurityPolicies {
     Preconditions.checkNotNull(requiredSignatureSha256Hashes);
     Preconditions.checkArgument(!requiredSignatureSha256Hashes.isEmpty());
 
-    ImmutableList<byte[]> requiredSignaturesHashesImmutable = ImmutableList.copyOf(requiredSignatureSha256Hashes);
-
+    ImmutableList.Builder<byte[]> immutableListBuilder = ImmutableList.builder();
     for (byte[] requiredSignatureSha256Hash : requiredSignatureSha256Hashes) {
       Preconditions.checkNotNull(requiredSignatureSha256Hash);
       Preconditions.checkArgument(requiredSignatureSha256Hash.length == SHA_256_BYTES_LENGTH);
+      immutableListBuilder.add(
+          Arrays.copyOf(requiredSignatureSha256Hash, requiredSignatureSha256Hash.length));
     }
+    ImmutableList<byte[]> requiredSignaturesHashesImmutable = immutableListBuilder.build();
 
     return new SecurityPolicy() {
       @Override
