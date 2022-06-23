@@ -38,6 +38,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.netty:netty-tcnative-boringssl-static:2.0.53.Final",
     "io.netty:netty-tcnative-classes:2.0.53.Final",
     "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.77.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.72.Final",
     "io.netty:netty-transport:4.1.77.Final",
     "io.opencensus:opencensus-api:0.24.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",

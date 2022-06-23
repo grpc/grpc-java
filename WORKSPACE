@@ -39,6 +39,7 @@ maven_install(
     repositories = [
         "https://repo.maven.apache.org/maven2/",
     ],
+    strict_visibility = True,
 )
 
 load("@maven//:compat.bzl", "compat_repositories")

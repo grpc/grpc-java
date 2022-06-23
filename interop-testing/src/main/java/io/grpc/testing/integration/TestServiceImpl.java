@@ -25,6 +25,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.LogExceptionRunnable;
 import io.grpc.services.CallMetricRecorder;
 import io.grpc.services.MetricRecorder;
@@ -50,6 +51,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -63,6 +65,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
   private final MetricRecorder metricRecorder;
+  final Semaphore lock = new Semaphore(1);
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
@@ -125,9 +128,6 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
     if (req.hasOrcaPerQueryReport()) {
       echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
-    }
-    if (req.hasOrcaOobReport()) {
-      echoMetricsFromPayload(req.getOrcaOobReport());
     }
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
@@ -203,8 +203,25 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
     final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
     return new StreamObserver<StreamingOutputCallRequest>() {
+      boolean oobTestLocked;
+
       @Override
       public void onNext(StreamingOutputCallRequest request) {
+        // to facilitate multiple clients running orca_oob test in parallel, the server allows
+        // only one orca_oob test client to run at a time to avoid conflicts.
+        if (request.hasOrcaOobReport()) {
+          if (!oobTestLocked) {
+            try {
+              lock.acquire();
+            } catch (InterruptedException ex) {
+              responseObserver.onError(new StatusRuntimeException(
+                  Status.ABORTED.withDescription("server service interrupted").withCause(ex)));
+              return;
+            }
+            oobTestLocked = true;
+          }
+          echoMetricsFromPayload(request.getOrcaOobReport());
+        }
         if (request.hasResponseStatus()) {
           dispatcher.cancel();
           dispatcher.onError(Status.fromCodeValue(request.getResponseStatus().getCode())
@@ -217,6 +234,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onCompleted() {
+        if (oobTestLocked) {
+          lock.release();
+          oobTestLocked = false;
+        }
         if (!dispatcher.isCancelled()) {
           // Tell the dispatcher that all input has been received.
           dispatcher.completeInput();
@@ -225,6 +246,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
+        if (oobTestLocked) {
+          lock.release();
+          oobTestLocked = false;
+        }
         dispatcher.onError(cause);
       }
     };
