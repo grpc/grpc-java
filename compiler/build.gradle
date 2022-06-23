@@ -50,7 +50,10 @@ model {
             }
         }
         gcc(Gcc) {
-            target("ppcle_64")
+            target("ppcle_64") {
+                cppCompiler.executable = 'powerpc64le-linux-gnu-g++'
+                linker.executable = 'powerpc64le-linux-gnu-g++'
+            }
             target("aarch_64") {
                 cppCompiler.executable = 'aarch64-linux-gnu-g++'
                 linker.executable = 'aarch64-linux-gnu-g++'
