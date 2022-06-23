@@ -114,7 +114,7 @@ public final class SecurityPolicies {
   public static SecurityPolicy oneOfSignatures(
       PackageManager packageManager,
       String packageName,
-      Collection<Signature> requiredSignatures) {
+      List<Signature> requiredSignatures) {
     Preconditions.checkNotNull(packageManager, "packageManager");
     Preconditions.checkNotNull(packageName, "packageName");
     Preconditions.checkNotNull(requiredSignatures, "requiredSignatures");
