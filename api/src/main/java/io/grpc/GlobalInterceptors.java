@@ -33,6 +33,10 @@ final class GlobalInterceptors {
   // Prevent instantiation
   private GlobalInterceptors() {}
 
+  static boolean isIsGlobalInterceptorsTracersSet() {
+    return isGlobalInterceptorsTracersSet;
+  }
+
   /**
    * Sets the list of global interceptors and global server stream tracers.
    *

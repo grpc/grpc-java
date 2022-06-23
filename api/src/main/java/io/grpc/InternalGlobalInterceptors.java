@@ -42,5 +42,9 @@ public final class InternalGlobalInterceptors {
     return GlobalInterceptors.getServerStreamTracerFactories();
   }
 
+  public static boolean isGlobalInterceptorsTracersSet() {
+    return GlobalInterceptors.isIsGlobalInterceptorsTracersSet();
+  }
+
   private InternalGlobalInterceptors() {}
 }
