@@ -18,6 +18,7 @@ package io.grpc.gcp.observability;
 
 import io.grpc.Internal;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import io.opencensus.trace.Sampler;
 import java.util.List;
 
 @Internal
@@ -69,36 +70,6 @@ public interface ObservabilityConfig {
       this.pattern = pattern;
       this.headerBytes = headerBytes;
       this.messageBytes = messageBytes;
-    }
-  }
-
-  /** Corresponds to a {@link io.opencensus.trace.Sampler} type. */
-  enum SamplerType {
-    ALWAYS,
-    NEVER,
-    PROBABILISTIC;
-  }
-
-  /** Represents a trace {@link io.opencensus.trace.Sampler} configuration. */
-  class Sampler {
-    private SamplerType type;
-    private double probability;
-
-    Sampler(double probability) {
-      this.probability = probability;
-      this.type = SamplerType.PROBABILISTIC;
-    }
-
-    Sampler(SamplerType type) {
-      this.type = type;
-    }
-
-    double getProbability() {
-      return probability;
-    }
-
-    SamplerType getType() {
-      return type;
     }
   }
 }

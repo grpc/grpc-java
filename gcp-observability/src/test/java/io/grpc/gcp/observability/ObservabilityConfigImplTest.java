@@ -81,27 +81,6 @@ public class ObservabilityConfigImplTest {
           + "    \"enable_cloud_tracing\": true\n"
           + "}";
 
-  private static final String GLOBAL_TRACING_ALWAYS_SAMPLER = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampler\": \"always\"\n"
-          + "}";
-
-  private static final String GLOBAL_TRACING_NEVER_SAMPLER = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampler\": \"never\"\n"
-          + "}";
-
-  private static final String GLOBAL_TRACING_PROBABILISTIC_SAMPLER = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampling_rate\": 0.75\n"
-          + "}";
-
-  private static final String GLOBAL_TRACING_BOTH_SAMPLER_ERROR = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampler\": \"never\",\n"
-          + "    \"global_trace_sampling_rate\": 0.75\n"
-          + "}";
-
   private static final String GLOBAL_TRACING_BADPROBABILISTIC_SAMPLER = "{\n"
           + "    \"enable_cloud_tracing\": true,\n"
           + "    \"global_trace_sampling_rate\": -0.75\n"
@@ -195,54 +174,13 @@ public class ObservabilityConfigImplTest {
   }
 
   @Test
-  public void alwaysSampler() throws IOException {
-    observabilityConfig.parse(GLOBAL_TRACING_ALWAYS_SAMPLER);
-    assertTrue(observabilityConfig.isEnableCloudTracing());
-    ObservabilityConfig.Sampler sampler = observabilityConfig.getSampler();
-    assertThat(sampler).isNotNull();
-    assertThat(sampler.getType()).isEqualTo(ObservabilityConfig.SamplerType.ALWAYS);
-  }
-
-  @Test
-  public void neverSampler() throws IOException {
-    observabilityConfig.parse(GLOBAL_TRACING_NEVER_SAMPLER);
-    assertTrue(observabilityConfig.isEnableCloudTracing());
-    ObservabilityConfig.Sampler sampler = observabilityConfig.getSampler();
-    assertThat(sampler).isNotNull();
-    assertThat(sampler.getType()).isEqualTo(ObservabilityConfig.SamplerType.NEVER);
-  }
-
-  @Test
-  public void probabilisticSampler() throws IOException {
-    observabilityConfig.parse(GLOBAL_TRACING_PROBABILISTIC_SAMPLER);
-    assertTrue(observabilityConfig.isEnableCloudTracing());
-    ObservabilityConfig.Sampler sampler = observabilityConfig.getSampler();
-    assertThat(sampler).isNotNull();
-    assertThat(sampler.getType()).isEqualTo(ObservabilityConfig.SamplerType.PROBABILISTIC);
-    assertThat(sampler.getProbability()).isEqualTo(0.75);
-  }
-
-  @Test
-  public void bothSamplerAndSamplingRate_error() throws IOException {
-    try {
-      observabilityConfig.parse(GLOBAL_TRACING_BOTH_SAMPLER_ERROR);
-      fail("exception expected!");
-    } catch (IllegalArgumentException iae) {
-      assertThat(iae.getMessage())
-          .isEqualTo(
-              "only one of 'global_trace_sampler' or 'global_trace_sampling_rate' can be"
-                  + " specified");
-    }
-  }
-
-  @Test
   public void badProbabilisticSampler_error() throws IOException {
     try {
       observabilityConfig.parse(GLOBAL_TRACING_BADPROBABILISTIC_SAMPLER);
       fail("exception expected!");
     } catch (IllegalArgumentException iae) {
       assertThat(iae.getMessage()).isEqualTo(
-              "'global_trace_sampling_rate' needs to be between 0.0 and 1.0");
+              "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
     }
   }
 

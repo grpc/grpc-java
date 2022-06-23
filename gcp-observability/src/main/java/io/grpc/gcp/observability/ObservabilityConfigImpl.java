@@ -23,6 +23,8 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import io.opencensus.trace.Sampler;
+import io.opencensus.trace.samplers.Samplers;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -100,19 +102,18 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         }
         this.eventTypes = eventTypesBuilder.build();
       }
-      String sampler = JsonUtil.getString(config, "global_trace_sampler");
       Double samplingRate = JsonUtil.getNumberAsDouble(config, "global_trace_sampling_rate");
-      checkArgument(
-          sampler == null || samplingRate == null,
-          "only one of 'global_trace_sampler' or 'global_trace_sampling_rate' can be specified");
-      if (sampler != null) {
-        this.sampler = new Sampler(SamplerType.valueOf(sampler.toUpperCase()));
-      }
       if (samplingRate != null) {
         checkArgument(
             samplingRate >= 0.0 && samplingRate <= 1.0,
-            "'global_trace_sampling_rate' needs to be between 0.0 and 1.0");
-        this.sampler = new Sampler(samplingRate);
+            "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
+        if (samplingRate == 0) {
+          this.sampler = Samplers.neverSample();
+        } else if (samplingRate == 1) {
+          this.sampler = Samplers.alwaysSample();
+        } else {
+          this.sampler = Samplers.probabilitySampler(samplingRate);
+        }
       }
     }
   }

@@ -32,25 +32,27 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class GcpObservabilityTest {
-  
+
   @Test
   public void initFinish() {
     ManagedChannelProvider prevChannelProvider = ManagedChannelProvider.provider();
     ServerProvider prevServerProvider = ServerProvider.provider();
     Sink sink = mock(Sink.class);
-    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory = mock(
-        InternalLoggingChannelInterceptor.Factory.class);
-    InternalLoggingServerInterceptor.Factory serverInterceptorFactory = mock(
-        InternalLoggingServerInterceptor.Factory.class);
+    ObservabilityConfig config = mock(ObservabilityConfig.class);
+    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+        mock(InternalLoggingChannelInterceptor.Factory.class);
+    InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+        mock(InternalLoggingServerInterceptor.Factory.class);
     GcpObservability observability1;
-    try (GcpObservability observability = GcpObservability.grpcInit(sink, channelInterceptorFactory,
-        serverInterceptorFactory)) {
+    try (GcpObservability observability =
+        GcpObservability.grpcInit(
+            sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
       assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
       assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
-      observability1 = GcpObservability.grpcInit(sink, channelInterceptorFactory,
-              serverInterceptorFactory);
+      observability1 =
+          GcpObservability.grpcInit(
+              sink, config, channelInterceptorFactory, serverInterceptorFactory);
       assertThat(observability1).isSameInstanceAs(observability);
-
     }
     verify(sink).close();
     assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(prevChannelProvider);
