@@ -345,7 +345,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private final class EdsClusterState extends ClusterState implements EdsResourceWatcher {
       @Nullable
       private final String edsServiceName;
-      private Map<Locality, String> localityPriorityNames = new HashMap<>();
+      private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
       int priorityNameGenId = 1;
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
@@ -470,7 +470,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             }
           }
           if ("".equals(foundName)) {
-            foundName = String.format("%s[priority%d]", name, priorityNameGenId++);
+            foundName = String.format("%s[child%d]", name, priorityNameGenId++);
           }
           for (Locality locality : todo.get(priority)) {
             newNames.put(locality, foundName);
@@ -756,7 +756,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * The ordering is undefined for priorities in different clusters.
    */
   private static String priorityName(String cluster, int priority) {
-    return cluster + "[priority" + priority + "]";
+    return cluster + "[child" + priority + "]";
   }
 
   /**
