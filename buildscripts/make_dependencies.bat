@@ -1,4 +1,6 @@
-set PROTOBUF_VER=3.19.2
+set PROTOBUF_VER=21.1
+@rem https://github.com/protocolbuffers/protobuf/issues/10172
+set PROTOBUF_VER_ISSUE_10172=3.%PROTOBUF_VER%
 set CMAKE_NAME=cmake-3.3.2-win32-x86
 
 if not exist "protobuf-%PROTOBUF_VER%\cmake\build\Release\" (
@@ -23,6 +25,7 @@ set PATH=%PATH%;%cd%\%CMAKE_NAME%\bin
 powershell -command "$ErrorActionPreference = 'stop'; & { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; iwr https://github.com/google/protobuf/archive/v%PROTOBUF_VER%.zip -OutFile protobuf.zip }" || exit /b 1
 powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('protobuf.zip', '.') }" || exit /b 1
 del protobuf.zip
+rename protobuf-%PROTOBUF_VER_ISSUE_10172% protobuf-%PROTOBUF_VER%
 pushd protobuf-%PROTOBUF_VER%\cmake
 mkdir build
 cd build
