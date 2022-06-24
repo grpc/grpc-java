@@ -243,16 +243,12 @@ public class EchoTestServer {
     public void echo(io.grpc.testing.istio.Istio.EchoRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.istio.Istio.EchoResponse> responseObserver) {
 
-      StringBuilder sb = new StringBuilder();
-      sb.append(HOSTNAME)
-          .append("=")
-          .append(hostname)
-          .append("\nEcho=")
-          .append(request.getMessage())
-          .append("\n");
+      EchoMessage echoMessage = new EchoMessage();
+      echoMessage.writeKeyValue(HOSTNAME, hostname);
+      echoMessage.writeKeyValue("Echo", request.getMessage());
       io.grpc.testing.istio.Istio.EchoResponse echoResponse
           = io.grpc.testing.istio.Istio.EchoResponse.newBuilder()
-          .setMessage(sb.toString())
+          .setMessage(echoMessage.toString())
           .build();
 
       responseObserver.onNext(echoResponse);
@@ -262,73 +258,79 @@ public class EchoTestServer {
     @Override
     public void forwardEcho(ForwardEchoRequest request,
         StreamObserver<ForwardEchoResponse> responseObserver) {
-      Istio.ForwardEchoResponse.Builder forwardEchoResponseBuilder
-          = io.grpc.testing.istio.Istio.ForwardEchoResponse.newBuilder();
       try {
-        String rawUrl = request.getUrl();
-        if (!rawUrl.startsWith(GRPC_SCHEME)) {
-          responseObserver.onError(
-              new StatusRuntimeException(
-                  Status.UNIMPLEMENTED.withDescription("protocol grpc:// required")));
-          return;
-        }
-        rawUrl = rawUrl.substring(GRPC_SCHEME.length());
-
-        // May need to use xds security if urlScheme is "xds"
-        ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(
-            rawUrl, InsecureChannelCredentials.create());
-        ManagedChannel channel = channelBuilder.build();
-
-        List<Istio.Header> requestHeaders = request.getHeadersList();
-        Metadata metadata = new Metadata();
-
-        for (Istio.Header header : requestHeaders) {
-          metadata.put(Metadata.Key.of(header.getKey(), Metadata.ASCII_STRING_MARSHALLER),
-              header.getValue());
-        }
-
-        int count = request.getCount() == 0 ? 1 : request.getCount();
-        Duration durationPerQuery = Duration.ZERO;
-        if (request.getQps() > 0) {
-          durationPerQuery = Duration.ofNanos(
-              Duration.ofSeconds(1).toNanos() / request.getQps());
-        }
-        logger.info("qps=" + request.getQps());
-        logger.info("durationPerQuery=" + durationPerQuery);
-        io.grpc.testing.istio.Istio.EchoRequest echoRequest
-            = io.grpc.testing.istio.Istio.EchoRequest.newBuilder()
-            .setMessage(request.getMessage())
-            .build();
-        Instant start = Instant.now();
-        logger.info("starting instant=" + start);
-        Duration expected = Duration.ZERO;
-        for (int i = 0; i < count; i++) {
-          Metadata currentMetadata = new Metadata();
-          currentMetadata.merge(metadata);
-          currentMetadata.put(
-              Metadata.Key.of(REQUEST_ID, Metadata.ASCII_STRING_MARSHALLER), "" + i);
-          EchoTestServiceGrpc.EchoTestServiceBlockingStub stub
-              = EchoTestServiceGrpc.newBlockingStub(channel).withInterceptors(
-                  MetadataUtils.newAttachHeadersInterceptor(currentMetadata))
-              .withDeadlineAfter(request.getTimeoutMicros(), TimeUnit.MICROSECONDS);
-          String response = callEcho(stub, echoRequest, i);
-          forwardEchoResponseBuilder.addOutput(response);
-          Instant current = Instant.now();
-          logger.info("after rpc instant=" + current);
-          Duration elapsed = Duration.between(start, current);
-          expected = expected.plus(durationPerQuery);
-          Duration timeLeft = expected.minus(elapsed);
-          logger.info("elapsed=" + elapsed + ", expected=" + expected + ", timeLeft=" + timeLeft);
-          if (!timeLeft.isNegative()) {
-            logger.info("sleeping for ms =" + timeLeft);
-            Thread.sleep(timeLeft.toMillis());
-          }
-        }
-        responseObserver.onNext(forwardEchoResponseBuilder.build());
+        responseObserver.onNext(buildEchoResponse(request));
         responseObserver.onCompleted();
+      } catch (InterruptedException e) {
+        responseObserver.onError(e);
+        Thread.currentThread().interrupt();
       } catch (Exception e) {
         responseObserver.onError(e);
       }
+    }
+
+    private ForwardEchoResponse buildEchoResponse(ForwardEchoRequest request)
+        throws InterruptedException {
+      Istio.ForwardEchoResponse.Builder forwardEchoResponseBuilder
+          = io.grpc.testing.istio.Istio.ForwardEchoResponse.newBuilder();
+      String rawUrl = request.getUrl();
+      if (!rawUrl.startsWith(GRPC_SCHEME)) {
+        throw new StatusRuntimeException(
+                Status.UNIMPLEMENTED.withDescription("protocol grpc:// required"));
+      }
+      rawUrl = rawUrl.substring(GRPC_SCHEME.length());
+
+      // May need to use xds security if urlScheme is "xds"
+      ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(
+          rawUrl, InsecureChannelCredentials.create());
+      ManagedChannel channel = channelBuilder.build();
+
+      List<Istio.Header> requestHeaders = request.getHeadersList();
+      Metadata metadata = new Metadata();
+
+      for (Istio.Header header : requestHeaders) {
+        metadata.put(Metadata.Key.of(header.getKey(), Metadata.ASCII_STRING_MARSHALLER),
+            header.getValue());
+      }
+
+      int count = request.getCount() == 0 ? 1 : request.getCount();
+      Duration durationPerQuery = Duration.ZERO;
+      if (request.getQps() > 0) {
+        durationPerQuery = Duration.ofNanos(
+            Duration.ofSeconds(1).toNanos() / request.getQps());
+      }
+      logger.info("qps=" + request.getQps());
+      logger.info("durationPerQuery=" + durationPerQuery);
+      io.grpc.testing.istio.Istio.EchoRequest echoRequest
+          = io.grpc.testing.istio.Istio.EchoRequest.newBuilder()
+          .setMessage(request.getMessage())
+          .build();
+      Instant start = Instant.now();
+      logger.info("starting instant=" + start);
+      Duration expected = Duration.ZERO;
+      for (int i = 0; i < count; i++) {
+        Metadata currentMetadata = new Metadata();
+        currentMetadata.merge(metadata);
+        currentMetadata.put(
+            Metadata.Key.of(REQUEST_ID, Metadata.ASCII_STRING_MARSHALLER), "" + i);
+        EchoTestServiceGrpc.EchoTestServiceBlockingStub stub
+            = EchoTestServiceGrpc.newBlockingStub(channel).withInterceptors(
+                MetadataUtils.newAttachHeadersInterceptor(currentMetadata))
+            .withDeadlineAfter(request.getTimeoutMicros(), TimeUnit.MICROSECONDS);
+        String response = callEcho(stub, echoRequest, i);
+        forwardEchoResponseBuilder.addOutput(response);
+        Instant current = Instant.now();
+        logger.info("after rpc instant=" + current);
+        Duration elapsed = Duration.between(start, current);
+        expected = expected.plus(durationPerQuery);
+        Duration timeLeft = expected.minus(elapsed);
+        logger.info("elapsed=" + elapsed + ", expected=" + expected + ", timeLeft=" + timeLeft);
+        if (!timeLeft.isNegative()) {
+          logger.info("sleeping for ms =" + timeLeft);
+          Thread.sleep(timeLeft.toMillis());
+        }
+      }
+      return forwardEchoResponseBuilder.build();
     }
 
     private String callEcho(EchoTestServiceGrpc.EchoTestServiceBlockingStub stub,

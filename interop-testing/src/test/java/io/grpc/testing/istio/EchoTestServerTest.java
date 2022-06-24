@@ -120,7 +120,7 @@ public class EchoTestServerTest {
     echoTestServer.blockUntilShutdown();
   }
 
-  static final int COUNT = 60;
+  static final int COUNT_OF_REQUESTS_TO_FORWARD = 60;
 
   @Test
   public void forwardEchoTest() throws IOException {
@@ -137,7 +137,7 @@ public class EchoTestServerTest {
 
     Istio.ForwardEchoRequest forwardEchoRequest =
         Istio.ForwardEchoRequest.newBuilder()
-            .setCount(COUNT)
+            .setCount(COUNT_OF_REQUESTS_TO_FORWARD)
             .setQps(100)
             .setTimeoutMicros(100_000L) // 100 millis
             .setUrl("grpc://localhost:" + port2)
@@ -155,12 +155,13 @@ public class EchoTestServerTest {
     Istio.ForwardEchoResponse forwardEchoResponse = stub.forwardEcho(forwardEchoRequest);
     Instant end = Instant.now();
     List<String> outputs = forwardEchoResponse.getOutputList();
-    assertEquals(COUNT, outputs.size());
-    for (int i = 0; i < COUNT; i++) {
+    assertEquals(COUNT_OF_REQUESTS_TO_FORWARD, outputs.size());
+    for (int i = 0; i < COUNT_OF_REQUESTS_TO_FORWARD; i++) {
       validateOutput(outputs.get(i), i);
     }
     long duration = Duration.between(start, end).toMillis();
-    assertThat(duration).isIn(Range.closed(COUNT * 10L, 2 * COUNT * 10L));
+    assertThat(duration).isIn(Range.closed(
+        COUNT_OF_REQUESTS_TO_FORWARD * 10L, 2 * COUNT_OF_REQUESTS_TO_FORWARD * 10L));
   }
 
   private static void validateOutput(String output, int i) {
