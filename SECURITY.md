@@ -386,32 +386,32 @@ If you are running in a runtime environment that also uses Netty (e.g., Hadoop, 
 
 Below are known to work version combinations:
 
-grpc-netty version | netty-handler version   | netty-tcnative-boringssl-static version
------------------- | ----------------------- | ---------------------------------------
-1.0.0-1.0.1        | 4.1.3.Final             | 1.1.33.Fork19
-1.0.2-1.0.3        | 4.1.6.Final             | 1.1.33.Fork23
-1.1.x-1.3.x        | 4.1.8.Final             | 1.1.33.Fork26
-1.4.x              | 4.1.11.Final            | 2.0.1.Final
-1.5.x              | 4.1.12.Final            | 2.0.5.Final
-1.6.x              | 4.1.14.Final            | 2.0.5.Final
-1.7.x-1.8.x        | 4.1.16.Final            | 2.0.6.Final
-1.9.x-1.10.x       | 4.1.17.Final            | 2.0.7.Final
-1.11.x-1.12.x      | 4.1.22.Final            | 2.0.7.Final
-1.13.x             | 4.1.25.Final            | 2.0.8.Final
-1.14.x-1.15.x      | 4.1.27.Final            | 2.0.12.Final
-1.16.x-1.17.x      | 4.1.30.Final            | 2.0.17.Final
-1.18.x-1.19.x      | 4.1.32.Final            | 2.0.20.Final
-1.20.x-1.21.x      | 4.1.34.Final            | 2.0.22.Final
-1.22.x             | 4.1.35.Final            | 2.0.25.Final
-1.23.x-1.24.x      | 4.1.38.Final            | 2.0.25.Final
-1.25.x-1.27.x      | 4.1.42.Final            | 2.0.26.Final
-1.28.x             | 4.1.45.Final            | 2.0.28.Final
-1.29.x-1.31.x      | 4.1.48.Final            | 2.0.30.Final
-1.32.x-1.34.x      | 4.1.51.Final            | 2.0.31.Final
-1.35.x-1.41.x      | 4.1.52.Final            | 2.0.34.Final
-1.42.x-1.43.x      | 4.1.63.Final            | 2.0.38.Final
-1.44.x-1.47.x      | 4.1.72.Final            | 2.0.46.Final
-1.48.x-            | 4.1.77.Final            | 2.0.53.Final
+grpc-netty version | netty-handler version | netty-tcnative-boringssl-static version
+------------------ | --------------------- | ---------------------------------------
+1.0.0-1.0.1        | 4.1.3.Final           | 1.1.33.Fork19
+1.0.2-1.0.3        | 4.1.6.Final           | 1.1.33.Fork23
+1.1.x-1.3.x        | 4.1.8.Final           | 1.1.33.Fork26
+1.4.x              | 4.1.11.Final          | 2.0.1.Final
+1.5.x              | 4.1.12.Final          | 2.0.5.Final
+1.6.x              | 4.1.14.Final          | 2.0.5.Final
+1.7.x-1.8.x        | 4.1.16.Final          | 2.0.6.Final
+1.9.x-1.10.x       | 4.1.17.Final          | 2.0.7.Final
+1.11.x-1.12.x      | 4.1.22.Final          | 2.0.7.Final
+1.13.x             | 4.1.25.Final          | 2.0.8.Final
+1.14.x-1.15.x      | 4.1.27.Final          | 2.0.12.Final
+1.16.x-1.17.x      | 4.1.30.Final          | 2.0.17.Final
+1.18.x-1.19.x      | 4.1.32.Final          | 2.0.20.Final
+1.20.x-1.21.x      | 4.1.34.Final          | 2.0.22.Final
+1.22.x             | 4.1.35.Final          | 2.0.25.Final
+1.23.x-1.24.x      | 4.1.38.Final          | 2.0.25.Final
+1.25.x-1.27.x      | 4.1.42.Final          | 2.0.26.Final
+1.28.x             | 4.1.45.Final          | 2.0.28.Final
+1.29.x-1.31.x      | 4.1.48.Final          | 2.0.30.Final
+1.32.x-1.34.x      | 4.1.51.Final          | 2.0.31.Final
+1.35.x-1.41.x      | 4.1.52.Final          | 2.0.34.Final
+1.42.x-1.43.x      | 4.1.63.Final          | 2.0.38.Final
+1.44.x-1.47.x      | 4.1.72.Final          | 2.0.46.Final
+1.48.x-            | 4.1.77.Final          | 2.0.53.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 
