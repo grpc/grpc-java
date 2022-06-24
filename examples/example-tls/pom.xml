@@ -49,19 +49,7 @@
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
-      <artifactId>grpc-netty</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-tcnative-boringssl-static</artifactId>
-      <version>${netty.tcnative.version}</version>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-tcnative-classes</artifactId>
-      <version>${netty.tcnative.version}</version>
-      <scope>runtime</scope>
+      <artifactId>grpc-netty-shaded</artifactId>
     </dependency>
   </dependencies>
 
