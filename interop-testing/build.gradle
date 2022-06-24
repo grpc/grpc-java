@@ -48,6 +48,7 @@ dependencies {
     runtimeOnly group: 'io.github.devatherock', name: 'jul-jsonformatter', version: '1.1.0'
     runtimeOnly libraries.opencensus.impl,
             libraries.netty.tcnative,
+            libraries.netty.tcnative.classes,
             project(':grpc-grpclb'),
             project(':grpc-rls')
     testImplementation project(':grpc-context').sourceSets.test.output,

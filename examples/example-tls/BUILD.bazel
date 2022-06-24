@@ -25,6 +25,7 @@ java_library(
     ),
     runtime_deps = [
         "@maven//:io_netty_netty_tcnative_boringssl_static",
+        "@maven//:io_netty_netty_tcnative_classes",
     ],
     deps = [
         ":helloworld_java_grpc",

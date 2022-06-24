@@ -189,7 +189,6 @@ public class ServerCallImplTest {
     call.sendMessage(1234L);
 
     verify(stream).writeMessage(isA(InputStream.class));
-    verify(stream).flush();
   }
 
   @Test

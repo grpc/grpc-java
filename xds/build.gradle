@@ -63,7 +63,33 @@ dependencies {
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    testRuntimeOnly libraries.netty.tcnative
+    testRuntimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "windows-x86_64"
+        }
+    }
 }
 
 sourceSets {

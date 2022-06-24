@@ -26,6 +26,7 @@ import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.google.errorprone.annotations.InlineMe;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
@@ -59,14 +60,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.CheckReturnValue;
 import javax.net.ssl.SSLException;
 
 /**
  * A builder to help simplify the construction of a Netty-based GRPC server.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
-@CanIgnoreReturnValue
+@CheckReturnValue
 public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
 
   // 1MiB
@@ -121,7 +121,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @param port the port on which the server is to be bound.
    * @return the server builder.
    */
-  @CheckReturnValue
   public static NettyServerBuilder forPort(int port) {
     return forAddress(new InetSocketAddress(port));
   }
@@ -132,7 +131,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @param port the port on which the server is to be bound.
    * @return the server builder.
    */
-  @CheckReturnValue
   public static NettyServerBuilder forPort(int port, ServerCredentials creds) {
     return forAddress(new InetSocketAddress(port), creds);
   }
@@ -143,7 +141,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @param address the socket address on which the server is to be bound.
    * @return the server builder
    */
-  @CheckReturnValue
   public static NettyServerBuilder forAddress(SocketAddress address) {
     return new NettyServerBuilder(address);
   }
@@ -154,7 +151,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @param address the socket address on which the server is to be bound.
    * @return the server builder
    */
-  @CheckReturnValue
   public static NettyServerBuilder forAddress(SocketAddress address, ServerCredentials creds) {
     ProtocolNegotiators.FromServerCredentialsResult result = ProtocolNegotiators.from(creds);
     if (result.error != null) {
@@ -171,7 +167,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     }
   }
 
-  @CheckReturnValue
   private NettyServerBuilder(SocketAddress address) {
     serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
     this.listenAddresses.add(address);
@@ -179,9 +174,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     this.freezeProtocolNegotiatorFactory = false;
   }
 
-  @CheckReturnValue
-  NettyServerBuilder(
-      SocketAddress address, ProtocolNegotiator.ServerFactory negotiatorFactory) {
+  NettyServerBuilder(SocketAddress address, ProtocolNegotiator.ServerFactory negotiatorFactory) {
     serverImplBuilder = new ServerImplBuilder(new NettyClientTransportServersBuilder());
     this.listenAddresses.add(address);
     this.protocolNegotiatorFactory = checkNotNull(negotiatorFactory, "negotiatorFactory");
@@ -199,6 +192,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * addresses are compatible with the Netty channel type, and that they don't conflict with each
    * other.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder addListenAddress(SocketAddress listenAddress) {
     this.listenAddresses.add(checkNotNull(listenAddress, "listenAddress"));
     return this;
@@ -219,6 +213,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * example, {@link NioServerSocketChannel} must use {@link
    * io.netty.channel.nio.NioEventLoopGroup}, otherwise your server won't start.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder channelType(Class<? extends ServerChannel> channelType) {
     checkNotNull(channelType, "channelType");
     return channelFactory(new ReflectiveChannelFactory<>(channelType));
@@ -238,6 +233,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * example, if the factory creates {@link NioServerSocketChannel} you must use {@link
    * io.netty.channel.nio.NioEventLoopGroup}, otherwise your server won't start.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder channelFactory(ChannelFactory<? extends ServerChannel> channelFactory) {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     return this;
@@ -249,6 +245,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.30.0
    */
+  @CanIgnoreReturnValue
   public <T> NettyServerBuilder withOption(ChannelOption<T> option, T value) {
     this.channelOptions.put(option, value);
     return this;
@@ -260,6 +257,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.9.0
    */
+  @CanIgnoreReturnValue
   public <T> NettyServerBuilder withChildOption(ChannelOption<T> option, T value) {
     this.childChannelOptions.put(option, value);
     return this;
@@ -288,6 +286,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * A simple solution to this problem is to call {@link io.grpc.Server#awaitTermination()} to
    * keep the main thread alive until the server has terminated.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder bossEventLoopGroup(EventLoopGroup group) {
     if (group != null) {
       return bossEventLoopGroupPool(new FixedObjectPool<>(group));
@@ -295,6 +294,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return bossEventLoopGroupPool(DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL);
   }
 
+  @CanIgnoreReturnValue
   NettyServerBuilder bossEventLoopGroupPool(
       ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool) {
     this.bossEventLoopGroupPool = checkNotNull(bossEventLoopGroupPool, "bossEventLoopGroupPool");
@@ -324,6 +324,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * A simple solution to this problem is to call {@link io.grpc.Server#awaitTermination()} to
    * keep the main thread alive until the server has terminated.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder workerEventLoopGroup(EventLoopGroup group) {
     if (group != null) {
       return workerEventLoopGroupPool(new FixedObjectPool<>(group));
@@ -331,6 +332,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return workerEventLoopGroupPool(DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL);
   }
 
+  @CanIgnoreReturnValue
   NettyServerBuilder workerEventLoopGroupPool(
       ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool) {
     this.workerEventLoopGroupPool =
@@ -349,6 +351,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * Sets the TLS context to use for encryption. Providing a context enables encryption. It must
    * have been configured with {@link GrpcSslContexts}, but options could have been overridden.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder sslContext(SslContext sslContext) {
     checkState(!freezeProtocolNegotiatorFactory,
                "Cannot change security when using ServerCredentials");
@@ -367,6 +370,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * Sets the {@link ProtocolNegotiator} to be used. Overrides the value specified in {@link
    * #sslContext(SslContext)}.
    */
+  @CanIgnoreReturnValue
   @Internal
   public final NettyServerBuilder protocolNegotiator(ProtocolNegotiator protocolNegotiator) {
     checkState(!freezeProtocolNegotiatorFactory,
@@ -395,6 +399,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * The maximum number of concurrent calls permitted for each incoming connection. Defaults to no
    * limit.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder maxConcurrentCallsPerConnection(int maxCalls) {
     checkArgument(maxCalls > 0, "max must be positive: %s", maxCalls);
     this.maxConcurrentCallsPerConnection = maxCalls;
@@ -407,6 +412,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * tuning, use {@link #flowControlWindow(int)}. By default, auto flow control is enabled with
    * initial flow control window size of {@link #DEFAULT_FLOW_CONTROL_WINDOW}.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder initialFlowControlWindow(int initialFlowControlWindow) {
     checkArgument(initialFlowControlWindow > 0, "initialFlowControlWindow must be positive");
     this.flowControlWindow = initialFlowControlWindow;
@@ -420,6 +426,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * called, the default value is {@link #DEFAULT_FLOW_CONTROL_WINDOW}) with auto flow control
    * tuning.
    */
+  @CanIgnoreReturnValue
   public NettyServerBuilder flowControlWindow(int flowControlWindow) {
     checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
         flowControlWindow);
@@ -437,6 +444,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @deprecated Call {@link #maxInboundMessageSize} instead. This method will be removed in a
    *     future release.
    */
+  @CanIgnoreReturnValue
   @Deprecated
   @InlineMe(replacement = "this.maxInboundMessageSize(maxMessageSize)")
   public NettyServerBuilder maxMessageSize(int maxMessageSize) {
@@ -444,6 +452,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /** {@inheritDoc} */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder maxInboundMessageSize(int bytes) {
     checkArgument(bytes >= 0, "bytes must be non-negative: %s", bytes);
@@ -459,6 +468,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @deprecated Use {@link #maxInboundMetadataSize} instead
    */
+  @CanIgnoreReturnValue
   @Deprecated
   @InlineMe(replacement = "this.maxInboundMetadataSize(maxHeaderListSize)")
   public NettyServerBuilder maxHeaderListSize(int maxHeaderListSize) {
@@ -476,6 +486,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @throws IllegalArgumentException if bytes is non-positive
    * @since 1.17.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder maxInboundMetadataSize(int bytes) {
     checkArgument(bytes > 0, "maxInboundMetadataSize must be positive: %s", bytes);
@@ -490,6 +501,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
     checkArgument(keepAliveTime > 0L, "keepalive time must be positive：%s", keepAliveTime);
@@ -512,6 +524,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
     checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive: %s",
@@ -535,6 +548,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.4.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
     checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive: %s",
@@ -557,6 +571,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder maxConnectionAge(long maxConnectionAge, TimeUnit timeUnit) {
     checkArgument(maxConnectionAge > 0L, "max connection age must be positive: %s",
@@ -580,6 +595,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @see #maxConnectionAge(long, TimeUnit)
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder maxConnectionAgeGrace(long maxConnectionAgeGrace, TimeUnit timeUnit) {
     checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative: %s",
@@ -605,6 +621,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @see #permitKeepAliveWithoutCalls(boolean)
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
     checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative: %s",
@@ -620,6 +637,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @see #permitKeepAliveTime(long, TimeUnit)
    * @since 1.3.0
    */
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder permitKeepAliveWithoutCalls(boolean permit) {
     permitKeepAliveWithoutCalls = permit;
@@ -631,7 +649,6 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
   }
 
-  @CheckReturnValue
   NettyServer buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     assertEventLoopsAndChannelType();
@@ -664,12 +681,13 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
             + "neither should be");
   }
 
-  NettyServerBuilder setTransportTracerFactory(
-      TransportTracer.Factory transportTracerFactory) {
+  @CanIgnoreReturnValue
+  NettyServerBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
     return this;
   }
 
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder useTransportSecurity(File certChain, File privateKey) {
     checkState(!freezeProtocolNegotiatorFactory,
@@ -685,6 +703,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return this;
   }
 
+  @CanIgnoreReturnValue
   @Override
   public NettyServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
     checkState(!freezeProtocolNegotiatorFactory,
