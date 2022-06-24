@@ -344,7 +344,7 @@ public class EchoTestServer {
   }
 
   private static class EchoMessage {
-    private StringBuilder sb = new StringBuilder();
+    private final StringBuilder sb = new StringBuilder();
 
     void writeKeyValue(String key, String value) {
       sb.append(key).append("=").append(value).append("\n");
