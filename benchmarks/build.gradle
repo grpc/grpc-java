@@ -30,6 +30,7 @@ dependencies {
             project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.hdrhistogram,
             libraries.netty.tcnative,
+            libraries.netty.tcnative.classes,
             libraries.commons.math3
     implementation (libraries.netty.transport.epoll) {
         artifact {

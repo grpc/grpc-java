@@ -38,7 +38,8 @@ dependencies {
     testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
-    testRuntimeOnly libraries.netty.tcnative
+    testRuntimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
     testRuntimeOnly (libraries.netty.transport.epoll) {
         artifact {
             classifier = "linux-x86_64"

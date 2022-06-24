@@ -5,7 +5,8 @@ autovalue = "1.9"
 checkstyle = "6.17"
 googleauth = "1.4.0"
 guava = "31.1-android"
-netty = "4.1.72.Final"
+netty = '4.1.77.Final'
+nettytcnative = '2.0.53.Final'
 opencensus = "0.31.0"
 protobuf = "3.19.2"
 
@@ -50,7 +51,8 @@ netty-transport-epoll = { module = "io.netty:netty-transport-native-epoll", vers
 #   SECURITY.md (multiple occurrences)
 #   examples/example-tls/build.gradle
 #   examples/example-tls/pom.xml
-netty-tcnative = "io.netty:netty-tcnative-boringssl-static:2.0.46.Final"
+netty-tcnative = { module = "io.netty:netty-tcnative-boringssl-static", version.ref = "nettytcnative" }
+netty-tcnative-classes = { module = "io.netty:netty-tcnative-classes", version.ref = "nettytcnative" }
 netty-unix-common = { module = "io.netty:netty-transport-native-unix-common", version.ref = "netty" }
 okhttp = "com.squareup.okhttp:okhttp:2.7.4"
 okio = "com.squareup.okio:okio:1.17.5"
