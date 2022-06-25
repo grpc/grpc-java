@@ -41,7 +41,6 @@ import io.opencensus.exporter.trace.stackdriver.StackdriverTraceConfiguration;
 import io.opencensus.exporter.trace.stackdriver.StackdriverTraceExporter;
 import io.opencensus.trace.Tracing;
 import io.opencensus.trace.config.TraceConfig;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -53,13 +52,16 @@ public final class GcpObservability implements AutoCloseable {
   private static GcpObservability instance = null;
   private final Sink sink;
   private final ObservabilityConfig config;
+  private final ArrayList<ClientInterceptor> clientInterceptors = new ArrayList<>();
+  private final ArrayList<ServerInterceptor> serverInterceptors = new ArrayList<>();
+  private final ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
 
   /**
    * Initialize grpc-observability.
    *
    * @throws ProviderNotFoundException if no underlying channel/server provider is available.
    */
-  public static synchronized GcpObservability grpcInit() throws IOException {
+  public static synchronized GcpObservability grpcInit() throws Exception {
     if (instance == null) {
       GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
@@ -69,6 +71,8 @@ public final class GcpObservability implements AutoCloseable {
               globalLoggingTags.getLocationTags(),
               globalLoggingTags.getCustomTags(),
               observabilityConfig.getFlushMessageCount());
+      // TODO(dnvindhya): Cleanup code for LoggingChannelProvider and LoggingServerProvider
+      // once ChannelBuilder and ServerBuilder are used
       LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
       instance =
@@ -86,10 +90,17 @@ public final class GcpObservability implements AutoCloseable {
       Sink sink,
       ObservabilityConfig config,
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
-      InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory)
+      throws Exception {
     if (instance == null) {
       instance =
           new GcpObservability(sink, config, channelInterceptorFactory, serverInterceptorFactory);
+      LogHelper logHelper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
+      ConfigFilterHelper logFilterHelper = ConfigFilterHelper.factory(config);
+      instance.setProducer(
+          new InternalLoggingChannelInterceptor.FactoryImpl(logHelper, logFilterHelper),
+          new InternalLoggingServerInterceptor.FactoryImpl(logHelper, logFilterHelper));
+      instance.registerStackDriverExporter(config.getDestinationProjectId());
     }
     return instance;
   }
@@ -109,26 +120,12 @@ public final class GcpObservability implements AutoCloseable {
     }
   }
 
-  private GcpObservability(
-      Sink sink,
-      ObservabilityConfig config,
+  private void setProducer(
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
-    this.sink = checkNotNull(sink);
-    this.config = checkNotNull(config);
-
-    ArrayList<ClientInterceptor> clientInterceptors = new ArrayList<>();
-    ArrayList<ServerInterceptor> serverInterceptors = new ArrayList<>();
-    ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
-    String projectId = config.getDestinationProjectId();
-    LogHelper logHelper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
-    ConfigFilterHelper logFilterHelper = ConfigFilterHelper.factory(config);
-
     if (config.isEnableCloudLogging()) {
-      clientInterceptors.add(
-          new InternalLoggingChannelInterceptor.FactoryImpl(logHelper, logFilterHelper).create());
-      serverInterceptors.add(
-          new InternalLoggingServerInterceptor.FactoryImpl(logHelper, logFilterHelper).create());
+      clientInterceptors.add(channelInterceptorFactory.create());
+      serverInterceptors.add(serverInterceptorFactory.create());
     }
 
     if (config.isEnableCloudMonitoring()) {
@@ -142,20 +139,16 @@ public final class GcpObservability implements AutoCloseable {
       clientInterceptors.add(InternalCensusTracingAccessor.getClientInterceptor());
       tracerFactories.add(InternalCensusTracingAccessor.getServerStreamTracerFactory());
     }
+
     if (!clientInterceptors.isEmpty()
         || !serverInterceptors.isEmpty()
         || !tracerFactories.isEmpty()) {
       InternalGlobalInterceptors.setInterceptorsTracers(
           clientInterceptors, serverInterceptors, tracerFactories);
     }
-
-    registerStackDriverExporter(projectId);
-
-    LoggingChannelProvider.init(checkNotNull(channelInterceptorFactory));
-    LoggingServerProvider.init(checkNotNull(serverInterceptorFactory));
   }
 
-  private void registerStackDriverExporter(String projectId) {
+  private void registerStackDriverExporter(String projectId) throws Exception {
     if (config.isEnableCloudMonitoring()) {
       RpcViews.registerAllGrpcViews();
       StackdriverStatsConfiguration.Builder statsConfigurationBuilder =
@@ -165,9 +158,8 @@ public final class GcpObservability implements AutoCloseable {
       }
       try {
         StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
-      } catch (Exception ex) {
-        throw new IllegalStateException(
-            "Could not register Cloud Stats exporter:" + ex.getMessage());
+      } catch (Exception e) {
+        throw new Exception("Failed to register Stackdriver stats exporter, " + e.getMessage());
       }
     }
 
@@ -182,9 +174,8 @@ public final class GcpObservability implements AutoCloseable {
       }
       try {
         StackdriverTraceExporter.createAndRegister(traceConfigurationBuilder.build());
-      } catch (Exception ex) {
-        throw new IllegalStateException(
-            "Could not register Cloud Trace exporter:" + ex.getMessage());
+      } catch (Exception e) {
+        throw new Exception("Failed to register Stackdriver trace exporter, " + e.getMessage());
       }
     }
   }
@@ -193,17 +184,31 @@ public final class GcpObservability implements AutoCloseable {
     if (config.isEnableCloudMonitoring()) {
       try {
         StackdriverStatsExporter.unregister();
-      } catch (IllegalStateException ex) {
-        logger.log(Level.WARNING, "Could not unregister Cloud Stats exporter");
+      } catch (IllegalStateException e) {
+        logger.log(
+            Level.SEVERE, "Failed to unregister Stackdriver stats exporter, " + e.getMessage());
       }
     }
 
     if (config.isEnableCloudTracing()) {
       try {
         StackdriverTraceExporter.unregister();
-      } catch (IllegalStateException ex) {
-        logger.log(Level.WARNING, "Could not unregister Cloud Trace exporter");
+      } catch (IllegalStateException e) {
+        logger.log(
+            Level.SEVERE, "Failed to unregister Stackdriver trace exporter, " + e.getMessage());
       }
     }
+  }
+
+  private GcpObservability(
+      Sink sink,
+      ObservabilityConfig config,
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
+    this.sink = checkNotNull(sink);
+    this.config = checkNotNull(config);
+
+    LoggingChannelProvider.init(checkNotNull(channelInterceptorFactory));
+    LoggingServerProvider.init(checkNotNull(serverInterceptorFactory));
   }
 }

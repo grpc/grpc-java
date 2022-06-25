@@ -41,7 +41,8 @@ dependencies {
 
     runtimeOnly libraries.opencensus.impl
 
-    testImplementation project(':grpc-testing'),
+    testImplementation project(':grpc-context').sourceSets.test.output,
+            project(':grpc-testing'),
             project(':grpc-testing-proto'),
             project(':grpc-netty-shaded')
     testImplementation (libraries.guava.testlib) {

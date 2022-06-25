@@ -103,13 +103,14 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         this.eventTypes = eventTypesBuilder.build();
       }
       Double samplingRate = JsonUtil.getNumberAsDouble(config, "global_trace_sampling_rate");
+      if (enableCloudTracing && samplingRate == null) {
+        this.sampler = Samplers.probabilitySampler(0.0);
+      }
       if (samplingRate != null) {
         checkArgument(
             samplingRate >= 0.0 && samplingRate <= 1.0,
             "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
-        if (samplingRate == 0) {
-          this.sampler = Samplers.neverSample();
-        } else if (samplingRate == 1) {
+        if (samplingRate == 1.0) {
           this.sampler = Samplers.alwaysSample();
         } else {
           this.sampler = Samplers.probabilitySampler(samplingRate);
