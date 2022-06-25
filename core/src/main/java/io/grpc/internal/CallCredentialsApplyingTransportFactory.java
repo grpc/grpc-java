@@ -144,8 +144,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
             }
           };
         try {
-          creds.applyRequestMetadata(
-              requestInfo, firstNonNull(callOptions.getExecutor(), appExecutor), applier);
+          creds.applyRequestMetadata(requestInfo, appExecutor, applier);
         } catch (Throwable t) {
           applier.fail(Status.UNAUTHENTICATED
               .withDescription("Credentials should use fail() instead of throwing exceptions")
