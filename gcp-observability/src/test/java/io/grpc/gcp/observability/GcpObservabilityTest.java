@@ -48,6 +48,8 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class GcpObservabilityTest {
 
+  private static final String PROJECT_ID = "project";
+
   @Test
   public void initFinish() throws Exception {
     ManagedChannelProvider prevChannelProvider = ManagedChannelProvider.provider();
@@ -100,6 +102,7 @@ public class GcpObservabilityTest {
       when(config.isEnableCloudMonitoring()).thenReturn(true);
       when(config.isEnableCloudTracing()).thenReturn(true);
       when(config.getSampler()).thenReturn(Samplers.neverSample());
+      when(config.getDestinationProjectId()).thenReturn(PROJECT_ID);
 
       ClientInterceptor clientInterceptor =
           mock(ClientInterceptor.class, delegatesTo(new NoopClientInterceptor()));
