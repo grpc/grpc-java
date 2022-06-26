@@ -142,7 +142,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     // Don't check if sendMessage has been called, since it requires that sendHeaders was already
     // called.
     sendHeadersCalled = true;
-    stream.writeHeaders(headers);
+    stream.writeHeaders(headers, !getMethodDescriptor().getType().serverSendsOneMessage());
   }
 
   @Override

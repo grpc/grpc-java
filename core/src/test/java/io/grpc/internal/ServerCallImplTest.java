@@ -153,7 +153,7 @@ public class ServerCallImplTest {
 
     call.sendHeaders(headers);
 
-    verify(stream).writeHeaders(headers);
+    verify(stream).writeHeaders(headers, shouldServerFlushHeaders());
   }
 
   @Test
@@ -162,8 +162,12 @@ public class ServerCallImplTest {
     headers.put(CONTENT_LENGTH_KEY, "123");
     call.sendHeaders(headers);
 
-    verify(stream).writeHeaders(headers);
+    verify(stream).writeHeaders(headers, shouldServerFlushHeaders());
     assertNull(headers.get(CONTENT_LENGTH_KEY));
+  }
+
+  private boolean shouldServerFlushHeaders() {
+    return !call.getMethodDescriptor().getType().serverSendsOneMessage();
   }
 
   @Test
