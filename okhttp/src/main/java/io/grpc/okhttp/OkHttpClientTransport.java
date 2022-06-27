@@ -323,8 +323,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         @Override
         public TransportTracer.FlowControlWindows read() {
           synchronized (lock) {
-            long local = -1; // okhttp does not track the local window size
-            long remote = outboundFlow == null ? -1 : outboundFlow.windowUpdate(null, 0);
+            long local = outboundFlow == null ? -1 : outboundFlow.windowUpdate(null, 0);
+            // connectionUnacknowledgedBytesRead is only readable by ClientFrameHandler, so we
+            // provide a lower bound.
+            long remote = (long) (initialWindowSize * DEFAULT_WINDOW_UPDATE_RATIO);
             return new TransportTracer.FlowControlWindows(local, remote);
           }
         }
