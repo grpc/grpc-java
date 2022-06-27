@@ -42,8 +42,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -294,20 +292,19 @@ public class EchoTestServer {
       }
 
       int count = request.getCount() == 0 ? 1 : request.getCount();
-      Duration durationPerQuery = Duration.ZERO;
+      long durationPerQueryNanos = 0L;
       if (request.getQps() > 0) {
-        durationPerQuery = Duration.ofNanos(
-            Duration.ofSeconds(1).toNanos() / request.getQps());
+        durationPerQueryNanos = TimeUnit.SECONDS.toNanos(1) / request.getQps();
       }
       logger.info("qps=" + request.getQps());
-      logger.info("durationPerQuery=" + durationPerQuery);
+      logger.info("durationPerQueryNanos=" + durationPerQueryNanos);
       io.grpc.testing.istio.Istio.EchoRequest echoRequest
           = io.grpc.testing.istio.Istio.EchoRequest.newBuilder()
           .setMessage(request.getMessage())
           .build();
-      Instant start = Instant.now();
-      logger.info("starting instant=" + start);
-      Duration expected = Duration.ZERO;
+      long startTimeNanos = System.nanoTime();
+      logger.info("starting instant=" + startTimeNanos);
+      long expectedNanos = 0L;
       for (int i = 0; i < count; i++) {
         Metadata currentMetadata = new Metadata();
         currentMetadata.merge(metadata);
@@ -319,15 +316,23 @@ public class EchoTestServer {
             .withDeadlineAfter(request.getTimeoutMicros(), TimeUnit.MICROSECONDS);
         String response = callEcho(stub, echoRequest, i);
         forwardEchoResponseBuilder.addOutput(response);
-        Instant current = Instant.now();
-        logger.info("after rpc instant=" + current);
-        Duration elapsed = Duration.between(start, current);
-        expected = expected.plus(durationPerQuery);
-        Duration timeLeft = expected.minus(elapsed);
-        logger.info("elapsed=" + elapsed + ", expected=" + expected + ", timeLeft=" + timeLeft);
-        if (!timeLeft.isNegative()) {
-          logger.info("sleeping for ms =" + timeLeft);
-          Thread.sleep(timeLeft.toMillis());
+        long currentTimeNanos = System.nanoTime();
+        logger.info("after rpc instant=" + currentTimeNanos);
+        long elapsesTimeNanos = currentTimeNanos - startTimeNanos;
+        expectedNanos += durationPerQueryNanos;
+        long timeLeftNanos = expectedNanos - elapsesTimeNanos;
+        logger.info(
+            "elapsed="
+                + elapsesTimeNanos
+                + ", expected="
+                + expectedNanos
+                + ", timeLeft="
+                + timeLeftNanos);
+        if (timeLeftNanos > 0L) {
+          logger.info("sleeping for ns =" + timeLeftNanos);
+          Thread.sleep(
+              timeLeftNanos / TimeUnit.MILLISECONDS.toNanos(1),
+              (int) (timeLeftNanos % TimeUnit.MILLISECONDS.toNanos(1)));
         }
       }
       return forwardEchoResponseBuilder.build();
