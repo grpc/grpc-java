@@ -330,9 +330,7 @@ public class EchoTestServer {
                 + timeLeftNanos);
         if (timeLeftNanos > 0L) {
           logger.info("sleeping for ns =" + timeLeftNanos);
-          Thread.sleep(
-              timeLeftNanos / TimeUnit.MILLISECONDS.toNanos(1),
-              (int) (timeLeftNanos % TimeUnit.MILLISECONDS.toNanos(1)));
+          TimeUnit.NANOSECONDS.sleep(timeLeftNanos);
         }
       }
       return forwardEchoResponseBuilder.build();
