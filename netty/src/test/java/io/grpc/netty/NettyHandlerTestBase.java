@@ -456,8 +456,8 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   public void transportTracer_windowSizeDefault() throws Exception {
     manualSetUp();
     TransportStats transportStats = transportTracer.getStats();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, transportStats.remoteFlowControlWindow);
-    assertEquals(flowControlWindow, transportStats.localFlowControlWindow);
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, transportStats.localFlowControlWindow);
+    assertEquals(flowControlWindow, transportStats.remoteFlowControlWindow);
   }
 
   @Test
@@ -465,31 +465,31 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     flowControlWindow = 1024 * 1024;
     manualSetUp();
     TransportStats transportStats = transportTracer.getStats();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, transportStats.remoteFlowControlWindow);
-    assertEquals(flowControlWindow, transportStats.localFlowControlWindow);
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, transportStats.localFlowControlWindow);
+    assertEquals(flowControlWindow, transportStats.remoteFlowControlWindow);
   }
 
   @Test
   public void transportTracer_windowUpdate_remote() throws Exception {
     manualSetUp();
     TransportStats before = transportTracer.getStats();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, before.remoteFlowControlWindow);
     assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, before.localFlowControlWindow);
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, before.remoteFlowControlWindow);
 
     ByteBuf serializedSettings = windowUpdate(0, 1000);
     channelRead(serializedSettings);
     TransportStats after = transportTracer.getStats();
     assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE + 1000,
-        after.remoteFlowControlWindow);
-    assertEquals(flowControlWindow, after.localFlowControlWindow);
+        after.localFlowControlWindow);
+    assertEquals(flowControlWindow, after.remoteFlowControlWindow);
   }
 
   @Test
   public void transportTracer_windowUpdate_local() throws Exception {
     manualSetUp();
     TransportStats before = transportTracer.getStats();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, before.remoteFlowControlWindow);
-    assertEquals(flowControlWindow, before.localFlowControlWindow);
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, before.localFlowControlWindow);
+    assertEquals(flowControlWindow, before.remoteFlowControlWindow);
 
     // If the window size is below a certain threshold, netty will wait to apply the update.
     // Use a large increment to be sure that it exceeds the threshold.
@@ -497,7 +497,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
         connection().connectionStream(), 8 * Http2CodecUtil.DEFAULT_WINDOW_SIZE);
 
     TransportStats after = transportTracer.getStats();
-    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, after.remoteFlowControlWindow);
+    assertEquals(Http2CodecUtil.DEFAULT_WINDOW_SIZE, after.localFlowControlWindow);
     assertEquals(flowControlWindow + 8 * Http2CodecUtil.DEFAULT_WINDOW_SIZE,
         connection().local().flowController().windowSize(connection().connectionStream()));
   }
