@@ -18,6 +18,7 @@ package io.grpc.gcp.observability;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.api.client.util.Strings;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ClientInterceptor;
 import io.grpc.ExperimentalApi;
@@ -55,6 +56,8 @@ public final class GcpObservability implements AutoCloseable {
   private final ArrayList<ClientInterceptor> clientInterceptors = new ArrayList<>();
   private final ArrayList<ServerInterceptor> serverInterceptors = new ArrayList<>();
   private final ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
+  private boolean metricsEnabled;
+  private boolean tracesEnabled;
 
   /**
    * Initialize grpc-observability.
@@ -81,6 +84,7 @@ public final class GcpObservability implements AutoCloseable {
               observabilityConfig,
               new InternalLoggingChannelInterceptor.FactoryImpl(helper, configFilterHelper),
               new InternalLoggingServerInterceptor.FactoryImpl(helper, configFilterHelper));
+      instance.registerStackDriverExporter(observabilityConfig.getDestinationProjectId());
     }
     return instance;
   }
@@ -100,7 +104,6 @@ public final class GcpObservability implements AutoCloseable {
       instance.setProducer(
           new InternalLoggingChannelInterceptor.FactoryImpl(logHelper, logFilterHelper),
           new InternalLoggingServerInterceptor.FactoryImpl(logHelper, logFilterHelper));
-      instance.registerStackDriverExporter(config.getDestinationProjectId());
     }
     return instance;
   }
@@ -112,10 +115,10 @@ public final class GcpObservability implements AutoCloseable {
       if (instance == null) {
         throw new IllegalStateException("GcpObservability already closed!");
       }
+      unRegisterStackDriverExporter();
       LoggingChannelProvider.shutdown();
       LoggingServerProvider.shutdown();
       sink.close();
-      unRegisterStackDriverExporter();
       instance = null;
     }
   }
@@ -127,14 +130,12 @@ public final class GcpObservability implements AutoCloseable {
       clientInterceptors.add(channelInterceptorFactory.create());
       serverInterceptors.add(serverInterceptorFactory.create());
     }
-
     if (config.isEnableCloudMonitoring()) {
       clientInterceptors.add(
           InternalCensusStatsAccessor.getClientInterceptor(true, true, true, true));
       tracerFactories.add(
           InternalCensusStatsAccessor.getServerStreamTracerFactory(true, true, true));
     }
-
     if (config.isEnableCloudTracing()) {
       clientInterceptors.add(InternalCensusTracingAccessor.getClientInterceptor());
       tracerFactories.add(InternalCensusTracingAccessor.getServerStreamTracerFactory());
@@ -153,7 +154,7 @@ public final class GcpObservability implements AutoCloseable {
       RpcViews.registerAllGrpcViews();
       StackdriverStatsConfiguration.Builder statsConfigurationBuilder =
           StackdriverStatsConfiguration.builder();
-      if (projectId != null) {
+      if (!Strings.isNullOrEmpty(projectId)) {
         statsConfigurationBuilder.setProjectId(projectId);
       }
       try {
@@ -161,6 +162,7 @@ public final class GcpObservability implements AutoCloseable {
       } catch (Exception e) {
         throw new Exception("Failed to register Stackdriver stats exporter, " + e.getMessage());
       }
+      metricsEnabled = true;
     }
 
     if (config.isEnableCloudTracing()) {
@@ -169,7 +171,7 @@ public final class GcpObservability implements AutoCloseable {
           traceConfig.getActiveTraceParams().toBuilder().setSampler(config.getSampler()).build());
       StackdriverTraceConfiguration.Builder traceConfigurationBuilder =
           StackdriverTraceConfiguration.builder();
-      if (projectId != null) {
+      if (!Strings.isNullOrEmpty(projectId)) {
         traceConfigurationBuilder.setProjectId(projectId);
       }
       try {
@@ -177,26 +179,29 @@ public final class GcpObservability implements AutoCloseable {
       } catch (Exception e) {
         throw new Exception("Failed to register Stackdriver trace exporter, " + e.getMessage());
       }
+      tracesEnabled = true;
     }
   }
 
   private void unRegisterStackDriverExporter() {
-    if (config.isEnableCloudMonitoring()) {
+    if (metricsEnabled) {
       try {
         StackdriverStatsExporter.unregister();
       } catch (IllegalStateException e) {
         logger.log(
             Level.SEVERE, "Failed to unregister Stackdriver stats exporter, " + e.getMessage());
       }
+      metricsEnabled = false;
     }
 
-    if (config.isEnableCloudTracing()) {
+    if (tracesEnabled) {
       try {
         StackdriverTraceExporter.unregister();
       } catch (IllegalStateException e) {
         logger.log(
             Level.SEVERE, "Failed to unregister Stackdriver trace exporter, " + e.getMessage());
       }
+      tracesEnabled = false;
     }
   }
 
