@@ -2008,7 +2008,6 @@ public abstract class AbstractInteropTest {
     TestServiceGrpc.TestServiceBlockingStub soakStub = TestServiceGrpc
         .newBlockingStub(soakChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-    soakStub = soakStub.withInterceptors(recordClientCallInterceptor(clientCallCapture));
     for (int i = 0; i < soakIterations; i++) {
       if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
@@ -2037,8 +2036,7 @@ public abstract class AbstractInteropTest {
         totalFailures++;
         System.err.println(
             String.format(
-                " exceeds max acceptable latency: %d",
-                maxAcceptablePerIterationLatencyMs));
+                " exceeds max acceptable latency: %d", maxAcceptablePerIterationLatencyMs));
       } else {
         System.err.println(" succeeded");
       }
@@ -2046,7 +2044,7 @@ public abstract class AbstractInteropTest {
       latencies.recordValue(result.getLatencyMs());
       long remainingNs = earliestNextStartNs - System.nanoTime();
       if (remainingNs > 0) {
-        Thread.sleep(TimeUnit.MILLISECONDS.convert(remainingNs, TimeUnit.NANOSECONDS));
+        TimeUnit.NANOSECONDS.sleep(remainingNs);
       }
     }
     soakChannel.shutdownNow();
