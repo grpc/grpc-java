@@ -3,12 +3,12 @@ set PROTOBUF_VER=21.1
 set PROTOBUF_VER_ISSUE_10172=3.%PROTOBUF_VER%
 set CMAKE_NAME=cmake-3.3.2-win32-x86
 
-if not exist "protobuf-%PROTOBUF_VER%\cmake\build\Release\" (
+if not exist "protobuf-%PROTOBUF_VER%\build\Release\" (
   call :installProto || exit /b 1
 )
 
 echo Compile gRPC-Java with something like:
-echo -PtargetArch=x86_32 -PvcProtobufLibs=%cd%\protobuf-%PROTOBUF_VER%\cmake\build\Release -PvcProtobufInclude=%cd%\protobuf-%PROTOBUF_VER%\cmake\build\include
+echo -PtargetArch=x86_32 -PvcProtobufLibs=%cd%\protobuf-%PROTOBUF_VER%\build\Release -PvcProtobufInclude=%cd%\protobuf-%PROTOBUF_VER%\build\include
 goto :eof
 
 
