@@ -26,11 +26,11 @@ powershell -command "$ErrorActionPreference = 'stop'; & { [Net.ServicePointManag
 powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('protobuf.zip', '.') }" || exit /b 1
 del protobuf.zip
 rename protobuf-%PROTOBUF_VER_ISSUE_10172% protobuf-%PROTOBUF_VER%
-@rem Workaround https://github.com/protocolbuffers/protobuf/issues/10174
-powershell -command "(Get-Content cmake\extract_includes.bat.in) -replace '\.\.\\', '' | Out-File -encoding ascii cmake\extract_includes.bat.in"
 mkdir protobuf-%PROTOBUF_VER%\build
 pushd protobuf-%PROTOBUF_VER%\build
 
+@rem Workaround https://github.com/protocolbuffers/protobuf/issues/10174
+powershell -command "(Get-Content ..\cmake\extract_includes.bat.in) -replace '\.\.\\', '' | Out-File -encoding ascii ..\cmake\extract_includes.bat.in"
 @rem cmake does not detect x86_64 from the vcvars64.bat variables.
 @rem If vcvars64.bat has set PLATFORM to X64, then inform cmake to use the Win64 version of VS
 if "%PLATFORM%" == "X64" (
