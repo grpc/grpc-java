@@ -1,5 +1,5 @@
 set PROTOBUF_VER=21.1
-@rem https://github.com/protocolbuffers/protobuf/issues/10172
+@rem Workaround https://github.com/protocolbuffers/protobuf/issues/10172
 set PROTOBUF_VER_ISSUE_10172=3.%PROTOBUF_VER%
 set CMAKE_NAME=cmake-3.3.2-win32-x86
 
@@ -26,6 +26,8 @@ powershell -command "$ErrorActionPreference = 'stop'; & { [Net.ServicePointManag
 powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('protobuf.zip', '.') }" || exit /b 1
 del protobuf.zip
 rename protobuf-%PROTOBUF_VER_ISSUE_10172% protobuf-%PROTOBUF_VER%
+@rem Workaround https://github.com/protocolbuffers/protobuf/issues/10174
+powershell -command "(Get-Content cmake\extract_includes.bat.in) -replace '\.\.\\', '' | Out-File -encoding ascii cmake\extract_includes.bat.in"
 mkdir protobuf-%PROTOBUF_VER%\build
 pushd protobuf-%PROTOBUF_VER%\build
 
