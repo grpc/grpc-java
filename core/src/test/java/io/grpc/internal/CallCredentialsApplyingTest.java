@@ -168,7 +168,7 @@ public class CallCredentialsApplyingTest {
 
     ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
     verify(mockCreds).applyRequestMetadata(infoCaptor.capture(),
-        same(anotherExecutor), any(CallCredentials.MetadataApplier.class));
+        same(mockExecutor), any(CallCredentials.MetadataApplier.class));
     RequestInfo info = infoCaptor.getValue();
     assertSame(transportAttrs, info.getTransportAttrs());
     assertSame(method, info.getMethodDescriptor());
@@ -212,7 +212,7 @@ public class CallCredentialsApplyingTest {
 
     ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
     verify(mockCreds).applyRequestMetadata(
-            infoCaptor.capture(), same(anotherExecutor),
+            infoCaptor.capture(), same(mockExecutor),
             any(io.grpc.CallCredentials.MetadataApplier.class));
     RequestInfo info = infoCaptor.getValue();
     assertSame(method, info.getMethodDescriptor());
