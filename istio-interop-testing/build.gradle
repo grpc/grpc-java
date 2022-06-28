@@ -1,0 +1,44 @@
+plugins {
+    id "application"
+    id "java"
+
+    id "com.google.protobuf"
+}
+
+description = "gRPC: Istio Interop testing"
+
+configurations {
+    alpnagent
+}
+
+evaluationDependsOn(project(':grpc-context').path)
+
+dependencies {
+    implementation  project(':grpc-core'),
+            project(':grpc-netty'),
+            project(':grpc-protobuf'),
+            project(':grpc-services'),
+            project(':grpc-stub'),
+            project(':grpc-testing')
+
+    compileOnly libraries.javax.annotation
+
+    runtimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
+    testImplementation project(':grpc-context').sourceSets.test.output,
+            project(':grpc-api').sourceSets.test.output,
+            project(':grpc-core').sourceSets.test.output,
+            libraries.mockito.core,
+            libraries.junit,
+            libraries.truth
+    alpnagent libraries.jetty.alpn.agent
+}
+
+configureProtoCompilation()
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+compileJava {
+    // This isn't a library; it can use beta APIs
+    options.errorprone.check("BetaApi", CheckSeverity.OFF)
+}
