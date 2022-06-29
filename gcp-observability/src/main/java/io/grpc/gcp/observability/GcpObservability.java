@@ -42,6 +42,7 @@ import io.opencensus.exporter.trace.stackdriver.StackdriverTraceConfiguration;
 import io.opencensus.exporter.trace.stackdriver.StackdriverTraceExporter;
 import io.opencensus.trace.Tracing;
 import io.opencensus.trace.config.TraceConfig;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -64,7 +65,7 @@ public final class GcpObservability implements AutoCloseable {
    *
    * @throws ProviderNotFoundException if no underlying channel/server provider is available.
    */
-  public static synchronized GcpObservability grpcInit() throws Exception {
+  public static synchronized GcpObservability grpcInit() throws IOException {
     if (instance == null) {
       GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
@@ -95,7 +96,7 @@ public final class GcpObservability implements AutoCloseable {
       ObservabilityConfig config,
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory)
-      throws Exception {
+      throws IOException {
     if (instance == null) {
       instance =
           new GcpObservability(sink, config, channelInterceptorFactory, serverInterceptorFactory);
@@ -149,7 +150,7 @@ public final class GcpObservability implements AutoCloseable {
     }
   }
 
-  private void registerStackDriverExporter(String projectId) throws Exception {
+  private void registerStackDriverExporter(String projectId) throws IOException {
     if (config.isEnableCloudMonitoring()) {
       RpcViews.registerAllGrpcViews();
       StackdriverStatsConfiguration.Builder statsConfigurationBuilder =
@@ -159,8 +160,8 @@ public final class GcpObservability implements AutoCloseable {
       }
       try {
         StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
-      } catch (Exception e) {
-        throw new Exception("Failed to register Stackdriver stats exporter, " + e.getMessage());
+      } catch (IOException e) {
+        throw new IOException("Failed to register Stackdriver stats exporter, " + e.getMessage());
       }
       metricsEnabled = true;
     }
@@ -176,8 +177,8 @@ public final class GcpObservability implements AutoCloseable {
       }
       try {
         StackdriverTraceExporter.createAndRegister(traceConfigurationBuilder.build());
-      } catch (Exception e) {
-        throw new Exception("Failed to register Stackdriver trace exporter, " + e.getMessage());
+      } catch (IOException e) {
+        throw new IOException("Failed to register Stackdriver trace exporter, " + e.getMessage());
       }
       tracesEnabled = true;
     }
