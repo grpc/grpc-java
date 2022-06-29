@@ -3,7 +3,7 @@ plugins {
     id "java"
 
     id "com.google.protobuf"
-    id 'com.google.cloud.tools.jib'  // For releasing to Docker Hub
+    id 'com.google.cloud.tools.jib'
 }
 
 description = "gRPC: Istio Interop testing"
