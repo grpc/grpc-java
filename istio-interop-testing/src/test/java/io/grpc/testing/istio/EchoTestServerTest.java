@@ -111,7 +111,7 @@ public class EchoTestServerTest {
         .build();
     EchoResponse echoResponse = stub.echo(echoRequest);
     String echoMessage = echoResponse.getMessage();
-    Set<String> lines = ImmutableSet.copyOf(echoMessage.split(System.lineSeparator()));
+    Set<String> lines = ImmutableSet.copyOf(echoMessage.split("\n"));
 
     assertThat(lines).contains("RequestHeader=header1:value1");
     assertThat(lines).contains("RequestHeader=header2:value2");
@@ -143,7 +143,7 @@ public class EchoTestServerTest {
         ForwardEchoRequest.newBuilder()
             .setCount(COUNT_OF_REQUESTS_TO_FORWARD)
             .setQps(100)
-            .setTimeoutMicros(1000_000L) // 1000 millis
+            .setTimeoutMicros(2000_000L) // 2000 millis
             .setUrl("grpc://localhost:" + port2)
             .addHeaders(
                 Header.newBuilder().setKey("test-key1").setValue("test-value1").build())
