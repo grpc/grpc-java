@@ -19,7 +19,7 @@ package io.grpc.testing.istio;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Context;
-import io.grpc.Contexts;
+import io.grpc.ForwardingServerCall;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
@@ -202,7 +202,44 @@ public final class EchoTestServer {
       final SocketAddress peerAddress = call.getAttributes()
           .get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
 
-      Context ctx = Context.current();
+      return next.startCall(
+          new ForwardingServerCall.SimpleForwardingServerCall<ReqT, RespT>(call) {
+
+            @SuppressWarnings("unchecked")
+            @Override
+            public void sendMessage(RespT message) {
+              EchoResponse echoResponse = (EchoResponse) message;
+              String oldMessage = echoResponse.getMessage();
+
+              EchoMessage echoMessage = new EchoMessage();
+
+              for (String key : requestHeaders.keys()) {
+                if (!key.endsWith("-bin")) {
+
+                  echoMessage.writeKeyValueForRequest(REQUEST_HEADER, key,
+                      requestHeaders.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER)));
+                }
+              }
+              // This is not a complete list. May need to add/remove fields later,
+              // such as "ServiceVersion", "ServicePort", "URL", "Method", "ResponseHeader",
+              // "Cluster", "IstioVersion"
+              // Only keep the fields needed for now.
+              if (peerAddress instanceof InetSocketAddress) {
+                InetSocketAddress inetPeerAddress = (InetSocketAddress) peerAddress;
+                echoMessage.writeKeyValue(IP, inetPeerAddress.getAddress().getHostAddress());
+              }
+              echoMessage.writeKeyValue(STATUS_CODE, "200");
+              echoMessage.writeKeyValue(HOST, call.getAuthority());
+              echoMessage.writeMessage(oldMessage);
+              echoResponse =
+                  EchoResponse.newBuilder()
+                      .setMessage(echoMessage.toString())
+                      .build();
+              super.sendMessage((RespT) echoResponse);
+            }
+          },
+          requestHeaders);
+      /*Context ctx = Context.current();
       if (peerAddress instanceof InetSocketAddress) {
         InetSocketAddress inetPeerAddress = (InetSocketAddress) peerAddress;
         ctx = ctx.withValue(CLIENT_ADDRESS_CONTEXT_KEY,
@@ -222,6 +259,7 @@ public final class EchoTestServer {
           call,
           requestHeaders,
           next);
+       */
     }
   }
 
@@ -240,7 +278,7 @@ public final class EchoTestServer {
       EchoMessage echoMessage = new EchoMessage();
       echoMessage.writeKeyValue(HOSTNAME, hostname);
       echoMessage.writeKeyValue("Echo", request.getMessage());
-      String clientAddress = CLIENT_ADDRESS_CONTEXT_KEY.get();
+      /*String clientAddress = CLIENT_ADDRESS_CONTEXT_KEY.get();
       if (clientAddress != null) {
         echoMessage.writeKeyValue(IP, clientAddress);
       }
@@ -249,7 +287,7 @@ public final class EchoTestServer {
         echoMessage.writeKeyValueForRequest(REQUEST_HEADER, entry.getKey(), entry.getValue());
       }
       echoMessage.writeKeyValue(STATUS_CODE, "200");
-      echoMessage.writeKeyValue(HOST, AUTHORITY_CONTEXT_KEY.get());
+      echoMessage.writeKeyValue(HOST, AUTHORITY_CONTEXT_KEY.get()); */
       EchoResponse echoResponse = EchoResponse.newBuilder()
           .setMessage(echoMessage.toString())
           .build();
@@ -358,6 +396,10 @@ public final class EchoTestServer {
       if (value != null) {
         writeKeyValue(requestHeader, key + ":" + value);
       }
+    }
+
+    void writeMessage(String message) {
+      sb.append(message);
     }
 
     @Override
