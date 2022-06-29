@@ -170,7 +170,7 @@ public class EchoTestServerTest {
   }
 
   private static void validateOutput(String output, int i) {
-    Set<String> lines = ImmutableSet.copyOf(output.split(System.lineSeparator()));
+    Set<String> lines = ImmutableSet.copyOf(output.split("\n"));
     assertThat(lines).contains("RequestHeader=x-request-id:" + i);
     assertThat(lines).contains("RequestHeader=test-key1:test-value1");
     assertThat(lines).contains("RequestHeader=test-key2:test-value2");
