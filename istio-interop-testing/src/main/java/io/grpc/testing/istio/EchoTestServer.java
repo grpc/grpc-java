@@ -18,7 +18,8 @@ package io.grpc.testing.istio;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ForwardingServerCall;
+import io.grpc.Context;
+import io.grpc.Contexts;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
@@ -63,9 +64,16 @@ import java.util.logging.Logger;
  * https://github.com/istio/istio/blob/master/pkg/test/echo/server/endpoint/grpc.go .
  * Please see Istio framework docs https://github.com/istio/istio/wiki/Istio-Test-Framework .
  */
-public class EchoTestServer {
+public final class EchoTestServer {
 
   private static final Logger logger = Logger.getLogger(EchoTestServer.class.getName());
+
+  static final Context.Key<String> CLIENT_ADDRESS_CONTEXT_KEY =
+      Context.key("io.grpc.testing.istio.ClientAddress");
+  static final Context.Key<String> AUTHORITY_CONTEXT_KEY =
+      Context.key("io.grpc.testing.istio.Authority");
+  static final Context.Key<Map<String,String>> REQUEST_HEADERS_CONTEXT_KEY =
+      Context.key("io.grpc.testing.istio.RequestHeaders");
 
   private static final String REQUEST_ID = "x-request-id";
   private static final String STATUS_CODE = "StatusCode";
@@ -191,47 +199,29 @@ public class EchoTestServer {
       if (!"Echo".equals(methodName)) {
         return next.startCall(call, requestHeaders);
       }
-
       final SocketAddress peerAddress = call.getAttributes()
           .get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
 
-      return next.startCall(
-          new ForwardingServerCall.SimpleForwardingServerCall<ReqT, RespT>(call) {
-
-            @SuppressWarnings("unchecked")
-            @Override
-            public void sendMessage(RespT message) {
-              EchoResponse echoResponse = (EchoResponse) message;
-              String oldMessage = echoResponse.getMessage();
-
-              EchoMessage echoMessage = new EchoMessage();
-
-              for (String key : requestHeaders.keys()) {
-                if (!key.endsWith("-bin")) {
-
-                  echoMessage.writeKeyValueForRequest(REQUEST_HEADER, key,
-                      requestHeaders.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER)));
-                }
-              }
-              // This is not a complete list. May need to add/remove fields later,
-              // such as "ServiceVersion", "ServicePort", "URL", "Method", "ResponseHeader",
-              // "Cluster", "IstioVersion"
-              // Only keep the fields needed for now.
-              if (peerAddress instanceof InetSocketAddress) {
-                InetSocketAddress inetPeerAddress = (InetSocketAddress) peerAddress;
-                echoMessage.writeKeyValue(IP, inetPeerAddress.getAddress().getHostAddress());
-              }
-              echoMessage.writeKeyValue(STATUS_CODE, "200");
-              echoMessage.writeKeyValue(HOST, call.getAuthority());
-              echoMessage.writeMessage(oldMessage);
-              echoResponse =
-                  EchoResponse.newBuilder()
-                      .setMessage(echoMessage.toString())
-                      .build();
-              super.sendMessage((RespT) echoResponse);
-            }
-          },
-          requestHeaders);
+      Context ctx = Context.current();
+      if (peerAddress instanceof InetSocketAddress) {
+        InetSocketAddress inetPeerAddress = (InetSocketAddress) peerAddress;
+        ctx = ctx.withValue(CLIENT_ADDRESS_CONTEXT_KEY,
+            inetPeerAddress.getAddress().getHostAddress());
+      }
+      ctx = ctx.withValue(AUTHORITY_CONTEXT_KEY, call.getAuthority());
+      Map<String, String> requestHeadersCopy = new HashMap<>();
+      for (String key : requestHeaders.keys()) {
+        if (!key.endsWith("-bin")) {
+          requestHeadersCopy.put(key,
+              requestHeaders.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER)));
+        }
+      }
+      ctx = ctx.withValue(REQUEST_HEADERS_CONTEXT_KEY, requestHeadersCopy);
+      return Contexts.interceptCall(
+          ctx,
+          call,
+          requestHeaders,
+          next);
     }
   }
 
@@ -250,6 +240,16 @@ public class EchoTestServer {
       EchoMessage echoMessage = new EchoMessage();
       echoMessage.writeKeyValue(HOSTNAME, hostname);
       echoMessage.writeKeyValue("Echo", request.getMessage());
+      String clientAddress = CLIENT_ADDRESS_CONTEXT_KEY.get();
+      if (clientAddress != null) {
+        echoMessage.writeKeyValue(IP, clientAddress);
+      }
+      Map<String, String> requestHeadersCopy = REQUEST_HEADERS_CONTEXT_KEY.get();
+      for (Map.Entry<String, String> entry : requestHeadersCopy.entrySet()) {
+        echoMessage.writeKeyValueForRequest(REQUEST_HEADER, entry.getKey(), entry.getValue());
+      }
+      echoMessage.writeKeyValue(STATUS_CODE, "200");
+      echoMessage.writeKeyValue(HOST, AUTHORITY_CONTEXT_KEY.get());
       EchoResponse echoResponse = EchoResponse.newBuilder()
           .setMessage(echoMessage.toString())
           .build();
