@@ -33,12 +33,16 @@ sourceSets {
     }
 }
 
+configurations {
+    pomDeps {
+        extendsFrom configurations.thirdpartyRuntimeClasspath, configurations.shadow
+    }
+}
+
 dependencies {
     thirdpartyCompileOnly libraries.javax.annotation
     thirdpartyImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
-            libraries.protobuf,
-            libraries.google_api_protos,
             libraries.opencensus.proto
     implementation sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
@@ -228,7 +232,7 @@ publishing {
 
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')
-                project.configurations.shadow.allDependencies.each { dep ->
+                project.configurations.pomDeps.allDependencies.each { dep ->
                     if (dep.group == null && dep.name == 'unspecified') {
                         // Ignore the thirdparty self-dependency
                         return;
