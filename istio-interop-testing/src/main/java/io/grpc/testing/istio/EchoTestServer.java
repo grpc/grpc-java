@@ -35,9 +35,14 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.istio.EchoTestServiceGrpc.EchoTestServiceImplBase;
-import io.grpc.testing.istio.Istio.ForwardEchoRequest;
-import io.grpc.testing.istio.Istio.ForwardEchoResponse;
+import io.istio.test.Echo.EchoRequest;
+import io.istio.test.Echo.EchoResponse;
+import io.istio.test.Echo.ForwardEchoRequest;
+import io.istio.test.Echo.ForwardEchoResponse;
+import io.istio.test.Echo.Header;
+import io.istio.test.EchoTestServiceGrpc;
+import io.istio.test.EchoTestServiceGrpc.EchoTestServiceBlockingStub;
+import io.istio.test.EchoTestServiceGrpc.EchoTestServiceImplBase;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -196,8 +201,7 @@ public class EchoTestServer {
             @SuppressWarnings("unchecked")
             @Override
             public void sendMessage(RespT message) {
-              io.grpc.testing.istio.Istio.EchoResponse echoResponse =
-                  (io.grpc.testing.istio.Istio.EchoResponse) message;
+              EchoResponse echoResponse = (EchoResponse) message;
               String oldMessage = echoResponse.getMessage();
 
               EchoMessage echoMessage = new EchoMessage();
@@ -221,7 +225,7 @@ public class EchoTestServer {
               echoMessage.writeKeyValue(HOST, call.getAuthority());
               echoMessage.writeMessage(oldMessage);
               echoResponse =
-                  io.grpc.testing.istio.Istio.EchoResponse.newBuilder()
+                  EchoResponse.newBuilder()
                       .setMessage(echoMessage.toString())
                       .build();
               super.sendMessage((RespT) echoResponse);
@@ -240,14 +244,13 @@ public class EchoTestServer {
     }
 
     @Override
-    public void echo(io.grpc.testing.istio.Istio.EchoRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.istio.Istio.EchoResponse> responseObserver) {
+    public void echo(EchoRequest request,
+        io.grpc.stub.StreamObserver<EchoResponse> responseObserver) {
 
       EchoMessage echoMessage = new EchoMessage();
       echoMessage.writeKeyValue(HOSTNAME, hostname);
       echoMessage.writeKeyValue("Echo", request.getMessage());
-      io.grpc.testing.istio.Istio.EchoResponse echoResponse
-          = io.grpc.testing.istio.Istio.EchoResponse.newBuilder()
+      EchoResponse echoResponse = EchoResponse.newBuilder()
           .setMessage(echoMessage.toString())
           .build();
 
@@ -271,8 +274,8 @@ public class EchoTestServer {
 
     private ForwardEchoResponse buildEchoResponse(ForwardEchoRequest request)
         throws InterruptedException {
-      Istio.ForwardEchoResponse.Builder forwardEchoResponseBuilder
-          = io.grpc.testing.istio.Istio.ForwardEchoResponse.newBuilder();
+      ForwardEchoResponse.Builder forwardEchoResponseBuilder
+          = ForwardEchoResponse.newBuilder();
       String rawUrl = request.getUrl();
       if (!rawUrl.startsWith(GRPC_SCHEME)) {
         throw new StatusRuntimeException(
@@ -285,10 +288,10 @@ public class EchoTestServer {
           rawUrl, InsecureChannelCredentials.create());
       ManagedChannel channel = channelBuilder.build();
 
-      List<Istio.Header> requestHeaders = request.getHeadersList();
+      List<Header> requestHeaders = request.getHeadersList();
       Metadata metadata = new Metadata();
 
-      for (Istio.Header header : requestHeaders) {
+      for (Header header : requestHeaders) {
         metadata.put(Metadata.Key.of(header.getKey(), Metadata.ASCII_STRING_MARSHALLER),
             header.getValue());
       }
@@ -301,8 +304,7 @@ public class EchoTestServer {
       }
       logger.info("qps=" + request.getQps());
       logger.info("durationPerQuery=" + durationPerQuery);
-      io.grpc.testing.istio.Istio.EchoRequest echoRequest
-          = io.grpc.testing.istio.Istio.EchoRequest.newBuilder()
+      EchoRequest echoRequest = EchoRequest.newBuilder()
           .setMessage(request.getMessage())
           .build();
       Instant start = Instant.now();
@@ -313,7 +315,7 @@ public class EchoTestServer {
         currentMetadata.merge(metadata);
         currentMetadata.put(
             Metadata.Key.of(REQUEST_ID, Metadata.ASCII_STRING_MARSHALLER), "" + i);
-        EchoTestServiceGrpc.EchoTestServiceBlockingStub stub
+        EchoTestServiceBlockingStub stub
             = EchoTestServiceGrpc.newBlockingStub(channel).withInterceptors(
                 MetadataUtils.newAttachHeadersInterceptor(currentMetadata))
             .withDeadlineAfter(request.getTimeoutMicros(), TimeUnit.MICROSECONDS);
@@ -333,10 +335,10 @@ public class EchoTestServer {
       return forwardEchoResponseBuilder.build();
     }
 
-    private String callEcho(EchoTestServiceGrpc.EchoTestServiceBlockingStub stub,
-        io.grpc.testing.istio.Istio.EchoRequest echoRequest, int count) {
+    private String callEcho(EchoTestServiceBlockingStub stub,
+        EchoRequest echoRequest, int count) {
       try {
-        Istio.EchoResponse echoResponse = stub.echo(echoRequest);
+        EchoResponse echoResponse = stub.echo(echoRequest);
         return echoResponse.getMessage();
       } catch (Exception e) {
         logger.log(Level.INFO, "RPC failed " + count, e);

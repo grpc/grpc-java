@@ -1,4 +1,4 @@
-package io.grpc.testing.istio;
+package io.istio.test;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
 
@@ -6,38 +6,38 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  */
 @javax.annotation.Generated(
     value = "by gRPC proto compiler",
-    comments = "Source: istio.testing/echo.proto")
+    comments = "Source: test/echo/proto/echo.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class EchoTestServiceGrpc {
 
   private EchoTestServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "istio.testing.EchoTestService";
+  public static final String SERVICE_NAME = "proto.EchoTestService";
 
   // Static method descriptors that strictly reflect the proto.
-  private static volatile io.grpc.MethodDescriptor<io.grpc.testing.istio.Istio.EchoRequest,
-      io.grpc.testing.istio.Istio.EchoResponse> getEchoMethod;
+  private static volatile io.grpc.MethodDescriptor<io.istio.test.Echo.EchoRequest,
+      io.istio.test.Echo.EchoResponse> getEchoMethod;
 
   @io.grpc.stub.annotations.RpcMethod(
       fullMethodName = SERVICE_NAME + '/' + "Echo",
-      requestType = io.grpc.testing.istio.Istio.EchoRequest.class,
-      responseType = io.grpc.testing.istio.Istio.EchoResponse.class,
+      requestType = io.istio.test.Echo.EchoRequest.class,
+      responseType = io.istio.test.Echo.EchoResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
-  public static io.grpc.MethodDescriptor<io.grpc.testing.istio.Istio.EchoRequest,
-      io.grpc.testing.istio.Istio.EchoResponse> getEchoMethod() {
-    io.grpc.MethodDescriptor<io.grpc.testing.istio.Istio.EchoRequest, io.grpc.testing.istio.Istio.EchoResponse> getEchoMethod;
+  public static io.grpc.MethodDescriptor<io.istio.test.Echo.EchoRequest,
+      io.istio.test.Echo.EchoResponse> getEchoMethod() {
+    io.grpc.MethodDescriptor<io.istio.test.Echo.EchoRequest, io.istio.test.Echo.EchoResponse> getEchoMethod;
     if ((getEchoMethod = EchoTestServiceGrpc.getEchoMethod) == null) {
       synchronized (EchoTestServiceGrpc.class) {
         if ((getEchoMethod = EchoTestServiceGrpc.getEchoMethod) == null) {
           EchoTestServiceGrpc.getEchoMethod = getEchoMethod =
-              io.grpc.MethodDescriptor.<io.grpc.testing.istio.Istio.EchoRequest, io.grpc.testing.istio.Istio.EchoResponse>newBuilder()
+              io.grpc.MethodDescriptor.<io.istio.test.Echo.EchoRequest, io.istio.test.Echo.EchoResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Echo"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  io.grpc.testing.istio.Istio.EchoRequest.getDefaultInstance()))
+                  io.istio.test.Echo.EchoRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  io.grpc.testing.istio.Istio.EchoResponse.getDefaultInstance()))
+                  io.istio.test.Echo.EchoResponse.getDefaultInstance()))
               .setSchemaDescriptor(new EchoTestServiceMethodDescriptorSupplier("Echo"))
               .build();
         }
@@ -46,29 +46,29 @@ public final class EchoTestServiceGrpc {
     return getEchoMethod;
   }
 
-  private static volatile io.grpc.MethodDescriptor<io.grpc.testing.istio.Istio.ForwardEchoRequest,
-      io.grpc.testing.istio.Istio.ForwardEchoResponse> getForwardEchoMethod;
+  private static volatile io.grpc.MethodDescriptor<io.istio.test.Echo.ForwardEchoRequest,
+      io.istio.test.Echo.ForwardEchoResponse> getForwardEchoMethod;
 
   @io.grpc.stub.annotations.RpcMethod(
       fullMethodName = SERVICE_NAME + '/' + "ForwardEcho",
-      requestType = io.grpc.testing.istio.Istio.ForwardEchoRequest.class,
-      responseType = io.grpc.testing.istio.Istio.ForwardEchoResponse.class,
+      requestType = io.istio.test.Echo.ForwardEchoRequest.class,
+      responseType = io.istio.test.Echo.ForwardEchoResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
-  public static io.grpc.MethodDescriptor<io.grpc.testing.istio.Istio.ForwardEchoRequest,
-      io.grpc.testing.istio.Istio.ForwardEchoResponse> getForwardEchoMethod() {
-    io.grpc.MethodDescriptor<io.grpc.testing.istio.Istio.ForwardEchoRequest, io.grpc.testing.istio.Istio.ForwardEchoResponse> getForwardEchoMethod;
+  public static io.grpc.MethodDescriptor<io.istio.test.Echo.ForwardEchoRequest,
+      io.istio.test.Echo.ForwardEchoResponse> getForwardEchoMethod() {
+    io.grpc.MethodDescriptor<io.istio.test.Echo.ForwardEchoRequest, io.istio.test.Echo.ForwardEchoResponse> getForwardEchoMethod;
     if ((getForwardEchoMethod = EchoTestServiceGrpc.getForwardEchoMethod) == null) {
       synchronized (EchoTestServiceGrpc.class) {
         if ((getForwardEchoMethod = EchoTestServiceGrpc.getForwardEchoMethod) == null) {
           EchoTestServiceGrpc.getForwardEchoMethod = getForwardEchoMethod =
-              io.grpc.MethodDescriptor.<io.grpc.testing.istio.Istio.ForwardEchoRequest, io.grpc.testing.istio.Istio.ForwardEchoResponse>newBuilder()
+              io.grpc.MethodDescriptor.<io.istio.test.Echo.ForwardEchoRequest, io.istio.test.Echo.ForwardEchoResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ForwardEcho"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  io.grpc.testing.istio.Istio.ForwardEchoRequest.getDefaultInstance()))
+                  io.istio.test.Echo.ForwardEchoRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  io.grpc.testing.istio.Istio.ForwardEchoResponse.getDefaultInstance()))
+                  io.istio.test.Echo.ForwardEchoResponse.getDefaultInstance()))
               .setSchemaDescriptor(new EchoTestServiceMethodDescriptorSupplier("ForwardEcho"))
               .build();
         }
@@ -127,15 +127,15 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    public void echo(io.grpc.testing.istio.Istio.EchoRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.istio.Istio.EchoResponse> responseObserver) {
+    public void echo(io.istio.test.Echo.EchoRequest request,
+        io.grpc.stub.StreamObserver<io.istio.test.Echo.EchoResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getEchoMethod(), responseObserver);
     }
 
     /**
      */
-    public void forwardEcho(io.grpc.testing.istio.Istio.ForwardEchoRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.istio.Istio.ForwardEchoResponse> responseObserver) {
+    public void forwardEcho(io.istio.test.Echo.ForwardEchoRequest request,
+        io.grpc.stub.StreamObserver<io.istio.test.Echo.ForwardEchoResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getForwardEchoMethod(), responseObserver);
     }
 
@@ -145,15 +145,15 @@ public final class EchoTestServiceGrpc {
             getEchoMethod(),
             io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
-                io.grpc.testing.istio.Istio.EchoRequest,
-                io.grpc.testing.istio.Istio.EchoResponse>(
+                io.istio.test.Echo.EchoRequest,
+                io.istio.test.Echo.EchoResponse>(
                   this, METHODID_ECHO)))
           .addMethod(
             getForwardEchoMethod(),
             io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
-                io.grpc.testing.istio.Istio.ForwardEchoRequest,
-                io.grpc.testing.istio.Istio.ForwardEchoResponse>(
+                io.istio.test.Echo.ForwardEchoRequest,
+                io.istio.test.Echo.ForwardEchoResponse>(
                   this, METHODID_FORWARD_ECHO)))
           .build();
     }
@@ -175,16 +175,16 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    public void echo(io.grpc.testing.istio.Istio.EchoRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.istio.Istio.EchoResponse> responseObserver) {
+    public void echo(io.istio.test.Echo.EchoRequest request,
+        io.grpc.stub.StreamObserver<io.istio.test.Echo.EchoResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getEchoMethod(), getCallOptions()), request, responseObserver);
     }
 
     /**
      */
-    public void forwardEcho(io.grpc.testing.istio.Istio.ForwardEchoRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.istio.Istio.ForwardEchoResponse> responseObserver) {
+    public void forwardEcho(io.istio.test.Echo.ForwardEchoRequest request,
+        io.grpc.stub.StreamObserver<io.istio.test.Echo.ForwardEchoResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getForwardEchoMethod(), getCallOptions()), request, responseObserver);
     }
@@ -206,14 +206,14 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    public io.grpc.testing.istio.Istio.EchoResponse echo(io.grpc.testing.istio.Istio.EchoRequest request) {
+    public io.istio.test.Echo.EchoResponse echo(io.istio.test.Echo.EchoRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getEchoMethod(), getCallOptions(), request);
     }
 
     /**
      */
-    public io.grpc.testing.istio.Istio.ForwardEchoResponse forwardEcho(io.grpc.testing.istio.Istio.ForwardEchoRequest request) {
+    public io.istio.test.Echo.ForwardEchoResponse forwardEcho(io.istio.test.Echo.ForwardEchoRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getForwardEchoMethod(), getCallOptions(), request);
     }
@@ -235,16 +235,16 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.istio.Istio.EchoResponse> echo(
-        io.grpc.testing.istio.Istio.EchoRequest request) {
+    public com.google.common.util.concurrent.ListenableFuture<io.istio.test.Echo.EchoResponse> echo(
+        io.istio.test.Echo.EchoRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getEchoMethod(), getCallOptions()), request);
     }
 
     /**
      */
-    public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.istio.Istio.ForwardEchoResponse> forwardEcho(
-        io.grpc.testing.istio.Istio.ForwardEchoRequest request) {
+    public com.google.common.util.concurrent.ListenableFuture<io.istio.test.Echo.ForwardEchoResponse> forwardEcho(
+        io.istio.test.Echo.ForwardEchoRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getForwardEchoMethod(), getCallOptions()), request);
     }
@@ -271,12 +271,12 @@ public final class EchoTestServiceGrpc {
     public void invoke(Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
       switch (methodId) {
         case METHODID_ECHO:
-          serviceImpl.echo((io.grpc.testing.istio.Istio.EchoRequest) request,
-              (io.grpc.stub.StreamObserver<io.grpc.testing.istio.Istio.EchoResponse>) responseObserver);
+          serviceImpl.echo((io.istio.test.Echo.EchoRequest) request,
+              (io.grpc.stub.StreamObserver<io.istio.test.Echo.EchoResponse>) responseObserver);
           break;
         case METHODID_FORWARD_ECHO:
-          serviceImpl.forwardEcho((io.grpc.testing.istio.Istio.ForwardEchoRequest) request,
-              (io.grpc.stub.StreamObserver<io.grpc.testing.istio.Istio.ForwardEchoResponse>) responseObserver);
+          serviceImpl.forwardEcho((io.istio.test.Echo.ForwardEchoRequest) request,
+              (io.grpc.stub.StreamObserver<io.istio.test.Echo.ForwardEchoResponse>) responseObserver);
           break;
         default:
           throw new AssertionError();
@@ -300,7 +300,7 @@ public final class EchoTestServiceGrpc {
 
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
-      return io.grpc.testing.istio.Istio.getDescriptor();
+      return io.istio.test.Echo.getDescriptor();
     }
 
     @java.lang.Override

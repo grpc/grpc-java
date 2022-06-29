@@ -29,6 +29,12 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.stub.MetadataUtils;
+import io.istio.test.Echo.EchoRequest;
+import io.istio.test.Echo.EchoResponse;
+import io.istio.test.Echo.ForwardEchoRequest;
+import io.istio.test.Echo.ForwardEchoResponse;
+import io.istio.test.Echo.Header;
+import io.istio.test.EchoTestServiceGrpc;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -101,11 +107,10 @@ public class EchoTestServerTest {
         EchoTestServiceGrpc.newBlockingStub(channel)
             .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
 
-    io.grpc.testing.istio.Istio.EchoRequest echoRequest
-        = io.grpc.testing.istio.Istio.EchoRequest.newBuilder()
+    EchoRequest echoRequest = EchoRequest.newBuilder()
         .setMessage("test-message1")
         .build();
-    Istio.EchoResponse echoResponse = stub.echo(echoRequest);
+    EchoResponse echoResponse = stub.echo(echoRequest);
     String echoMessage = echoResponse.getMessage();
     Set<String> lines = ImmutableSet.copyOf(echoMessage.split(System.lineSeparator()));
 
@@ -135,16 +140,16 @@ public class EchoTestServerTest {
         Grpc.newChannelBuilderForAddress("localhost", port1, InsecureChannelCredentials.create());
     ManagedChannel channel = channelBuilder.build();
 
-    Istio.ForwardEchoRequest forwardEchoRequest =
-        Istio.ForwardEchoRequest.newBuilder()
+    ForwardEchoRequest forwardEchoRequest =
+        ForwardEchoRequest.newBuilder()
             .setCount(COUNT_OF_REQUESTS_TO_FORWARD)
             .setQps(100)
             .setTimeoutMicros(100_000L) // 100 millis
             .setUrl("grpc://localhost:" + port2)
             .addHeaders(
-                Istio.Header.newBuilder().setKey("test-key1").setValue("test-value1").build())
+                Header.newBuilder().setKey("test-key1").setValue("test-value1").build())
             .addHeaders(
-                Istio.Header.newBuilder().setKey("test-key2").setValue("test-value2").build())
+                Header.newBuilder().setKey("test-key2").setValue("test-value2").build())
             .setMessage("forward-echo-test-message")
             .build();
 
@@ -152,7 +157,7 @@ public class EchoTestServerTest {
         EchoTestServiceGrpc.newBlockingStub(channel);
 
     Instant start = Instant.now();
-    Istio.ForwardEchoResponse forwardEchoResponse = stub.forwardEcho(forwardEchoRequest);
+    ForwardEchoResponse forwardEchoResponse = stub.forwardEcho(forwardEchoRequest);
     Instant end = Instant.now();
     List<String> outputs = forwardEchoResponse.getOutputList();
     assertEquals(COUNT_OF_REQUESTS_TO_FORWARD, outputs.size());

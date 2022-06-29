@@ -35,6 +35,14 @@ dependencies {
     alpnagent libraries.jetty.alpn.agent
 }
 
+sourceSets {
+    main {
+        proto {
+            srcDir 'third_party/istio/src/main/proto'
+        }
+    }
+}
+
 configureProtoCompilation()
 
 import net.ltgt.gradle.errorprone.CheckSeverity
