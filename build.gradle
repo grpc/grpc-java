@@ -4,6 +4,7 @@ plugins {
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
     id "net.ltgt.errorprone" apply false
+    id 'com.google.cloud.tools.jib' apply false
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

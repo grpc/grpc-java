@@ -3,6 +3,7 @@ plugins {
     id "java"
 
     id "com.google.protobuf"
+    id 'com.google.cloud.tools.jib'  // For releasing to Docker Hub
 }
 
 description = "gRPC: Istio Interop testing"
@@ -41,4 +42,19 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 compileJava {
     // This isn't a library; it can use beta APIs
     options.errorprone.check("BetaApi", CheckSeverity.OFF)
+}
+
+
+// For releasing to Docker Hub
+jib {
+    from.image = "gcr.io/distroless/java:8"
+    container {
+        ports = ['50051']
+        mainClass="io.grpc.testing.istio.EchoTestServer"
+    }
+    outputPaths {
+        tar = 'build/istio-echo-server.tar'
+        digest = 'build/istio-echo-server.digest'
+        imageId = 'build/istio-echo-server.id'
+    }
 }
