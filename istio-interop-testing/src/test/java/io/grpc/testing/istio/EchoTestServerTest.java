@@ -22,7 +22,6 @@ import static org.junit.Assert.assertNotEquals;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Range;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
@@ -165,18 +164,16 @@ public class EchoTestServerTest {
       validateOutput(outputs.get(i), i);
     }
     long duration = Duration.between(start, end).toMillis();
-    assertThat(duration).isIn(Range.closed(
-        COUNT_OF_REQUESTS_TO_FORWARD * 10L, 2 * COUNT_OF_REQUESTS_TO_FORWARD * 10L));
+    assertThat(duration).isAtLeast(COUNT_OF_REQUESTS_TO_FORWARD * 10L);
   }
 
   private static void validateOutput(String output, int i) {
-    Set<String> lines = ImmutableSet.copyOf(output.split("\n"));
-    assertThat(lines).contains("RequestHeader=x-request-id:" + i);
-    assertThat(lines).contains("RequestHeader=test-key1:test-value1");
-    assertThat(lines).contains("RequestHeader=test-key2:test-value2");
-    assertThat(lines).contains("Hostname=test-host");
-    assertThat(lines).contains("StatusCode=200");
-    assertThat(lines).contains("Echo=forward-echo-test-message");
+    assertThat(output).contains("RequestHeader=x-request-id:" + i);
+    assertThat(output).contains("RequestHeader=test-key1:test-value1");
+    assertThat(output).contains("RequestHeader=test-key2:test-value2");
+    assertThat(output).contains("Hostname=test-host");
+    assertThat(output).contains("StatusCode=200");
+    assertThat(output).contains("Echo=forward-echo-test-message");
   }
 
   private static final String[] EXPECTED_KEY_SET = {
