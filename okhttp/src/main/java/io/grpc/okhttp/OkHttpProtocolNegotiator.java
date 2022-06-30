@@ -194,7 +194,7 @@ class OkHttpProtocolNegotiator {
       try {
         setServerNamesMethod = SSLParameters.class.getMethod("setServerNames", List.class);
         sniHostNameConstructor =
-            Class.forName("javax.net.ssl.SNIHostName").getConstructor(String.class);
+            Class.forName("javax.net.ssl.SNIHostName").getConstructor(byte[].class);
       } catch (ClassNotFoundException e) {
         logger.log(Level.FINER, "Failed to find Android 7.0+ APIs", e);
       } catch (NoSuchMethodException e) {
@@ -249,7 +249,7 @@ class OkHttpProtocolNegotiator {
           }
           if (SET_SERVER_NAMES != null && SNI_HOST_NAME != null) {
             SET_SERVER_NAMES
-                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance(hostname)));
+                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance((Object) hostname.getBytes())));
           } else {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
