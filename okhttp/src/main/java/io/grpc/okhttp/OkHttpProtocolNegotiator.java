@@ -19,6 +19,7 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Charsets;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.okhttp.internal.OptionalMethod;
 import io.grpc.okhttp.internal.Platform;
@@ -30,7 +31,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.Socket;
-import com.google.common.base.Charsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -250,7 +250,9 @@ class OkHttpProtocolNegotiator {
           }
           if (SET_SERVER_NAMES != null && SNI_HOST_NAME != null) {
             SET_SERVER_NAMES
-                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance((Object) hostname.getBytes(Charsets.UTF_8))));
+                .invoke(sslParams, Collections.singletonList(
+                  SNI_HOST_NAME.newInstance((Object) hostname.getBytes(Charsets.UTF_8)))
+                );
           } else {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
