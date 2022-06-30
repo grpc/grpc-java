@@ -30,6 +30,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -249,7 +250,7 @@ class OkHttpProtocolNegotiator {
           }
           if (SET_SERVER_NAMES != null && SNI_HOST_NAME != null) {
             SET_SERVER_NAMES
-                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance((Object) hostname.getBytes())));
+                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance((Object) hostname.getBytes(StandardCharsets.UTF_8))));
           } else {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
