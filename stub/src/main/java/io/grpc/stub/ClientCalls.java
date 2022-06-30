@@ -509,6 +509,7 @@ public final class ClientCalls {
   private static final class UnaryStreamToFuture<RespT> extends StartableListener<RespT> {
     private final GrpcFuture<RespT> responseFuture;
     private RespT value;
+    private boolean isValueReceived = false;
 
     // Non private to avoid synthetic class
     UnaryStreamToFuture(GrpcFuture<RespT> responseFuture) {
@@ -521,17 +522,18 @@ public final class ClientCalls {
 
     @Override
     public void onMessage(RespT value) {
-      if (this.value != null) {
+      if (this.isValueReceived) {
         throw Status.INTERNAL.withDescription("More than one value received for unary call")
             .asRuntimeException();
       }
       this.value = value;
+      this.isValueReceived = true;
     }
 
     @Override
     public void onClose(Status status, Metadata trailers) {
       if (status.isOk()) {
-        if (value == null) {
+        if (!isValueReceived) {
           // No value received so mark the future as an error
           responseFuture.setException(
               Status.INTERNAL.withDescription("No value received for unary call")
