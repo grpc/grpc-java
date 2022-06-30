@@ -21,6 +21,7 @@ import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.junit.Test;
@@ -98,7 +99,7 @@ public class GlobalInterceptorsTest {
     public void run() {
       GlobalInterceptors.setInterceptorsTracers(
           new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
-          null,
+              Collections.emptyList(),
           new ArrayList<>(Arrays.asList(new NoopServerStreamTracerFactory())));
       try {
         GlobalInterceptors.setInterceptorsTracers(
@@ -115,7 +116,7 @@ public class GlobalInterceptorsTest {
     @Override
     public void run() {
       List<ClientInterceptor> clientInterceptors = GlobalInterceptors.getClientInterceptors();
-      assertThat(clientInterceptors).isEmpty();
+      assertThat(clientInterceptors).isNull();
 
       try {
         GlobalInterceptors.setInterceptorsTracers(
@@ -132,7 +133,7 @@ public class GlobalInterceptorsTest {
     @Override
     public void run() {
       List<ServerInterceptor> serverInterceptors = GlobalInterceptors.getServerInterceptors();
-      assertThat(serverInterceptors).isEmpty();
+      assertThat(serverInterceptors).isNull();
 
       try {
         GlobalInterceptors.setInterceptorsTracers(
@@ -150,7 +151,7 @@ public class GlobalInterceptorsTest {
     public void run() {
       List<ServerStreamTracer.Factory> serverStreamTracerFactories =
           GlobalInterceptors.getServerStreamTracerFactories();
-      assertThat(serverStreamTracerFactories).isEmpty();
+      assertThat(serverStreamTracerFactories).isNull();
 
       try {
         GlobalInterceptors.setInterceptorsTracers(

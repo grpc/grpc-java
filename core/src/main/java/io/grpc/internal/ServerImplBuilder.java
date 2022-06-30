@@ -247,15 +247,15 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   @VisibleForTesting
   List<? extends ServerStreamTracer.Factory> getTracerFactories() {
     ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
-    boolean isGlobalInterceptorsTracersSet
-        = InternalGlobalInterceptors.isGlobalInterceptorsTracersSet();
+    boolean isGlobalInterceptorsTracersSet = false;
     List<ServerInterceptor> globalServerInterceptors
         = InternalGlobalInterceptors.getServerInterceptors();
     List<ServerStreamTracer.Factory> globalServerStreamTracerFactories
         = InternalGlobalInterceptors.getServerStreamTracerFactories();
-    if (isGlobalInterceptorsTracersSet) {
+    if (globalServerInterceptors != null) {
       tracerFactories.addAll(globalServerStreamTracerFactories);
       interceptors.addAll(globalServerInterceptors);
+      isGlobalInterceptorsTracersSet = true;
     }
     if (!isGlobalInterceptorsTracersSet && statsEnabled) {
       ServerStreamTracer.Factory censusStatsTracerFactory = null;

@@ -638,11 +638,12 @@ public final class ManagedChannelImplBuilder
   @VisibleForTesting
   List<ClientInterceptor> getEffectiveInterceptors() {
     List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
-    boolean isGlobalInterceptorsSet = InternalGlobalInterceptors.isGlobalInterceptorsTracersSet();
+    boolean isGlobalInterceptorsSet = false;
     List<ClientInterceptor> globalClientInterceptors =
         InternalGlobalInterceptors.getClientInterceptors();
-    if (isGlobalInterceptorsSet) {
+    if (globalClientInterceptors != null) {
       effectiveInterceptors.addAll(globalClientInterceptors);
+      isGlobalInterceptorsSet = true;
     }
     if (!isGlobalInterceptorsSet && statsEnabled) {
       ClientInterceptor statsInterceptor = null;
