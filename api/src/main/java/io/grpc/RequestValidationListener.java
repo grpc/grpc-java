@@ -1,6 +1,20 @@
-package io.grpc;
+/*
+ * Copyright 2016 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import com.google.protobuf.MessageLiteOrBuilder;
+package io.grpc;
 
 public class RequestValidationListener<ReqT, ResT> extends ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT> {
 
@@ -22,33 +36,33 @@ public class RequestValidationListener<ReqT, ResT> extends ForwardingServerCallL
 
     @Override
     public void onMessage(ReqT message) {
-        MessageLiteOrBuilder convertMessage = (MessageLiteOrBuilder) message;
-        RequestValidator<MessageLiteOrBuilder> validator = requestValidatorResolver.find(convertMessage.getClass().getTypeName());
+        RequestValidator<ReqT> validator = (RequestValidator<ReqT>) requestValidatorResolver.find(message.getClass());
 
         if (validator == null) {
             super.onMessage(message);
-        } else {
-            try {
-                ValidationResult validationResult = validator.isValid(convertMessage);
+            return;
+        }
 
-                if (validationResult.isValid()) {
-                    super.onMessage(message);
-                } else {
-                    Status status = Status.INVALID_ARGUMENT
-                            .withDescription("invalid argument. " + validationResult.getMessage());
-                    handleInvalidRequest(status);
-                }
-            } catch (Exception e) {
-                Status status = Status.INTERNAL.withDescription(e.getMessage());
+        try {
+            ValidationResult validationResult = validator.isValid(message);
 
+            if (validationResult.isValid()) {
+                super.onMessage(message);
+            } else {
+                Status status = Status.INVALID_ARGUMENT
+                        .withDescription("invalid argument. " + validationResult.getMessage());
                 handleInvalidRequest(status);
             }
+        } catch (Exception e) {
+            Status status = Status.INTERNAL.withDescription(e.getMessage());
+
+            handleInvalidRequest(status);
         }
     }
 
     private void handleInvalidRequest(Status status) {
         if (!serverCall.isCancelled()) {
-            serverCall.close(status, headers);
+            serverCall.close(status, new Metadata());
         }
     }
 }

@@ -15,8 +15,6 @@ dependencies {
             libraries.jsr305,
             libraries.errorprone.annotations
     implementation libraries.guava
-    implementation "com.google.protobuf:protobuf-javalite:3.19.2"
-
 
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
