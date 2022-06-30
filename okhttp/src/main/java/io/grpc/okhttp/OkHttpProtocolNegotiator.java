@@ -19,7 +19,8 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
+import com.google.common.net.HostAndPort;
+import com.google.common.net.InetAddresses;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.okhttp.internal.OptionalMethod;
 import io.grpc.okhttp.internal.Platform;
@@ -195,7 +196,7 @@ class OkHttpProtocolNegotiator {
       try {
         setServerNamesMethod = SSLParameters.class.getMethod("setServerNames", List.class);
         sniHostNameConstructor =
-            Class.forName("javax.net.ssl.SNIHostName").getConstructor(byte[].class);
+            Class.forName("javax.net.ssl.SNIHostName").getConstructor(String.class);
       } catch (ClassNotFoundException e) {
         logger.log(Level.FINER, "Failed to find Android 7.0+ APIs", e);
       } catch (NoSuchMethodException e) {
@@ -248,11 +249,11 @@ class OkHttpProtocolNegotiator {
           } else {
             SET_USE_SESSION_TICKETS.invokeOptionalWithoutCheckedException(sslSocket, true);
           }
-          if (SET_SERVER_NAMES != null && SNI_HOST_NAME != null) {
+          if (SET_SERVER_NAMES != null
+              && SNI_HOST_NAME != null
+              && !InetAddresses.isInetAddress(HostAndPort.fromString(hostname).getHost())) {
             SET_SERVER_NAMES
-                .invoke(sslParams, Collections.singletonList(
-                  SNI_HOST_NAME.newInstance((Object) hostname.getBytes(Charsets.UTF_8)))
-            );
+                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance(hostname)));
           } else {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
