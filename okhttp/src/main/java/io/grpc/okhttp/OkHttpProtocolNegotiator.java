@@ -252,7 +252,7 @@ class OkHttpProtocolNegotiator {
             SET_SERVER_NAMES
                 .invoke(sslParams, Collections.singletonList(
                   SNI_HOST_NAME.newInstance((Object) hostname.getBytes(Charsets.UTF_8)))
-                );
+            );
           } else {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
