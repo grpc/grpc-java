@@ -4,6 +4,7 @@ plugins {
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
     id "net.ltgt.errorprone" apply false
+    id 'com.google.cloud.tools.jib' apply false
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -19,7 +20,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.48.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.49.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()

@@ -4,6 +4,7 @@ pluginManagement {
         id "com.android.library" version "4.2.0"
         id "com.github.johnrengelman.shadow" version "7.1.2"
         id "com.github.kt3k.coveralls" version "2.12.0"
+        id "com.google.cloud.tools.jib" version "3.2.1"
         id "com.google.osdetector" version "1.7.0"
         id "com.google.protobuf" version "0.8.18"
         id "digital.wup.android-maven-publish" version "3.6.3"
@@ -54,6 +55,7 @@ include ":grpc-bom"
 include ":grpc-rls"
 include ":grpc-authz"
 include ":grpc-gcp-observability"
+include ":grpc-istio-interop-testing"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
@@ -81,6 +83,7 @@ project(':grpc-bom').projectDir = "$rootDir/bom" as File
 project(':grpc-rls').projectDir = "$rootDir/rls" as File
 project(':grpc-authz').projectDir = "$rootDir/authz" as File
 project(':grpc-gcp-observability').projectDir = "$rootDir/gcp-observability" as File
+project(':grpc-istio-interop-testing').projectDir = "$rootDir/istio-interop-testing" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'

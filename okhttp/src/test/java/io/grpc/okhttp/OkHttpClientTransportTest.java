@@ -727,24 +727,21 @@ public class OkHttpClientTransportTest {
   public void transportTracer_windowSizeDefault() throws Exception {
     initTransport();
     TransportStats stats = getTransportStats(clientTransport);
-    assertEquals(INITIAL_WINDOW_SIZE, stats.remoteFlowControlWindow);
-    // okhttp does not track local window sizes
-    assertEquals(-1, stats.localFlowControlWindow);
+    assertEquals(INITIAL_WINDOW_SIZE / 2, stats.remoteFlowControlWindow); // Lower bound
+    assertEquals(INITIAL_WINDOW_SIZE, stats.localFlowControlWindow);
   }
 
   @Test
   public void transportTracer_windowSize_remote() throws Exception {
     initTransport();
     TransportStats before = getTransportStats(clientTransport);
-    assertEquals(INITIAL_WINDOW_SIZE, before.remoteFlowControlWindow);
-    // okhttp does not track local window sizes
-    assertEquals(-1, before.localFlowControlWindow);
+    assertEquals(INITIAL_WINDOW_SIZE / 2, before.remoteFlowControlWindow); // Lower bound
+    assertEquals(INITIAL_WINDOW_SIZE, before.localFlowControlWindow);
 
     frameHandler().windowUpdate(0, 1000);
     TransportStats after = getTransportStats(clientTransport);
-    assertEquals(INITIAL_WINDOW_SIZE + 1000, after.remoteFlowControlWindow);
-    // okhttp does not track local window sizes
-    assertEquals(-1, after.localFlowControlWindow);
+    assertEquals(INITIAL_WINDOW_SIZE / 2, after.remoteFlowControlWindow);
+    assertEquals(INITIAL_WINDOW_SIZE + 1000, after.localFlowControlWindow);
   }
 
   @Test

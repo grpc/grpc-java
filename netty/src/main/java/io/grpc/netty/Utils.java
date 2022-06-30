@@ -466,8 +466,11 @@ class Utils {
     private final Http2FlowController remote;
 
     FlowControlReader(Http2Connection connection) {
-      local = connection.local().flowController();
-      remote = connection.remote().flowController();
+      // 'local' in Netty is the _controller_ that controls inbound data. 'local' in Channelz is
+      // the _present window_ provided by the remote that allows data to be sent. They are
+      // opposites.
+      local = connection.remote().flowController();
+      remote = connection.local().flowController();
       connectionStream = connection.connectionStream();
     }
 
