@@ -8,9 +8,6 @@ plugins {
 }
 
 description = "gRPC: Integration Testing"
-startShadowScripts.enabled = false
-installDist.dependsOn(installShadowDist)
-installDist.enabled = false
 
 configurations {
     alpnagent
@@ -63,17 +60,17 @@ configureProtoCompilation()
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-compileJava {
+tasks.named("compileJava").configure {
     // This isn't a library; it can use beta APIs
     options.errorprone.check("BetaApi", CheckSeverity.OFF)
 }
-jar {
+tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
 }
 
 def xdsPrefixName = 'io.grpc.xds'
-shadowJar {
+tasks.named("shadowJar").configure {
     archiveClassifier = null
     dependencies {
         exclude(dependency {true})
@@ -81,94 +78,104 @@ shadowJar {
     relocate 'com.github.xds', "${xdsPrefixName}.shaded.com.github.xds"
 }
 
-test {
+tasks.named("test").configure {
     // For the automated tests, use Jetty ALPN.
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
+}
+
+tasks.named("startShadowScripts").configure {
+    enabled = false
+}
+tasks.named("installDist").configure {
+    dependsOn installShadowDist
+    enabled = false
 }
 
 // For the generated scripts, use Netty tcnative (i.e. OpenSSL).
 // Note that OkHttp currently only supports ALPN, so OpenSSL version >= 1.0.2 is required.
 
-var startScriptsClasspath = shadowJar.outputs.files + configurations.shadow
+def startScriptsClasspath = provider {
+    shadowJar.outputs.files + configurations.shadow
+}
 
-task test_client(type: CreateStartScripts) {
+def test_client = tasks.register("test_client", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.TestServiceClient"
     applicationName = "test-client"
     defaultJvmOpts = [
         "-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name
     ]
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
     doLast {
         unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\'"\$APP_HOME"\'/lib/')
         windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
     }
 }
 
-task test_server(type: CreateStartScripts) {
+def test_server = tasks.register("test_server", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.TestServiceServer"
     applicationName = "test-server"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
 }
 
-task reconnect_test_client(type: CreateStartScripts) {
+def reconnect_test_client = tasks.register("reconnect_test_client", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.ReconnectTestClient"
     applicationName = "reconnect-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
 }
 
-task stresstest_client(type: CreateStartScripts) {
+def stresstest_client = tasks.register("stresstest_client", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.StressTestClient"
     applicationName = "stresstest-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
     defaultJvmOpts = [
         "-verbose:gc",
         "-XX:+PrintFlagsFinal"
     ]
 }
 
-task http2_client(type: CreateStartScripts) {
+def http2_client = tasks.register("http2_client", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.Http2Client"
     applicationName = "http2-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
 }
 
-task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
+def grpclb_long_lived_affinity_test_client = tasks.register("grpclb_long_lived_affinity_test_client", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
     applicationName = "grpclb-long-lived-affinity-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
     defaultJvmOpts = [
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
     ]
 }
 
-task grpclb_fallback_test_client (type: CreateStartScripts) {
+def grpclb_fallback_test_client = tasks.register("grpclb_fallback_test_client", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.GrpclbFallbackTestClient"
     applicationName = "grpclb-fallback-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
     defaultJvmOpts = [
         "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
     ]
 }
 
-task xds_test_client(type: CreateStartScripts) {
+def xds_test_client = tasks.register("xds_test_client", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
 }
 
-task xds_test_server(type: CreateStartScripts) {
+def xds_test_server = tasks.register("xds_test_server", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.XdsTestServer"
     applicationName = "xds-test-server"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath
+    classpath = startScriptsClasspath.get()
 }
 
 distributions.shadow.contents.into("bin") {

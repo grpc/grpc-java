@@ -29,7 +29,7 @@ subprojects {
         mavenLocal()
     }
 
-    tasks.withType(JavaCompile) {
+    tasks.withType(JavaCompile).configureEach {
         it.options.compilerArgs += [
             "-Xlint:all",
             "-Xlint:-options",
@@ -42,7 +42,7 @@ subprojects {
         }
     }
 
-    tasks.withType(GenerateModuleMetadata) {
+    tasks.withType(GenerateModuleMetadata).configureEach {
         // Module metadata, introduced in Gradle 6.0, conflicts with our publishing task for
         // grpc-alts and grpc-compiler.
         enabled = false
@@ -82,7 +82,7 @@ subprojects {
             if (rootProject.childProjects.containsKey('grpc-compiler')) {
                 // Only when the codegen is built along with the project, will we be able to run
                 // the grpc code generator.
-                task syncGeneratedSources { }
+                def syncGeneratedSources = tasks.register("syncGeneratedSources") { }
                 project.protobuf {
                     plugins { grpc { path = javaPluginPath } }
                     generateProtoTasks {
@@ -97,16 +97,20 @@ subprojects {
                                 }
                                 dependsOn "generate${source}Proto"
                             }
-                            syncGeneratedSources.dependsOn syncTask
+                            syncGeneratedSources.configure {
+                                dependsOn syncTask
+                            }
 
-                            task.dependsOn ':grpc-compiler:java_pluginExecutable'
-                            // Recompile protos when the codegen has been changed
-                            task.inputs.file javaPluginPath
-                            task.plugins { grpc { option 'noversion' } }
-                            if (isAndroid) {
-                                task.plugins {
-                                    grpc {
-                                        option 'lite'
+                            task.configure {
+                                dependsOn ':grpc-compiler:java_pluginExecutable'
+                                // Recompile protos when the codegen has been changed
+                                inputs.file javaPluginPath
+                                plugins { grpc { option 'noversion' } }
+                                if (isAndroid) {
+                                    plugins {
+                                        grpc {
+                                            option 'lite'
+                                        }
                                     }
                                 }
                             }
@@ -114,7 +118,9 @@ subprojects {
                     }
                 }
                 // Re-sync as part of a normal build, to avoid forgetting to run the sync
-                assemble.dependsOn syncGeneratedSources
+                tasks.named("assemble").configure {
+                    dependsOn syncGeneratedSources
+                }
             } else {
                 // Otherwise, we just use the checked-in generated code.
                 if (isAndroid) {
@@ -129,7 +135,7 @@ subprojects {
                 }
             }
 
-            tasks.withType(JavaCompile) {
+            tasks.withType(JavaCompile).configureEach {
                 appendToProperty(
                     it.options.errorprone.excludedPaths,
                     ".*/src/generated/[^/]+/java/.*" +
@@ -152,7 +158,7 @@ subprojects {
     // Disable JavaDoc doclint on Java 8. It's annoying.
     if (JavaVersion.current().isJava8Compatible()) {
         allprojects {
-            tasks.withType(Javadoc) {
+            tasks.withType(Javadoc).configureEach {
                 options.addStringOption('Xdoclint:none', '-quiet')
             }
         }
@@ -174,7 +180,7 @@ subprojects {
         }
     } else {
         // Disable Error Prone
-        tasks.withType(JavaCompile) {
+        tasks.withType(JavaCompile).configureEach {
             options.errorprone.enabled = false
         }
     }
@@ -189,36 +195,40 @@ subprojects {
                     libraries.truth
         }
 
-        compileTestJava {
+        tasks.named("compileTestJava").configure {
             // serialVersionUID is basically guaranteed to be useless in our tests
             options.compilerArgs += [
                 "-Xlint:-serial"
             ]
         }
 
-        jar.manifest {
-            attributes('Implementation-Title': name,
-            'Implementation-Version': version)
+        tasks.named("jar").configure {
+            manifest {
+                attributes('Implementation-Title': name,
+                        'Implementation-Version': project.version)
+            }
         }
 
-        javadoc.options {
-            encoding = 'UTF-8'
-            use = true
-            links 'https://docs.oracle.com/javase/8/docs/api/'
-            source = "8"
+        tasks.named("javadoc").configure {
+            options {
+                encoding = 'UTF-8'
+                use = true
+                links 'https://docs.oracle.com/javase/8/docs/api/'
+                source = "8"
+            }
         }
 
-        checkstyleMain {
+        tasks.named("checkstyleMain").configure {
             source = fileTree(dir: "$projectDir/src/main", include: "**/*.java")
         }
 
-        checkstyleTest {
+        tasks.named("checkstyleTest").configure {
             source = fileTree(dir: "$projectDir/src/test", include: "**/*.java")
         }
 
         // At a test failure, log the stack trace to the console so that we don't
         // have to open the HTML in a browser.
-        test {
+        tasks.named("test").configure {
             testLogging {
                 exceptionFormat = 'full'
                 showExceptions true
@@ -234,7 +244,7 @@ subprojects {
             }
         }
 
-        compileJava {
+        tasks.named("compileJava").configure {
             // This project targets Java 7 (no method references)
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             // This project targets Java 7 (no time.Duration class)
@@ -243,7 +253,7 @@ subprojects {
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
         }
-        compileTestJava {
+        tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
@@ -267,7 +277,7 @@ subprojects {
                 requireUpperBoundDepsMatch(configurations.runtimeClasspath, project)
             }
         }
-        tasks.named('compileJava') {
+        tasks.named('compileJava').configure {
             dependsOn checkUpperBoundDeps
         }
     }
@@ -275,11 +285,11 @@ subprojects {
     plugins.withId("me.champeau.jmh") {
         // invoke jmh on a single benchmark class like so:
         //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
-	compileJmhJava {
+	tasks.named("compileJmhJava").configure {
 	    sourceCompatibility = 1.8
 	    targetCompatibility = 1.8
 	}
-        jmh {
+        tasks.named("jmh").configure {
             warmupIterations = 10
             iterations = 10
             fork = 1
@@ -296,7 +306,7 @@ subprojects {
     }
 
     plugins.withId("com.github.johnrengelman.shadow") {
-        tasks.named("shadowJar") {
+        tasks.named("shadowJar").configure {
             // Do a dance to remove Class-Path. This needs to run after the doFirst() from the
             // shadow plugin that adds Class-Path and before the core jar action. Using doFirst will
             // have this run before the shadow plugin, and doLast will run after the core jar
@@ -442,7 +452,8 @@ subprojects {
         }
 
         // Add a japicmp task that compares the current .jar with baseline .jar
-        task japicmp(type: me.champeau.gradle.japicmp.JapicmpTask, dependsOn: jar) {
+        tasks.register("japicmp", me.champeau.gradle.japicmp.JapicmpTask) {
+            dependsOn jar
             oldClasspath = files(baselineArtifact)
             newClasspath = files(jar.archivePath)
             onlyBinaryIncompatibleModified = false

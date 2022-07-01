@@ -109,7 +109,7 @@ dependencies {
 
 configureProtoCompilation()
 
-compileThirdpartyJava {
+tasks.named("compileThirdpartyJava").configure {
     options.errorprone.enabled = false
     options.compilerArgs += [
         // valueOf(int) in RoutingPriority has been deprecated
@@ -117,11 +117,11 @@ compileThirdpartyJava {
     ]
 }
 
-checkstyleThirdparty {
+tasks.named("checkstyleThirdparty").configure {
     enabled = false
 }
 
-[compileJava].each() {
+tasks.named("compileJava").configure {
     it.options.compilerArgs += [
         // TODO: remove
         "-Xlint:-deprecation",
@@ -134,12 +134,12 @@ checkstyleThirdparty {
             "|")
 }
 
-jar {
+tasks.named("jar").configure {
     archiveClassifier = 'original'
     from sourceSets.thirdparty.output
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     // Exclusions here should generally also be relocated
     exclude 'com/github/udpa/**'
     exclude 'com/github/xds/**'
@@ -159,7 +159,7 @@ javadoc {
 }
 
 def prefixName = 'io.grpc.xds'
-shadowJar {
+tasks.named("shadowJar").configure {
     archiveClassifier = null
     dependencies {
         include(project(':grpc-xds'))
@@ -180,7 +180,8 @@ shadowJar {
     exclude "**/*.proto"
 }
 
-task checkPackageLeakage(dependsOn: shadowJar) {
+def checkPackageLeakage = tasks.register("checkPackageLeakage") {
+    dependsOn shadowJar
     doLast {
         def jarEntryPrefixName = prefixName.replaceAll('\\.', '/')
         shadowJar.outputs.getFiles().each { jar ->
@@ -203,11 +204,11 @@ task checkPackageLeakage(dependsOn: shadowJar) {
     }
 }
 
-test {
+tasks.named("test").configure {
     dependsOn checkPackageLeakage
 }
 
-jacocoTestReport {
+tasks.named("jacocoTestReport").configure {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
         exclude: [ // Exclusions here should generally also be relocated
