@@ -11,7 +11,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # )
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.0.1",
+    "com.google.api.grpc:proto-google-common-protos:2.9.0",
     "com.google.auth:google-auth-library-credentials:0.22.0",
     "com.google.auth:google-auth-library-oauth2-http:0.22.0",
     "com.google.auto.value:auto-value-annotations:1.9",
@@ -22,9 +22,9 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:31.0.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
-    "com.google.re2j:re2j:1.5",
+    "com.google.re2j:re2j:1.6",
     "com.google.truth:truth:1.0.1",
-    "com.squareup.okhttp:okhttp:2.7.4",
+    "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:1.17.5",
     "io.netty:netty-buffer:4.1.77.Final",
     "io.netty:netty-codec-http2:4.1.77.Final",
@@ -45,7 +45,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.perfmark:perfmark-api:0.25.0",
     "junit:junit:4.12",
     "org.apache.tomcat:annotations-api:6.0.53",
-    "org.codehaus.mojo:animal-sniffer-annotations:1.19",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.21",
 ]
 
 # For use with maven_install's override_targets.
