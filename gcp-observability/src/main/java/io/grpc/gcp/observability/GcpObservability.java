@@ -18,7 +18,6 @@ package io.grpc.gcp.observability;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.api.client.util.Strings;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ClientInterceptor;
 import io.grpc.ExperimentalApi;
@@ -69,22 +68,16 @@ public final class GcpObservability implements AutoCloseable {
     if (instance == null) {
       GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
-      Sink sink =
-          new GcpLogSink(
-              observabilityConfig.getDestinationProjectId(),
-              globalLoggingTags.getLocationTags(),
-              globalLoggingTags.getCustomTags(),
-              observabilityConfig.getFlushMessageCount());
+      Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
+          globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
+          observabilityConfig.getFlushMessageCount());
       // TODO(dnvindhya): Cleanup code for LoggingChannelProvider and LoggingServerProvider
       // once ChannelBuilder and ServerBuilder are used
       LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
-      instance =
-          grpcInit(
-              sink,
-              observabilityConfig,
-              new InternalLoggingChannelInterceptor.FactoryImpl(helper, configFilterHelper),
-              new InternalLoggingServerInterceptor.FactoryImpl(helper, configFilterHelper));
+      instance = grpcInit(sink, observabilityConfig,
+          new InternalLoggingChannelInterceptor.FactoryImpl(helper, configFilterHelper),
+          new InternalLoggingServerInterceptor.FactoryImpl(helper, configFilterHelper));
       instance.registerStackDriverExporter(observabilityConfig.getDestinationProjectId());
     }
     return instance;
@@ -142,12 +135,8 @@ public final class GcpObservability implements AutoCloseable {
       tracerFactories.add(InternalCensusTracingAccessor.getServerStreamTracerFactory());
     }
 
-    if (!clientInterceptors.isEmpty()
-        || !serverInterceptors.isEmpty()
-        || !tracerFactories.isEmpty()) {
-      InternalGlobalInterceptors.setInterceptorsTracers(
-          clientInterceptors, serverInterceptors, tracerFactories);
-    }
+    InternalGlobalInterceptors.setInterceptorsTracers(
+        clientInterceptors, serverInterceptors, tracerFactories);
   }
 
   private void registerStackDriverExporter(String projectId) throws IOException {
@@ -155,14 +144,10 @@ public final class GcpObservability implements AutoCloseable {
       RpcViews.registerAllGrpcViews();
       StackdriverStatsConfiguration.Builder statsConfigurationBuilder =
           StackdriverStatsConfiguration.builder();
-      if (!Strings.isNullOrEmpty(projectId)) {
+      if (projectId != null) {
         statsConfigurationBuilder.setProjectId(projectId);
       }
-      try {
-        StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
-      } catch (IOException e) {
-        throw new IOException("Failed to register Stackdriver stats exporter, " + e.getMessage());
-      }
+      StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
       metricsEnabled = true;
     }
 
@@ -172,14 +157,10 @@ public final class GcpObservability implements AutoCloseable {
           traceConfig.getActiveTraceParams().toBuilder().setSampler(config.getSampler()).build());
       StackdriverTraceConfiguration.Builder traceConfigurationBuilder =
           StackdriverTraceConfiguration.builder();
-      if (!Strings.isNullOrEmpty(projectId)) {
+      if (projectId != null) {
         traceConfigurationBuilder.setProjectId(projectId);
       }
-      try {
-        StackdriverTraceExporter.createAndRegister(traceConfigurationBuilder.build());
-      } catch (IOException e) {
-        throw new IOException("Failed to register Stackdriver trace exporter, " + e.getMessage());
-      }
+      StackdriverTraceExporter.createAndRegister(traceConfigurationBuilder.build());
       tracesEnabled = true;
     }
   }

@@ -28,18 +28,21 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.InternalGlobalInterceptors;
+// import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+// import io.grpc.ServerProvider;
 import io.grpc.ServerProvider;
 import io.grpc.StaticTestingClassLoader;
 import io.grpc.gcp.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
 import io.grpc.gcp.observability.logging.Sink;
 import io.opencensus.trace.samplers.Samplers;
+import java.io.IOException;
 import java.util.regex.Pattern;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -48,51 +51,77 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class GcpObservabilityTest {
 
-  private static final String PROJECT_ID = "project";
+  private final StaticTestingClassLoader classLoader =
+      new StaticTestingClassLoader(
+          getClass().getClassLoader(),
+          Pattern.compile(
+              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
+                  + "io\\.grpc\\.gcp\\.observability\\.[^.]+|"
+                  + "io\\.grpc\\.gcp\\.observability\\.interceptors\\.[^.]+|"
+                  + "io\\.grpc\\.gcp\\.observability\\.GcpObservabilityTest\\$.*"));
 
   @Test
   public void initFinish() throws Exception {
-    ManagedChannelProvider prevChannelProvider = ManagedChannelProvider.provider();
-    ServerProvider prevServerProvider = ServerProvider.provider();
-    Sink sink = mock(Sink.class);
-    ObservabilityConfig config = mock(ObservabilityConfig.class);
-    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
-        mock(InternalLoggingChannelInterceptor.Factory.class);
-    InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
-        mock(InternalLoggingServerInterceptor.Factory.class);
-    GcpObservability observability1;
-    try (GcpObservability observability =
-        GcpObservability.grpcInit(
-            sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
-      assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
-      assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
-      observability1 =
-          GcpObservability.grpcInit(
-              sink, config, channelInterceptorFactory, serverInterceptorFactory);
-      assertThat(observability1).isSameInstanceAs(observability);
-    }
-    verify(sink).close();
-    assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(prevChannelProvider);
-    assertThat(ServerProvider.provider()).isSameInstanceAs(prevServerProvider);
-    try {
-      observability1.close();
-      fail("should have failed for calling close() second time");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().contains("GcpObservability already closed!");
-    }
+    Class<?> runnable =
+        classLoader.loadClass(StaticTestingClassInitFinish.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
   @Test
   public void enableObservability() throws Exception {
-    StaticTestingClassLoader classLoader =
-        new StaticTestingClassLoader(
-            getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
-    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSet.class.getName());
+    Class<?> runnable =
+        classLoader.loadClass(StaticTestingClassEnableObservability.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  @Test
+  public void disableObservability() throws Exception {
+    Class<?> runnable =
+        classLoader.loadClass(StaticTestingClassDisableObservability.class.getName());
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
   // UsedReflectively
-  public static final class StaticTestingClassLoaderSet implements Runnable {
+  public static final class StaticTestingClassInitFinish implements Runnable {
+
+    @Override
+    public void run() {
+      ManagedChannelProvider prevChannelProvider = ManagedChannelProvider.provider();
+      ServerProvider prevServerProvider = ServerProvider.provider();
+      Sink sink = mock(Sink.class);
+      ObservabilityConfig config = mock(ObservabilityConfig.class);
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+          mock(InternalLoggingChannelInterceptor.Factory.class);
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+          mock(InternalLoggingServerInterceptor.Factory.class);
+      GcpObservability observability1;
+      try {
+        GcpObservability observability =
+            GcpObservability.grpcInit(
+              sink, config, channelInterceptorFactory, serverInterceptorFactory);
+        assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
+        assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
+        observability1 =
+            GcpObservability.grpcInit(
+                sink, config, channelInterceptorFactory, serverInterceptorFactory);
+        assertThat(observability1).isSameInstanceAs(observability);
+        observability.close();
+        verify(sink).close();
+        assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(prevChannelProvider);
+        assertThat(ServerProvider.provider()).isSameInstanceAs(prevServerProvider);
+        try {
+          observability1.close();
+          fail("should have failed for calling close() second time");
+        } catch (IllegalStateException e) {
+          assertThat(e).hasMessageThat().contains("GcpObservability already closed!");
+        }
+      } catch (IOException e) {
+        fail("Encountered exception: " + e);
+      }
+    }
+  }
+
+  public static final class StaticTestingClassEnableObservability implements Runnable {
 
     @Override
     public void run() {
@@ -102,7 +131,6 @@ public class GcpObservabilityTest {
       when(config.isEnableCloudMonitoring()).thenReturn(true);
       when(config.isEnableCloudTracing()).thenReturn(true);
       when(config.getSampler()).thenReturn(Samplers.neverSample());
-      when(config.getDestinationProjectId()).thenReturn(PROJECT_ID);
 
       ClientInterceptor clientInterceptor =
           mock(ClientInterceptor.class, delegatesTo(new NoopClientInterceptor()));
@@ -125,6 +153,35 @@ public class GcpObservabilityTest {
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }
+    }
+  }
+
+  public static final class StaticTestingClassDisableObservability implements Runnable {
+
+    @Override
+    public void run() {
+      Sink sink = mock(Sink.class);
+      ObservabilityConfig config = mock(ObservabilityConfig.class);
+      when(config.isEnableCloudLogging()).thenReturn(false);
+      when(config.isEnableCloudMonitoring()).thenReturn(false);
+      when(config.isEnableCloudTracing()).thenReturn(false);
+      when(config.getSampler()).thenReturn(Samplers.neverSample());
+
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+          mock(InternalLoggingChannelInterceptor.Factory.class);
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+          mock(InternalLoggingServerInterceptor.Factory.class);;
+
+      try (GcpObservability observability =
+          GcpObservability.grpcInit(
+              sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+        assertThat(InternalGlobalInterceptors.getClientInterceptors()).isEmpty();
+        assertThat(InternalGlobalInterceptors.getServerInterceptors()).isEmpty();
+        assertThat(InternalGlobalInterceptors.getServerStreamTracerFactories()).isEmpty();
+      } catch (Exception e) {
+        fail("Encountered exception: " + e);
+      }
+      verify(sink).close();
     }
   }
 

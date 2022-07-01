@@ -106,11 +106,15 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
       if (enableCloudTracing && samplingRate == null) {
         this.sampler = Samplers.probabilitySampler(0.0);
       }
+      double epsilon = 1e-6;
       if (samplingRate != null) {
         checkArgument(
             samplingRate >= 0.0 && samplingRate <= 1.0,
             "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
-        if (samplingRate == 1.0) {
+        // Using alwaysSample() instead of probabilitySampler() because according to
+        // {@link io.opencensus.trace.samplers.ProbabilitySampler#shouldSample}
+        // there is a (very) small chance of *not* sampling if probability = 1.00.
+        if (Math.abs(1 - samplingRate) < epsilon) {
           this.sampler = Samplers.alwaysSample();
         } else {
           this.sampler = Samplers.probabilitySampler(samplingRate);

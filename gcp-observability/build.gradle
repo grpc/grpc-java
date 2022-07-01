@@ -30,6 +30,7 @@ dependencies {
             project(':grpc-alts'),
             project(':grpc-census'),
             ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}"),
+            libraries.opencensus.contrib.grpc.metrics,
             libraries.opencensus.exporter.stats.stackdriver,
             libraries.opencensus.exporter.trace.stackdriver,
             libraries.animalsniffer.annotations, // Prefer our version
