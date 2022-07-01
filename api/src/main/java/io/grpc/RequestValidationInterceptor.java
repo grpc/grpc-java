@@ -30,8 +30,11 @@ public class RequestValidationInterceptor implements ServerInterceptor {
             Metadata headers,
             ServerCallHandler<ReqT, RespT> next
     ) {
-        ServerCall.Listener<ReqT> delegate = next.startCall(call, headers);
+        ServerCallHandler<ReqT, RespT> handler = (call1, headers1) -> {
+            call1.request(1);
+            return new RequestValidationListener<>(call1, headers1, next, requestValidatorResolver);
+        };
 
-        return new RequestValidationListener<ReqT, RespT>(delegate, call, headers, requestValidatorResolver);
+        return handler.startCall(call, headers);
     }
 }

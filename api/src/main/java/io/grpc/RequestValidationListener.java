@@ -16,53 +16,62 @@
 
 package io.grpc;
 
-public class RequestValidationListener<ReqT, ResT> extends ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT> {
+public class RequestValidationListener<ReqT, ResT> extends ForwardingServerCallListener<ReqT> {
 
-    private ServerCall<ReqT, ResT> serverCall;
-    private Metadata headers;
+    private ServerCall<ReqT, ResT> call;
+    private Metadata metadata;
+    private ServerCallHandler<ReqT, ResT> next;
     private RequestValidatorResolver requestValidatorResolver;
+    private final ServerCall.Listener<ReqT> NOOP_LISTENER = new ServerCall.Listener<ReqT>() {};
+
+    private ServerCall.Listener<ReqT> delegate = NOOP_LISTENER;
 
     public RequestValidationListener(
-            ServerCall.Listener<ReqT> delegate,
-            ServerCall<ReqT, ResT> serverCall,
-            Metadata headers,
+            ServerCall<ReqT, ResT> call,
+            Metadata metadata,
+            ServerCallHandler<ReqT, ResT> next,
             RequestValidatorResolver requestValidatorResolver
     ) {
-        super(delegate);
-        this.serverCall = serverCall;
-        this.headers = headers;
+        this.call = call;
+        this.metadata = metadata;
+        this.next = next;
         this.requestValidatorResolver = requestValidatorResolver;
     }
 
     @Override
-    public void onMessage(ReqT message) {
-        RequestValidator<ReqT> validator = (RequestValidator<ReqT>) requestValidatorResolver.find(message.getClass());
+    protected ServerCall.Listener<ReqT> delegate() {
+        return delegate;
+    }
 
-        if (validator == null) {
+    @Override
+    public void onMessage(ReqT message) {
+        if (delegate != NOOP_LISTENER) {
             super.onMessage(message);
             return;
         }
 
-        try {
+        RequestValidator<ReqT> validator = (RequestValidator<ReqT>) requestValidatorResolver.find(message.getClass());
+
+        if (validator != null) {
             ValidationResult validationResult = validator.isValid(message);
 
-            if (validationResult.isValid()) {
-                super.onMessage(message);
-            } else {
+            if (!validationResult.isValid()) {
                 Status status = Status.INVALID_ARGUMENT
                         .withDescription("invalid argument. " + validationResult.getMessage());
-                handleInvalidRequest(status);
-            }
-        } catch (Exception e) {
-            Status status = Status.INTERNAL.withDescription(e.getMessage());
 
-            handleInvalidRequest(status);
+                handleInvalidRequest(status);
+
+                return;
+            }
         }
+
+        delegate = next.startCall(call, metadata);
+        super.onMessage(message);
     }
 
     private void handleInvalidRequest(Status status) {
-        if (!serverCall.isCancelled()) {
-            serverCall.close(status, new Metadata());
+        if (!call.isCancelled()) {
+            call.close(status, new Metadata());
         }
     }
 }
