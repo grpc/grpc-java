@@ -63,12 +63,12 @@ dependencies {
     }
 }
 
-jar {
+tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
 }
 
-shadowJar {
+tasks.named("shadowJar").configure {
     archiveClassifier = null
     dependencies {
         include(project(':grpc-netty'))
@@ -120,14 +120,18 @@ publishing {
     }
 }
 
-task testShadow(type: Test) {
+tasks.register("testShadow", Test) {
     testClassesDirs = sourceSets.testShadow.output.classesDirs
     classpath = sourceSets.testShadow.runtimeClasspath
 }
-compileTestShadowJava.options.compilerArgs = compileTestJava.options.compilerArgs
-compileTestShadowJava.options.encoding = compileTestJava.options.encoding
+tasks.named("compileTestShadowJava").configure {
+    options.compilerArgs = compileTestJava.options.compilerArgs
+    options.encoding = compileTestJava.options.encoding
+}
 
-test.dependsOn testShadow
+tasks.named("test").configure {
+    dependsOn tasks.named("testShadow")
+}
 
 /**
  * A Transformer which updates the Netty JAR META-INF/ resources to accurately

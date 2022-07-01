@@ -55,7 +55,7 @@ dependencies {
     runtimeOnly libraries.netty.tcnative, libraries.netty.tcnative.classes
 }
 
-compileJava {
+tasks.named("compileJava").configure {
     // Disable "No processor claimed any of these annotations: org.junit.Ignore"
     options.compilerArgs += ["-Xlint:-processing"]
 }
@@ -118,7 +118,8 @@ String getAppUrl(String project, String service, String version) {
     return "http://${version}.${service}.${project}.appspot.com"
 }
 
-task runInteropTestRemote(dependsOn: 'appengineDeploy') {
+tasks.register("runInteropTestRemote") {
+    dependsOn appengineDeploy
     doLast {
         // give remote app some time to settle down
         sleep(20000)
