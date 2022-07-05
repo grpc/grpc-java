@@ -134,7 +134,7 @@ public abstract class ClientXdsClientTestBase {
   private static final Any FAILING_ANY = MessageFactory.FAILING_ANY;
   private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
   private final ServerInfo lrsServerInfo =
-      ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3());
+      ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3(), false);
 
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
@@ -319,19 +319,21 @@ public abstract class ClientXdsClientTestBase {
     Bootstrapper.BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3())))
+                Bootstrapper.ServerInfo.create(
+                    SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3(), false)))
             .node(NODE)
             .authorities(ImmutableMap.of(
                 "authority.xds.com",
                 AuthorityInfo.create(
                     "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS, useProtocolV3()))),
+                        SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS, useProtocolV3(),
+                        false))),
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS, useProtocolV3())))))
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS, useProtocolV3(), false)))))
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();

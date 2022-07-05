@@ -155,7 +155,7 @@ import org.junit.runners.JUnit4;
 public class ClientXdsClientDataTest {
 
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true, false);
 
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule

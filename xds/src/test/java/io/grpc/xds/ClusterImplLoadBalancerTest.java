@@ -88,7 +88,7 @@ public class ClusterImplLoadBalancerTest {
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("api.google.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("api.google.com", InsecureChannelCredentials.create(), true, false);
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override

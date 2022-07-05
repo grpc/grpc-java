@@ -2438,6 +2438,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     private final Set<ResourceWatcher> watchers = new HashSet<>();
     private ResourceUpdate data;
     private boolean absent;
+    private boolean resourceDeletionIgnored;
     private ScheduledHandle respTimer;
     private ResourceMetadata metadata;
     @Nullable private String errorDescription;
@@ -2552,10 +2553,24 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           notifyWatcher(watcher, data);
         }
       }
+      if (resourceDeletionIgnored) {
+        logger.log(
+            XdsLogLevel.INFO, "Recovered deleted resource type {0} name {1}", type, resource);
+        resourceDeletionIgnored = false;
+      }
     }
 
     void onAbsent() {
       if (respTimer != null && respTimer.isPending()) {  // too early to conclude absence
+        return;
+      }
+      if (serverInfo.ignoreResourceDeletion()) {
+        // Only log warning if not previously logged
+        if (!resourceDeletionIgnored) {
+          logger.log(
+              XdsLogLevel.WARNING, "Ignoring deletion type {0} name {1}", type, resource);
+          resourceDeletionIgnored = true;
+        }
         return;
       }
       logger.log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);

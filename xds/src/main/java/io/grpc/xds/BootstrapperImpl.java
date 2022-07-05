@@ -55,6 +55,7 @@ class BootstrapperImpl extends Bootstrapper {
   @VisibleForTesting
   static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY);
   private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
+  private static final String IGNORE_RESOURCE_DELETION_FEATURE = "ignore_resource_deletion";
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
@@ -275,12 +276,15 @@ class BootstrapperImpl extends Bootstrapper {
       }
 
       boolean useProtocolV3 = false;
+      boolean ignoreResourceDeletion = false;
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
         useProtocolV3 = serverFeatures.contains(XDS_V3_SERVER_FEATURE);
+        ignoreResourceDeletion = serverFeatures.contains(IGNORE_RESOURCE_DELETION_FEATURE);
       }
-      servers.add(ServerInfo.create(serverUri, channelCredentials, useProtocolV3));
+      servers.add(
+          ServerInfo.create(serverUri, channelCredentials, useProtocolV3, ignoreResourceDeletion));
     }
     return servers.build();
   }

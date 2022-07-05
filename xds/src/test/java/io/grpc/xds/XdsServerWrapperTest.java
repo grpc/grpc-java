@@ -130,7 +130,8 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create(), false)))
+                Bootstrapper.ServerInfo.create(
+                    "uri", InsecureChannelCredentials.create(), false, false)))
             .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
             .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
             .build();
@@ -142,7 +143,8 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create(), true)))
+                Bootstrapper.ServerInfo.create(
+                    "uri", InsecureChannelCredentials.create(), true, false)))
             .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
             .build();
     verifyBootstrapFail(b);
@@ -181,7 +183,7 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b = Bootstrapper.BootstrapInfo.builder()
         .servers(Arrays.asList(
             Bootstrapper.ServerInfo.create(
-                "uri", InsecureChannelCredentials.create(), true)))
+                "uri", InsecureChannelCredentials.create(), true, false)))
         .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
         .serverListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")
