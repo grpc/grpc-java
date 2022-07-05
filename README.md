@@ -135,12 +135,12 @@ For non-Android protobuf-based codegen integrated with the Gradle build system,
 you can use [protobuf-gradle-plugin][]:
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.8.18'
+    id 'com.google.protobuf' version '0.8.19'
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.19.2"
+    artifact = "com.google.protobuf:protoc:3.21.1"
   }
   plugins {
     grpc {
@@ -168,12 +168,12 @@ use protobuf-gradle-plugin but specify the 'lite' options:
 
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.8.18'
+    id 'com.google.protobuf' version '0.8.19'
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.19.2"
+    artifact = "com.google.protobuf:protoc:3.21.1"
   }
   plugins {
     grpc {
