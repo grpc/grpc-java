@@ -208,7 +208,7 @@ final class AsyncSink implements Sink {
       @Override
       public void run() {
         try {
-          if (buffer.size() > 0) {
+          if (sink != null && buffer.size() > 0) {
             sink.write(buffer, buffer.size());
           }
         } catch (IOException e) {
