@@ -133,8 +133,9 @@ public abstract class ClientXdsClientTestBase {
   private static final Node NODE = Node.newBuilder().setId(NODE_ID).build();
   private static final Any FAILING_ANY = MessageFactory.FAILING_ANY;
   private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
-  private final ServerInfo lrsServerInfo =
-      ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3());
+
+  // xDS control plane server info.
+  private ServerInfo xdsServerInfo;
 
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
@@ -316,10 +317,11 @@ public abstract class ClientXdsClientTestBase {
       }
     };
 
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3(),
+        ignoreResourceDeletion());
     Bootstrapper.BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
-            .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3())))
+            .servers(Collections.singletonList(xdsServerInfo))
             .node(NODE)
             .authorities(ImmutableMap.of(
                 "authority.xds.com",
@@ -364,6 +366,9 @@ public abstract class ClientXdsClientTestBase {
   }
 
   protected abstract boolean useProtocolV3();
+
+  /** Whether ignore_resource_deletion server feature is enabled for the given test. */
+  protected abstract boolean ignoreResourceDeletion();
 
   protected abstract BindableService createAdsService();
 
@@ -2086,7 +2091,7 @@ public abstract class ClientXdsClientTestBase {
     childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
         JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(xdsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_2, TIME_INCREMENT * 2);
@@ -2216,7 +2221,7 @@ public abstract class ClientXdsClientTestBase {
     childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
         JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(xdsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verify(watcher2).onChanged(cdsUpdateCaptor.capture());
@@ -2229,7 +2234,7 @@ public abstract class ClientXdsClientTestBase {
     childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
         JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(xdsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     // Metadata of both clusters is stored.
@@ -2510,7 +2515,7 @@ public abstract class ClientXdsClientTestBase {
     verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(null);
-    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(xdsServerInfo);
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(EDS_RESOURCE);
@@ -2853,7 +2858,7 @@ public abstract class ClientXdsClientTestBase {
   public void reportLoadStatsToServer() {
     xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     String clusterName = "cluster-foo.googleapis.com";
-    ClusterDropStats dropStats = xdsClient.addClusterDropStats(lrsServerInfo, clusterName, null);
+    ClusterDropStats dropStats = xdsClient.addClusterDropStats(xdsServerInfo, clusterName, null);
     LrsRpcCall lrsCall = loadReportCalls.poll();
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList()); // initial LRS request
 
