@@ -484,10 +484,73 @@ public abstract class ClientXdsClientTestBase {
   }
 
   /**
-   * Helper method to validate {@link XdsClient.EdsUpdate} created for the test CDS resource
-   * {@link ClientXdsClientTestBase#testClusterLoadAssignment}.
+   * Verifies the LDS update against the golden Listener with vhosts {@link #testListenerVhosts}.
    */
-  private void validateTestClusterLoadAssigment(EdsUpdate edsUpdate) {
+  private void verifyGoldenListenerVhosts(LdsUpdate ldsUpdate) {
+    assertThat(ldsUpdate.listener()).isNull();
+    HttpConnectionManager hcm = ldsUpdate.httpConnectionManager();
+    assertThat(hcm.rdsName()).isNull();
+    assertThat(hcm.virtualHosts()).hasSize(VHOST_SIZE);
+    verifyGoldenHcm(hcm);
+  }
+
+  /**
+   * Verifies the LDS update against the golden Listener with RDS name {@link #testListenerRds}.
+   */
+  private void verifyGoldenListenerRds(LdsUpdate ldsUpdate) {
+    assertThat(ldsUpdate.listener()).isNull();
+    HttpConnectionManager hcm = ldsUpdate.httpConnectionManager();
+    assertThat(hcm.rdsName()).isEqualTo(RDS_RESOURCE);
+    assertThat(hcm.virtualHosts()).isNull();
+    verifyGoldenHcm(hcm);
+  }
+
+  private void verifyGoldenHcm(HttpConnectionManager hcm) {
+    if (useProtocolV3()) {
+      // The last configured filter has to be a terminal filter.
+      assertThat(hcm.httpFilterConfigs()).isNotNull();
+      assertThat(hcm.httpFilterConfigs()).hasSize(1);
+      assertThat(hcm.httpFilterConfigs().get(0).name).isEqualTo("terminal");
+      assertThat(hcm.httpFilterConfigs().get(0).filterConfig).isEqualTo(RouterFilter.ROUTER_CONFIG);
+    } else {
+      assertThat(hcm.httpFilterConfigs()).isNull();
+    }
+  }
+
+  /**
+   * Verifies the RDS update against the golden route config {@link #testRouteConfig}.
+   */
+  private void verifyGoldenRouteConfig(RdsUpdate rdsUpdate) {
+    assertThat(rdsUpdate.virtualHosts).hasSize(VHOST_SIZE);
+    for (VirtualHost vhost : rdsUpdate.virtualHosts) {
+      assertThat(vhost.name()).contains("do not care");
+      assertThat(vhost.domains()).hasSize(1);
+      assertThat(vhost.routes()).hasSize(1);
+    }
+  }
+
+  /**
+   * Verifies the CDS update against the golden Round Robin Cluster {@link #testClusterRoundRobin}.
+   */
+  private void verifyGoldenClusterRoundRobin(CdsUpdate cdsUpdate) {
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isNull();
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+  }
+
+  /**
+   * Verifies the EDS update against the golden Cluster with load assignment
+   * {@link #testClusterLoadAssignment}.
+   */
+  private void validateGoldenClusterLoadAssignment(EdsUpdate edsUpdate) {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
@@ -712,8 +775,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
-        .hasSize(VHOST_SIZE);
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -727,8 +789,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
-        .hasSize(VHOST_SIZE);
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -742,8 +803,7 @@ public abstract class ClientXdsClientTestBase {
     // Client sends an ACK LDS request.
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
-        .isEqualTo(RDS_RESOURCE);
+    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -760,8 +820,7 @@ public abstract class ClientXdsClientTestBase {
     LdsResourceWatcher watcher = mock(LdsResourceWatcher.class);
     xdsClient.watchLdsResource(LDS_RESOURCE, watcher);
     verify(watcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
-        .isEqualTo(RDS_RESOURCE);
+    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -790,16 +849,14 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
-        .hasSize(VHOST_SIZE);
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
 
     // Updated LDS response.
     call.sendResponse(LDS, testListenerRds, VERSION_2, "0001");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
-        .isEqualTo(RDS_RESOURCE);
+    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_2, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
     assertThat(channelForCustomAuthority).isNull();
@@ -821,8 +878,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, ldsResourceName, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
-        .hasSize(VHOST_SIZE);
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(
         LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
   }
@@ -842,8 +898,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, ldsResourceName, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
-        .hasSize(VHOST_SIZE);
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(
         LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
   }
@@ -1079,8 +1134,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
-        .hasSize(VHOST_SIZE);
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
@@ -1119,17 +1173,14 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, ImmutableList.of(testListenerVhosts, listenerTwo), VERSION_1, "0000");
     // ldsResourceWatcher called with listenerVhosts.
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
-        .hasSize(VHOST_SIZE);
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     // watcher1 called with listenerTwo.
     verify(watcher1).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
-        .isEqualTo(RDS_RESOURCE);
+    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
     assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts()).isNull();
     // watcher2 called with listenerTwo.
     verify(watcher2).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
-        .isEqualTo(RDS_RESOURCE);
+    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
     assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts()).isNull();
     // Metadata of both listeners is stored.
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
@@ -1265,7 +1316,7 @@ public abstract class ClientXdsClientTestBase {
     // Client sends an ACK RDS request.
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
@@ -1279,7 +1330,7 @@ public abstract class ClientXdsClientTestBase {
     // Client sends an ACK RDS request.
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
@@ -1296,7 +1347,7 @@ public abstract class ClientXdsClientTestBase {
     RdsResourceWatcher watcher = mock(RdsResourceWatcher.class);
     xdsClient.watchRdsResource(RDS_RESOURCE, watcher);
     verify(watcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
@@ -1325,7 +1376,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
 
     // Updated RDS response.
@@ -1353,23 +1404,21 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
-        .isEqualTo(RDS_RESOURCE);
+    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     call.sendResponse(LDS, testListenerVhosts, VERSION_2, "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
-        .hasSize(VHOST_SIZE);
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
     verifyResourceMetadataAcked(
@@ -1413,7 +1462,7 @@ public abstract class ClientXdsClientTestBase {
     // Simulates receiving the requested RDS resource.
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
 
     // Simulates receiving an updated version of the requested LDS resource as a TCP listener
@@ -1466,7 +1515,7 @@ public abstract class ClientXdsClientTestBase {
 
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
     verifyNoMoreInteractions(watcher1, watcher2);
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataDoesNotExist(RDS, rdsResourceTwo);
@@ -1702,18 +1751,7 @@ public abstract class ClientXdsClientTestBase {
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
@@ -1728,18 +1766,7 @@ public abstract class ClientXdsClientTestBase {
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
@@ -1992,18 +2019,7 @@ public abstract class ClientXdsClientTestBase {
     CdsResourceWatcher watcher = mock(CdsResourceWatcher.class);
     xdsClient.watchCdsResource(CDS_RESOURCE, watcher);
     verify(watcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
@@ -2133,18 +2149,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2369,7 +2374,7 @@ public abstract class ClientXdsClientTestBase {
     // Client sent an ACK EDS request.
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    validateTestClusterLoadAssigment(edsUpdateCaptor.getValue());
+    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -2383,7 +2388,7 @@ public abstract class ClientXdsClientTestBase {
     // Client sent an ACK EDS request.
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    validateTestClusterLoadAssigment(edsUpdateCaptor.getValue());
+    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue());
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -2400,7 +2405,7 @@ public abstract class ClientXdsClientTestBase {
     EdsResourceWatcher watcher = mock(EdsResourceWatcher.class);
     xdsClient.watchEdsResource(EDS_RESOURCE, watcher);
     verify(watcher).onChanged(edsUpdateCaptor.capture());
-    validateTestClusterLoadAssigment(edsUpdateCaptor.getValue());
+    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue());
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
@@ -2430,7 +2435,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    validateTestClusterLoadAssigment(edsUpdate);
+    validateGoldenClusterLoadAssignment(edsUpdate);
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
 
@@ -2588,7 +2593,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    validateTestClusterLoadAssigment(edsUpdate);
+    validateGoldenClusterLoadAssignment(edsUpdate);
     verifyNoMoreInteractions(watcher1, watcher2);
     verifyResourceMetadataAcked(
         EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1, TIME_INCREMENT);
