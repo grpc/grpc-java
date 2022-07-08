@@ -688,7 +688,12 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
         VERSION_2, TIME_INCREMENT * 2, errorsV2);
-    verifyResourceMetadataDoesNotExist(LDS, "C");
+    if (!ignoreResourceDeletion()) {
+      verifyResourceMetadataDoesNotExist(LDS, "C");
+    } else {
+      // When resource deletion is disabled, {C} stays ACKed in the previous version VERSION_1.
+      verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    }
     call.verifyRequestNack(LDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
 
     // LDS -> {B, C} version 3
@@ -698,7 +703,12 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, resourcesV3.values().asList(), VERSION_3, "0002");
     // {A} -> does not exist
     // {B, C} -> ACK, version 3
-    verifyResourceMetadataDoesNotExist(LDS, "A");
+    if (!ignoreResourceDeletion()) {
+      verifyResourceMetadataDoesNotExist(LDS, "A");
+    } else {
+      // When resource deletion is disabled, {A} stays ACKed in the previous version VERSION_2.
+      verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
+    }
     verifyResourceMetadataAcked(LDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
     verifyResourceMetadataAcked(LDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
     call.verifyRequest(LDS, subscribedResourceNames, VERSION_3, "0002", NODE);
@@ -706,7 +716,7 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
-  public void ldsResponseErrorHandling_subscribedResourceInvalid_withRdsSubscriptioin() {
+  public void ldsResponseErrorHandling_subscribedResourceInvalid_withRdsSubscription() {
     List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
     xdsClient.watchLdsResource("A", ldsResourceWatcher);
     xdsClient.watchRdsResource("A.1", rdsResourceWatcher);
@@ -762,14 +772,26 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataNacked(
         LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT, VERSION_2, TIME_INCREMENT * 3,
         errorsV2);
-    verifyResourceMetadataDoesNotExist(LDS, "C");
+    if (!ignoreResourceDeletion()) {
+      verifyResourceMetadataDoesNotExist(LDS, "C");
+    } else {
+      // When resource deletion is disabled, {C} stays ACKed in the previous version VERSION_1.
+      verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    }
     call.verifyRequestNack(LDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
-    // {A.1} -> does not exist
+    // {A.1} -> does not exist, missing from {A}
     // {B.1} -> version 1
-    // {C.1} -> does not exist
+    // {C.1} -> does not exist because {C} does not exist
     verifyResourceMetadataDoesNotExist(RDS, "A.1");
     verifyResourceMetadataAcked(RDS, "B.1", resourcesV11.get("B.1"), VERSION_1, TIME_INCREMENT * 2);
-    verifyResourceMetadataDoesNotExist(RDS, "C.1");
+    if (!ignoreResourceDeletion()) {
+      verifyResourceMetadataDoesNotExist(RDS, "C.1");
+    } else {
+      // When resource deletion is disabled, {C.1} is not deleted when {C} is deleted.
+      // Verify {C.1} stays in the previous version VERSION_1.
+      verifyResourceMetadataAcked(RDS, "C.1", resourcesV11.get("C.1"), VERSION_1,
+          TIME_INCREMENT * 2);
+    }
   }
 
   @Test
@@ -1132,6 +1154,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceDeleted() {
+    Assume.assumeFalse(ignoreResourceDeletion());
+
     DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
     verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
 
@@ -1149,6 +1173,46 @@ public abstract class ClientXdsClientTestBase {
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+  }
+
+  /**
+   * When ignore_resource_deletion server feature is on, xDS client should keep the deleted listener
+   * on empty response, and resume the normal work when LDS contains the listener again.
+   * */
+  @Test
+  public void ldsResourceDeleted_ignoreResourceDeletion() {
+    Assume.assumeTrue(ignoreResourceDeletion());
+
+    DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+
+    // Initial LDS response.
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+
+    // Empty LDS response does not delete the listener.
+    call.sendResponse(LDS, Collections.emptyList(), VERSION_2, "0001");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
+    // The resource is still ACKED at VERSION_1 (no changes).
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+    // onResourceDoesNotExist not called
+    verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+
+    // Next update is correct, and contains the listener again.
+    call.sendResponse(LDS, testListenerVhosts, VERSION_3, "0003");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_3, "0003", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    // LDS is now ACKEd at VERSION_3.
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_3,
+        TIME_INCREMENT * 3);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+    verifyNoMoreInteractions(ldsResourceWatcher);
   }
 
   @Test
@@ -1421,6 +1485,10 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
+    // The Listener is getting replaced configured with an RDS name, to the one configured with
+    // vhosts. Expect the RDS resources to be discarded.
+    // Note that this must work the same despite the ignore_resource_deletion feature is on.
+    // This happens because the Listener is getting replaced, and not deleted.
     call.sendResponse(LDS, testListenerVhosts, VERSION_2, "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
     verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
@@ -1472,6 +1540,8 @@ public abstract class ClientXdsClientTestBase {
 
     // Simulates receiving an updated version of the requested LDS resource as a TCP listener
     // with a filter chain containing inlined RouteConfiguration.
+    // Note that this must work the same despite the ignore_resource_deletion feature is on.
+    // This happens because the Listener is getting replaced, and not deleted.
     hcmFilter = mf.buildHttpConnectionManagerFilter(
         null,
         mf.buildRouteConfiguration(
@@ -1652,7 +1722,12 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataAcked(CDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
         VERSION_2, TIME_INCREMENT * 2, errorsV2);
-    verifyResourceMetadataDoesNotExist(CDS, "C");
+    if (!ignoreResourceDeletion()) {
+      verifyResourceMetadataDoesNotExist(CDS, "C");
+    } else {
+      // When resource deletion is disabled, {C} stays ACKed in the previous version VERSION_1.
+      verifyResourceMetadataAcked(CDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    }
     call.verifyRequestNack(CDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
 
     // CDS -> {B, C} version 3
@@ -1666,7 +1741,12 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(CDS, resourcesV3.values().asList(), VERSION_3, "0002");
     // {A} -> does not exit
     // {B, C} -> ACK, version 3
-    verifyResourceMetadataDoesNotExist(CDS, "A");
+    if (!ignoreResourceDeletion()) {
+      verifyResourceMetadataDoesNotExist(CDS, "A");
+    } else {
+      // When resource deletion is disabled, {A} stays ACKed in the previous version VERSION_2.
+      verifyResourceMetadataAcked(CDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
+    }
     verifyResourceMetadataAcked(CDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
     verifyResourceMetadataAcked(CDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
     call.verifyRequest(CDS, subscribedResourceNames, VERSION_3, "0002", NODE);
@@ -1738,14 +1818,26 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataNacked(
         CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT, VERSION_2, TIME_INCREMENT * 3,
         errorsV2);
-    verifyResourceMetadataDoesNotExist(CDS, "C");
+    if (!ignoreResourceDeletion()) {
+      verifyResourceMetadataDoesNotExist(CDS, "C");
+    } else {
+      // When resource deletion is disabled, {C} stays ACKed in the previous version VERSION_1.
+      verifyResourceMetadataAcked(CDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    }
     call.verifyRequestNack(CDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
-    // {A.1} -> does not exist
+    // {A.1} -> does not exist, missing from {A}
     // {B.1} -> version 1
-    // {C.1} -> does not exist
+    // {C.1} -> does not exist because {C} does not exist
     verifyResourceMetadataDoesNotExist(EDS, "A.1");
     verifyResourceMetadataAcked(EDS, "B.1", resourcesV11.get("B.1"), VERSION_1, TIME_INCREMENT * 2);
-    verifyResourceMetadataDoesNotExist(EDS, "C.1");
+    if (!ignoreResourceDeletion()) {
+      verifyResourceMetadataDoesNotExist(EDS, "C.1");
+    } else {
+      // When resource deletion is disabled, {C.1} is not deleted when {C} is deleted.
+      // Verify {C.1} stays in the previous version VERSION_1.
+      verifyResourceMetadataAcked(EDS, "C.1", resourcesV11.get("C.1"), VERSION_1,
+          TIME_INCREMENT * 2);
+    }
   }
 
   @Test
@@ -2147,6 +2239,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void cdsResourceDeleted() {
+    Assume.assumeFalse(ignoreResourceDeletion());
+
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
 
@@ -2165,6 +2259,48 @@ public abstract class ClientXdsClientTestBase {
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+  }
+
+  /**
+   * When ignore_resource_deletion server feature is on, xDS client should keep the deleted cluster
+   * on empty response, and resume the normal work when CDS contains the cluster again.
+   * */
+  @Test
+  public void cdsResourceDeleted_ignoreResourceDeletion() {
+    Assume.assumeTrue(ignoreResourceDeletion());
+
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
+
+    // Initial CDS response.
+    call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
+    call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+
+    // Empty LDS response does not delete the cluster.
+    call.sendResponse(CDS, Collections.emptyList(), VERSION_2, "0001");
+    call.verifyRequest(CDS, CDS_RESOURCE, VERSION_2, "0001", NODE);
+
+    // The resource is still ACKED at VERSION_1 (no changes).
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+    // onResourceDoesNotExist must not be called.
+    verify(cdsResourceWatcher, never()).onResourceDoesNotExist(CDS_RESOURCE);
+
+    // Next update is correct, and contains the cluster again.
+    call.sendResponse(CDS, testClusterRoundRobin, VERSION_3, "0003");
+    call.verifyRequest(CDS, CDS_RESOURCE, VERSION_3, "0003", NODE);
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_3,
+        TIME_INCREMENT * 3);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+    verifyNoMoreInteractions(cdsResourceWatcher);
   }
 
   @Test
@@ -2563,7 +2699,10 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(CDS, clusters, VERSION_2, "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
     assertThat(cdsUpdateCaptor.getValue().edsServiceName()).isNull();
+    // Note that the endpoint must be deleted even if the ignore_resource_deletion feature.
+    // This happens because the cluster CDS_RESOURCE is getting replaced, and not deleted.
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
+    verify(edsResourceWatcher, never()).onResourceDoesNotExist(resource);
     verifyNoMoreInteractions(cdsWatcher, edsWatcher);
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
     verifyResourceMetadataAcked(
