@@ -3,6 +3,7 @@
 _JavaRpcToolchainInfo = provider(
     fields = [
         "java_toolchain",
+        "java_plugins",
         "plugin",
         "plugin_arg",
         "protoc",
@@ -14,6 +15,7 @@ def _java_rpc_toolchain_impl(ctx):
     return [
         _JavaRpcToolchainInfo(
             java_toolchain = ctx.attr._java_toolchain,
+            java_plugins = ctx.attr.java_plugins,
             plugin = ctx.executable.plugin,
             plugin_arg = ctx.attr.plugin_arg,
             protoc = ctx.executable._protoc,
@@ -38,6 +40,10 @@ java_rpc_toolchain = rule(
             cfg = "host",
             default = Label("@com_google_protobuf//:protoc"),
             executable = True,
+        ),
+        "java_plugins": attr.label_list(
+            default = [],
+            providers = [JavaPluginInfo],
         ),
         "_java_toolchain": attr.label(
             default = Label("@bazel_tools//tools/jdk:current_java_toolchain"),
@@ -104,6 +110,7 @@ def _java_rpc_library_impl(ctx):
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,
+        plugins = [plugin[JavaPluginInfo] for plugin in toolchain.java_plugins],
         deps = [
             java_common.make_non_strict(deps_java_info),
         ] + [dep[JavaInfo] for dep in toolchain.runtime],
