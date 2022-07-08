@@ -124,7 +124,7 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     }
     return ConfigOrError.fromError(
         Status
-            .INVALID_ARGUMENT
+            .UNAVAILABLE
             .withDescription(
                 "None of " + policiesTried + " specified child policies are available."));
   }
