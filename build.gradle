@@ -273,6 +273,8 @@ subprojects {
         // Detect Maven Enforcer's dependencyConvergence failures. We only care
         // for artifacts used as libraries by others with Maven.
         tasks.register('checkUpperBoundDeps') {
+            inputs.files(configurations.runtimeClasspath).withNormalizer(ClasspathNormalizer)
+            outputs.file("${buildDir}/tmp/${name}") // Fake output for UP-TO-DATE checking
             doLast {
                 requireUpperBoundDepsMatch(configurations.runtimeClasspath, project)
             }
