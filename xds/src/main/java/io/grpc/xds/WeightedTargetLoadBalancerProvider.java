@@ -117,7 +117,7 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
       return ConfigOrError.fromConfig(new WeightedTargetConfig(parsedChildConfigs));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.fromThrowable(e).withDescription(
+          Status.INTERNAL.withCause(e).withDescription(
               "Failed to parse weighted_target LB config: " + rawConfig));
     }
   }
