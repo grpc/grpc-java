@@ -78,7 +78,7 @@ public final class WrrLocalityLoadBalancerProvider extends LoadBalancerProvider 
       PolicySelection policySelection = (PolicySelection) selectedConfig.getConfig();
       return ConfigOrError.fromConfig(new WrrLocalityConfig(policySelection));
     } catch (RuntimeException e) {
-      return ConfigOrError.fromError(Status.fromThrowable(e)
+      return ConfigOrError.fromError(Status.INTERNAL.withCause(e)
           .withDescription("Failed to parse wrr_locality LB config: " + rawConfig));
     }
   }
