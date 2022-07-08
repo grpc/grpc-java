@@ -100,15 +100,26 @@ import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
 /**
  * Tests for {@link ClientXdsClient} with protocol version v2.
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
+
+  /** Parameterized test cases. */
+  @Parameters(name = "ignoreResourceDeletion={0}")
+  public static Iterable<? extends Boolean> data() {
+    return ImmutableList.of(false, true);
+  }
+
+  @Parameter
+  public boolean ignoreResourceDeletion;
 
   @Override
   protected BindableService createAdsService() {
@@ -166,6 +177,11 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
   @Override
   protected boolean useProtocolV3() {
     return false;
+  }
+
+  @Override
+  protected boolean ignoreResourceDeletion() {
+    return ignoreResourceDeletion;
   }
 
   private static class DiscoveryRpcCallV2 extends DiscoveryRpcCall {
