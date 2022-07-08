@@ -2549,10 +2549,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       }
       stopTimer();
       String message = "Unsubscribing {0} resource {1} from server {2}";
+      XdsLogLevel logLevel = XdsLogLevel.INFO;
       if (resourceDeletionIgnored) {
         message += " for which we previously ignored a deletion";
+        logLevel = XdsLogLevel.FORCE_INFO;
       }
-      logger.log(XdsLogLevel.INFO, message, type, resource,
+      logger.log(logLevel, message, type, resource,
           serverInfo != null ? serverInfo.target() : "unknown");
     }
 
@@ -2571,8 +2573,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       this.data = parsedResource.getResourceUpdate();
       absent = false;
       if (resourceDeletionIgnored) {
-        logger.log(XdsLogLevel.INFO, "xds server {0}: server returned new version of resource "
-                + "for which we previously ignored a deletion: type {1} name {2}",
+        logger.log(XdsLogLevel.FORCE_INFO, "xds server {0}: server returned new version "
+                + "of resource for which we previously ignored a deletion: type {1} name {2}",
             serverInfo != null ? serverInfo.target() : "unknown", type, resource);
         resourceDeletionIgnored = false;
       }
@@ -2595,7 +2597,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       boolean isStateOfTheWorld = (type == ResourceType.LDS || type == ResourceType.CDS);
       if (ignoreResourceDeletionEnabled && isStateOfTheWorld && data != null) {
         if (!resourceDeletionIgnored) {
-          logger.log(XdsLogLevel.WARNING,
+          logger.log(XdsLogLevel.FORCE_WARNING,
               "xds server {0}: ignoring deletion for resource type {1} name {2}}",
               serverInfo.target(), type, resource);
           resourceDeletionIgnored = true;
