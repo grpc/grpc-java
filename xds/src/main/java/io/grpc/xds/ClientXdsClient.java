@@ -2587,8 +2587,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         return;
       }
 
-      // Ignore deletion when the server instructs to, and the resource is reusable.
-      if (data != null && serverInfo != null && serverInfo.ignoreResourceDeletion()) {
+      // Ignore deletion of State of the World resources when this feature is on,
+      // and the resource is reusable.
+      boolean ignoreResourceDeletionEnabled =
+          serverInfo != null && serverInfo.ignoreResourceDeletion();
+      boolean isStateOfTheWorld = (type == ResourceType.LDS || type == ResourceType.CDS);
+      if (ignoreResourceDeletionEnabled && isStateOfTheWorld && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.WARNING,
               "xds server {0}: ignoring deletion for resource type {1} name {2}}",
