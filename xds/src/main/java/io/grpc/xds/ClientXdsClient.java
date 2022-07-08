@@ -2373,7 +2373,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           // For State of the World services, notify watchers when their watched resource is missing
           // from the ADS update.
           subscriber.onAbsent();
-          // Retain any dependent resources if the resource deletion is ignored per server setting.
+          // Retain any dependent resources if the resource deletion is ignored
+          // per bootstrap ignore_resource_deletion server feature.
           if (!subscriber.absent) {
             retainDependentResource(subscriber, retainedResources);
           }
@@ -2444,7 +2445,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     private final Set<ResourceWatcher> watchers = new HashSet<>();
     @Nullable private ResourceUpdate data;
     private boolean absent;
-    // Tracks whether the deletion has been ignored per server request.
+    // Tracks whether the deletion has been ignored per bootstrap server feature.
     // See https://github.com/grpc/proposal/blob/master/A53-xds-ignore-resource-deletion.md
     private boolean resourceDeletionIgnored;
     @Nullable private ScheduledHandle respTimer;
