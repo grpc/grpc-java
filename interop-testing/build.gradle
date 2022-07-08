@@ -71,6 +71,14 @@ tasks.named("jar").configure {
     archiveClassifier = 'original'
 }
 
+tasks.named("distZip").configure {
+    archiveClassifier = "original"
+}
+
+tasks.named("distTar").configure {
+    archiveClassifier = "original"
+}
+
 def xdsPrefixName = 'io.grpc.xds'
 tasks.named("shadowJar").configure {
     archiveClassifier = null
