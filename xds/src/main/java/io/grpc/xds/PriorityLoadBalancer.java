@@ -70,6 +70,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
   @Nullable private String currentPriority;
   private ConnectivityState currentConnectivityState;
   private SubchannelPicker currentPicker;
+  // Set to true if currently in the process of handling resolved addresses.
+  private boolean resolvingAddresses;
 
   PriorityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -82,6 +84,15 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    try {
+      resolvingAddresses = true;
+      handleResolvedAddressesInternal(resolvedAddresses);
+    } finally {
+      resolvingAddresses = false;
+    }
+  }
+
+  public void handleResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
     PriorityLbConfig config = (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -297,32 +308,31 @@ final class PriorityLoadBalancer extends LoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!children.containsKey(priority)) {
-              return;
-            }
-            connectivityState = newState;
-            picker = newPicker;
-            if (deletionTimer != null && deletionTimer.isPending()) {
-              return;
-            }
-            if (newState.equals(CONNECTING) ) {
-              if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
-                failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
-                    executor);
-              }
-            } else if (newState.equals(READY) || newState.equals(IDLE)) {
-              seenReadyOrIdleSinceTransientFailure = true;
-              failOverTimer.cancel();
-            } else if (newState.equals(TRANSIENT_FAILURE)) {
-              seenReadyOrIdleSinceTransientFailure = false;
-              failOverTimer.cancel();
-            }
-            tryNextPriority();
+        if (resolvingAddresses) {
+          return;
+        }
+
+        if (!children.containsKey(priority)) {
+          return;
+        }
+        connectivityState = newState;
+        picker = newPicker;
+        if (deletionTimer != null && deletionTimer.isPending()) {
+          return;
+        }
+        if (newState.equals(CONNECTING)) {
+          if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
+            failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
+                executor);
           }
-        });
+        } else if (newState.equals(READY) || newState.equals(IDLE)) {
+          seenReadyOrIdleSinceTransientFailure = true;
+          failOverTimer.cancel();
+        } else if (newState.equals(TRANSIENT_FAILURE)) {
+          seenReadyOrIdleSinceTransientFailure = false;
+          failOverTimer.cancel();
+        }
+        tryNextPriority();
       }
 
       @Override

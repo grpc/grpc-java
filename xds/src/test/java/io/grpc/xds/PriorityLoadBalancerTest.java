@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeastOnce;
@@ -686,6 +687,26 @@ public class PriorityLoadBalancerTest {
     verifyNoMoreInteractions(helper);
   }
 
+  @Test
+  public void noDuplicateOverallBalancingStateUpdate() {
+    FakeLoadBalancerProvider fakeLbProvider = new FakeLoadBalancerProvider();
+
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fakeLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(fakeLbProvider, new Object()), false);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(
+            ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
+            ImmutableList.of("p0", "p1"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    verify(helper, times(1)).updateBalancingState(any(), any());
+  }
+
   private void assertLatestConnectivityState(ConnectivityState expectedState) {
     verify(helper, atLeastOnce())
         .updateBalancingState(connectivityStateCaptor.capture(), pickerCaptor.capture());
@@ -713,5 +734,50 @@ public class PriorityLoadBalancerTest {
     assertLatestConnectivityState(IDLE);
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(pickResult).isEqualTo(PickResult.withNoResult());
+  }
+
+  private static class FakeLoadBalancerProvider extends LoadBalancerProvider {
+
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    @Override
+    public String getPolicyName() {
+      return "foo";
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      return new FakeLoadBalancer(helper);
+    }
+  }
+
+  static class FakeLoadBalancer extends LoadBalancer {
+
+    private Helper helper;
+
+    FakeLoadBalancer(Helper helper) {
+      this.helper = helper;
+    }
+
+    @Override
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
+    }
+
+    @Override
+    public void handleNameResolutionError(Status error) {
+    }
+
+    @Override
+    public void shutdown() {
+    }
   }
 }
