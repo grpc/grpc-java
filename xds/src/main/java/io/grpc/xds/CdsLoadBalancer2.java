@@ -192,7 +192,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           root.result.lbPolicyConfig());
       LoadBalancerProvider lbProvider = lbRegistry.getProvider(unwrappedLbConfig.getPolicyName());
       if (lbProvider == null) {
-        throw NameResolver.ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
+        throw NameResolver.ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
                 "No provider available for LB: " + unwrappedLbConfig.getPolicyName())).getError()
             .asRuntimeException();
       }

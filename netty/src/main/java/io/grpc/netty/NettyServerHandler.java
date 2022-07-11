@@ -52,6 +52,7 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -854,6 +855,9 @@ class NettyServerHandler extends AbstractNettyHandler {
         keepAliveManager.onDataReceived();
       }
       NettyServerHandler.this.onHeadersRead(ctx, streamId, headers);
+      if (endStream) {
+        NettyServerHandler.this.onDataRead(streamId, Unpooled.EMPTY_BUFFER, 0, endStream);
+      }
     }
 
     @Override

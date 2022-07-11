@@ -67,13 +67,13 @@ public final class LeastRequestLoadBalancerProvider extends LoadBalancerProvider
         choiceCount = DEFAULT_CHOICE_COUNT;
       }
       if (choiceCount < MIN_CHOICE_COUNT) {
-        return ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
-            "Invalid 'choiceCount'"));
+        return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
+            "Invalid 'choiceCount' in least_request_experimental config"));
       }
       return ConfigOrError.fromConfig(new LeastRequestConfig(choiceCount));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.fromThrowable(e).withDescription(
+          Status.UNAVAILABLE.withCause(e).withDescription(
               "Failed to parse least_request_experimental LB config: " + rawConfig));
     }
   }

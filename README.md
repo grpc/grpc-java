@@ -161,7 +161,7 @@ The prebuilt protoc-gen-grpc-java binary uses glibc on Linux. If you are
 compiling on Alpine Linux, you may want to use the [Alpine grpc-java package][]
 which uses musl instead.
 
-[Alpine grpc-java package]: https://pkgs.alpinelinux.org/package/edge/testing/x86_64/grpc-java
+[Alpine grpc-java package]: https://pkgs.alpinelinux.org/package/edge/community/x86_64/grpc-java
 
 For Android protobuf-based codegen integrated with the Gradle build system, also
 use protobuf-gradle-plugin but specify the 'lite' options:

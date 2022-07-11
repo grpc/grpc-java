@@ -36,7 +36,7 @@ dependencies {
     api subprojects.minus([project(':grpc-protobuf-lite')])
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     classpath = files(subprojects.collect { subproject ->
         subproject.javadoc.classpath
     })
@@ -49,7 +49,7 @@ javadoc {
     }
 }
 
-task jacocoMerge(type: JacocoMerge) {
+tasks.register("jacocoMerge", JacocoMerge) {
     dependsOn(subprojects.jacocoTestReport.dependsOn)
     dependsOn(project(':grpc-interop-testing').jacocoTestReport.dependsOn)
     mustRunAfter(subprojects.jacocoTestReport.mustRunAfter)
@@ -60,7 +60,7 @@ task jacocoMerge(type: JacocoMerge) {
             .filter { f -> f.exists() }
 }
 
-jacocoTestReport {
+tasks.named("jacocoTestReport").configure {
     dependsOn(jacocoMerge)
     reports {
         xml.required = true
@@ -78,4 +78,4 @@ coveralls {
     sourceDirs = subprojects.sourceSets.main.allSource.srcDirs.flatten()
 }
 
-tasks.coveralls { dependsOn(jacocoTestReport) }
+tasks.named("coveralls").configure { dependsOn tasks.named("jacocoTestReport") }

@@ -288,7 +288,7 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsResourceNotFound();
-    assertEmptyResolutionResult();
+    assertEmptyResolutionResult(expectedLdsResourceName);
   }
 
   @SuppressWarnings("unchecked")
@@ -346,7 +346,7 @@ public class XdsNameResolverTest {
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
     xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);
-    assertEmptyResolutionResult();
+    assertEmptyResolutionResult(RDS_RESOURCE_NAME);
   }
 
   @SuppressWarnings("unchecked")
@@ -374,7 +374,7 @@ public class XdsNameResolverTest {
     reset(mockListener);
     xdsClient.deliverLdsResourceNotFound();  // revoke LDS resource
     assertThat(xdsClient.rdsResource).isNull();  // stop subscribing to stale RDS resource
-    assertEmptyResolutionResult();
+    assertEmptyResolutionResult(expectedLdsResourceName);
 
     reset(mockListener);
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
@@ -412,7 +412,7 @@ public class XdsNameResolverTest {
 
     reset(mockListener);
     xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);  // revoke RDS resource
-    assertEmptyResolutionResult();
+    assertEmptyResolutionResult(RDS_RESOURCE_NAME);
 
     // Simulate management server adds back the previously used RDS resource.
     reset(mockListener);
@@ -470,7 +470,7 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(0L, buildUnmatchedVirtualHosts());
-    assertEmptyResolutionResult();
+    assertEmptyResolutionResult(expectedLdsResourceName);
   }
 
   @Test
@@ -479,7 +479,7 @@ public class XdsNameResolverTest {
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, buildUnmatchedVirtualHosts());
-    assertEmptyResolutionResult();
+    assertEmptyResolutionResult(expectedLdsResourceName);
   }
 
   private List<VirtualHost> buildUnmatchedVirtualHosts() {
@@ -1056,11 +1056,16 @@ public class XdsNameResolverTest {
   }
 
   @SuppressWarnings("unchecked")
-  private void assertEmptyResolutionResult() {
+  private void assertEmptyResolutionResult(String resource) {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
     assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    Result configResult = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    assertThat(configResult.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(configResult.getStatus().getDescription()).contains(resource);
   }
 
   private void assertCallSelectClusterResult(

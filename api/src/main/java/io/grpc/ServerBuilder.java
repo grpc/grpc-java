@@ -246,7 +246,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   /**
    * Sets the time without read activity before sending a keepalive ping. An unreasonably small
    * value might be increased, and {@code Long.MAX_VALUE} nano seconds or an unreasonably large
-   * value will disable keepalive. The typical default is infinite when supported.
+   * value will disable keepalive. The typical default is two hours when supported.
    *
    * @throws IllegalArgumentException if time is not positive
    * @throws UnsupportedOperationException if unsupported

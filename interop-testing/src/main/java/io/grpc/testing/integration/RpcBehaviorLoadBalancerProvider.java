@@ -54,7 +54,7 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
     String rpcBehavior = JsonUtil.getString(rawLoadBalancingPolicyConfig, "rpcBehavior");
     if (rpcBehavior == null) {
       return ConfigOrError.fromError(
-          Status.INVALID_ARGUMENT.withDescription("no 'rpcBehavior' defined"));
+          Status.UNAVAILABLE.withDescription("no 'rpcBehavior' defined"));
     }
     return ConfigOrError.fromConfig(new RpcBehaviorConfig(rpcBehavior));
   }

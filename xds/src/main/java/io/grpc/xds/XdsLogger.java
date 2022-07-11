@@ -81,6 +81,10 @@ final class XdsLogger {
         return Level.FINE;
       case INFO:
         return Level.FINER;
+      case FORCE_INFO:
+        return Level.INFO;
+      case FORCE_WARNING:
+        return Level.WARNING;
       default:
         return Level.FINEST;
     }
@@ -89,6 +93,11 @@ final class XdsLogger {
   /**
    * Log levels. See the table below for the mapping from the XdsLogger levels to
    * Java logger levels.
+   *
+   * <p><b>NOTE:</b>
+   *   Please use {@code FORCE_} levels with care, only when the message is expected to be
+   *   surfaced to the library user. Normally libraries should minimize the usage
+   *   of highly visible logs.
    * <pre>
    * +---------------------+-------------------+
    * | XdsLogger Level     | Java Logger Level |
@@ -97,6 +106,8 @@ final class XdsLogger {
    * | INFO                | FINER             |
    * | WARNING             | FINE              |
    * | ERROR               | FINE              |
+   * | FORCE_INFO          | INFO              |
+   * | FORCE_WARNING       | WARNING           |
    * +---------------------+-------------------+
    * </pre>
    */
@@ -104,6 +115,8 @@ final class XdsLogger {
     DEBUG,
     INFO,
     WARNING,
-    ERROR
+    ERROR,
+    FORCE_INFO,
+    FORCE_WARNING,
   }
 }

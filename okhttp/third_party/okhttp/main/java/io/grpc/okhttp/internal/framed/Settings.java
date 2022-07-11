@@ -46,7 +46,7 @@ public final class Settings {
   /** spdy/3: Sender's estimate of max outgoing kbps. */
   static final int DOWNLOAD_BANDWIDTH = 2;
   /** HTTP/2: The peer must not send a PUSH_PROMISE frame when this is 0. */
-  static final int ENABLE_PUSH = 2;
+  public static final int ENABLE_PUSH = 2;
   /** spdy/3: Sender's estimate of millis between sending a request and receiving a response. */
   static final int ROUND_TRIP_TIME = 3;
   /** Sender's maximum number of concurrent streams. */
@@ -58,7 +58,7 @@ public final class Settings {
   /** spdy/3: Retransmission rate. Percentage */
   static final int DOWNLOAD_RETRANS_RATE = 6;
   /** HTTP/2: Advisory only. Size in bytes of the largest header list the sender will accept. */
-  static final int MAX_HEADER_LIST_SIZE = 6;
+  public static final int MAX_HEADER_LIST_SIZE = 6;
   /** Window size in bytes. */
   public static final int INITIAL_WINDOW_SIZE = 7;
   /** spdy/3: Size of the client certificate vector. Unsupported. */

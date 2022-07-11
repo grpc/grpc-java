@@ -81,7 +81,7 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
     }
     if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize
         || maxRingSize > MAX_RING_SIZE) {
-      return ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
+      return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
           "Invalid 'mingRingSize'/'maxRingSize'"));
     }
     return ConfigOrError.fromConfig(new RingHashConfig(minRingSize, maxRingSize));

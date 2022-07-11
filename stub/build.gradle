@@ -17,6 +17,6 @@ dependencies {
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     exclude 'io/grpc/stub/Internal*'
 }

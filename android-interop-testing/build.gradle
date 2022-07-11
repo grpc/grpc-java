@@ -101,7 +101,7 @@ project.tasks['check'].dependsOn checkStyleMain, checkStyleTest
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-tasks.withType(JavaCompile) {
+tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
             "-Xlint:-cast"
     ]

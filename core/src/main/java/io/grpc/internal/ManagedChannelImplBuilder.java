@@ -31,6 +31,7 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
+import io.grpc.InternalGlobalInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
@@ -636,9 +637,15 @@ public final class ManagedChannelImplBuilder
   // TODO(zdapeng): FIX IT
   @VisibleForTesting
   List<ClientInterceptor> getEffectiveInterceptors() {
-    List<ClientInterceptor> effectiveInterceptors =
-        new ArrayList<>(this.interceptors);
-    if (statsEnabled) {
+    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
+    boolean isGlobalInterceptorsSet = false;
+    List<ClientInterceptor> globalClientInterceptors =
+        InternalGlobalInterceptors.getClientInterceptors();
+    if (globalClientInterceptors != null) {
+      effectiveInterceptors.addAll(globalClientInterceptors);
+      isGlobalInterceptorsSet = true;
+    }
+    if (!isGlobalInterceptorsSet && statsEnabled) {
       ClientInterceptor statsInterceptor = null;
       try {
         Class<?> censusStatsAccessor =
@@ -674,7 +681,7 @@ public final class ManagedChannelImplBuilder
         effectiveInterceptors.add(0, statsInterceptor);
       }
     }
-    if (tracingEnabled) {
+    if (!isGlobalInterceptorsSet && tracingEnabled) {
       ClientInterceptor tracingInterceptor = null;
       try {
         Class<?> censusTracingAccessor =

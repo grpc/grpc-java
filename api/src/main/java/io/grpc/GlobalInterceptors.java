@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,10 +25,10 @@ import java.util.List;
 /** The collection of global interceptors and global server stream tracers. */
 @Internal
 final class GlobalInterceptors {
-  private static List<ClientInterceptor> clientInterceptors = Collections.emptyList();
-  private static List<ServerInterceptor> serverInterceptors = Collections.emptyList();
+  private static List<ClientInterceptor> clientInterceptors = null;
+  private static List<ServerInterceptor> serverInterceptors = null;
   private static List<ServerStreamTracer.Factory> serverStreamTracerFactories =
-      Collections.emptyList();
+      null;
   private static boolean isGlobalInterceptorsTracersSet;
   private static boolean isGlobalInterceptorsTracersGet;
 
@@ -61,19 +63,13 @@ final class GlobalInterceptors {
     if (isGlobalInterceptorsTracersSet) {
       throw new IllegalStateException("Global interceptors and tracers are already set");
     }
-
-    if (clientInterceptorList != null) {
-      clientInterceptors = Collections.unmodifiableList(new ArrayList<>(clientInterceptorList));
-    }
-
-    if (serverInterceptorList != null) {
-      serverInterceptors = Collections.unmodifiableList(new ArrayList<>(serverInterceptorList));
-    }
-
-    if (serverStreamTracerFactoryList != null) {
-      serverStreamTracerFactories =
+    checkNotNull(clientInterceptorList);
+    checkNotNull(serverInterceptorList);
+    checkNotNull(serverStreamTracerFactoryList);
+    clientInterceptors = Collections.unmodifiableList(new ArrayList<>(clientInterceptorList));
+    serverInterceptors = Collections.unmodifiableList(new ArrayList<>(serverInterceptorList));
+    serverStreamTracerFactories =
           Collections.unmodifiableList(new ArrayList<>(serverStreamTracerFactoryList));
-    }
     isGlobalInterceptorsTracersSet = true;
   }
 

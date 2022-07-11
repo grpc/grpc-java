@@ -42,7 +42,7 @@ dependencies {
     testImplementation libraries.truth
 }
 
-task javadocs(type: Javadoc) {
+tasks.register("javadocs", Javadoc) {
     source = android.sourceSets.main.java.srcDirs
     classpath += files(android.getBootClasspath())
     classpath += files({
@@ -58,12 +58,13 @@ task javadocs(type: Javadoc) {
     }
 }
 
-task javadocJar(type: Jar, dependsOn: javadocs) {
+tasks.register("javadocJar", Jar) {
+    dependsOn javadocs
     archiveClassifier = 'javadoc'
     from javadocs.destinationDir
 }
 
-task sourcesJar(type: Jar) {
+tasks.register("sourcesJar", Jar) {
     archiveClassifier = 'sources'
     from android.sourceSets.main.java.srcDirs
 }
