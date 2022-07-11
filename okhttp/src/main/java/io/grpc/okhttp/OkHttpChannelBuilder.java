@@ -104,7 +104,7 @@ public final class OkHttpChannelBuilder extends
     PLAINTEXT
   }
 
-  @VisibleForTesting
+  // @VisibleForTesting
   static final ConnectionSpec INTERNAL_DEFAULT_CONNECTION_SPEC =
       new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
           .cipherSuites(

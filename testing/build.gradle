@@ -26,9 +26,9 @@ dependencies {
             project(':grpc-core').sourceSets.test.output
 }
 
-javadoc { exclude 'io/grpc/internal/**' }
+tasks.named("javadoc").configure { exclude 'io/grpc/internal/**' }
 
-jacocoTestReport {
+tasks.named("jacocoTestReport").configure {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
         exclude: [

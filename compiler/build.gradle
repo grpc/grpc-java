@@ -152,11 +152,11 @@ sourceSets {
     }
 }
 
-compileTestJava {
+tasks.named("compileTestJava").configure {
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
-compileTestLiteJava {
+tasks.named("compileTestLiteJava").configure {
     options.compilerArgs = compileTestJava.options.compilerArgs
     options.compilerArgs += [
         "-Xlint:-cast"
@@ -177,16 +177,24 @@ protobuf {
     }
     generateProtoTasks {
         all().each { task ->
-            task.dependsOn 'java_pluginExecutable'
-            task.inputs.file javaPluginPath
-        }
-        ofSourceSet('test')*.plugins { grpc {} }
-        ofSourceSet('testLite')*.each { task ->
-            task.builtins {
-                java { option 'lite' }
+            task.configure {
+                dependsOn 'java_pluginExecutable'
+                inputs.file javaPluginPath
             }
-            task.plugins {
-                grpc { option 'lite' }
+        }
+        ofSourceSet('test').each { task ->
+            task.configure {
+                plugins { grpc {} }
+            }
+        }
+        ofSourceSet('testLite').each { task ->
+            task.configure {
+                builtins {
+                    java { option 'lite' }
+                }
+                plugins {
+                    grpc { option 'lite' }
+                }
             }
         }
     }
@@ -195,7 +203,7 @@ protobuf {
 println "*** Building codegen requires Protobuf version ${libs.versions.protobuf.get()}"
 println "*** Please refer to https://github.com/grpc/grpc-java/blob/master/COMPILING.md#how-to-build-code-generation-plugin"
 
-task buildArtifacts(type: Copy) {
+tasks.register("buildArtifacts", Copy) {
     dependsOn 'java_pluginExecutable'
     from("$buildDir/exe") {
         if (osdetector.os != 'windows') {
@@ -207,7 +215,7 @@ task buildArtifacts(type: Copy) {
 
 archivesBaseName = "$protocPluginBaseName"
 
-task checkArtifacts {
+def checkArtifacts = tasks.register("checkArtifacts") {
     dependsOn buildArtifacts
     doLast {
         if (!usingVisualCpp) {
@@ -290,11 +298,15 @@ def configureTestTask(Task task, String dep, String extraPackage, String service
             "$projectDir/src/test${dep}/golden/${serviceName}.java.txt"
 }
 
-task testGolden(type: Exec)
-task testLiteGolden(type: Exec)
-task testDeprecatedGolden(type: Exec)
-task testDeprecatedLiteGolden(type: Exec)
-configureTestTask(testGolden, '', '', 'TestService')
-configureTestTask(testLiteGolden, 'Lite', '', 'TestService')
-configureTestTask(testDeprecatedGolden, '', '', 'TestDeprecatedService')
-configureTestTask(testDeprecatedLiteGolden, 'Lite', '', 'TestDeprecatedService')
+tasks.register("testGolden", Exec) {
+    configureTestTask(it, '', '', 'TestService')
+}
+tasks.register("testLiteGolden", Exec) {
+    configureTestTask(it, 'Lite', '', 'TestService')
+}
+tasks.register("testDeprecatedGolden", Exec) {
+    configureTestTask(it, '', '', 'TestDeprecatedService')
+}
+tasks.register("testDeprecatedLiteGolden", Exec) {
+    configureTestTask(it, 'Lite', '', 'TestDeprecatedService')
+}

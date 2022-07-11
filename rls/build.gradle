@@ -26,7 +26,7 @@ dependencies {
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
-[compileJava].each() {
+tasks.named("compileJava").configure {
     it.options.compilerArgs += [
             // only has AutoValue annotation processor
             "-Xlint:-processing",
@@ -37,7 +37,7 @@ dependencies {
             "|")
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     // Do not publish javadoc since currently there is no public API.
     failOnError false  // no public or protected classes found to document
     exclude 'io/grpc/lookup/v1/**'
@@ -45,7 +45,7 @@ javadoc {
     exclude 'io/grpc/rls/Internal*'
 }
 
-jacocoTestReport {
+tasks.named("jacocoTestReport").configure {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it, exclude: ['**/io/grpc/lookup/**'])
     }

@@ -45,13 +45,13 @@ public class MetadataLoadBalancerProvider extends LoadBalancerProvider {
     String metadataKey = JsonUtil.getString(rawLoadBalancingPolicyConfig, "metadataKey");
     if (metadataKey == null) {
       return NameResolver.ConfigOrError.fromError(
-          Status.INVALID_ARGUMENT.withDescription("no 'metadataKey' defined"));
+          Status.UNAVAILABLE.withDescription("no 'metadataKey' defined"));
     }
 
     String metadataValue = JsonUtil.getString(rawLoadBalancingPolicyConfig, "metadataValue");
     if (metadataValue == null) {
       return NameResolver.ConfigOrError.fromError(
-          Status.INVALID_ARGUMENT.withDescription("no 'metadataValue' defined"));
+          Status.UNAVAILABLE.withDescription("no 'metadataValue' defined"));
     }
 
     return NameResolver.ConfigOrError.fromConfig(

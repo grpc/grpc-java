@@ -69,12 +69,12 @@ dependencies {
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-[compileJava, compileTestJava].each() {
+[tasks.named("compileJava"), tasks.named("compileTestJava")]*.configure {
     // Netty retuns a lot of futures that we mostly don't care about.
-    it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
+    options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     options.links 'http://netty.io/4.1/api/'
     exclude 'io/grpc/netty/Internal*'
 }
@@ -83,17 +83,17 @@ project.sourceSets {
     main { java { srcDir "${projectDir}/third_party/netty/java" } }
 }
 
-test {
+tasks.named("test").configure {
     // Allow testing Jetty ALPN in TlsTest
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
 }
 
-jmh {
+tasks.named("jmh").configure {
     // Workaround
     // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
     includeTests = true
 }
 
-checkstyleMain {
+tasks.named("checkstyleMain").configure {
     source = source.minus(fileTree(dir: "src/main", include: "**/Http2ControlFrameLimitEncoder.java"))
 }
