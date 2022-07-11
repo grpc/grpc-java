@@ -9,10 +9,7 @@ plugins {
 
 description = "grpc Benchmarks"
 
-startScripts.enabled = false
-run.enabled = false
-
-jmh {
+tasks.named("jmh").configure {
     jvmArgs = ["-server", "-Xms2g", "-Xmx2g"]
 }
 
@@ -46,7 +43,7 @@ dependencies {
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-compileJava {
+tasks.named("compileJava").configure {
     // The Control.Void protobuf clashes
     options.errorprone.check("JavaLangClash", CheckSeverity.OFF)
 }
@@ -60,7 +57,15 @@ def vmArgs = [
     "-XX:+PrintGCDetails"
 ]
 
-task qps_client(type: CreateStartScripts) {
+tasks.named("startScripts").configure {
+    enabled = false
+}
+
+tasks.named("run").configure {
+    enabled = false
+}
+
+def qps_client = tasks.register("qps_client", CreateStartScripts) {
     mainClass = "io.grpc.benchmarks.qps.AsyncClient"
     applicationName = "qps_client"
     defaultJvmOpts = vmArgs
@@ -68,7 +73,7 @@ task qps_client(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-task openloop_client(type: CreateStartScripts) {
+def openloop_client = tasks.register("openloop_client", CreateStartScripts) {
     mainClass = "io.grpc.benchmarks.qps.OpenLoopClient"
     applicationName = "openloop_client"
     defaultJvmOpts = vmArgs
@@ -76,14 +81,14 @@ task openloop_client(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-task qps_server(type: CreateStartScripts) {
+def qps_server = tasks.register("qps_server", CreateStartScripts) {
     mainClass = "io.grpc.benchmarks.qps.AsyncServer"
     applicationName = "qps_server"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
-task benchmark_worker(type: CreateStartScripts) {
+def benchmark_worker = tasks.register("benchmark_worker", CreateStartScripts) {
     mainClass = "io.grpc.benchmarks.driver.LoadWorker"
     applicationName = "benchmark_worker"
     defaultJvmOpts = vmArgs

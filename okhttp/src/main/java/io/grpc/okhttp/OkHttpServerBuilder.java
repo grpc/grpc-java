@@ -125,7 +125,7 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     return serverImplBuilder;
   }
 
-  @VisibleForTesting
+  // @VisibleForTesting
   OkHttpServerBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
     return this;

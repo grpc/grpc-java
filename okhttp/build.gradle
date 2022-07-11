@@ -32,15 +32,17 @@ project.sourceSets {
     test { java { srcDir "${projectDir}/third_party/okhttp/test/java" } }
 }
 
-checkstyleMain.exclude '**/io/grpc/okhttp/internal/**'
+tasks.named("checkstyleMain").configure {
+    exclude '**/io/grpc/okhttp/internal/**'
+}
 
-javadoc {
+tasks.named("javadoc").configure {
     options.links 'http://square.github.io/okhttp/2.x/okhttp/'
     exclude 'io/grpc/okhttp/Internal*'
     exclude 'io/grpc/okhttp/internal/**'
 }
 
-jacocoTestReport {
+tasks.named("jacocoTestReport").configure {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
         exclude: [

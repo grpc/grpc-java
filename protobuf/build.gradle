@@ -28,4 +28,6 @@ dependencies {
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
-javadoc.options.links 'https://developers.google.com/protocol-buffers/docs/reference/java/'
+tasks.named("javadoc").configure {
+    options.links 'https://developers.google.com/protocol-buffers/docs/reference/java/'
+}

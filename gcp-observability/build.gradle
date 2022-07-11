@@ -8,7 +8,7 @@ plugins {
 
 description = "gRPC: Google Cloud Platform Observability"
 
-[compileJava].each() {
+tasks.named("compileJava").configure {
     it.options.compilerArgs += [
             // only has AutoValue annotation processor
             "-Xlint:-processing"
