@@ -28,11 +28,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.AbstractServerStream.TransportState;
 import io.grpc.internal.MessageFramerTest.ByteWritableBuffer;
 import java.io.ByteArrayInputStream;
@@ -106,6 +108,43 @@ public class AbstractServerStreamTest {
 
     verify(buffer).close();
     assertNull("no message expected", streamListenerMessageQueue.poll());
+  }
+
+  @Test
+  public void noHalfCloseListenerOnCancellation() throws Exception {
+    final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
+    final SettableFuture<Status> closedFuture = SettableFuture.create();
+
+    stream.transportState().setListener(new ServerStreamListenerBase() {
+      @Override
+      public void messagesAvailable(StreamListener.MessageProducer producer) {
+        InputStream message;
+        while ((message = producer.next()) != null) {
+          streamListenerMessageQueue.add(message);
+        }
+      }
+
+      @Override
+      public void halfClosed() {
+        if (streamListenerMessageQueue.isEmpty()) {
+          throw new StatusRuntimeException(Status.INTERNAL.withDescription(
+              "Half close without request"));
+        }
+      }
+
+      @Override
+      public void closed(Status status) {
+        closedFuture.set(status);
+      }
+    });
+
+    ReadableBuffer buffer = mock(ReadableBuffer.class);
+    when(buffer.readableBytes()).thenReturn(1);
+    stream.transportState().inboundDataReceived(buffer, true);
+    Status cancel = Status.CANCELLED.withDescription("DEADLINE EXCEEDED");
+    stream.transportState().transportReportStatus(cancel);
+    assertEquals(cancel, closedFuture.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    verify(buffer).close();
   }
 
   @Test
