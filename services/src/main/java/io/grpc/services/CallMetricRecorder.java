@@ -19,6 +19,7 @@ package io.grpc.services;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
@@ -53,9 +54,10 @@ public final class CallMetricRecorder {
     private Map<String, Double> utilizationMetrics;
 
     /**
-     * Create a report for all backend metrics.
+     * A gRPC object of orca load report. LB policies listening at per-rpc or oob orca load reports
+     * will be notified of the metrics data in this data format.
      */
-    CallMetricReport(double cpuUtilization, double memoryUtilization,
+    public CallMetricReport(double cpuUtilization, double memoryUtilization,
                             Map<String, Double> requestCostMetrics,
                             Map<String, Double> utilizationMetrics) {
       this.cpuUtilization = cpuUtilization;
@@ -78,6 +80,24 @@ public final class CallMetricRecorder {
 
     public Map<String, Double> getUtilizationMetrics() {
       return utilizationMetrics;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(cpuUtilization, memoryUtilization, requestCostMetrics,
+          utilizationMetrics);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (o instanceof CallMetricReport) {
+        CallMetricReport that = (CallMetricReport) o;
+        return cpuUtilization == that.cpuUtilization
+            && memoryUtilization == that.memoryUtilization
+            && Objects.equal(requestCostMetrics, that.requestCostMetrics)
+            && Objects.equal(utilizationMetrics, that.utilizationMetrics);
+      }
+      return false;
     }
   }
 

@@ -28,6 +28,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.protobuf.ProtoUtils;
+import io.grpc.services.CallMetricRecorder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -175,14 +176,14 @@ public abstract class OrcaPerRequestUtil {
   public interface OrcaPerRequestReportListener {
 
     /**
-     * Invoked when an per-request ORCA report is received.
+     * Invoked when a per-request ORCA report is received.
      *
      * <p>Note this callback will be invoked from the network thread as the RPC finishes,
      * implementations should not block.
      *
-     * @param report load report in the format of ORCA format.
+     * @param report load report in the format of grpc {@link CallMetricRecorder.CallMetricReport}.
      */
-    void onLoadReport(OrcaLoadReport report);
+    void onLoadReport(CallMetricRecorder.CallMetricReport report);
   }
 
   /**
@@ -250,6 +251,12 @@ public abstract class OrcaPerRequestUtil {
     }
   }
 
+  static CallMetricRecorder.CallMetricReport fromOrcaLoadReport(OrcaLoadReport loadReport) {
+    return new CallMetricRecorder.CallMetricReport(loadReport.getCpuUtilization(),
+        loadReport.getMemUtilization(), loadReport.getRequestCostMap(),
+        loadReport.getUtilizationMap());
+  }
+
   /**
    * A container class to hold registered {@link OrcaPerRequestReportListener}s and invoke all of
    * them when an {@link OrcaLoadReport} is received.
@@ -263,8 +270,9 @@ public abstract class OrcaPerRequestUtil {
     }
 
     void onReport(OrcaLoadReport report) {
+      CallMetricRecorder.CallMetricReport metricReport = fromOrcaLoadReport(report);
       for (OrcaPerRequestReportListener listener : listeners) {
-        listener.onLoadReport(report);
+        listener.onLoadReport(metricReport);
       }
     }
   }

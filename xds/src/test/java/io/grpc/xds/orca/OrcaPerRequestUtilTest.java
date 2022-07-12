@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
+import io.grpc.services.CallMetricRecorder;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaReportingTracerFactory;
 import org.junit.Before;
@@ -96,9 +97,11 @@ public class OrcaPerRequestUtilTest {
         OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,
         OrcaLoadReport.getDefaultInstance());
     tracer.inboundTrailers(trailer);
-    ArgumentCaptor<OrcaLoadReport> reportCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallMetricRecorder.CallMetricReport> reportCaptor =
+        ArgumentCaptor.forClass(null);
     verify(orcaListener1).onLoadReport(reportCaptor.capture());
-    assertThat(reportCaptor.getValue()).isEqualTo(OrcaLoadReport.getDefaultInstance());
+    assertThat(reportCaptor.getValue()).isEqualTo(
+        OrcaPerRequestUtil.fromOrcaLoadReport(OrcaLoadReport.getDefaultInstance()));
   }
 
   /**
@@ -136,11 +139,14 @@ public class OrcaPerRequestUtilTest {
         OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,
         OrcaLoadReport.getDefaultInstance());
     childTracer.inboundTrailers(trailer);
-    ArgumentCaptor<OrcaLoadReport> parentReportCap = ArgumentCaptor.forClass(null);
-    ArgumentCaptor<OrcaLoadReport> childReportCap = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallMetricRecorder.CallMetricReport> parentReportCap =
+        ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallMetricRecorder.CallMetricReport> childReportCap =
+        ArgumentCaptor.forClass(null);
     verify(orcaListener1).onLoadReport(parentReportCap.capture());
     verify(orcaListener2).onLoadReport(childReportCap.capture());
-    assertThat(parentReportCap.getValue()).isEqualTo(OrcaLoadReport.getDefaultInstance());
+    assertThat(parentReportCap.getValue()).isEqualTo(
+        OrcaPerRequestUtil.fromOrcaLoadReport(OrcaLoadReport.getDefaultInstance()));
     assertThat(childReportCap.getValue()).isSameInstanceAs(parentReportCap.getValue());
   }
 
@@ -163,7 +169,8 @@ public class OrcaPerRequestUtilTest {
         OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,
         OrcaLoadReport.getDefaultInstance());
     parentTracer.inboundTrailers(trailer);
-    verify(orcaListener1).onLoadReport(eq(OrcaLoadReport.getDefaultInstance()));
+    verify(orcaListener1).onLoadReport(eq(
+        OrcaPerRequestUtil.fromOrcaLoadReport(OrcaLoadReport.getDefaultInstance())));
     verifyNoInteractions(childFactory);
     verifyNoInteractions(orcaListener2);
   }
