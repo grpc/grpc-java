@@ -34,7 +34,6 @@ dependencies {
     def xdsDependency = implementation project(':grpc-xds')
 
     compileOnly libraries.javax.annotation
-    shadow configurations.implementation.getDependencies().minus(xdsDependency)
     shadow project(path: ':grpc-xds', configuration: 'shadow')
     // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
     // Used instead of google-cloud-logging because it's failing
@@ -42,8 +41,10 @@ dependencies {
     // https://cloud.google.com/logging/docs/setup/java#the_javautillogging_handler
     // Error example: "java.util.logging.ErrorManager: 1"
     // Latest failing version com.google.cloud:google-cloud-logging:2.1.2
-    runtimeOnly group: 'io.github.devatherock', name: 'jul-jsonformatter', version: '1.1.0'
-    runtimeOnly libraries.opencensus.impl,
+    // TODO(ejona): These should be compileOnly, but that doesn't get picked up
+    // for the shadow runtime
+    implementation group: 'io.github.devatherock', name: 'jul-jsonformatter', version: '1.1.0'
+    implementation libraries.opencensus.impl,
             libraries.netty.tcnative,
             libraries.netty.tcnative.classes,
             project(':grpc-grpclb'),
@@ -54,6 +55,7 @@ dependencies {
             libraries.mockito.core,
             libraries.okhttp
     alpnagent libraries.jetty.alpn.agent
+    shadow configurations.implementation.getDependencies().minus(xdsDependency)
 }
 
 configureProtoCompilation()
@@ -67,6 +69,14 @@ tasks.named("compileJava").configure {
 tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
+}
+
+tasks.named("distZip").configure {
+    archiveClassifier = "original"
+}
+
+tasks.named("distTar").configure {
+    archiveClassifier = "original"
 }
 
 def xdsPrefixName = 'io.grpc.xds'

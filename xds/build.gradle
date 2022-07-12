@@ -181,7 +181,8 @@ tasks.named("shadowJar").configure {
 }
 
 def checkPackageLeakage = tasks.register("checkPackageLeakage") {
-    dependsOn shadowJar
+    inputs.files(shadowJar).withNormalizer(CompileClasspathNormalizer)
+    outputs.file("${buildDir}/tmp/${name}") // Fake output for UP-TO-DATE checking
     doLast {
         def jarEntryPrefixName = prefixName.replaceAll('\\.', '/')
         shadowJar.outputs.getFiles().each { jar ->
