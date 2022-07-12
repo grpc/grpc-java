@@ -1989,7 +1989,6 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream2, times(2)).flush();
     inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream2).request(456);
-    inOrder.verify(mockStream1).isReady();
     inOrder.verify(mockStream2).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -2028,8 +2027,6 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream3).request(456);
     inOrder.verify(mockStream3, times(2)).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).isReady();
-    inOrder.verify(mockStream2).isReady();
     inOrder.verify(mockStream3).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -2073,8 +2070,6 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream4).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream4).request(456);
     inOrder.verify(mockStream4, times(4)).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).isReady();
-    inOrder.verify(mockStream2).isReady();
     inOrder.verify(mockStream4).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -2387,7 +2382,7 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream1).start(sublistenerCaptor1.capture());
-    inOrder.verify(mockStream1).isReady();
+    inOrder.verify(mockStream1).isReady(); // called when substream drained
     inOrder.verifyNoMoreInteractions();
 
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
@@ -2395,8 +2390,7 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
-    inOrder.verify(mockStream1).isReady();
-    inOrder.verify(mockStream2).isReady();
+    inOrder.verify(mockStream2).isReady(); // called when substream drained
     inOrder.verifyNoMoreInteractions();
 
     Status status = Status.CANCELLED.withDescription("cancelled");
@@ -2436,7 +2430,6 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     verify(mockStream2).start(sublistenerCaptor2.capture());
-    verify(mockStream1, times(2)).isReady();
     verify(mockStream2).isReady();
 
     ClientStreamTracer bufferSizeTracer2 = bufferSizeTracer;
@@ -2469,7 +2462,7 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     verify(mockStream1).start(sublistenerCaptor1.capture());
-    verify(mockStream1).isReady();
+    verify(mockStream1).isReady(); // called when substream drained
 
     ClientStreamTracer bufferSizeTracer1 = bufferSizeTracer;
     bufferSizeTracer1.outboundWireSize(100);
@@ -2478,8 +2471,7 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     verify(mockStream2).start(sublistenerCaptor2.capture());
-    verify(mockStream1, times(2)).isReady();
-    verify(mockStream2).isReady();
+    verify(mockStream2).isReady(); // called when substream drained
 
     ClientStreamTracer bufferSizeTracer2 = bufferSizeTracer;
     bufferSizeTracer2.outboundWireSize(100);
