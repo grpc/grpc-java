@@ -67,6 +67,7 @@ public final class AutoConfiguredLoadBalancerFactory {
 
     @Override
     @Deprecated
+    @SuppressWarnings("InlineMeSuggester")
     public boolean handleResolvedAddressGroups(List<EquivalentAddressGroup> s, Attributes a) {
       return true;
     }

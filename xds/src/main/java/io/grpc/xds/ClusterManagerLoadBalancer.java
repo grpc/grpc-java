@@ -73,13 +73,13 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
   public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
-      handleResolvedAddressesInternal(resolvedAddresses);
+      return handleResolvedAddressesInternal(resolvedAddresses);
     } finally {
       resolvingAddresses = false;
     }
   }
 
-  public void handleResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
+  public boolean handleResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
