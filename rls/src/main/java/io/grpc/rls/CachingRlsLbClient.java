@@ -518,7 +518,7 @@ final class CachingRlsLbClient {
       // TODO(creamsoup) fallback to other targets if first one is not available
       childPolicyWrapper =
           refCountedChildPolicyWrapperFactory
-              .createOrGet(response.targets().get(0));
+              .createOrGet(response.targets());
       long now = ticker.read();
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
