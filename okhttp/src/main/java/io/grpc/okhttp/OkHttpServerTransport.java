@@ -45,6 +45,7 @@ import io.grpc.okhttp.internal.framed.Variant;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.Executor;
@@ -552,6 +553,7 @@ final class OkHttpServerTransport implements ServerTransport,
       if (metadataSize > config.maxInboundMetadataSize) {
         respondWithHttpError(streamId, inFinished, 431, Status.Code.RESOURCE_EXHAUSTED,
             String.format(
+                Locale.US,
                 "Request metadata larger than %d: %d",
                 config.maxInboundMetadataSize,
                 metadataSize));
