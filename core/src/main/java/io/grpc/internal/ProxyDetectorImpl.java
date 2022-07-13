@@ -133,7 +133,7 @@ class ProxyDetectorImpl implements ProxyDetector {
         // let url be null
         log.log(
             Level.WARNING,
-            String.format("failed to create URL for Authenticator: %s %s", protocol, host));
+            "failed to create URL for Authenticator: {0} {1}", new Object[] {protocol, host});
       }
       // TODO(spencerfang): consider using java.security.AccessController here
       return Authenticator.requestPasswordAuthentication(

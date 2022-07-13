@@ -80,6 +80,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -642,7 +643,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       // Prepare headers and request method line
       Request proxyRequest = createHttpProxyRequest(address, proxyUsername, proxyPassword);
       HttpUrl url = proxyRequest.httpUrl();
-      String requestLine = String.format("CONNECT %s:%d HTTP/1.1", url.host(), url.port());
+      String requestLine =
+          String.format(Locale.US, "CONNECT %s:%d HTTP/1.1", url.host(), url.port());
 
       // Write request to socket
       sink.writeUtf8(requestLine).writeUtf8("\r\n");
@@ -674,6 +676,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           // ignored
         }
         String message = String.format(
+            Locale.US,
             "Response returned from proxy was not successful (expected 2xx, got %d %s). "
               + "Response body:\n%s",
             statusLine.code, statusLine.message, body.readUtf8());
@@ -1185,6 +1188,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         if (metadataSize > maxInboundMetadataSize) {
           failedStatus = Status.RESOURCE_EXHAUSTED.withDescription(
               String.format(
+                  Locale.US,
                   "Response %s metadata larger than %d: %d",
                   inFinished ? "trailer" : "header",
                   maxInboundMetadataSize,
@@ -1300,8 +1304,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
               p = ping;
               ping = null;
             } else {
-              log.log(Level.WARNING, String.format("Received unexpected ping ack. "
-                  + "Expecting %d, got %d", ping.payload(), ackPayload));
+              log.log(Level.WARNING, String.format(
+                  Locale.US, "Received unexpected ping ack. Expecting %d, got %d",
+                  ping.payload(), ackPayload));
             }
           } else {
             log.warning("Received unexpected ping ack. No ping outstanding");

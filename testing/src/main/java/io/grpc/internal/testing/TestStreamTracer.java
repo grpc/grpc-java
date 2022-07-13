@@ -18,6 +18,7 @@ package io.grpc.internal.testing;
 
 import io.grpc.Status;
 import io.grpc.StreamTracer;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -180,6 +181,7 @@ public interface TestStreamTracer {
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       outboundEvents.add(
           String.format(
+              Locale.US,
               "outboundMessageSent(%d, %d, %d)",
               seqNo, optionalWireSize, optionalUncompressedSize));
     }
@@ -189,6 +191,7 @@ public interface TestStreamTracer {
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       inboundEvents.add(
           String.format(
+              Locale.US,
               "inboundMessageRead(%d, %d, %d)", seqNo, optionalWireSize, optionalUncompressedSize));
     }
 

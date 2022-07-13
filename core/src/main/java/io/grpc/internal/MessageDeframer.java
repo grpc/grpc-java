@@ -28,6 +28,7 @@ import java.io.Closeable;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Locale;
 import java.util.zip.DataFormatException;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -386,7 +387,7 @@ public class MessageDeframer implements Closeable, Deframer {
     requiredLength = nextFrame.readInt();
     if (requiredLength < 0 || requiredLength > maxInboundMessageSize) {
       throw Status.RESOURCE_EXHAUSTED.withDescription(
-          String.format("gRPC message exceeds maximum size %d: %d",
+          String.format(Locale.US, "gRPC message exceeds maximum size %d: %d",
               maxInboundMessageSize, requiredLength))
           .asRuntimeException();
     }
@@ -516,9 +517,9 @@ public class MessageDeframer implements Closeable, Deframer {
 
     private void verifySize() {
       if (count > maxMessageSize) {
-        throw Status.RESOURCE_EXHAUSTED.withDescription(String.format(
-                "Decompressed gRPC message exceeds maximum size %d",
-                maxMessageSize)).asRuntimeException();
+        throw Status.RESOURCE_EXHAUSTED
+            .withDescription("Decompressed gRPC message exceeds maximum size " + maxMessageSize)
+            .asRuntimeException();
       }
     }
   }

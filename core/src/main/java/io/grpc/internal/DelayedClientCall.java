@@ -98,12 +98,14 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         StringBuilder builder =
             new StringBuilder(
                 String.format(
+                    Locale.US,
                     "Call timeout set to '%d' ns, due to context deadline.", remainingNanos));
         if (deadline == null) {
           builder.append(" Explicit call timeout was not set.");
         } else {
           long callTimeout = deadline.timeRemaining(TimeUnit.NANOSECONDS);
-          builder.append(String.format(" Explicit call timeout was '%d' ns.", callTimeout));
+          builder.append(String.format(
+              Locale.US, " Explicit call timeout was '%d' ns.", callTimeout));
         }
         logger.fine(builder.toString());
       }

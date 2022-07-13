@@ -894,10 +894,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       }
       if (data == flowControlPing().payload()) {
         flowControlPing().updateWindow();
-        if (logger.isLoggable(Level.FINE)) {
-          logger.log(Level.FINE, String.format("Window: %d",
-              decoder().flowController().initialWindowSize(connection().connectionStream())));
-        }
+        logger.log(Level.FINE, "Window: {0}",
+            decoder().flowController().initialWindowSize(connection().connectionStream()));
       } else if (data == GRACEFUL_SHUTDOWN_PING) {
         if (gracefulShutdown == null) {
           // this should never happen

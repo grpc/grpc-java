@@ -60,6 +60,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -470,7 +471,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             }
           }
           if ("".equals(foundName)) {
-            foundName = String.format("%s[child%d]", name, priorityNameGenId++);
+            foundName = String.format(Locale.US, "%s[child%d]", name, priorityNameGenId++);
           }
           for (Locality locality : todo.get(priority)) {
             newNames.put(locality, foundName);

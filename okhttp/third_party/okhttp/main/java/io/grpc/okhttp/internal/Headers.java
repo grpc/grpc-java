@@ -22,6 +22,7 @@ package io.grpc.okhttp.internal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The header fields of a single HTTP message. Values are uninterpreted strings;
@@ -132,6 +133,7 @@ public final class Headers {
         char c = name.charAt(i);
         if (c <= '\u001f' || c >= '\u007f') {
           throw new IllegalArgumentException(String.format(
+              Locale.US,
               "Unexpected char %#04x at %d in header name: %s", (int) c, i, name));
         }
       }
@@ -140,6 +142,7 @@ public final class Headers {
         char c = value.charAt(i);
         if (c <= '\u001f' || c >= '\u007f') {
           throw new IllegalArgumentException(String.format(
+              Locale.US,
               "Unexpected char %#04x at %d in header value: %s", (int) c, i, value));
         }
       }

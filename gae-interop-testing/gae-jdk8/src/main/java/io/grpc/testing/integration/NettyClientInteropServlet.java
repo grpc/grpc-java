@@ -28,6 +28,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Locale;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.logging.Handler;
@@ -102,6 +103,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
       resp.setStatus(200);
       writer.println(
           String.format(
+              Locale.US,
               "PASS! Tests ran %d, tests ignored %d",
               result.getRunCount(),
               result.getIgnoreCount()));
@@ -109,6 +111,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
       resp.setStatus(500);
       writer.println(
           String.format(
+              Locale.US,
               "FAILED! Tests ran %d, tests failed %d, tests ignored %d",
               result.getRunCount(),
               result.getFailureCount(),
