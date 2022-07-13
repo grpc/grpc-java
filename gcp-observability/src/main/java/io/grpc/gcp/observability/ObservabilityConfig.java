@@ -44,6 +44,7 @@ public interface ObservabilityConfig {
   /** Get event types to log. */
   List<EventType> getEventTypes();
 
+  /** Get sampler for TraceConfig - when Cloud Tracing is enabled. */
   Sampler getSampler();
 
   /**

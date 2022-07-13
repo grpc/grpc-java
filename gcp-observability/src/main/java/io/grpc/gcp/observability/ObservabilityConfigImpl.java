@@ -37,6 +37,8 @@ import java.util.Map;
 final class ObservabilityConfigImpl implements ObservabilityConfig {
   private static final String CONFIG_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY";
   private static final String CONFIG_FILE_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY_JSON";
+  // Tolerance for floating-point comparisons.
+  private static final double EPSILON = 1e-6;
 
   private boolean enableCloudLogging = false;
   private boolean enableCloudMonitoring = false;
@@ -103,18 +105,16 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         this.eventTypes = eventTypesBuilder.build();
       }
       Double samplingRate = JsonUtil.getNumberAsDouble(config, "global_trace_sampling_rate");
-      if (enableCloudTracing && samplingRate == null) {
+      if (samplingRate == null) {
         this.sampler = Samplers.probabilitySampler(0.0);
-      }
-      double epsilon = 1e-6;
-      if (samplingRate != null) {
+      } else {
         checkArgument(
             samplingRate >= 0.0 && samplingRate <= 1.0,
             "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
         // Using alwaysSample() instead of probabilitySampler() because according to
         // {@link io.opencensus.trace.samplers.ProbabilitySampler#shouldSample}
         // there is a (very) small chance of *not* sampling if probability = 1.00.
-        if (Math.abs(1 - samplingRate) < epsilon) {
+        if (1 - samplingRate < EPSILON) {
           this.sampler = Samplers.alwaysSample();
         } else {
           this.sampler = Samplers.probabilitySampler(samplingRate);

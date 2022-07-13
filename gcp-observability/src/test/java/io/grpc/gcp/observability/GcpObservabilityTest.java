@@ -28,14 +28,12 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.InternalGlobalInterceptors;
-// import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
-// import io.grpc.ServerProvider;
 import io.grpc.ServerProvider;
 import io.grpc.StaticTestingClassLoader;
 import io.grpc.gcp.observability.interceptors.InternalLoggingChannelInterceptor;
@@ -86,6 +84,7 @@ public class GcpObservabilityTest {
 
     @Override
     public void run() {
+      // TODO(dnvindhya) : Remove usage of Providers on cleaning up Logging*Provider
       ManagedChannelProvider prevChannelProvider = ManagedChannelProvider.provider();
       ServerProvider prevServerProvider = ServerProvider.provider();
       Sink sink = mock(Sink.class);
@@ -144,7 +143,7 @@ public class GcpObservabilityTest {
           mock(InternalLoggingServerInterceptor.Factory.class);
       when(serverInterceptorFactory.create()).thenReturn(serverInterceptor);
 
-      try (GcpObservability observability =
+      try (GcpObservability unused =
           GcpObservability.grpcInit(
               sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
         assertThat(InternalGlobalInterceptors.getClientInterceptors()).hasSize(3);
@@ -172,7 +171,7 @@ public class GcpObservabilityTest {
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
           mock(InternalLoggingServerInterceptor.Factory.class);;
 
-      try (GcpObservability observability =
+      try (GcpObservability unused =
           GcpObservability.grpcInit(
               sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
         assertThat(InternalGlobalInterceptors.getClientInterceptors()).isEmpty();
