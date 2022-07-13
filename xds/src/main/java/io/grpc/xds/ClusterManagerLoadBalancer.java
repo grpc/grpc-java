@@ -57,6 +57,8 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final XdsLogger logger;
+  // Set to true if currently in the process of handling resolved addresses.
+  private boolean resolvingAddresses;
 
   ClusterManagerLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -69,6 +71,15 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    try {
+      resolvingAddresses = true;
+      handleResolvedAddressesInternal(resolvedAddresses);
+    } finally {
+      resolvingAddresses = false;
+    }
+  }
+
+  public void handleResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -251,21 +262,18 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!childLbStates.containsKey(name)) {
-              return;
-            }
-            // Subchannel picker and state are saved, but will only be propagated to the channel
-            // when the child instance exits deactivated state.
-            currentState = newState;
-            currentPicker = newPicker;
-            if (!deactivated) {
-              updateOverallBalancingState();
-            }
-          }
-        });
+        // If we are already in the process of resolving addresses, the overall balancing state
+        // will be updated at the end of it, and we don't need to trigger that update here.
+        if (resolvingAddresses || !childLbStates.containsKey(name)) {
+          return;
+        }
+        // Subchannel picker and state are saved, but will only be propagated to the channel
+        // when the child instance exits deactivated state.
+        currentState = newState;
+        currentPicker = newPicker;
+        if (!deactivated) {
+          updateOverallBalancingState();
+        }
       }
 
       @Override
