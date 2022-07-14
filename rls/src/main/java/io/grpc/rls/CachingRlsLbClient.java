@@ -634,7 +634,7 @@ final class CachingRlsLbClient {
           .add("response", response)
           .add("expireTime", expireTime)
           .add("staleTime", staleTime)
-          .add("childPolicyWrapper", childPolicyWrappers)
+          .add("childPolicyWrappers", childPolicyWrappers)
           .toString();
     }
   }
