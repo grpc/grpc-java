@@ -29,6 +29,7 @@ import io.grpc.Metadata;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.InternalCallMetricRecorder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -252,7 +253,7 @@ public abstract class OrcaPerRequestUtil {
   }
 
   static CallMetricRecorder.CallMetricReport fromOrcaLoadReport(OrcaLoadReport loadReport) {
-    return new CallMetricRecorder.CallMetricReport(loadReport.getCpuUtilization(),
+    return InternalCallMetricRecorder.createMetricReport(loadReport.getCpuUtilization(),
         loadReport.getMemUtilization(), loadReport.getRequestCostMap(),
         loadReport.getUtilizationMap());
   }

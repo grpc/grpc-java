@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
@@ -286,8 +287,9 @@ public class OrcaOobUtilTest {
       OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
       serverCall.responseObserver.onNext(report);
       assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-      verify(mockOrcaListener0, times(i + 1)).onLoadReport(eq(
-          OrcaPerRequestUtil.fromOrcaLoadReport(report)));
+      verify(mockOrcaListener0, times(i + 1)).onLoadReport(
+          argThat(new OrcaPerRequestUtilTest.MetricsReportMatcher(
+              OrcaPerRequestUtil.fromOrcaLoadReport(report))));
     }
 
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -372,7 +374,8 @@ public class OrcaOobUtilTest {
       serverCall.responseObserver.onNext(report);
       assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
       verify(mockOrcaListener1, times(i + 1)).onLoadReport(
-          eq(OrcaPerRequestUtil.fromOrcaLoadReport(report)));
+          argThat(new OrcaPerRequestUtilTest.MetricsReportMatcher(
+              OrcaPerRequestUtil.fromOrcaLoadReport(report))));
     }
 
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -429,8 +432,8 @@ public class OrcaOobUtilTest {
     serverCall.responseObserver.onNext(report);
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
     verify(mockOrcaListener0).onLoadReport(
-        eq(OrcaPerRequestUtil.fromOrcaLoadReport(report)));
-
+        argThat(new OrcaPerRequestUtilTest.MetricsReportMatcher(
+            OrcaPerRequestUtil.fromOrcaLoadReport(report))));
     verifyNoInteractions(backoffPolicyProvider);
   }
 
@@ -476,8 +479,8 @@ public class OrcaOobUtilTest {
     orcaServiceImp.calls.peek().responseObserver.onNext(report);
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
     inOrder.verify(mockOrcaListener0).onLoadReport(
-        eq(OrcaPerRequestUtil.fromOrcaLoadReport(report)));
-
+        argThat(new OrcaPerRequestUtilTest.MetricsReportMatcher(
+            OrcaPerRequestUtil.fromOrcaLoadReport(report))));
     // Server closes the ORCA reporting RPC after a response, will restart immediately.
     orcaServiceImp.calls.poll().responseObserver.onCompleted();
     assertThat(subchannel.logs).containsExactly(
@@ -667,8 +670,8 @@ public class OrcaOobUtilTest {
     ArgumentCaptor<CallMetricRecorder.CallMetricReport> parentReportCaptor =
         ArgumentCaptor.forClass(null);
     verify(mockOrcaListener1).onLoadReport(parentReportCaptor.capture());
-    assertThat(parentReportCaptor.getValue()).isEqualTo(
-        OrcaPerRequestUtil.fromOrcaLoadReport(report));
+    assertThat(OrcaPerRequestUtilTest.reportEqual(parentReportCaptor.getValue(),
+        OrcaPerRequestUtil.fromOrcaLoadReport(report))).isTrue();
     verifyNoMoreInteractions(mockOrcaListener2);
 
     // Now child helper also wants to receive reports.
