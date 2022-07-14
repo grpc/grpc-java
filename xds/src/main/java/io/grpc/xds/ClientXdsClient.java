@@ -2352,35 +2352,50 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           type, version, nonce, errorDetail);
       serverChannelMap.get(serverInfo).nackResponse(type, nonce, errorDetail);
     }
+
     long updateTime = timeProvider.currentTimeNanos();
     for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
       String resourceName = entry.getKey();
       ResourceSubscriber subscriber = entry.getValue();
-      // Attach error details to the subscribed resources that included in the ADS update.
+
+      if (parsedResources.containsKey(resourceName)) {
+        // Happy path: the resource updated successfully. Notify the watchers of the update.
+        subscriber.onData(parsedResources.get(resourceName), version, updateTime);
+        continue;
+      }
+
       if (invalidResources.contains(resourceName)) {
+        // The resource update is invalid. Capture the error without notifying the watchers.
         subscriber.onRejected(version, updateTime, errorDetail);
       }
-      // Notify the watchers.
-      if (parsedResources.containsKey(resourceName)) {
-        subscriber.onData(parsedResources.get(resourceName), version, updateTime);
-      } else if (type == ResourceType.LDS || type == ResourceType.CDS) {
-        if (subscriber.data != null && invalidResources.contains(resourceName)) {
-          // Update is rejected but keep using the cached data.
+
+      // Nothing else to do for incremental ADS resources.
+      if (type != ResourceType.LDS && type != ResourceType.CDS) {
+        continue;
+      }
+
+      // Handle State of the World ADS: invalid resources.
+      if (invalidResources.contains(resourceName)) {
+        // The resource is missing. Reuse the cached resource if possible.
+        if (subscriber.data != null) {
           retainDependentResource(subscriber, retainedResources);
-        } else if (invalidResources.contains(resourceName)) {
-          subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail));
         } else {
-          // For State of the World services, notify watchers when their watched resource is missing
-          // from the ADS update.
-          subscriber.onAbsent();
-          // Retain any dependent resources if the resource deletion is ignored
-          // per bootstrap ignore_resource_deletion server feature.
-          if (!subscriber.absent) {
-            retainDependentResource(subscriber, retainedResources);
-          }
+          // No cached data. Notify the watchers of an invalid update.
+          subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail));
         }
+        continue;
+      }
+
+      // For State of the World services, notify watchers when their watched resource is missing
+      // from the ADS update.
+      subscriber.onAbsent();
+      // Retain any dependent resources if the resource deletion is ignored
+      // per bootstrap ignore_resource_deletion server feature.
+      if (!subscriber.absent) {
+        retainDependentResource(subscriber, retainedResources);
       }
     }
+
     // LDS/CDS responses represents the state of the world, RDS/EDS resources not referenced in
     // LDS/CDS resources should be deleted.
     if (type == ResourceType.LDS || type == ResourceType.CDS) {
