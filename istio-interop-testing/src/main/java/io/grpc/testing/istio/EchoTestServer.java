@@ -17,7 +17,13 @@
 package io.grpc.testing.istio;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ChannelCredentials;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.Grpc;
@@ -29,21 +35,26 @@ import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.TlsServerCredentials;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.XdsChannelCredentials;
+import io.grpc.xds.XdsServerCredentials;
 import io.istio.test.Echo.EchoRequest;
 import io.istio.test.Echo.EchoResponse;
 import io.istio.test.Echo.ForwardEchoRequest;
 import io.istio.test.Echo.ForwardEchoResponse;
 import io.istio.test.Echo.Header;
 import io.istio.test.EchoTestServiceGrpc;
-import io.istio.test.EchoTestServiceGrpc.EchoTestServiceBlockingStub;
+import io.istio.test.EchoTestServiceGrpc.EchoTestServiceFutureStub;
 import io.istio.test.EchoTestServiceGrpc.EchoTestServiceImplBase;
+import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -55,9 +66,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * This class implements the Istio echo server functionality similar to
@@ -89,8 +102,6 @@ public final class EchoTestServer {
    * Preprocess args, for two things:
    * 1. merge duplicate flags. So "--grpc=8080 --grpc=9090" becomes
    * "--grpc=8080,9090".
-   * 2. replace '-' to '_'. So "--istio-version=123" becomes
-   * "--istio_version=123" (so exclude the leading "--").
    **/
   @VisibleForTesting
   static Map<String, List<String>> preprocessArgs(String[] args) {
@@ -100,9 +111,10 @@ public final class EchoTestServer {
 
       if (keyValue.length == 2) {
         String key = keyValue[0];
+        if ("--version".equals(key)) {
+          continue;
+        }
         String value = keyValue[1];
-
-        key = key.substring(0, 2) + key.substring(2).replace('-', '_');
         List<String> oldValue = argsMap.get(key);
         if (oldValue == null) {
           oldValue = new ArrayList<>();
@@ -114,10 +126,10 @@ public final class EchoTestServer {
     return ImmutableMap.<String, List<String>>builder().putAll(argsMap).build();
   }
 
-  /** Turn gRPC ports from a string list to an int list. */
+  /** Turn ports from a string list to an int list. */
   @VisibleForTesting
-  static List<Integer> getGrpcPorts(Map<String, List<String>> args) {
-    List<String> grpcPorts = args.get("--grpc");
+  static List<Integer> getPortsList(Map<String, List<String>> args, String flagName) {
+    List<String> grpcPorts = args.get(flagName);
     List<Integer> grpcPortsInt = new ArrayList<>(grpcPorts.size());
 
     for (String port : grpcPorts) {
@@ -141,11 +153,47 @@ public final class EchoTestServer {
    */
   public static void main(String[] args) throws Exception {
     Map<String, List<String>> processedArgs = preprocessArgs(args);
-    List<Integer> grpcPorts = getGrpcPorts(processedArgs);
+    List<Integer> grpcPorts = getPortsList(processedArgs, "--grpc");
+    List<Integer> xdsPorts = getPortsList(processedArgs, "--xds-grpc-server");
+    // If an xds port does not exist in gRPC ports set, add it.
+    for (Integer xdsPort : xdsPorts) {
+      if (!grpcPorts.contains(xdsPort)) {
+        grpcPorts.add(xdsPort);
+      }
+    }
+    // which ports are supposed to use tls
+    List<Integer> tlsPorts = getPortsList(processedArgs, "--tls");
+    List<String> forwardingAddress = processedArgs.get("--forwarding-adddress");
+    if (forwardingAddress.size() > 1) {
+      logger.severe("More than one value for --forwarding-adddress not allowed");
+      System.exit(1);
+    } else if (forwardingAddress.size() == 0) {
+      forwardingAddress.add("0.0.0.0:7072");
+    }
+    List<String> key = processedArgs.get("key");
+    List<String> crt = processedArgs.get("crt");
+
+    if (key.size() > 1 || crt.size() > 1) {
+      logger.severe("More than one value for --key or --crt not allowed");
+      System.exit(1);
+    }
+    if (key.size() != crt.size()) {
+      logger.severe("Both --key or --crt should be present or absent");
+      System.exit(1);
+    }
+    ServerCredentials tlsServerCredentials = null;
+    if (key.size() == 1) {
+      tlsServerCredentials = TlsServerCredentials.create(new File(crt.get(0)),
+          new File(key.get(0)));
+    } else if (!tlsPorts.isEmpty()) {
+      logger.severe("Both --key or --crt should be present if tls ports used");
+      System.exit(1);
+    }
 
     String hostname = determineHostname();
     EchoTestServer echoTestServer = new EchoTestServer();
-    echoTestServer.runServers(grpcPorts, hostname);
+    echoTestServer.runServers(hostname, grpcPorts, xdsPorts, tlsPorts, forwardingAddress.get(0),
+        tlsServerCredentials);
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       try {
         System.out.println("Shutting down");
@@ -158,20 +206,31 @@ public final class EchoTestServer {
     echoTestServer.blockUntilShutdown();
   }
 
-  void runServers(List<Integer> grpcPorts, String hostname) throws IOException {
+  void runServers(String hostname, List<Integer> grpcPorts, List<Integer> xdsPorts,
+      List<Integer> tlsPorts, String forwardingAddress, ServerCredentials tlsServerCredentials)
+      throws IOException {
     ServerServiceDefinition service = ServerInterceptors.intercept(
-        new EchoTestServiceImpl(hostname), new EchoTestServerInterceptor());
+        new EchoTestServiceImpl(hostname, forwardingAddress), new EchoTestServerInterceptor());
     servers = new ArrayList<>(grpcPorts.size() + 1);
     for (int port : grpcPorts) {
-      runServer(port, service);
+      ServerCredentials serverCredentials = InsecureServerCredentials.create();
+      if (xdsPorts.contains(port)) {
+        serverCredentials = XdsServerCredentials.create(InsecureServerCredentials.create());
+      } else if (tlsPorts.contains(port)) {
+        serverCredentials = tlsServerCredentials;
+      }
+      servers.add(runServer(port, service, serverCredentials));
     }
   }
 
-  void runServer(int port, ServerServiceDefinition service) throws IOException {
+  static Server runServer(
+      int port, ServerServiceDefinition service, ServerCredentials serverCredentials)
+      throws IOException {
     logger.log(Level.INFO, "Listening GRPC on " + port);
-    servers.add(Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
+    return Grpc.newServerBuilderForPort(port, serverCredentials)
         .addService(service)
-        .build().start());
+        .build()
+        .start();
   }
 
   void stopServers() {
@@ -228,9 +287,14 @@ public final class EchoTestServer {
   private static class EchoTestServiceImpl extends EchoTestServiceImplBase {
 
     private final String hostname;
+    private final String forwardingAddress;
+    private final EchoTestServiceGrpc.EchoTestServiceBlockingStub forwardingStub;
 
-    EchoTestServiceImpl(String hostname) {
+    EchoTestServiceImpl(String hostname, String forwardingAddress) {
       this.hostname = hostname;
+      this.forwardingAddress = forwardingAddress;
+      this.forwardingStub = EchoTestServiceGrpc.newBlockingStub(
+          Grpc.newChannelBuilder(forwardingAddress, InsecureChannelCredentials.create()).build());
     }
 
     @Override
@@ -272,20 +336,39 @@ public final class EchoTestServer {
       }
     }
 
+    private static class EchoCall {
+      EchoResponse response;
+      Status status;
+    }
+
     private ForwardEchoResponse buildEchoResponse(ForwardEchoRequest request)
         throws InterruptedException {
       ForwardEchoResponse.Builder forwardEchoResponseBuilder
           = ForwardEchoResponse.newBuilder();
       String rawUrl = request.getUrl();
-      if (!rawUrl.startsWith(GRPC_SCHEME)) {
+      List<String> parts = Splitter.on(':').limit(2).splitToList(rawUrl);
+      if (parts.size() < 2) {
         throw new StatusRuntimeException(
-            Status.UNIMPLEMENTED.withDescription("protocol grpc:// required"));
+            Status.INVALID_ARGUMENT.withDescription("No protocol configured for url " + rawUrl));
       }
-      rawUrl = rawUrl.substring(GRPC_SCHEME.length());
+      ChannelCredentials creds;
+      String target = null;
+      if ("grpc".equals(parts.get(0))) {
+        // We don't really want to test this but the istio test infrastructure needs
+        // this to be supported. If we ever decide to add support for this properly,
+        // we would need to add support for TLS creds here.
+        creds = InsecureChannelCredentials.create();
+        target = parts.get(1).substring(2);
+      } else if ("xds".equals(parts.get(0))) {
+        creds = XdsChannelCredentials.create(InsecureChannelCredentials.create());
+        target = rawUrl;
+      } else {
+        logger.log(Level.INFO, "Protocol {0} not supported. Forwarding to {1}",
+            new String[]{parts.get(0), forwardingAddress});
+        return forwardingStub.withDeadline(Context.current().getDeadline()).forwardEcho(request);
+      }
 
-      // May need to use xds security if urlScheme is "xds"
-      ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(
-          rawUrl, InsecureChannelCredentials.create());
+      ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, creds);
       ManagedChannel channel = channelBuilder.build();
 
       List<Header> requestHeaders = request.getHeadersList();
@@ -297,6 +380,7 @@ public final class EchoTestServer {
       }
 
       int count = request.getCount() == 0 ? 1 : request.getCount();
+      // Calculate the amount of time to sleep after each call.
       Duration durationPerQuery = Duration.ZERO;
       if (request.getQps() > 0) {
         durationPerQuery = Duration.ofNanos(
@@ -310,17 +394,20 @@ public final class EchoTestServer {
       Instant start = Instant.now();
       logger.info("starting instant=" + start);
       Duration expected = Duration.ZERO;
+      final CountDownLatch latch = new CountDownLatch(count);
+      EchoCall[] echoCalls = new EchoCall[count];
       for (int i = 0; i < count; i++) {
         Metadata currentMetadata = new Metadata();
         currentMetadata.merge(metadata);
         currentMetadata.put(
             Metadata.Key.of(REQUEST_ID, Metadata.ASCII_STRING_MARSHALLER), "" + i);
-        EchoTestServiceBlockingStub stub
-            = EchoTestServiceGrpc.newBlockingStub(channel).withInterceptors(
+        EchoTestServiceGrpc.EchoTestServiceFutureStub stub
+            = EchoTestServiceGrpc.newFutureStub(channel).withInterceptors(
                 MetadataUtils.newAttachHeadersInterceptor(currentMetadata))
             .withDeadlineAfter(request.getTimeoutMicros(), TimeUnit.MICROSECONDS);
-        String response = callEcho(stub, echoRequest, i);
-        forwardEchoResponseBuilder.addOutput(response);
+
+        echoCalls[i] = new EchoCall();
+        callEcho(stub, echoRequest, echoCalls[i], latch);
         Instant current = Instant.now();
         logger.info("after rpc instant=" + current);
         Duration elapsed = Duration.between(start, current);
@@ -332,18 +419,57 @@ public final class EchoTestServer {
           Thread.sleep(timeLeft.toMillis());
         }
       }
+      latch.await();
+      for (int i = 0; i < count; i++) {
+        if (Status.OK.equals(echoCalls[i].status)) {
+          forwardEchoResponseBuilder.addOutput(
+              buildForwardEchoStruct(i, echoCalls, request.getMessage()));
+        } else {
+          logger.log(Level.SEVERE, "RPC {0} failed {1}: {2}",
+              new Object[]{i, echoCalls[i].status.getCode(), echoCalls[i].status.getDescription()});
+          forwardEchoResponseBuilder.clear();
+          throw echoCalls[i].status.asRuntimeException();
+        }
+      }
       return forwardEchoResponseBuilder.build();
     }
 
-    private String callEcho(EchoTestServiceBlockingStub stub,
-        EchoRequest echoRequest, int count) {
-      try {
-        EchoResponse echoResponse = stub.echo(echoRequest);
-        return echoResponse.getMessage();
-      } catch (Exception e) {
-        logger.log(Level.INFO, "RPC failed " + count, e);
+    private static String buildForwardEchoStruct(int i, EchoCall[] echoCalls,
+        String requestMessage) {
+      // The test infrastructure might expect the entire struct instead of
+      // just the message.
+      StringBuilder sb = new StringBuilder();
+      sb.append(String.format("[%d] grpcecho.Echo(%s)\n", i, requestMessage));
+      List<String> content = Splitter.on('\n').splitToList(echoCalls[i].response.getMessage());
+      for (String line : content) {
+        if (!line.isEmpty()) {
+          sb.append(String.format("[%d body] %s\n", i, line));
+        }
       }
-      return "";
+      return sb.toString();
+    }
+
+    private void callEcho(EchoTestServiceFutureStub stub,
+        EchoRequest echoRequest, final EchoCall echoCall, CountDownLatch latch) {
+
+      ListenableFuture<EchoResponse> response = stub.echo(echoRequest);
+      Futures.addCallback(
+          response,
+          new FutureCallback<EchoResponse>() {
+            @Override
+            public void onSuccess(@Nullable EchoResponse result) {
+              echoCall.response = result;
+              echoCall.status = Status.OK;
+              latch.countDown();
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              echoCall.status = Status.fromThrowable(t);
+              latch.countDown();
+            }
+          },
+          MoreExecutors.directExecutor());
     }
   }
 

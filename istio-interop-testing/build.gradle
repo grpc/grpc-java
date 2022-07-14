@@ -20,7 +20,8 @@ dependencies {
             project(':grpc-protobuf'),
             project(':grpc-services'),
             project(':grpc-stub'),
-            project(':grpc-testing')
+            project(':grpc-testing'),
+            project(':grpc-xds')
 
     compileOnly libraries.javax.annotation
 
