@@ -623,14 +623,12 @@ final class CachingRlsLbClient {
     void cleanup() {
       synchronized (lock) {
         for (ChildPolicyWrapper policyWrapper : childPolicyWrappers)
-        refCountedChildPolicyWrapperFactory.release(policyWrapper);
+          refCountedChildPolicyWrapperFactory.release(policyWrapper);
       }
     }
 
     @Override
     public String toString() {
-//      StringBuilder policyWrapperBuiler = new StringBuilder();
-//      for (ChildPolicyWrapper)
       return MoreObjects.toStringHelper(this)
           .add("request", request)
           .add("response", response)
