@@ -57,7 +57,6 @@ import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
@@ -526,6 +525,7 @@ final class CachingRlsLbClient {
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
       this.response = checkNotNull(response, "response");
+      checkState(!response.targets().isEmpty(), "No targets returned by RLS");
       childPolicyWrappers =
           refCountedChildPolicyWrapperFactory
               .createOrGet(response.targets());
@@ -586,10 +586,6 @@ final class CachingRlsLbClient {
 
     @Nullable
     ChildPolicyWrapper getChildPolicyWrapper() {
-      if (childPolicyWrappers == null || childPolicyWrappers.isEmpty()) {
-        return null;
-      }
-
       for (ChildPolicyWrapper childPolicyWrapper : childPolicyWrappers) {
         if (childPolicyWrapper.getState() != ConnectivityState.TRANSIENT_FAILURE) {
           return childPolicyWrapper;
@@ -621,8 +617,9 @@ final class CachingRlsLbClient {
     @Override
     void cleanup() {
       synchronized (lock) {
-        for (ChildPolicyWrapper policyWrapper : childPolicyWrappers)
+        for (ChildPolicyWrapper policyWrapper : childPolicyWrappers) {
           refCountedChildPolicyWrapperFactory.release(policyWrapper);
+        }
       }
     }
 
