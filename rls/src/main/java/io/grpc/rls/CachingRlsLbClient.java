@@ -57,9 +57,12 @@ import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import jdk.internal.joptsimple.internal.Strings;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -372,6 +375,15 @@ final class CachingRlsLbClient {
       return dataCacheEntry.getChildPolicyWrapper();
     }
 
+    @VisibleForTesting
+    @Nullable
+    ChildPolicyWrapper getChildPolicyWrapper(String target) {
+      if (!hasData()) {
+        return null;
+      }
+      return dataCacheEntry.getChildPolicyWrapper(target);
+    }
+
     @Nullable
     String getHeaderData() {
       if (!hasData()) {
@@ -509,14 +521,13 @@ final class CachingRlsLbClient {
     private final RouteLookupResponse response;
     private final long expireTime;
     private final long staleTime;
-    private final ChildPolicyWrapper childPolicyWrapper;
+    private final List<ChildPolicyWrapper> childPolicyWrappers;
 
     // GuardedBy CachingRlsLbClient.lock
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
       this.response = checkNotNull(response, "response");
-      // TODO(creamsoup) fallback to other targets if first one is not available
-      childPolicyWrapper =
+      childPolicyWrappers =
           refCountedChildPolicyWrapperFactory
               .createOrGet(response.targets());
       long now = ticker.read();
@@ -563,9 +574,29 @@ final class CachingRlsLbClient {
       }
     }
 
+    @VisibleForTesting
+    ChildPolicyWrapper getChildPolicyWrapper(String target) {
+      for (ChildPolicyWrapper childPolicyWrapper : childPolicyWrappers) {
+        if (childPolicyWrapper.getTarget().equals(target)) {
+          return childPolicyWrapper;
+        }
+      }
+
+      throw new RuntimeException("Target not found:" + target);
+    }
+
     @Nullable
     ChildPolicyWrapper getChildPolicyWrapper() {
-      return childPolicyWrapper;
+      if (childPolicyWrappers == null || childPolicyWrappers.isEmpty()) {
+        return null;
+      }
+
+      for (ChildPolicyWrapper childPolicyWrapper : childPolicyWrappers) {
+        if (childPolicyWrapper.getState() != ConnectivityState.TRANSIENT_FAILURE) {
+          return childPolicyWrapper;
+        }
+      }
+      return childPolicyWrappers.get(0);
     }
 
     String getHeaderData() {
@@ -591,18 +622,21 @@ final class CachingRlsLbClient {
     @Override
     void cleanup() {
       synchronized (lock) {
-        refCountedChildPolicyWrapperFactory.release(childPolicyWrapper);
+        for (ChildPolicyWrapper policyWrapper : childPolicyWrappers)
+        refCountedChildPolicyWrapperFactory.release(policyWrapper);
       }
     }
 
     @Override
     public String toString() {
+//      StringBuilder policyWrapperBuiler = new StringBuilder();
+//      for (ChildPolicyWrapper)
       return MoreObjects.toStringHelper(this)
           .add("request", request)
           .add("response", response)
           .add("expireTime", expireTime)
           .add("staleTime", staleTime)
-          .add("childPolicyWrapper", childPolicyWrapper)
+          .add("childPolicyWrapper", childPolicyWrappers)
           .toString();
     }
   }
@@ -898,7 +932,8 @@ final class CachingRlsLbClient {
       boolean hasFallback = defaultTarget != null && !defaultTarget.isEmpty();
       if (response.hasData()) {
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
-        SubchannelPicker picker = childPolicyWrapper.getPicker();
+        SubchannelPicker picker =
+            (childPolicyWrapper != null) ? childPolicyWrapper.getPicker() : null;
         if (picker == null) {
           return PickResult.withNoResult();
         }

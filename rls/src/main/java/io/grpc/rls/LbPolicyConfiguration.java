@@ -36,7 +36,6 @@ import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -215,9 +214,6 @@ final class LbPolicyConfiguration {
     private final ChildLbStatusListener childLbStatusListener;
     private final ChildLoadBalancingPolicy childPolicy;
     private final ResolvedAddressFactory childLbResolvedAddressFactory;
-    private static final List<ConnectivityState> OK_STATES =
-        Arrays.asList(ConnectivityState.READY, ConnectivityState.IDLE);
-
 
     public RefCountedChildPolicyWrapperFactory(
         ChildLoadBalancingPolicy childPolicy,
@@ -252,8 +248,12 @@ final class LbPolicyConfiguration {
     }
 
     // GuardedBy CachingRlsLbClient.lock
-    ChildPolicyWrapper createOrGet(List<String> targets) {
-      return createOrGet(findBestTarget(targets));
+    List<ChildPolicyWrapper> createOrGet(List<String> targets) {
+      List<ChildPolicyWrapper> retVal = new ArrayList<>();
+      for (String target : targets) {
+        retVal.add(createOrGet(target));
+      }
+      return retVal;
     }
 
     // GuardedBy CachingRlsLbClient.lock
@@ -266,30 +266,6 @@ final class LbPolicyConfiguration {
       if (existing.isReleased()) {
         childPolicyMap.remove(target);
       }
-    }
-
-    private String findBestTarget(List<String> targets) {
-      checkArgument(!targets.isEmpty(), "Empty list of target properties");
-
-      // Look for a policy that is READY or IDLE
-      for (String target : targets) {
-        RefCountedChildPolicyWrapper policyWrapper = childPolicyMap.get(target);
-        if (policyWrapper != null && OK_STATES.contains(policyWrapper.getObjectState())) {
-          return target;
-        }
-      }
-
-      // Look for a policy that is CONNECTING
-      for (String target : targets) {
-        RefCountedChildPolicyWrapper policyWrapper = childPolicyMap.get(target);
-        if (policyWrapper != null
-            && ConnectivityState.CONNECTING == policyWrapper.getObjectState()) {
-          return target;
-        }
-      }
-
-      // Return the first policy
-      return targets.get(0);
     }
   }
 
@@ -459,10 +435,6 @@ final class LbPolicyConfiguration {
 
     boolean isReleased() {
       return childPolicyWrapper == null;
-    }
-
-    ConnectivityState getObjectState() {
-      return childPolicyWrapper.getState();
     }
 
     static RefCountedChildPolicyWrapper of(ChildPolicyWrapper childPolicyWrapper) {

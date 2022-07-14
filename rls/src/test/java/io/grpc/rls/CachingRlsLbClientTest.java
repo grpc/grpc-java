@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
+import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -78,8 +79,10 @@ import io.grpc.testing.TestMethodDescriptors;
 import java.io.IOException;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -421,6 +424,70 @@ public class CachingRlsLbClientTest {
     assertThat(resp2.hasData()).isTrue();
     assertThat(resp2.getHeaderData()).isEqualTo("header2");
     assertThat(resp2.getChildPolicyWrapper()).isEqualTo(resp.getChildPolicyWrapper());
+  }
+
+  @Test
+  public void get_childPolicyWrapper_multiTarget() throws Exception {
+    setUpRlsLbClient();
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequest,
+            RouteLookupResponse.create(ImmutableList.of("target1", "target2", "target3"), "header")));
+
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.isPending()).isTrue();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isTrue();
+    List<ChildPolicyWrapper> policyWrappers = new ArrayList<>();
+
+    for (int i = 1; i <= 3; i++) {
+      String target = "target" + i;
+      policyWrappers.add(resp.getChildPolicyWrapper(target));
+    }
+
+    // Set to states: null, READY, null
+    setState(policyWrappers.get(1), ConnectivityState.READY);
+    ChildPolicyWrapper childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: null, CONNECTING, null
+    setState(policyWrappers.get(1), ConnectivityState.CONNECTING);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: null, CONNECTING, READY
+    setState(policyWrappers.get(2), ConnectivityState.READY);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: READY, CONNECTING, READY
+    setState(policyWrappers.get(0), ConnectivityState.READY);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: TRANSIENT_FAILURE, CONNECTING, READY
+    setState(policyWrappers.get(0), ConnectivityState.TRANSIENT_FAILURE);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(1), childPolicy);
+
+    // Set to states: TRANSIENT_FAILURE, TRANSIENT_FAILURE, TRANSIENT_FAILURE
+    setState(policyWrappers.get(1), ConnectivityState.TRANSIENT_FAILURE);
+    setState(policyWrappers.get(2), ConnectivityState.TRANSIENT_FAILURE);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: TRANSIENT_FAILURE, TRANSIENT_FAILURE, READY
+    setState(policyWrappers.get(2), ConnectivityState.READY);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(2), childPolicy);
+  }
+
+  private void setState(ChildPolicyWrapper policyWrapper, ConnectivityState newState) {
+    policyWrapper.getHelper().updateBalancingState(newState, policyWrapper.getPicker());
   }
 
   private static RouteLookupConfig getRouteLookupConfig() {

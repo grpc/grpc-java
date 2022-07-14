@@ -17,7 +17,6 @@
 package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
@@ -46,8 +45,6 @@ import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper.ChildPolicyReporting
 import io.grpc.rls.LbPolicyConfiguration.InvalidChildPolicyConfigException;
 import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
@@ -123,72 +120,6 @@ public class LbPolicyConfigurationTest {
     }
   }
 
-  private void setState(ChildPolicyWrapper policyWrapper, ConnectivityState newState) {
-    policyWrapper.getHelper().updateBalancingState(newState, picker);
-  }
-  
-  @Test
-  public void childLoadBalancingPolicy_multiTarget() {
-    List<String> targets = new ArrayList<>();
-    List<ChildPolicyWrapper> policyWrappers = new ArrayList<>();
-
-    for (int i = 1; i <= 3; i++) {
-      String target = "target" + i;
-      targets.add(target);
-      policyWrappers.add(factory.createOrGet(target));
-    }
-
-    // Set to states: null, READY, null
-    setState(policyWrappers.get(1), ConnectivityState.READY);
-    ChildPolicyWrapper childPolicy = factory.createOrGet(targets);
-    assertSame(policyWrappers.get(1), childPolicy);
-    factory.release(childPolicy);
-
-    // Set to states: null, CONNECTING, null
-    setState(policyWrappers.get(1), ConnectivityState.CONNECTING);
-    childPolicy = factory.createOrGet(targets);
-    assertSame(policyWrappers.get(1), childPolicy);
-    factory.release(childPolicy);
-
-    // Set to states: null, CONNECTING, READY
-    setState(policyWrappers.get(2), ConnectivityState.READY);
-    childPolicy = factory.createOrGet(targets);
-    assertSame(policyWrappers.get(2), childPolicy);
-    factory.release(childPolicy);
-
-    // Set to states: READY, CONNECTING, READY
-    setState(policyWrappers.get(0), ConnectivityState.READY);
-    childPolicy = factory.createOrGet(targets);
-    assertSame(policyWrappers.get(0), childPolicy);
-    factory.release(childPolicy);
-
-    // Set to states: TRANSIENT_FAILURE, CONNECTING, READY
-    setState(policyWrappers.get(0), ConnectivityState.TRANSIENT_FAILURE);
-    childPolicy = factory.createOrGet(targets);
-    assertSame(policyWrappers.get(2), childPolicy);
-    factory.release(childPolicy);
-
-    // Set to states: TRANSIENT_FAILURE, TRANSIENT_FAILURE, TRANSIENT_FAILURE
-    setState(policyWrappers.get(1), ConnectivityState.TRANSIENT_FAILURE);
-    setState(policyWrappers.get(2), ConnectivityState.TRANSIENT_FAILURE);
-    childPolicy = factory.createOrGet(targets);
-    assertSame(policyWrappers.get(0), childPolicy);
-    factory.release(childPolicy);
-
-    // Set to states: CONNECTING, CONNECTING, CONNECTING
-    setState(policyWrappers.get(0), ConnectivityState.CONNECTING);
-    setState(policyWrappers.get(1), ConnectivityState.CONNECTING);
-    setState(policyWrappers.get(2), ConnectivityState.CONNECTING);
-    childPolicy = factory.createOrGet(targets);
-    assertSame(policyWrappers.get(0), childPolicy);
-    factory.release(childPolicy);
-
-    // Cleanup
-    for (ChildPolicyWrapper policyWrapper : policyWrappers) {
-      factory.release(policyWrapper);
-    }
-  }
-  
   @Test
   public void childLoadBalancingPolicy_effectiveChildPolicy() {
     LoadBalancerProvider mockProvider = mock(LoadBalancerProvider.class);
