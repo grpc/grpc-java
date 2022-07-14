@@ -434,7 +434,9 @@ public class CachingRlsLbClientTest {
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            RouteLookupResponse.create(ImmutableList.of("target1", "target2", "target3"), "header")));
+            RouteLookupResponse.create(
+                ImmutableList.of("target1", "target2", "target3"),
+                "header")));
 
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();
