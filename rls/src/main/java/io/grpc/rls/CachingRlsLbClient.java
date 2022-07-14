@@ -57,7 +57,6 @@ import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import jdk.internal.joptsimple.internal.Strings;
 
 import java.net.URI;
 import java.net.URISyntaxException;
