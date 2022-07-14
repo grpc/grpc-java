@@ -73,24 +73,19 @@ final class GlobalInterceptors {
     isGlobalInterceptorsTracersSet = true;
   }
 
-  /**
-   * Returns the list of global {@link ClientInterceptor}. If not set, this returns am empty list.
-   */
+  /** Returns the list of global {@link ClientInterceptor}. If not set, this returns null. */
   static synchronized List<ClientInterceptor> getClientInterceptors() {
     isGlobalInterceptorsTracersGet = true;
     return clientInterceptors;
   }
 
-  /** Returns list of global {@link ServerInterceptor}. If not set, this returns an empty list. */
+  /** Returns list of global {@link ServerInterceptor}. If not set, this returns null. */
   static synchronized List<ServerInterceptor> getServerInterceptors() {
     isGlobalInterceptorsTracersGet = true;
     return serverInterceptors;
   }
 
-  /**
-   * Returns list of global {@link ServerStreamTracer.Factory}. If not set, this returns an empty
-   * list.
-   */
+  /** Returns list of global {@link ServerStreamTracer.Factory}. If not set, this returns null. */
   static synchronized List<ServerStreamTracer.Factory> getServerStreamTracerFactories() {
     isGlobalInterceptorsTracersGet = true;
     return serverStreamTracerFactories;
