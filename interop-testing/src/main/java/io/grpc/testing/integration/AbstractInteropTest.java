@@ -2054,7 +2054,7 @@ public abstract class AbstractInteropTest {
             .withInterceptors(recordClientCallInterceptor(clientCallCapture));
       }
       SoakIterationResult result = performOneSoakIteration(soakStub);
-      Attributes.Key<SocketAddress> peer = clientCallCapture
+      SocketAddress peer = clientCallCapture
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       System.err.print(
           String.format(
