@@ -53,7 +53,8 @@ public final class CallMetricRecorder {
     private Map<String, Double> utilizationMetrics;
 
     /**
-     * Create a report for all backend metrics.
+     * A gRPC object of orca load report. LB policies listening at per-rpc or oob orca load reports
+     * will be notified of the metrics data in this data format.
      */
     CallMetricReport(double cpuUtilization, double memoryUtilization,
                             Map<String, Double> requestCostMetrics,
