@@ -23,7 +23,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.MetricReport;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -87,7 +87,7 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
         Subchannel subchannel = super.createSubchannel(args);
         OrcaOobUtil.setListener(subchannel, new OrcaOobUtil.OrcaOobReportListener() {
               @Override
-              public void onLoadReport(CallMetricRecorder.CallMetricReport orcaLoadReport) {
+              public void onLoadReport(MetricReport orcaLoadReport) {
                 latestOobReport = fromCallMetricReport(orcaLoadReport);
               }
             },
@@ -133,7 +133,7 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                 new OrcaPerRequestUtil.OrcaPerRequestReportListener() {
                   @Override
-                  public void onLoadReport(CallMetricRecorder.CallMetricReport callMetricReport) {
+                  public void onLoadReport(MetricReport callMetricReport) {
                     AtomicReference<TestOrcaReport> reportRef =
                         args.getCallOptions().getOption(ORCA_RPC_REPORT_KEY);
                     reportRef.set(fromCallMetricReport(callMetricReport));
@@ -143,8 +143,7 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
     }
   }
 
-  private static TestOrcaReport fromCallMetricReport(
-      CallMetricRecorder.CallMetricReport callMetricReport) {
+  private static TestOrcaReport fromCallMetricReport(MetricReport callMetricReport) {
     return TestOrcaReport.newBuilder()
         .setCpuUtilization(callMetricReport.getCpuUtilization())
         .setMemoryUtilization(callMetricReport.getMemoryUtilization())

@@ -29,7 +29,7 @@ public final class InternalMetricRecorder {
   private InternalMetricRecorder() {
   }
 
-  public static CallMetricRecorder.CallMetricReport getMetricReport(MetricRecorder recorder) {
+  public static MetricReport getMetricReport(MetricRecorder recorder) {
     return recorder.getMetricReport();
   }
 }
