@@ -30,6 +30,7 @@ dependencies {
             project(':grpc-alts'),
             project(':grpc-census'),
             ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}"),
+            libraries.opencensus.contrib.grpc.metrics,
             libraries.opencensus.exporter.stats.stackdriver,
             libraries.opencensus.exporter.trace.stackdriver,
             libraries.animalsniffer.annotations, // Prefer our version
@@ -41,7 +42,8 @@ dependencies {
 
     runtimeOnly libraries.opencensus.impl
 
-    testImplementation project(':grpc-testing'),
+    testImplementation project(':grpc-context').sourceSets.test.output,
+            project(':grpc-testing'),
             project(':grpc-testing-proto'),
             project(':grpc-netty-shaded')
     testImplementation (libraries.guava.testlib) {

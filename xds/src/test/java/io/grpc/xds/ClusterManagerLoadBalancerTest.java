@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
@@ -52,6 +53,7 @@ import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -249,6 +251,15 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(childBalancer2.upstreamError.getDescription()).isEqualTo("unknown error");
   }
 
+  @Test
+  public void noDuplicateOverallBalancingStateUpdate() {
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
+
+    // The test child LBs would have triggered state updates, let's make sure the overall balancing
+    // state was only updated once.
+    verify(helper, times(1)).updateBalancingState(any(), any());
+  }
+
   private void deliverResolvedAddresses(final Map<String, String> childPolicies) {
     clusterManagerLoadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -329,6 +340,10 @@ public class ClusterManagerLoadBalancerTest {
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
+
+      // Update balancing state here so that concurrent child state changes can be easily tested.
+      // Most tests ignore this and trigger separate child LB updates.
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
     }
 
     @Override
