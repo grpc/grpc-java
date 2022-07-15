@@ -19,11 +19,11 @@ package io.grpc.testing.integration;
 import static io.grpc.testing.integration.AbstractInteropTest.ORCA_OOB_REPORT_KEY;
 import static io.grpc.testing.integration.AbstractInteropTest.ORCA_RPC_REPORT_KEY;
 
-import com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.services.CallMetricRecorder;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -87,8 +87,8 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
         Subchannel subchannel = super.createSubchannel(args);
         OrcaOobUtil.setListener(subchannel, new OrcaOobUtil.OrcaOobReportListener() {
               @Override
-              public void onLoadReport(OrcaLoadReport orcaLoadReport) {
-                latestOobReport = fromOrcaLoadReport(orcaLoadReport);
+              public void onLoadReport(CallMetricRecorder.CallMetricReport orcaLoadReport) {
+                latestOobReport = fromCallMetricReport(orcaLoadReport);
               }
             },
             OrcaOobUtil.OrcaReportingConfig.newBuilder()
@@ -133,22 +133,23 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                 new OrcaPerRequestUtil.OrcaPerRequestReportListener() {
                   @Override
-                  public void onLoadReport(OrcaLoadReport orcaLoadReport) {
+                  public void onLoadReport(CallMetricRecorder.CallMetricReport callMetricReport) {
                     AtomicReference<TestOrcaReport> reportRef =
                         args.getCallOptions().getOption(ORCA_RPC_REPORT_KEY);
-                    reportRef.set(fromOrcaLoadReport(orcaLoadReport));
+                    reportRef.set(fromCallMetricReport(callMetricReport));
                   }
                 }));
       }
     }
   }
 
-  private static TestOrcaReport fromOrcaLoadReport(OrcaLoadReport orcaLoadReport) {
+  private static TestOrcaReport fromCallMetricReport(
+      CallMetricRecorder.CallMetricReport callMetricReport) {
     return TestOrcaReport.newBuilder()
-        .setCpuUtilization(orcaLoadReport.getCpuUtilization())
-        .setMemoryUtilization(orcaLoadReport.getMemUtilization())
-        .putAllRequestCost(orcaLoadReport.getRequestCostMap())
-        .putAllUtilization(orcaLoadReport.getUtilizationMap())
+        .setCpuUtilization(callMetricReport.getCpuUtilization())
+        .setMemoryUtilization(callMetricReport.getMemoryUtilization())
+        .putAllRequestCost(callMetricReport.getRequestCostMetrics())
+        .putAllUtilization(callMetricReport.getUtilizationMetrics())
         .build();
   }
 }
