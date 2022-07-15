@@ -23,6 +23,8 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import io.opencensus.trace.Sampler;
+import io.opencensus.trace.samplers.Samplers;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -35,6 +37,8 @@ import java.util.Map;
 final class ObservabilityConfigImpl implements ObservabilityConfig {
   private static final String CONFIG_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY";
   private static final String CONFIG_FILE_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY_JSON";
+  // Tolerance for floating-point comparisons.
+  private static final double EPSILON = 1e-6;
 
   private boolean enableCloudLogging = false;
   private boolean enableCloudMonitoring = false;
@@ -100,19 +104,21 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         }
         this.eventTypes = eventTypesBuilder.build();
       }
-      String sampler = JsonUtil.getString(config, "global_trace_sampler");
       Double samplingRate = JsonUtil.getNumberAsDouble(config, "global_trace_sampling_rate");
-      checkArgument(
-          sampler == null || samplingRate == null,
-          "only one of 'global_trace_sampler' or 'global_trace_sampling_rate' can be specified");
-      if (sampler != null) {
-        this.sampler = new Sampler(SamplerType.valueOf(sampler.toUpperCase()));
-      }
-      if (samplingRate != null) {
+      if (samplingRate == null) {
+        this.sampler = Samplers.probabilitySampler(0.0);
+      } else {
         checkArgument(
             samplingRate >= 0.0 && samplingRate <= 1.0,
-            "'global_trace_sampling_rate' needs to be between 0.0 and 1.0");
-        this.sampler = new Sampler(samplingRate);
+            "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
+        // Using alwaysSample() instead of probabilitySampler() because according to
+        // {@link io.opencensus.trace.samplers.ProbabilitySampler#shouldSample}
+        // there is a (very) small chance of *not* sampling if probability = 1.00.
+        if (1 - samplingRate < EPSILON) {
+          this.sampler = Samplers.alwaysSample();
+        } else {
+          this.sampler = Samplers.probabilitySampler(samplingRate);
+        }
       }
     }
   }
