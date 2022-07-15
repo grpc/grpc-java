@@ -550,6 +550,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       @Override
       public void runWith(Substream substream) {
         substream.stream.writeMessage(method.streamRequest(message));
+        // TODO(ejona): Workaround Netty memory leak. Message writes always need to be followed by
+        // flushes (or half close), but retry appears to have a code path that the flushes may
+        // not happen. The code needs to be fixed and this removed. See #9340.
+        substream.stream.flush();
       }
     }
 
