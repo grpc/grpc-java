@@ -81,7 +81,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     List<EquivalentAddressGroup> addrList = resolvedAddresses.getAddresses();
     if (addrList.isEmpty()) {

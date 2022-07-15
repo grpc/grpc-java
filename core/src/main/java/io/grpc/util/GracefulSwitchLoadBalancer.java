@@ -35,7 +35,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * will keep using the old policy until the new policy reports READY or the old policy exits READY.
  *
  * <p>The balancer must {@link #switchTo(LoadBalancer.Factory) switch to} a policy prior to {@link
- * LoadBalancer#handleResolvedAddresses(ResolvedAddresses) handling resolved addresses} for the
+ * LoadBalancer#acceptResolvedAddresses(ResolvedAddresses) handling resolved addresses} for the
  * first time.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
@@ -43,7 +43,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
-    public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       //  Most LB policies using this class will receive child policy configuration within the
       //  service config, so they are naturally calling switchTo() just before
       //  handleResolvedAddresses(), within their own handleResolvedAddresses(). If switchTo() is

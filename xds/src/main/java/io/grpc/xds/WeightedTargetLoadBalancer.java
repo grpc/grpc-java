@@ -61,7 +61,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
       return handleResolvedAddressesInternal(resolvedAddresses);
@@ -92,7 +92,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     }
     targets = newTargets;
     for (String targetName : targets.keySet()) {
-      childBalancers.get(targetName).handleResolvedAddresses(
+      childBalancers.get(targetName).acceptResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), targetName))
               .setLoadBalancingPolicyConfig(targets.get(targetName).policySelection.getConfig())

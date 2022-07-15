@@ -70,7 +70,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
       return handleResolvedAddressesInternal(resolvedAddresses);
@@ -99,7 +99,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
       LoadBalancer childLb = childLbStates.get(name).lb;
       ResolvedAddresses childAddresses =
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build();
-      childLb.handleResolvedAddresses(childAddresses);
+      childLb.acceptResolvedAddresses(childAddresses);
     }
     for (String name : childLbStates.keySet()) {
       if (!newChildPolicies.containsKey(name)) {

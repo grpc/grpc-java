@@ -1861,7 +1861,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   .build();
             }
 
-            Status handleResult = helper.lb.tryHandleResolvedAddresses(
+            Status handleResult = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(attrBuilder.build())

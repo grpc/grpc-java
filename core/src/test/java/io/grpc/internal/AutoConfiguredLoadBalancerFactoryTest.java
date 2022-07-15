@@ -97,8 +97,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
   @Before
   public void setUp() {
-    when(testLbBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
-    when(testLbBalancer2.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
+    when(testLbBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
+    when(testLbBalancer2.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
     defaultRegistry.register(testLbBalancerProvider);
     defaultRegistry.register(testLbBalancerProvider2);
   }
@@ -183,7 +183,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
     LoadBalancer oldDelegate = lb.getDelegate();
 
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
@@ -225,7 +225,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     };
     lb.setDelegate(testlb);
 
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -250,7 +250,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     Helper helper = new TestHelper();
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
 
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -261,7 +261,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(lb.getDelegate()).isSameInstanceAs(testLbBalancer);
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(testLbBalancer).acceptResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
     ArgumentCaptor<Map<String, ?>> lbConfigCaptor = ArgumentCaptor.forClass(Map.class);
     verify(testLbBalancerProvider).parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
@@ -272,7 +272,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"low\" } } ] }");
     lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig);
 
-    handleResult = lb.tryHandleResolvedAddresses(
+    handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -280,7 +280,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(testLbBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
+    verify(testLbBalancer, times(2)).acceptResolvedAddresses(resultCaptor.capture());
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
     verify(testLbBalancerProvider, times(2))
@@ -303,7 +303,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new InetSocketAddress(8080){}));
 
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -314,19 +314,19 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(lb.getDelegate()).isSameInstanceAs(testLbBalancer);
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(testLbBalancer).acceptResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
 
     servers =
         Collections.singletonList(new EquivalentAddressGroup(new InetSocketAddress(9090){}));
-    handleResult = lb.tryHandleResolvedAddresses(
+    handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
             .build());
 
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
-    verify(testLbBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
+    verify(testLbBalancer, times(2)).acceptResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
   }
 
@@ -335,7 +335,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       throws Exception {
 
     // The test LB will NOT accept the addresses we give them.
-    when(testLbBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(false);
+    when(testLbBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(false);
 
     Helper helper = new TestHelper();
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
@@ -343,14 +343,15 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
     ConfigOrError lbConfig = lbf.parseLoadBalancerPolicy(serviceConfig);
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setLoadBalancingPolicyConfig(lbConfig.getConfig())
             .build());
 
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(handleResult.getDescription()).startsWith("NameResolver returned no usable address");
+    assertThat(handleResult.getDescription()).startsWith(
+        "The load balancer did not accept the addresses returned from the NameResolver");
     assertThat(lb.getDelegate()).isSameInstanceAs(testLbBalancer);
   }
 
@@ -364,7 +365,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb2\": { \"setting1\": \"high\" } } ] }");
     ConfigOrError lbConfigs =
         lbf.parseLoadBalancerPolicy(rawServiceConfig);
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -374,7 +375,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(lb.getDelegate()).isSameInstanceAs(testLbBalancer2);
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(testLbBalancer2).handleResolvedAddresses(resultCaptor.capture());
+    verify(testLbBalancer2).acceptResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig())
         .isEqualTo(nextParsedConfigOrError2.get().getConfig());
@@ -399,7 +400,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       }
     };
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -421,7 +422,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       }
     };
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(null)
@@ -436,7 +437,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         .newLoadBalancer(new TestHelper());
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(null)
@@ -458,7 +459,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     AutoConfiguredLoadBalancer lb =
         new AutoConfiguredLoadBalancerFactory(GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(helper);
-    Status handleResult = lb.tryHandleResolvedAddresses(
+    Status handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
@@ -472,7 +473,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { } } ] }");
     ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig);
-    handleResult = lb.tryHandleResolvedAddresses(
+    handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -495,7 +496,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     nextParsedConfigOrError.set(testLbParsedConfig);
     serviceConfig = parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { } } ] }");
     lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig);
-    handleResult = lb.tryHandleResolvedAddresses(
+    handleResult = lb.tryAcceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers)
             .setLoadBalancingPolicyConfig(lbConfigs.getConfig())
@@ -643,14 +644,13 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     @Override
     @Deprecated
-    public boolean handleResolvedAddressGroups(
-        List<EquivalentAddressGroup> servers, Attributes attributes) {
-      return delegate().handleResolvedAddressGroups(servers, attributes);
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      delegate().acceptResolvedAddresses(resolvedAddresses);
     }
 
     @Override
-    public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      return delegate().handleResolvedAddresses(resolvedAddresses);
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return delegate().acceptResolvedAddresses(resolvedAddresses);
     }
 
     @Override

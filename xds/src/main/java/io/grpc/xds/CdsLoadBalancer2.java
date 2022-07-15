@@ -79,7 +79,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   }
 
   @Override
-  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (this.resolvedAddresses != null) {
       return true;
     }
@@ -210,7 +210,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (childLb == null) {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }
-      childLb.handleResolvedAddresses(
+      childLb.acceptResolvedAddresses(
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build());
     }
 

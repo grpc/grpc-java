@@ -108,11 +108,11 @@ public class MetadataLoadBalancerProvider extends LoadBalancerProvider {
     }
 
     @Override
-    public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       MetadataLoadBalancerConfig config
           = (MetadataLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       helper.setMetadata(config.metadataKey, config.metadataValue);
-      delegateLb.handleResolvedAddresses(resolvedAddresses);
+      delegateLb.acceptResolvedAddresses(resolvedAddresses);
 
       return true;
     }

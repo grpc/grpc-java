@@ -302,7 +302,8 @@ final class LbPolicyConfiguration {
           new Runnable() {
             @Override
             public void run() {
-              lb.handleResolvedAddresses(
+              // TODO: How should a false response be handled?
+              lb.acceptResolvedAddresses(
                   childLbResolvedAddressFactory.create(lbConfig.getConfig()));
               lb.requestConnection();
             }

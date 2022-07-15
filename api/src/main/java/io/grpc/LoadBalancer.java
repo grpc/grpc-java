@@ -124,42 +124,41 @@ public abstract class LoadBalancer {
    *
    * <p>Implementations should not modify the given {@code servers}.
    *
-   * @param servers the resolved server addresses, never empty.
-   * @param attributes extra information from naming system.
-   * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
-   * @deprecated override {@link #handleResolvedAddresses(ResolvedAddresses) instead}
-   * @since 1.2.0
+   * @param resolvedAddresses the resolved server addresses, attributes, and config.
+   * @deprecated override {@link #acceptResolvedAddresses(ResolvedAddresses) instead}
+   * @since 1.21.0
    */
   @Deprecated
-  public boolean handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers,
-      @NameResolver.ResolutionResultAttr Attributes attributes) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
-      return handleResolvedAddresses(
-          ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+      // Note that the information about the addresses actually being accepted will be lost
+      // if you rely on this method for backward compatibility.
+      acceptResolvedAddresses(resolvedAddresses);
     }
     recursionCount = 0;
-    return true;
   }
 
   /**
-   * Handles newly resolved server groups and metadata attributes from name resolution system.
-   * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
-   * but may be flattened into a single list if needed.
+   * Accepts newly resolved addresses from the name resolution system. The {@link
+   * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
+   * single list if needed.
    *
-   * <p>Implementations should not modify the given {@code servers}.
+   * <p>Implementations can choose to reject the given addresses by returning {@code false}.
+   *
+   * <p>Implementations should not modify the given {@code addresses}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
-   * @since 1.21.0
+   * @since 1.49.0
    */
   @SuppressWarnings("deprecation")
-  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
-      return handleResolvedAddressGroups(
-          resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
+      handleResolvedAddresses(resolvedAddresses);
     }
     recursionCount = 0;
+
+    // The legacy method does not tell us if the addresses were accepted, so we default to true.
     return true;
   }
 

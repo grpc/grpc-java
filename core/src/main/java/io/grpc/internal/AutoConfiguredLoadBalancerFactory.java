@@ -68,12 +68,11 @@ public final class AutoConfiguredLoadBalancerFactory {
     @Override
     @Deprecated
     @SuppressWarnings("InlineMeSuggester")
-    public boolean handleResolvedAddressGroups(List<EquivalentAddressGroup> s, Attributes a) {
-      return true;
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     }
 
     @Override
-    public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       return true;
     }
 
@@ -105,7 +104,7 @@ public final class AutoConfiguredLoadBalancerFactory {
      * Returns non-OK status if the delegate rejects the resolvedAddresses (e.g. if it does not
      * support an empty list).
      */
-    Status tryHandleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    Status tryAcceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       Attributes attributes = resolvedAddresses.getAttributes();
       PolicySelection policySelection =
@@ -145,7 +144,7 @@ public final class AutoConfiguredLoadBalancerFactory {
       }
 
       LoadBalancer delegate = getDelegate();
-      if (delegate.handleResolvedAddresses(
+      if (delegate.acceptResolvedAddresses(
           ResolvedAddresses.newBuilder()
               .setAddresses(resolvedAddresses.getAddresses())
               .setAttributes(attributes)
@@ -154,7 +153,8 @@ public final class AutoConfiguredLoadBalancerFactory {
         return Status.OK;
       } else {
         return Status.UNAVAILABLE.withDescription(
-            "NameResolver returned no usable address. addrs=" + servers + ", attrs=" + attributes);
+            "The load balancer did not accept the addresses returned from the NameResolver. addrs="
+                + servers + ", attrs=" + attributes);
       }
     }
 

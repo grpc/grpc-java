@@ -327,7 +327,7 @@ public class ManagedChannelImplTest {
 
   @Before
   public void setUp() throws Exception {
-    when(mockLoadBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
+    when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
     transports = TestUtils.captureTransports(mockTransportFactory);
@@ -948,7 +948,7 @@ public class ManagedChannelImplTest {
 
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
 
     SubchannelStateListener stateListener1 = mock(SubchannelStateListener.class);
@@ -1164,10 +1164,11 @@ public class ManagedChannelImplTest {
 
   @Test
   public void nameResolverReturnsEmptySubLists_becomeErrorByDefault() throws Exception {
-    String errorDescription = "NameResolver returned no usable address";
+    String errorDescription
+        = "The load balancer did not accept the addresses returned from the NameResolver";
 
     // The mock LB is set to reject the addresses.
-    when(mockLoadBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(false);
+    when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(false);
 
     // Pass a FakeNameResolverFactory with an empty list and LB config
     FakeNameResolverFactory nameResolverFactory =
@@ -1214,7 +1215,7 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig()).isEqualTo(parsedLbConfig);
 
@@ -1235,7 +1236,7 @@ public class ManagedChannelImplTest {
     createChannel();
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    doThrow(ex).when(mockLoadBalancer).handleResolvedAddresses(any(ResolvedAddresses.class));
+    doThrow(ex).when(mockLoadBalancer).acceptResolvedAddresses(any(ResolvedAddresses.class));
 
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();
@@ -1297,7 +1298,7 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    inOrder.verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
@@ -1447,7 +1448,7 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    inOrder.verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
 
     Subchannel subchannel =
@@ -3773,7 +3774,7 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
-    verify(mockLoadBalancer).handleResolvedAddresses(
+    verify(mockLoadBalancer).acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(nameResolverFactory.servers)
             .build());
@@ -3879,7 +3880,7 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
-    verify(mockLoadBalancer).handleResolvedAddresses(
+    verify(mockLoadBalancer).acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(nameResolverFactory.servers)
             .build());
@@ -4206,7 +4207,7 @@ public class ManagedChannelImplTest {
 
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       assertThat(resultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -4244,7 +4245,7 @@ public class ManagedChannelImplTest {
 
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       assertThat(resultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -4274,7 +4275,7 @@ public class ManagedChannelImplTest {
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
@@ -4290,7 +4291,7 @@ public class ManagedChannelImplTest {
       nameResolverFactory.allResolved();
 
       resultCaptor = ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer, times(2)).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -4324,7 +4325,7 @@ public class ManagedChannelImplTest {
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -4352,7 +4353,7 @@ public class ManagedChannelImplTest {
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -4378,7 +4379,7 @@ public class ManagedChannelImplTest {
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -4458,7 +4459,7 @@ public class ManagedChannelImplTest {
 
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAttributes()
           .get(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG))
           .containsExactly("serviceName", "service1");
