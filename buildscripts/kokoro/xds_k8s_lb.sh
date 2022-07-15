@@ -103,6 +103,7 @@ build_docker_images_if_needed() {
 # Globals:
 #   TEST_DRIVER_FLAGFILE: Relative path to test driver flagfile
 #   KUBE_CONTEXT: The name of kubectl context with GKE cluster access
+#   SECONDARY_KUBE_CONTEXT: The name of kubectl context with secondary GKE cluster access, if any
 #   TEST_XML_OUTPUT_DIR: Output directory for the test xUnit XML report
 #   SERVER_IMAGE_NAME: Test server Docker image name
 #   CLIENT_IMAGE_NAME: Test client Docker image name
@@ -121,6 +122,7 @@ run_test() {
   python -m "tests.${test_name}" \
     --flagfile="${TEST_DRIVER_FLAGFILE}" \
     --kube_context="${KUBE_CONTEXT}" \
+    --secondary_kube_context="${SECONDARY_KUBE_CONTEXT}" \
     --server_image="${SERVER_IMAGE_NAME}:${GIT_COMMIT}" \
     --client_image="${CLIENT_IMAGE_NAME}:${GIT_COMMIT}" \
     --testing_version="${TESTING_VERSION}" \
@@ -158,6 +160,7 @@ main() {
   source /dev/stdin <<< "$(curl -s "${TEST_DRIVER_INSTALL_SCRIPT_URL}")"
 
   activate_gke_cluster GKE_CLUSTER_PSM_BASIC
+  activate_secondary_gke_cluster GKE_CLUSTER_PSM_LB
 
   set -x
   if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
