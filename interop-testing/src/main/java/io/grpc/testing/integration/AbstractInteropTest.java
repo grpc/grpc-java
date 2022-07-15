@@ -2054,12 +2054,12 @@ public abstract class AbstractInteropTest {
             .withInterceptors(recordClientCallInterceptor(clientCallCapture));
       }
       SoakIterationResult result = performOneSoakIteration(soakStub);
-      String peer = clientCallCapture
-          .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString();
+      Attributes.Key<SocketAddress> peer = clientCallCapture
+          .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       System.err.print(
           String.format(
               "soak iteration: %d elapsed_ms: %d peer: %s",
-              i, result.getLatencyMs(), peer));
+              i, result.getLatencyMs(), peer != null ? peer.toString() : "null"));
       if (!result.getStatus().equals(Status.OK)) {
         totalFailures++;
         System.err.println(String.format(" failed: %s", result.getStatus()));
