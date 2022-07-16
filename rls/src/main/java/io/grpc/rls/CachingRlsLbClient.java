@@ -902,14 +902,7 @@ final class CachingRlsLbClient {
         if (picker == null) {
           return PickResult.withNoResult();
         }
-        PickResult result = picker.pickSubchannel(args);
-        if (result.getStatus().isOk()) {
-          return result;
-        }
-        if (hasFallback) {
-          return useFallback(args);
-        }
-        return PickResult.withError(result.getStatus());
+        return picker.pickSubchannel(args);
       } else if (response.hasError()) {
         if (hasFallback) {
           return useFallback(args);
