@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
@@ -61,6 +62,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
+import io.grpc.services.CallMetricRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -285,7 +287,9 @@ public class OrcaOobUtilTest {
       OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
       serverCall.responseObserver.onNext(report);
       assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-      verify(mockOrcaListener0, times(i + 1)).onLoadReport(eq(report));
+      verify(mockOrcaListener0, times(i + 1)).onLoadReport(
+          argThat(new OrcaPerRequestUtilTest.MetricsReportMatcher(
+              OrcaPerRequestUtil.fromOrcaLoadReport(report))));
     }
 
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -369,7 +373,9 @@ public class OrcaOobUtilTest {
       OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
       serverCall.responseObserver.onNext(report);
       assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-      verify(mockOrcaListener1, times(i + 1)).onLoadReport(eq(report));
+      verify(mockOrcaListener1, times(i + 1)).onLoadReport(
+          argThat(new OrcaPerRequestUtilTest.MetricsReportMatcher(
+              OrcaPerRequestUtil.fromOrcaLoadReport(report))));
     }
 
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -425,8 +431,9 @@ public class OrcaOobUtilTest {
     OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
     serverCall.responseObserver.onNext(report);
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-    verify(mockOrcaListener0).onLoadReport(eq(report));
-
+    verify(mockOrcaListener0).onLoadReport(
+        argThat(new OrcaPerRequestUtilTest.MetricsReportMatcher(
+            OrcaPerRequestUtil.fromOrcaLoadReport(report))));
     verifyNoInteractions(backoffPolicyProvider);
   }
 
@@ -471,8 +478,9 @@ public class OrcaOobUtilTest {
     OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
     orcaServiceImp.calls.peek().responseObserver.onNext(report);
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-    inOrder.verify(mockOrcaListener0).onLoadReport(eq(report));
-
+    inOrder.verify(mockOrcaListener0).onLoadReport(
+        argThat(new OrcaPerRequestUtilTest.MetricsReportMatcher(
+            OrcaPerRequestUtil.fromOrcaLoadReport(report))));
     // Server closes the ORCA reporting RPC after a response, will restart immediately.
     orcaServiceImp.calls.poll().responseObserver.onCompleted();
     assertThat(subchannel.logs).containsExactly(
@@ -659,9 +667,11 @@ public class OrcaOobUtilTest {
     orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
     assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
     // Only parent helper's listener receives the report.
-    ArgumentCaptor<OrcaLoadReport> parentReportCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallMetricRecorder.CallMetricReport> parentReportCaptor =
+        ArgumentCaptor.forClass(null);
     verify(mockOrcaListener1).onLoadReport(parentReportCaptor.capture());
-    assertThat(parentReportCaptor.getValue()).isEqualTo(report);
+    assertThat(OrcaPerRequestUtilTest.reportEqual(parentReportCaptor.getValue(),
+        OrcaPerRequestUtil.fromOrcaLoadReport(report))).isTrue();
     verifyNoMoreInteractions(mockOrcaListener2);
 
     // Now child helper also wants to receive reports.
@@ -669,7 +679,8 @@ public class OrcaOobUtilTest {
     orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
     assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
     // Both helper receives the same report instance.
-    ArgumentCaptor<OrcaLoadReport> childReportCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallMetricRecorder.CallMetricReport> childReportCaptor =
+        ArgumentCaptor.forClass(null);
     verify(mockOrcaListener1, times(2))
         .onLoadReport(parentReportCaptor.capture());
     verify(mockOrcaListener2)
