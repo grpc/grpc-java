@@ -37,6 +37,7 @@ java_library(
     srcs = [
         "src/main/java/io/grpc/services/CallMetricRecorder.java",
         "src/main/java/io/grpc/services/MetricRecorder.java",
+        "src/main/java/io/grpc/services/MetricReport.java",
     ],
     deps = [
         "//api",

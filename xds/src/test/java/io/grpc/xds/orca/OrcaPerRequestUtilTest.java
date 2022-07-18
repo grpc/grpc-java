@@ -31,7 +31,7 @@ import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.base.Objects;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
-import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.MetricReport;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaReportingTracerFactory;
 import org.junit.Before;
@@ -99,29 +99,28 @@ public class OrcaPerRequestUtilTest {
         OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,
         OrcaLoadReport.getDefaultInstance());
     tracer.inboundTrailers(trailer);
-    ArgumentCaptor<CallMetricRecorder.CallMetricReport> reportCaptor =
+    ArgumentCaptor<MetricReport> reportCaptor =
         ArgumentCaptor.forClass(null);
     verify(orcaListener1).onLoadReport(reportCaptor.capture());
     assertThat(reportEqual(reportCaptor.getValue(),
         OrcaPerRequestUtil.fromOrcaLoadReport(OrcaLoadReport.getDefaultInstance()))).isTrue();
   }
 
-  static final class MetricsReportMatcher implements
-      ArgumentMatcher<CallMetricRecorder.CallMetricReport> {
-    private CallMetricRecorder.CallMetricReport original;
+  static final class MetricsReportMatcher implements ArgumentMatcher<MetricReport> {
+    private MetricReport original;
 
-    public MetricsReportMatcher(CallMetricRecorder.CallMetricReport report) {
+    public MetricsReportMatcher(MetricReport report) {
       this.original = report;
     }
 
     @Override
-    public boolean matches(CallMetricRecorder.CallMetricReport argument) {
+    public boolean matches(MetricReport argument) {
       return reportEqual(original, argument);
     }
   }
 
-  static boolean reportEqual(CallMetricRecorder.CallMetricReport a,
-                             CallMetricRecorder.CallMetricReport b) {
+  static boolean reportEqual(MetricReport a,
+                             MetricReport b) {
     return a.getCpuUtilization() == b.getCpuUtilization()
         && a.getMemoryUtilization() == b.getMemoryUtilization()
         && Objects.equal(a.getRequestCostMetrics(), b.getRequestCostMetrics())
@@ -163,9 +162,9 @@ public class OrcaPerRequestUtilTest {
         OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,
         OrcaLoadReport.getDefaultInstance());
     childTracer.inboundTrailers(trailer);
-    ArgumentCaptor<CallMetricRecorder.CallMetricReport> parentReportCap =
+    ArgumentCaptor<MetricReport> parentReportCap =
         ArgumentCaptor.forClass(null);
-    ArgumentCaptor<CallMetricRecorder.CallMetricReport> childReportCap =
+    ArgumentCaptor<MetricReport> childReportCap =
         ArgumentCaptor.forClass(null);
     verify(orcaListener1).onLoadReport(parentReportCap.capture());
     verify(orcaListener2).onLoadReport(childReportCap.capture());
