@@ -16,8 +16,6 @@
 
 package io.grpc.services;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
@@ -45,42 +43,6 @@ public final class CallMetricRecorder {
   private double cpuUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
   private volatile boolean disabled;
-
-  public static final class CallMetricReport {
-    private double cpuUtilization;
-    private double memoryUtilization;
-    private Map<String, Double> requestCostMetrics;
-    private Map<String, Double> utilizationMetrics;
-
-    /**
-     * A gRPC object of orca load report. LB policies listening at per-rpc or oob orca load reports
-     * will be notified of the metrics data in this data format.
-     */
-    CallMetricReport(double cpuUtilization, double memoryUtilization,
-                            Map<String, Double> requestCostMetrics,
-                            Map<String, Double> utilizationMetrics) {
-      this.cpuUtilization = cpuUtilization;
-      this.memoryUtilization = memoryUtilization;
-      this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
-      this.utilizationMetrics = checkNotNull(utilizationMetrics, "utilizationMetrics");
-    }
-
-    public double getCpuUtilization() {
-      return cpuUtilization;
-    }
-
-    public double getMemoryUtilization() {
-      return memoryUtilization;
-    }
-
-    public Map<String, Double> getRequestCostMetrics() {
-      return requestCostMetrics;
-    }
-
-    public Map<String, Double> getUtilizationMetrics() {
-      return utilizationMetrics;
-    }
-  }
 
   /**
    * Returns the call metric recorder attached to the current {@link Context}.  If there is none,
@@ -201,13 +163,13 @@ public final class CallMetricRecorder {
    *
    * @return a per-request ORCA reports containing all saved metrics.
    */
-  CallMetricReport finalizeAndDump2() {
+  MetricReport finalizeAndDump2() {
     Map<String, Double> savedRequestCostMetrics = finalizeAndDump();
     Map<String, Double> savedUtilizationMetrics = utilizationMetrics.get();
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    return new CallMetricReport(cpuUtilizationMetric,
+    return new MetricReport(cpuUtilizationMetric,
         memoryUtilizationMetric, Collections.unmodifiableMap(savedRequestCostMetrics),
         Collections.unmodifiableMap(savedUtilizationMetrics)
     );

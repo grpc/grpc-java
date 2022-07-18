@@ -86,8 +86,8 @@ public final class MetricRecorder {
     memoryUtilization = 0;
   }
 
-  CallMetricRecorder.CallMetricReport getMetricReport() {
-    return new CallMetricRecorder.CallMetricReport(cpuUtilization, memoryUtilization,
+  MetricReport getMetricReport() {
+    return new MetricReport(cpuUtilization, memoryUtilization,
         Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
   }
 }

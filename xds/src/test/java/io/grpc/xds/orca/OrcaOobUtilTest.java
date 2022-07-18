@@ -62,7 +62,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
-import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.MetricReport;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -667,7 +667,7 @@ public class OrcaOobUtilTest {
     orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
     assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
     // Only parent helper's listener receives the report.
-    ArgumentCaptor<CallMetricRecorder.CallMetricReport> parentReportCaptor =
+    ArgumentCaptor<MetricReport> parentReportCaptor =
         ArgumentCaptor.forClass(null);
     verify(mockOrcaListener1).onLoadReport(parentReportCaptor.capture());
     assertThat(OrcaPerRequestUtilTest.reportEqual(parentReportCaptor.getValue(),
@@ -679,7 +679,7 @@ public class OrcaOobUtilTest {
     orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
     assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
     // Both helper receives the same report instance.
-    ArgumentCaptor<CallMetricRecorder.CallMetricReport> childReportCaptor =
+    ArgumentCaptor<MetricReport> childReportCaptor =
         ArgumentCaptor.forClass(null);
     verify(mockOrcaListener1, times(2))
         .onLoadReport(parentReportCaptor.capture());
