@@ -66,6 +66,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -240,6 +241,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         // statuscodes.md is updated.
         Status status = Status.RESOURCE_EXHAUSTED.withDescription(
             String.format(
+                Locale.US,
                 "Request metadata larger than %d: %d",
                 serverMaxInboundMetadataSize,
                 metadataSize));
@@ -554,6 +556,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             // Status, which may need to be updated if statuscodes.md is updated.
             Status failedStatus = Status.RESOURCE_EXHAUSTED.withDescription(
                 String.format(
+                    Locale.US,
                     "Response header metadata larger than %d: %d",
                     clientMaxInboundMetadataSize,
                     metadataSize));
@@ -593,6 +596,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             // Status, which may need to be updated if statuscodes.md is updated.
             status = Status.RESOURCE_EXHAUSTED.withDescription(
                 String.format(
+                    Locale.US,
                     "Response header metadata larger than %d: %d",
                     clientMaxInboundMetadataSize,
                     metadataSize));

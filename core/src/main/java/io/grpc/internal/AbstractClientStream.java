@@ -331,8 +331,7 @@ public abstract class AbstractClientStream extends AbstractStream
           if (compressedStream) {
             deframeFailed(
                 Status.INTERNAL
-                    .withDescription(
-                        String.format("Full stream and gRPC message encoding cannot both be set"))
+                    .withDescription("Full stream and gRPC message encoding cannot both be set")
                     .asRuntimeException());
             return;
           }

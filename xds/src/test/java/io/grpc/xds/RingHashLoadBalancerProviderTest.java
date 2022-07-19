@@ -31,6 +31,7 @@ import io.grpc.internal.JsonParser;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import java.io.IOException;
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.util.Locale;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -117,7 +118,8 @@ public class RingHashLoadBalancerProviderTest {
   @Test
   public void parseLoadBalancingConfig_invalid_ringTooLarge() throws IOException {
     long ringSize = RingHashLoadBalancerProvider.MAX_RING_SIZE + 1;
-    String lbConfig = String.format("{\"minRingSize\" : 10, \"maxRingSize\" : %d}", ringSize);
+    String lbConfig =
+        String.format(Locale.US, "{\"minRingSize\" : 10, \"maxRingSize\" : %d}", ringSize);
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
     assertThat(configOrError.getError()).isNotNull();
