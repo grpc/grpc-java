@@ -82,7 +82,8 @@ public class AdaptiveThrottlerTest {
         .of(1.0f / 3.0f);
 
     // Skip to half second mark from the beginning (half the duration).
-    fakeClock.forwardTime(500 - (fakeClock.currentTimeMillis() - startTime), TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(500 - (fakeClock.currentTimeMillis() - startTime),
+        TimeUnit.MILLISECONDS);
 
     // Request 3, throttled by backend
     assertThat(throttler.shouldThrottle(0.4f)).isFalse();
