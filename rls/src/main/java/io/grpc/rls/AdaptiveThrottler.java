@@ -249,14 +249,14 @@ final class AdaptiveThrottler implements Throttler {
     /** Gets the current slot. */
     private Slot getSlot(long now) {
       Slot currentSlot = slots.get(currentIndex);
-      if (now < currentSlot.endNanos) {
+      if (now - currentSlot.endNanos < 0) {
         return currentSlot;
       } else {
         long slotBoundary = getSlotEndTime(now);
         synchronized (this) {
           int index = currentIndex;
           currentSlot = slots.get(index);
-          if (now < currentSlot.endNanos) {
+          if (now - currentSlot.endNanos < 0) {
             return currentSlot;
           }
           int newIndex = (index == NUM_SLOTS - 1) ? 0 : index + 1;
