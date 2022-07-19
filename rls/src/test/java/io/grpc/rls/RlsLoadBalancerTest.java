@@ -74,6 +74,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import org.junit.After;
 import org.junit.Before;
@@ -156,7 +157,9 @@ public class RlsLoadBalancerTest {
       @Override
       public CachingRlsLbClient.Builder get() {
         // using fake throttler to allow enablement of throttler
-        return CachingRlsLbClient.newBuilder().setThrottler(fakeThrottler);
+        return CachingRlsLbClient.newBuilder()
+            .setThrottler(fakeThrottler)
+            .setTicker(fakeClock.getTicker());
       }
     };
   }
@@ -239,7 +242,7 @@ public class RlsLoadBalancerTest {
     // Search that when the RLS server doesn't respond, that fallback is used
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    FakeSubchannel fallbackSubchannel = subchannels.getLast();
+    FakeSubchannel fallbackSubchannel = (FakeSubchannel) res.getSubchannel();
 
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
@@ -261,22 +264,20 @@ public class RlsLoadBalancerTest {
 
     // Make sure that when RLS starts communicating that default stops being used
     fakeThrottler.nextResult = false;
-    Thread.sleep(2000); // Allow backoff cache entries to expire
-
+    fakeClock.forwardTime(2, TimeUnit.SECONDS); // Expires backoff cache entries
     // Create search subchannel
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
-    FakeSubchannel searchSubchannel = subchannels.getLast();
+    FakeSubchannel searchSubchannel = (FakeSubchannel) res.getSubchannel();
     searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
 
     // create rescue subchannel
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
     assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
     assertThat(res.getSubchannel()).isNotSameInstanceAs(searchSubchannel);
-    FakeSubchannel rescueSubchannel = subchannels.getLast();
+    FakeSubchannel rescueSubchannel = (FakeSubchannel) res.getSubchannel();
     rescueSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     // all channels are failed
@@ -585,7 +586,7 @@ public class RlsLoadBalancerTest {
     private final Attributes attributes;
     private List<EquivalentAddressGroup> eags;
     private SubchannelStateListener listener;
-    private boolean isReady;
+    private volatile boolean isReady;
 
     public FakeSubchannel(List<EquivalentAddressGroup> eags, Attributes attributes) {
       this.eags = Collections.unmodifiableList(eags);
