@@ -21,7 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.grpc.internal.TimeProvider;
+import com.google.common.base.Ticker;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -60,7 +60,7 @@ final class AdaptiveThrottler implements Throttler {
    * is currently accepting.
    */
   private final float ratioForAccepts;
-  private final TimeProvider timeProvider;
+  private final Ticker ticker;
   /**
    * The number of requests attempted by the client during the Adaptive Throttler instance's
    * history of calls. This includes requests throttled at the client. The history period defaults
@@ -79,10 +79,10 @@ final class AdaptiveThrottler implements Throttler {
     this.historySeconds = builder.historySeconds;
     this.requestsPadding = builder.requestsPadding;
     this.ratioForAccepts = builder.ratioForAccepts;
-    this.timeProvider = builder.timeProvider;
+    this.ticker = builder.ticker;
     long internalNanos = TimeUnit.SECONDS.toNanos(historySeconds);
-    this.requestStat = new TimeBasedAccumulator(internalNanos, timeProvider);
-    this.throttledStat = new TimeBasedAccumulator(internalNanos, timeProvider);
+    this.requestStat = new TimeBasedAccumulator(internalNanos, ticker);
+    this.throttledStat = new TimeBasedAccumulator(internalNanos, ticker);
   }
 
   @Override
@@ -92,7 +92,7 @@ final class AdaptiveThrottler implements Throttler {
 
   @VisibleForTesting
   boolean shouldThrottle(float random) {
-    long nowNanos = timeProvider.currentTimeNanos();
+    long nowNanos = ticker.read();
     if (getThrottleProbability(nowNanos) <= random) {
       return false;
     }
@@ -118,7 +118,7 @@ final class AdaptiveThrottler implements Throttler {
 
   @Override
   public void registerBackendResponse(boolean throttled) {
-    long now = timeProvider.currentTimeNanos();
+    long now = ticker.read();
     requestStat.increment(now);
     if (throttled) {
       throttledStat.increment(now);
@@ -150,7 +150,7 @@ final class AdaptiveThrottler implements Throttler {
     private float ratioForAccepts = DEFAULT_RATIO_FOR_ACCEPT;
     private int historySeconds = DEFAULT_HISTORY_SECONDS;
     private int requestsPadding = DEFAULT_REQUEST_PADDING;
-    private TimeProvider timeProvider = TimeProvider.SYSTEM_TIME_PROVIDER;
+    private Ticker ticker = Ticker.systemTicker();
 
     public Builder setRatioForAccepts(float ratioForAccepts) {
       this.ratioForAccepts = ratioForAccepts;
@@ -167,8 +167,8 @@ final class AdaptiveThrottler implements Throttler {
       return this;
     }
 
-    public Builder setTimeProvider(TimeProvider timeProvider) {
-      this.timeProvider = checkNotNull(timeProvider, "timeProvider");
+    public Builder setTicker(Ticker ticker) {
+      this.ticker = checkNotNull(ticker, "ticker");
       return this;
     }
 
@@ -206,7 +206,7 @@ final class AdaptiveThrottler implements Throttler {
     }
 
     // Represents a slot which is not initialized and is unusable.
-    private static final Slot NULL_SLOT = new Slot(-1);
+    private static final Slot NULL_SLOT = new Slot(Long.MIN_VALUE);
 
     /** The array of slots. */
     private final AtomicReferenceArray<Slot> slots = new AtomicReferenceArray<>(NUM_SLOTS);
@@ -224,7 +224,7 @@ final class AdaptiveThrottler implements Throttler {
      */
     private volatile int currentIndex;
 
-    private final TimeProvider timeProvider;
+    private final Ticker ticker;
 
     /**
      * Interval constructor.
@@ -232,7 +232,7 @@ final class AdaptiveThrottler implements Throttler {
      * @param internalNanos is the stat interval in nanoseconds
      * @throws IllegalArgumentException if the supplied interval is too small to be effective
      */
-    TimeBasedAccumulator(long internalNanos, TimeProvider timeProvider) {
+    TimeBasedAccumulator(long internalNanos, Ticker ticker) {
       checkArgument(
           internalNanos >= NUM_SLOTS,
           "Interval must be greater than %s",
@@ -243,7 +243,7 @@ final class AdaptiveThrottler implements Throttler {
       for (int i = 0; i < NUM_SLOTS; i++) {
         slots.set(i, NULL_SLOT);
       }
-      this.timeProvider = checkNotNull(timeProvider, "ticker");
+      this.ticker = checkNotNull(ticker, "ticker");
     }
 
     /** Gets the current slot. */
@@ -294,7 +294,7 @@ final class AdaptiveThrottler implements Throttler {
      *
      * @param now is the time used to increment the count
      */
-    final void increment(long now) {
+    void increment(long now) {
       getSlot(now).increment();
     }
 
@@ -304,7 +304,7 @@ final class AdaptiveThrottler implements Throttler {
      * @param now the current time
      * @return the statistic count
      */
-    final long get(long now) {
+    long get(long now) {
       long intervalEnd = getSlotEndTime(now);
       long intervalStart = intervalEnd - interval;
       // This is the point at which increments to new slots will be ignored.
@@ -337,7 +337,7 @@ final class AdaptiveThrottler implements Throttler {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("interval", interval)
-          .add("current_count", get(timeProvider.currentTimeNanos()))
+          .add("current_count", get(ticker.read()))
           .toString();
     }
   }

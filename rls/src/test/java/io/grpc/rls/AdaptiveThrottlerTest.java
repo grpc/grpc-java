@@ -18,9 +18,10 @@ package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.base.Ticker;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.TimeProvider;
 import java.util.concurrent.TimeUnit;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -29,24 +30,31 @@ import org.junit.runners.JUnit4;
 public class AdaptiveThrottlerTest {
   private static final float TOLERANCE = 0.0001f;
 
-  private final FakeClock fakeClock = new FakeClock();
-  private final TimeProvider fakeTimeProvider = fakeClock.getTimeProvider();
-  private final AdaptiveThrottler throttler =
-      new AdaptiveThrottler.Builder()
-          .setHistorySeconds(1)
-          .setRatioForAccepts(1.0f)
-          .setRequestsPadding(1)
-          .setTimeProvider(fakeTimeProvider)
-          .build();
+  private FakeClock fakeClock;
+  private Ticker fakeTicker;
+  private AdaptiveThrottler throttler;
+
+  @Before
+  public void setUp() {
+    fakeClock = new FakeClock();
+    fakeTicker = fakeClock.getTicker();
+    throttler =
+        new AdaptiveThrottler.Builder()
+            .setHistorySeconds(1)
+            .setRatioForAccepts(1.0f)
+            .setRequestsPadding(1)
+            .setTicker(fakeTicker)
+            .build();
+  }
 
   @Test
   public void shouldThrottle() {
     long startTime = fakeClock.currentTimeMillis();
 
     // initial states
-    assertThat(throttler.requestStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(0L);
-    assertThat(throttler.throttledStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(0L);
-    assertThat(throttler.getThrottleProbability(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.requestStat.get(fakeTicker.read())).isEqualTo(0L);
+    assertThat(throttler.throttledStat.get(fakeTicker.read())).isEqualTo(0L);
+    assertThat(throttler.getThrottleProbability(fakeTicker.read()))
         .isWithin(TOLERANCE).of(0.0f);
 
     // Request 1, allowed by all.
@@ -54,10 +62,10 @@ public class AdaptiveThrottlerTest {
     fakeClock.forwardTime(1L, TimeUnit.MILLISECONDS);
     throttler.registerBackendResponse(false);
 
-    assertThat(throttler.requestStat.get(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.requestStat.get(fakeTicker.read()))
         .isEqualTo(1L);
-    assertThat(throttler.throttledStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(0L);
-    assertThat(throttler.getThrottleProbability(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.throttledStat.get(fakeTicker.read())).isEqualTo(0L);
+    assertThat(throttler.getThrottleProbability(fakeTicker.read()))
         .isWithin(TOLERANCE).of(0.0f);
 
     // Request 2, throttled by backend
@@ -65,11 +73,11 @@ public class AdaptiveThrottlerTest {
     fakeClock.forwardTime(1L, TimeUnit.MILLISECONDS);
     throttler.registerBackendResponse(true);
 
-    assertThat(throttler.requestStat.get(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.requestStat.get(fakeTicker.read()))
         .isEqualTo(2L);
-    assertThat(throttler.throttledStat.get(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.throttledStat.get(fakeTicker.read()))
         .isEqualTo(1L);
-    assertThat(throttler.getThrottleProbability(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.getThrottleProbability(fakeTicker.read()))
         .isWithin(TOLERANCE)
         .of(1.0f / 3.0f);
 
@@ -81,9 +89,9 @@ public class AdaptiveThrottlerTest {
     fakeClock.forwardTime(1L, TimeUnit.MILLISECONDS);
     throttler.registerBackendResponse(true);
 
-    assertThat(throttler.requestStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(3L);
-    assertThat(throttler.throttledStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(2L);
-    assertThat(throttler.getThrottleProbability(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.requestStat.get(fakeTicker.read())).isEqualTo(3L);
+    assertThat(throttler.throttledStat.get(fakeTicker.read())).isEqualTo(2L);
+    assertThat(throttler.getThrottleProbability(fakeTicker.read()))
         .isWithin(TOLERANCE)
         .of(2.0f / 4.0f);
 
@@ -91,9 +99,9 @@ public class AdaptiveThrottlerTest {
     assertThat(throttler.shouldThrottle(0.4f)).isTrue();
     fakeClock.forwardTime(1L, TimeUnit.MILLISECONDS);
 
-    assertThat(throttler.requestStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(4L);
-    assertThat(throttler.throttledStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(3L);
-    assertThat(throttler.getThrottleProbability(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.requestStat.get(fakeTicker.read())).isEqualTo(4L);
+    assertThat(throttler.throttledStat.get(fakeTicker.read())).isEqualTo(3L);
+    assertThat(throttler.getThrottleProbability(fakeTicker.read()))
         .isWithin(TOLERANCE)
         .of(3.0f / 5.0f);
 
@@ -101,10 +109,16 @@ public class AdaptiveThrottlerTest {
     fakeClock.forwardTime(
         1250 - (fakeClock.currentTimeMillis() - startTime), TimeUnit.MILLISECONDS);
 
-    assertThat(throttler.requestStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(2L);
-    assertThat(throttler.throttledStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(2L);
-    assertThat(throttler.getThrottleProbability(fakeTimeProvider.currentTimeNanos()))
+    assertThat(throttler.requestStat.get(fakeTicker.read())).isEqualTo(2L);
+    assertThat(throttler.throttledStat.get(fakeTicker.read())).isEqualTo(2L);
+    assertThat(throttler.getThrottleProbability(fakeTicker.read()))
         .isWithin(TOLERANCE)
         .of(2.0f / 3.0f);
+  }
+
+  @Test
+  public void negativeTickerValues() {
+    fakeClock.forwardTime(-300, TimeUnit.MILLISECONDS);
+    shouldThrottle();
   }
 }
