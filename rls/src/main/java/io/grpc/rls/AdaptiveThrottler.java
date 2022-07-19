@@ -193,9 +193,9 @@ final class AdaptiveThrottler implements Throttler {
       volatile long count;
       // The nearest 0 modulo slot boundary in nanoseconds. The slot boundary
       // is exclusive. [previous_slot.end, end)
-      final long endNanos;
+      final Long endNanos;
 
-      Slot(long endNanos) {
+      Slot(Long endNanos) {
         this.endNanos = endNanos;
         this.count = 0;
       }
@@ -206,7 +206,7 @@ final class AdaptiveThrottler implements Throttler {
     }
 
     // Represents a slot which is not initialized and is unusable.
-    private static final Slot NULL_SLOT = new Slot(Long.MIN_VALUE);
+    private static final Slot NULL_SLOT = new Slot(null);
 
     /** The array of slots. */
     private final AtomicReferenceArray<Slot> slots = new AtomicReferenceArray<>(NUM_SLOTS);
@@ -249,14 +249,14 @@ final class AdaptiveThrottler implements Throttler {
     /** Gets the current slot. */
     private Slot getSlot(long now) {
       Slot currentSlot = slots.get(currentIndex);
-      if (now - currentSlot.endNanos < 0) {
+      if (currentSlot.endNanos != null && now - currentSlot.endNanos < 0) {
         return currentSlot;
       } else {
         long slotBoundary = getSlotEndTime(now);
         synchronized (this) {
           int index = currentIndex;
           currentSlot = slots.get(index);
-          if (now - currentSlot.endNanos < 0) {
+          if (currentSlot.endNanos != null && now - currentSlot.endNanos < 0) {
             return currentSlot;
           }
           int newIndex = (index == NUM_SLOTS - 1) ? 0 : index + 1;
@@ -318,6 +318,10 @@ final class AdaptiveThrottler implements Throttler {
         }
         Slot currentSlot = slots.get(index);
         index--;
+        if (currentSlot.endNanos == null) {
+          continue;
+        }
+
         long currentSlotEnd = currentSlot.endNanos;
 
         if (currentSlotEnd <= intervalStart || currentSlotEnd > prevSlotEnd) {
