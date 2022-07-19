@@ -311,7 +311,7 @@ final class AdaptiveThrottler implements Throttler {
       int index = currentIndex;
 
       long accumulated = 0L;
-      long prevSlotEnd = Long.MAX_VALUE;
+      Long prevSlotEnd = null;
       for (int i = 0; i < NUM_SLOTS; i++) {
         if (index < 0) {
           index = NUM_SLOTS - 1;
@@ -324,12 +324,13 @@ final class AdaptiveThrottler implements Throttler {
 
         long currentSlotEnd = currentSlot.endNanos;
 
-        if (currentSlotEnd <= intervalStart || currentSlotEnd > prevSlotEnd) {
+        if (currentSlotEnd - intervalStart <= 0
+            || (prevSlotEnd != null && currentSlotEnd - prevSlotEnd > 0)) {
           break;
         }
         prevSlotEnd = currentSlotEnd;
 
-        if (currentSlotEnd > intervalEnd) {
+        if (currentSlotEnd - intervalEnd > 0) {
           continue;
         }
         accumulated = accumulated + currentSlot.count;
