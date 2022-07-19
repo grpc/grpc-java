@@ -117,6 +117,11 @@ public class AdaptiveThrottlerTest {
         .of(2.0f / 3.0f);
   }
 
+  /**
+   * Check that when the ticker returns a negative value for now that the slot detection logic
+   * is correctly handled and then when the value transitions from negative to positive that things
+   * continue to work correctly.
+   */
   @Test
   public void negativeTickerValues() {
     fakeClock.forwardTime(-300, TimeUnit.MILLISECONDS);
