@@ -16,15 +16,16 @@
 
 package io.grpc.examples.orca;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
-import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -87,9 +88,9 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
         // otherwise it is treated as server minimum report interval.
         OrcaOobUtil.setListener(subchannel, new OrcaOobUtil.OrcaOobReportListener() {
               @Override
-              public void onLoadReport(OrcaLoadReport orcaLoadReport) {
+              public void onLoadReport(MetricReport orcaLoadReport) {
                 System.out.println("Example load balancer received OOB metrics report:\n"
-                    + orcaLoadReport);
+                    + printReport(orcaLoadReport));
               }
             },
             OrcaOobUtil.OrcaReportingConfig.newBuilder()
@@ -129,12 +130,21 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                 new OrcaPerRequestUtil.OrcaPerRequestReportListener() {
                   @Override
-                  public void onLoadReport(OrcaLoadReport orcaLoadReport) {
+                  public void onLoadReport(MetricReport orcaLoadReport) {
                     System.out.println("Example load balancer received per-rpc metrics report:\n"
-                        + orcaLoadReport);
+                        + printReport(orcaLoadReport));
                   }
                 }));
       }
     }
+  }
+
+  private static String printReport(MetricReport metricReport) {
+    return MoreObjects.toStringHelper(metricReport)
+        .add("cpuUtilization", metricReport.getCpuUtilization())
+        .add("memoryUtilization", metricReport.getMemoryUtilization())
+        .add("requestCost", metricReport.getRequestCostMetrics())
+        .add("utilization", metricReport.getUtilizationMetrics())
+        .toString();
   }
 }
