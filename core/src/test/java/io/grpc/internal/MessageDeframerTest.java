@@ -49,6 +49,7 @@ import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPOutputStream;
 import org.junit.Before;
@@ -507,7 +508,7 @@ public class MessageDeframerTest {
     for (int i = 0; i < count; i++) {
       assertEquals("inboundMessage(" + i + ")", tracer.nextInboundEvent());
       assertEquals(
-          String.format("inboundMessageRead(%d, %d, -1)", i, sizes[i * 2]),
+          String.format(Locale.US, "inboundMessageRead(%d, %d, -1)", i, sizes[i * 2]),
           tracer.nextInboundEvent());
       expectedWireSize += sizes[i * 2];
       expectedUncompressedSize += sizes[i * 2 + 1];

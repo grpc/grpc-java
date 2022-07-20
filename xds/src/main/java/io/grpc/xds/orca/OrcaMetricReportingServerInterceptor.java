@@ -31,6 +31,7 @@ import io.grpc.Status;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.services.CallMetricRecorder;
 import io.grpc.services.InternalCallMetricRecorder;
+import io.grpc.services.MetricReport;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -89,8 +90,7 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         next);
   }
 
-  private static OrcaLoadReport fromInternalReport(
-      CallMetricRecorder.CallMetricReport internalReport) {
+  private static OrcaLoadReport fromInternalReport(MetricReport internalReport) {
     return OrcaLoadReport.newBuilder()
         .setCpuUtilization(internalReport.getCpuUtilization())
         .setMemUtilization(internalReport.getMemoryUtilization())

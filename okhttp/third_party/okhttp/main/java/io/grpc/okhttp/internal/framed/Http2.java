@@ -23,6 +23,7 @@ import com.google.errorprone.annotations.FormatMethod;
 import io.grpc.okhttp.internal.Protocol;
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Logger;
 
 import okio.Buffer;
@@ -590,12 +591,12 @@ public final class Http2 implements Variant {
 
   @FormatMethod
   private static IllegalArgumentException illegalArgument(String message, Object... args) {
-    throw new IllegalArgumentException(format(message, args));
+    throw new IllegalArgumentException(format(Locale.US, message, args));
   }
 
   @FormatMethod
   private static IOException ioException(String message, Object... args) throws IOException {
-    throw new IOException(format(message, args));
+    throw new IOException(format(Locale.US, message, args));
   }
 
   /**
@@ -684,7 +685,7 @@ public final class Http2 implements Variant {
     static String formatHeader(boolean inbound, int streamId, int length, byte type, byte flags) {
       String formattedType = type < TYPES.length ? TYPES[type] : format("0x%02x", type);
       String formattedFlags = formatFlags(type, flags);
-      return format("%s 0x%08x %5d %-13s %s", inbound ? "<<" : ">>", streamId, length,
+      return format(Locale.US, "%s 0x%08x %5d %-13s %s", inbound ? "<<" : ">>", streamId, length,
           formattedType, formattedFlags);
     }
 
