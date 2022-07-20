@@ -69,7 +69,7 @@ public final class GcpObservability implements AutoCloseable {
       GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
-          globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
+          globalLoggingTags.getLocationTags(), observabilityConfig.getCustomTags(),
           observabilityConfig.getFlushMessageCount());
       // TODO(dnvindhya): Cleanup code for LoggingChannelProvider and LoggingServerProvider
       // once ChannelBuilder and ServerBuilder are used

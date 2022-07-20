@@ -41,14 +41,11 @@ final class GlobalLoggingTags {
 
   private static final String ENV_KEY_PREFIX = "GRPC_OBSERVABILITY_";
   private final Map<String, String> locationTags;
-  private final Map<String, String> customTags;
 
   GlobalLoggingTags() {
     ImmutableMap.Builder<String, String> locationTagsBuilder = ImmutableMap.builder();
-    ImmutableMap.Builder<String, String> customTagsBuilder = ImmutableMap.builder();
-    populate(locationTagsBuilder, customTagsBuilder);
+    populate(locationTagsBuilder);
     locationTags = locationTagsBuilder.buildOrThrow();
-    customTags = customTagsBuilder.buildOrThrow();
   }
 
   private static String applyTrim(String value) {
@@ -60,10 +57,6 @@ final class GlobalLoggingTags {
 
   Map<String, String> getLocationTags() {
     return locationTags;
-  }
-
-  Map<String, String> getCustomTags() {
-    return customTags;
   }
 
   @VisibleForTesting
@@ -139,10 +132,6 @@ final class GlobalLoggingTags {
     return null;
   }
 
-  private static void populateFromEnvironmentVars(ImmutableMap.Builder<String, String> customTags) {
-    populateFromMap(System.getenv(), customTags);
-  }
-
   @VisibleForTesting
   static void populateFromMap(Map<String, String> map,
       final ImmutableMap.Builder<String, String> customTags) {
@@ -155,9 +144,7 @@ final class GlobalLoggingTags {
     });
   }
 
-  static void populate(ImmutableMap.Builder<String, String> locationTags,
-      ImmutableMap.Builder<String, String> customTags) {
-    populateFromEnvironmentVars(customTags);
+  static void populate(ImmutableMap.Builder<String, String> locationTags) {
     populateFromMetadataServer(locationTags);
     populateFromKubernetesValues(locationTags,
         "/var/run/secrets/kubernetes.io/serviceaccount/namespace",
