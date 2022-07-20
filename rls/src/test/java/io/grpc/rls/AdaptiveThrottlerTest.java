@@ -21,7 +21,6 @@ import static com.google.common.truth.Truth.assertThat;
 import com.google.common.base.Ticker;
 import io.grpc.internal.FakeClock;
 import java.util.concurrent.TimeUnit;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -30,22 +29,15 @@ import org.junit.runners.JUnit4;
 public class AdaptiveThrottlerTest {
   private static final float TOLERANCE = 0.0001f;
 
-  private FakeClock fakeClock;
-  private Ticker fakeTicker;
-  private AdaptiveThrottler throttler;
-
-  @Before
-  public void setUp() {
-    fakeClock = new FakeClock();
-    fakeTicker = fakeClock.getTicker();
-    throttler =
-        new AdaptiveThrottler.Builder()
-            .setHistorySeconds(1)
-            .setRatioForAccepts(1.0f)
-            .setRequestsPadding(1)
-            .setTicker(fakeTicker)
-            .build();
-  }
+  private final FakeClock fakeClock = new FakeClock();
+  private final Ticker fakeTicker = fakeClock.getTicker();
+  private final AdaptiveThrottler throttler =
+      new AdaptiveThrottler.Builder()
+          .setHistorySeconds(1)
+          .setRatioForAccepts(1.0f)
+          .setRequestsPadding(1)
+          .setTicker(fakeTicker)
+          .build();
 
   @Test
   public void shouldThrottle() {
@@ -124,7 +116,9 @@ public class AdaptiveThrottlerTest {
    */
   @Test
   public void negativeTickerValues() {
-    fakeClock.forwardTime(-300, TimeUnit.MILLISECONDS);
+    long rewindAmount = TimeUnit.MILLISECONDS.toNanos(300) + fakeClock.getTicker().read();
+    fakeClock.forwardTime(-1 * rewindAmount, TimeUnit.NANOSECONDS);
+    assertThat(fakeClock.getTicker().read()).isEqualTo(TimeUnit.MILLISECONDS.toNanos(-300));
     shouldThrottle();
   }
 }
