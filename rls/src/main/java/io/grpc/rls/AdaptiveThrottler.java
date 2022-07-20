@@ -193,9 +193,9 @@ final class AdaptiveThrottler implements Throttler {
       volatile long count;
       // The nearest 0 modulo slot boundary in nanoseconds. The slot boundary
       // is exclusive. [previous_slot.end, end)
-      final Long endNanos;
+      final long endNanos;
 
-      Slot(Long endNanos) {
+      Slot(long endNanos) {
         this.endNanos = endNanos;
         this.count = 0;
       }
@@ -204,9 +204,6 @@ final class AdaptiveThrottler implements Throttler {
         ATOMIC_COUNT.incrementAndGet(this);
       }
     }
-
-    // Represents a slot which is not initialized and is unusable.
-    private static final Slot NULL_SLOT = new Slot(null);
 
     /** The array of slots. */
     private final AtomicReferenceArray<Slot> slots = new AtomicReferenceArray<>(NUM_SLOTS);
@@ -240,30 +237,27 @@ final class AdaptiveThrottler implements Throttler {
       this.interval = internalNanos;
       this.slotNanos = internalNanos / NUM_SLOTS;
       this.currentIndex = 0;
-      for (int i = 0; i < NUM_SLOTS; i++) {
-        slots.set(i, NULL_SLOT);
-      }
       this.ticker = checkNotNull(ticker, "ticker");
     }
 
     /** Gets the current slot. */
     private Slot getSlot(long now) {
       Slot currentSlot = slots.get(currentIndex);
-      if (currentSlot.endNanos != null && now - currentSlot.endNanos < 0) {
+      if (currentSlot != null && now - currentSlot.endNanos < 0) {
         return currentSlot;
       } else {
         long slotBoundary = getSlotEndTime(now);
         synchronized (this) {
           int index = currentIndex;
           currentSlot = slots.get(index);
-          if (currentSlot.endNanos != null && now - currentSlot.endNanos < 0) {
+          if (currentSlot != null && now - currentSlot.endNanos < 0) {
             return currentSlot;
           }
           int newIndex = (index == NUM_SLOTS - 1) ? 0 : index + 1;
           Slot nextSlot = new Slot(slotBoundary);
           slots.set(newIndex, nextSlot);
           // Set currentIndex only after assigning the new slot to slots, otherwise
-          // racing readers will see NULL_SLOT or an old slot.
+          // racing readers will see null or an old slot.
           currentIndex = newIndex;
           return nextSlot;
         }
@@ -318,7 +312,7 @@ final class AdaptiveThrottler implements Throttler {
         }
         Slot currentSlot = slots.get(index);
         index--;
-        if (currentSlot.endNanos == null) {
+        if (currentSlot == null) {
           continue;
         }
 
