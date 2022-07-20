@@ -114,6 +114,10 @@ public final class InProcessChannelBuilder extends
     managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
     managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
     managedChannelImplBuilder.setStatsRecordRetryMetrics(false);
+
+    // By default, In-process transport should not be retriable as that leaks memory.  Since
+    // there is no wire, bytes aren't calculated so buffer limit isn't respected
+    managedChannelImplBuilder.disableRetry();
   }
 
   @Internal
@@ -123,7 +127,7 @@ public final class InProcessChannelBuilder extends
   }
 
   @Override
-  public final InProcessChannelBuilder maxInboundMessageSize(int max) {
+  public InProcessChannelBuilder maxInboundMessageSize(int max) {
     // TODO(carl-mastrangelo): maybe throw an exception since this not enforced?
     return super.maxInboundMessageSize(max);
   }

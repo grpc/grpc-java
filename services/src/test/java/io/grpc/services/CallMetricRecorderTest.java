@@ -47,7 +47,7 @@ public class CallMetricRecorderTest {
     recorder.recordCpuUtilizationMetric(0.1928);
     recorder.recordMemoryUtilizationMetric(47.4);
 
-    CallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    MetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.getUtilizationMetrics())
         .containsExactly("util1", 154353.423, "util2", 0.1367, "util3", 1437.34);
     Truth.assertThat(dump.getRequestCostMetrics())
@@ -76,7 +76,7 @@ public class CallMetricRecorderTest {
     recorder.recordMemoryUtilizationMetric(9384.0);
     recorder.recordUtilizationMetric("util1", 84323.3);
 
-    CallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    MetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.getRequestCostMetrics())
         .containsExactly("cost1", 4654.67, "cost2", 75.83);
     Truth.assertThat(dump.getMemoryUtilization()).isEqualTo(9384.0);

@@ -115,6 +115,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -2058,6 +2059,7 @@ public abstract class AbstractInteropTest {
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       System.err.print(
           String.format(
+              Locale.US,
               "soak iteration: %d elapsed_ms: %d peer: %s",
               i, result.getLatencyMs(), peer != null ? peer.toString() : "null"));
       if (!result.getStatus().equals(Status.OK)) {
@@ -2066,8 +2068,7 @@ public abstract class AbstractInteropTest {
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
         totalFailures++;
         System.err.println(
-            String.format(
-                " exceeds max acceptable latency: %d", maxAcceptablePerIterationLatencyMs));
+            " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
       } else {
         System.err.println(" succeeded");
       }
@@ -2082,6 +2083,7 @@ public abstract class AbstractInteropTest {
     soakChannel.awaitTermination(10, TimeUnit.SECONDS);
     System.err.println(
         String.format(
+            Locale.US,
             "soak test ran: %d / %d iterations\n"
                 + "total failures: %d\n"
                 + "max failures threshold: %d\n"
@@ -2102,6 +2104,7 @@ public abstract class AbstractInteropTest {
     // check if we timed out
     String timeoutErrorMessage =
         String.format(
+            Locale.US,
             "soak test consumed all %d seconds of time and quit early, only "
                 + "having ran %d out of desired %d iterations.",
             overallTimeoutSeconds,
@@ -2111,6 +2114,7 @@ public abstract class AbstractInteropTest {
     // check if we had too many failures
     String tooManyFailuresErrorMessage =
         String.format(
+            Locale.US,
             "soak test total failures: %d exceeds max failures threshold: %d.",
             totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
@@ -2353,9 +2357,10 @@ public abstract class AbstractInteropTest {
     long uncompressedSentSize = 0;
     int seqNo = 0;
     for (MessageLite msg : sentMessages) {
-      assertThat(tracer.nextOutboundEvent()).isEqualTo(String.format("outboundMessage(%d)", seqNo));
+      assertThat(tracer.nextOutboundEvent())
+          .isEqualTo(String.format(Locale.US, "outboundMessage(%d)", seqNo));
       assertThat(tracer.nextOutboundEvent()).matches(
-          String.format("outboundMessageSent\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
+          String.format(Locale.US, "outboundMessageSent\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
       seqNo++;
       uncompressedSentSize += msg.getSerializedSize();
     }
@@ -2363,9 +2368,10 @@ public abstract class AbstractInteropTest {
     long uncompressedReceivedSize = 0;
     seqNo = 0;
     for (MessageLite msg : receivedMessages) {
-      assertThat(tracer.nextInboundEvent()).isEqualTo(String.format("inboundMessage(%d)", seqNo));
+      assertThat(tracer.nextInboundEvent())
+          .isEqualTo(String.format(Locale.US, "inboundMessage(%d)", seqNo));
       assertThat(tracer.nextInboundEvent()).matches(
-          String.format("inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
+          String.format(Locale.US, "inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
       uncompressedReceivedSize += msg.getSerializedSize();
       seqNo++;
     }

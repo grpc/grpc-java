@@ -1795,8 +1795,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
             "Cluster " + clusterName
                 + ": LOGICAL DNS clusters socket_address must have port_value");
       }
-      String dnsHostName =
-          String.format("%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
+      String dnsHostName = String.format(
+          Locale.US, "%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
           clusterName, dnsHostName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext));
     }

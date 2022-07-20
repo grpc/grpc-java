@@ -34,6 +34,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import javax.annotation.Nullable;
 
 /**
@@ -172,7 +173,8 @@ public class MessageFramer implements Framer {
     if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
-              String.format("message too large %d > %d", written , maxOutboundMessageSize))
+              String.format(
+                  Locale.US, "message too large %d > %d", written , maxOutboundMessageSize))
           .asRuntimeException();
     }
     writeBufferChain(bufferChain, false);
@@ -192,7 +194,8 @@ public class MessageFramer implements Framer {
     if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
-              String.format("message too large %d > %d", written , maxOutboundMessageSize))
+              String.format(
+                  Locale.US, "message too large %d > %d", written , maxOutboundMessageSize))
           .asRuntimeException();
     }
 
@@ -215,7 +218,8 @@ public class MessageFramer implements Framer {
     if (maxOutboundMessageSize >= 0 && messageLength > maxOutboundMessageSize) {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
-              String.format("message too large %d > %d", messageLength , maxOutboundMessageSize))
+              String.format(
+                  Locale.US, "message too large %d > %d", messageLength , maxOutboundMessageSize))
           .asRuntimeException();
     }
     headerScratch.clear();
