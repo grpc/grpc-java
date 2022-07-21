@@ -271,8 +271,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
         // when the child instance exits deactivated state.
         currentState = newState;
         currentPicker = newPicker;
-        //if (!deactivated && !resolvingAddresses) {
-        if (!resolvingAddresses) {
+        if (!deactivated && !resolvingAddresses) {
           updateOverallBalancingState();
         }
       }
