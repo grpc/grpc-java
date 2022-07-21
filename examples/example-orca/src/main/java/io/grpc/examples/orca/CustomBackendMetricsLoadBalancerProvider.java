@@ -16,7 +16,6 @@
 
 package io.grpc.examples.orca;
 
-import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -90,7 +89,7 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
               @Override
               public void onLoadReport(MetricReport orcaLoadReport) {
                 System.out.println("Example load balancer received OOB metrics report:\n"
-                    + printReport(orcaLoadReport));
+                    + orcaLoadReport);
               }
             },
             OrcaOobUtil.OrcaReportingConfig.newBuilder()
@@ -132,19 +131,10 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
                   @Override
                   public void onLoadReport(MetricReport orcaLoadReport) {
                     System.out.println("Example load balancer received per-rpc metrics report:\n"
-                        + printReport(orcaLoadReport));
+                        + orcaLoadReport);
                   }
                 }));
       }
     }
-  }
-
-  private static String printReport(MetricReport metricReport) {
-    return MoreObjects.toStringHelper(metricReport)
-        .add("cpuUtilization", metricReport.getCpuUtilization())
-        .add("memoryUtilization", metricReport.getMemoryUtilization())
-        .add("requestCost", metricReport.getRequestCostMetrics())
-        .add("utilization", metricReport.getUtilizationMetrics())
-        .toString();
   }
 }
