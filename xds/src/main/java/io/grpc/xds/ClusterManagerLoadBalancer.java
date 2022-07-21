@@ -264,14 +264,15 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
           final SubchannelPicker newPicker) {
         // If we are already in the process of resolving addresses, the overall balancing state
         // will be updated at the end of it, and we don't need to trigger that update here.
-        if (resolvingAddresses || !childLbStates.containsKey(name)) {
+        if (!childLbStates.containsKey(name)) {
           return;
         }
         // Subchannel picker and state are saved, but will only be propagated to the channel
         // when the child instance exits deactivated state.
         currentState = newState;
         currentPicker = newPicker;
-        if (!deactivated) {
+        //if (!deactivated && !resolvingAddresses) {
+        if (!resolvingAddresses) {
           updateOverallBalancingState();
         }
       }
