@@ -34,12 +34,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /** A container of all global location tags used for observability. */
-final class GlobalLoggingTags {
-  private static final Logger logger = Logger.getLogger(GlobalLoggingTags.class.getName());
+final class GlobalLocationTags {
+  private static final Logger logger = Logger.getLogger(GlobalLocationTags.class.getName());
 
   private final Map<String, String> locationTags;
 
-  GlobalLoggingTags() {
+  GlobalLocationTags() {
     ImmutableMap.Builder<String, String> locationTagsBuilder = ImmutableMap.builder();
     populate(locationTagsBuilder);
     locationTags = locationTagsBuilder.buildOrThrow();
@@ -69,11 +69,11 @@ final class GlobalLoggingTags {
       String hostnameFile, String cgroupFile) {
     // namespace name: contents of file /var/run/secrets/kubernetes.io/serviceaccount/namespace
     populateFromFileContents(locationTags, "namespace_name",
-        namespaceFile, GlobalLoggingTags::applyTrim);
+        namespaceFile, GlobalLocationTags::applyTrim);
 
     // pod_name: hostname i.e. contents of /etc/hostname
     populateFromFileContents(locationTags, "pod_name", hostnameFile,
-        GlobalLoggingTags::applyTrim);
+        GlobalLocationTags::applyTrim);
 
     // container_id: parsed from /proc/self/cgroup . Note: only works for Linux-based containers
     populateFromFileContents(locationTags, "container_id", cgroupFile,
