@@ -52,15 +52,6 @@ public class GlobalLoggingTagsTest {
   @Rule public TemporaryFolder cgroupFolder = new TemporaryFolder();
 
   @Test
-  public void testPopulateFromMap() {
-    ImmutableMap.Builder<String, String> customTags = ImmutableMap.builder();
-    GlobalLoggingTags.populateFromMap(
-        ImmutableMap.of("GRPC_OBSERVABILITY_KEY1", "VALUE1", "ANOTHER_KEY2", "VALUE2",
-            "GRPC_OBSERVABILITY_KEY3", "VALUE3"), customTags);
-    assertThat(customTags.buildOrThrow()).containsExactly("KEY1", "VALUE1", "KEY3", "VALUE3");
-  }
-
-  @Test
   public void testContainerIdParsing_lastLine() {
     String containerId = GlobalLoggingTags.getContainerIdFromFileContents(FILE_CONTENTS_LAST_LINE);
     assertThat(containerId).isEqualTo("e19a54df");

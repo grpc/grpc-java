@@ -16,8 +16,6 @@
 
 package io.grpc.gcp.observability;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.util.Strings;
@@ -39,7 +37,6 @@ import java.util.logging.Logger;
 final class GlobalLoggingTags {
   private static final Logger logger = Logger.getLogger(GlobalLoggingTags.class.getName());
 
-  private static final String ENV_KEY_PREFIX = "GRPC_OBSERVABILITY_";
   private final Map<String, String> locationTags;
 
   GlobalLoggingTags() {
@@ -130,18 +127,6 @@ final class GlobalLoggingTags {
       logger.log(Level.FINE, "File:" + file + " is not readable (or missing?)");
     }
     return null;
-  }
-
-  @VisibleForTesting
-  static void populateFromMap(Map<String, String> map,
-      final ImmutableMap.Builder<String, String> customTags) {
-    checkNotNull(map);
-    map.forEach((k, v) -> {
-      if (k.startsWith(ENV_KEY_PREFIX)) {
-        String customTagKey = k.substring(ENV_KEY_PREFIX.length());
-        customTags.put(customTagKey, v);
-      }
-    });
   }
 
   static void populate(ImmutableMap.Builder<String, String> locationTags) {
