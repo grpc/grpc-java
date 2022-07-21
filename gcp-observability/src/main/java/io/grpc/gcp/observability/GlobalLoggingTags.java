@@ -33,7 +33,7 @@ import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** A container of all global custom tags used for logging (for now). */
+/** A container of all global location tags used for observability. */
 final class GlobalLoggingTags {
   private static final Logger logger = Logger.getLogger(GlobalLoggingTags.class.getName());
 
@@ -57,35 +57,35 @@ final class GlobalLoggingTags {
   }
 
   @VisibleForTesting
-  static void populateFromMetadataServer(ImmutableMap.Builder<String, String> customTags) {
+  static void populateFromMetadataServer(ImmutableMap.Builder<String, String> locationTags) {
     MetadataConfig metadataConfig = new MetadataConfig(new DefaultHttpTransportFactory());
     metadataConfig.init();
-    customTags.putAll(metadataConfig.getAllValues());
+    locationTags.putAll(metadataConfig.getAllValues());
   }
 
   @VisibleForTesting
-  static void populateFromKubernetesValues(ImmutableMap.Builder<String, String> customTags,
+  static void populateFromKubernetesValues(ImmutableMap.Builder<String, String> locationTags,
       String namespaceFile,
       String hostnameFile, String cgroupFile) {
     // namespace name: contents of file /var/run/secrets/kubernetes.io/serviceaccount/namespace
-    populateFromFileContents(customTags, "namespace_name",
+    populateFromFileContents(locationTags, "namespace_name",
         namespaceFile, GlobalLoggingTags::applyTrim);
 
     // pod_name: hostname i.e. contents of /etc/hostname
-    populateFromFileContents(customTags, "pod_name", hostnameFile,
+    populateFromFileContents(locationTags, "pod_name", hostnameFile,
         GlobalLoggingTags::applyTrim);
 
     // container_id: parsed from /proc/self/cgroup . Note: only works for Linux-based containers
-    populateFromFileContents(customTags, "container_id", cgroupFile,
+    populateFromFileContents(locationTags, "container_id", cgroupFile,
         (value) -> getContainerIdFromFileContents(value));
   }
 
   @VisibleForTesting
-  static void populateFromFileContents(ImmutableMap.Builder<String, String> customTags, String key,
-      String filePath, Function<String, String> parser) {
+  static void populateFromFileContents(ImmutableMap.Builder<String, String> locationTags,
+      String key, String filePath, Function<String, String> parser) {
     String value = parser.apply(readFileContents(filePath));
     if (value != null) {
-      customTags.put(key, value);
+      locationTags.put(key, value);
     }
   }
 
