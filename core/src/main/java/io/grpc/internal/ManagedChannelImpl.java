@@ -645,6 +645,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             builder.maxRetryAttempts,
             builder.maxHedgedAttempts,
             loadBalancerFactory);
+    this.authorityOverride = builder.authorityOverride;
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
@@ -654,8 +655,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setServiceConfigParser(serviceConfigParser)
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
+            .setOverrideAuthority(this.authorityOverride)
             .build();
-    this.authorityOverride = builder.authorityOverride;
     this.nameResolverFactory = builder.nameResolverFactory;
     this.nameResolver = getNameResolver(
         target, authorityOverride, nameResolverFactory, nameResolverArgs);
