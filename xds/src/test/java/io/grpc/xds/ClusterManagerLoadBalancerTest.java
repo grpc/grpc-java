@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
@@ -91,7 +92,7 @@ public class ClusterManagerLoadBalancerTest {
 
   private final Map<String, Object> lbConfigInventory = new HashMap<>();
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
-  private LoadBalancer clusterManagerLoadBalancer;
+  private ClusterManagerLoadBalancer clusterManagerLoadBalancer;
 
   @Before
   public void setUp() {
@@ -253,28 +254,33 @@ public class ClusterManagerLoadBalancerTest {
 
   @Test
   public void noDuplicateOverallBalancingStateUpdate() {
-    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"), true);
 
     // The test child LBs would have triggered state updates, let's make sure the overall balancing
-    // state was only updated once.
-    verify(helper, times(1)).updateBalancingState(any(), any());
+    // state was only updated once but that the new state reflects the state the child LB reported.
+    verify(helper, times(1)).updateBalancingState(
+        eq(TRANSIENT_FAILURE), isA(SubchannelPicker.class));
   }
 
   private void deliverResolvedAddresses(final Map<String, String> childPolicies) {
+    deliverResolvedAddresses(childPolicies, false);
+  }
+
+  private void deliverResolvedAddresses(final Map<String, String> childPolicies, boolean failing) {
     clusterManagerLoadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setLoadBalancingPolicyConfig(buildConfig(childPolicies))
+            .setLoadBalancingPolicyConfig(buildConfig(childPolicies, failing))
             .build());
   }
 
-  private ClusterManagerConfig buildConfig(Map<String, String> childPolicies) {
+  private ClusterManagerConfig buildConfig(Map<String, String> childPolicies, boolean failing) {
     Map<String, PolicySelection> childPolicySelections = new LinkedHashMap<>();
     for (String name : childPolicies.keySet()) {
       String childPolicyName = childPolicies.get(name);
       Object childConfig = lbConfigInventory.get(name);
       PolicySelection policy =
-          new PolicySelection(new FakeLoadBalancerProvider(childPolicyName), childConfig);
+          new PolicySelection(new FakeLoadBalancerProvider(childPolicyName, failing), childConfig);
       childPolicySelections.put(name, policy);
     }
     return new ClusterManagerConfig(childPolicySelections);
@@ -297,14 +303,16 @@ public class ClusterManagerLoadBalancerTest {
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
     private final String policyName;
+    private final boolean failing;
 
-    FakeLoadBalancerProvider(String policyName) {
+    FakeLoadBalancerProvider(String policyName, boolean failing) {
       this.policyName = policyName;
+      this.failing = failing;
     }
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      FakeLoadBalancer balancer = new FakeLoadBalancer(policyName, helper);
+      FakeLoadBalancer balancer = new FakeLoadBalancer(policyName, helper, failing);
       childBalancers.add(balancer);
       return balancer;
     }
@@ -328,22 +336,24 @@ public class ClusterManagerLoadBalancerTest {
   private final class FakeLoadBalancer extends LoadBalancer {
     private final String name;
     private final Helper helper;
+    private final boolean failing;
     private Object config;
     private Status upstreamError;
     private boolean shutdown;
 
-    FakeLoadBalancer(String name, Helper helper) {
+    FakeLoadBalancer(String name, Helper helper, boolean failing) {
       this.name = name;
       this.helper = helper;
+      this.failing = failing;
     }
 
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
 
-      // Update balancing state here so that concurrent child state changes can be easily tested.
-      // Most tests ignore this and trigger separate child LB updates.
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
+      if (failing) {
+        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
+      }
     }
 
     @Override
