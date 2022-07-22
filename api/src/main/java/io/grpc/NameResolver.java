@@ -367,12 +367,13 @@ public abstract class NameResolver {
 
     /**
      * Returns the overrideAuthority from channel {@link ManagedChannelBuilder#overrideAuthority}.
-     * Overrides the host name for L7 HTTP virtual host matching.
+     * Overrides the host name for L7 HTTP virtual host matching. Almost all name resolvers should
+     * not use this.
      *
      * @since 1.49.0
      */
     @Nullable
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/?")
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9406")
     public String getOverrideAuthority() {
       return overrideAuthority;
     }
@@ -514,7 +515,7 @@ public abstract class NameResolver {
        *
        * @since 1.49.0
        */
-      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/?")
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9406")
       public Builder setOverrideAuthority(String authority) {
         this.overrideAuthority = authority;
         return this;
