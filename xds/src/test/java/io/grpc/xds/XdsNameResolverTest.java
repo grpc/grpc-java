@@ -167,7 +167,8 @@ public class XdsNameResolverTest {
     FilterRegistry filterRegistry = FilterRegistry.newRegistry().register(
         new FaultFilter(mockRandom, new AtomicLong()),
         RouterFilter.INSTANCE);
-    resolver = new XdsNameResolver(null, AUTHORITY, serviceConfigParser, syncContext, scheduler,
+    resolver = new XdsNameResolver(null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, filterRegistry, null);
   }
 
@@ -200,7 +201,8 @@ public class XdsNameResolverTest {
         throw new XdsInitializationException("Fail to read bootstrap file");
       }
     };
-    resolver = new XdsNameResolver(null, AUTHORITY, serviceConfigParser, syncContext, scheduler,
+    resolver = new XdsNameResolver(null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
@@ -213,7 +215,7 @@ public class XdsNameResolverTest {
   @Test
   public void resolving_withTargetAuthorityNotFound() {
     resolver = new XdsNameResolver(
-        "notfound.google.com", AUTHORITY, serviceConfigParser, syncContext, scheduler,
+        "notfound.google.com", AUTHORITY, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
@@ -234,7 +236,8 @@ public class XdsNameResolverTest {
     String serviceAuthority = "[::FFFF:129.144.52.38]:80";
     expectedLdsResourceName = "[::FFFF:129.144.52.38]:80/id=1";
     resolver = new XdsNameResolver(
-        null, serviceAuthority, serviceConfigParser, syncContext, scheduler, xdsClientPoolFactory,
+        null, serviceAuthority, null, serviceConfigParser, syncContext,
+        scheduler, xdsClientPoolFactory,
         mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
@@ -254,7 +257,7 @@ public class XdsNameResolverTest {
         "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
             + "%5B::FFFF:129.144.52.38%5D:80?id=1";
     resolver = new XdsNameResolver(
-        null, serviceAuthority, serviceConfigParser, syncContext, scheduler,
+        null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
@@ -277,7 +280,7 @@ public class XdsNameResolverTest {
     expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
         + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
     resolver = new XdsNameResolver(
-        "xds.authority.com", serviceAuthority, serviceConfigParser, syncContext, scheduler,
+        "xds.authority.com", serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
@@ -465,6 +468,61 @@ public class XdsNameResolverTest {
         + ". xDS server returned: UNAVAILABLE: server unreachable");
   }
 
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolving_matchingVirtualHostNotFound_matchingOverrideAuthority() {
+    Route route = Route.forAction(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(
+            cluster1, Collections.<HashPolicy>emptyList(), TimeUnit.SECONDS.toNanos(15L), null),
+        ImmutableMap.<String, FilterConfig>of());
+    VirtualHost virtualHost =
+        VirtualHost.create("virtualhost", Collections.singletonList("random"),
+            Collections.singletonList(route),
+            ImmutableMap.<String, FilterConfig>of());
+
+    resolver = new XdsNameResolver(null, AUTHORITY, "random",
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Collections.singletonList(cluster1),
+        (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
+  }
+
+  @Test
+  public void resolving_matchingVirtualHostNotFound_notMatchingOverrideAuthority() {
+    Route route = Route.forAction(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(
+            cluster1, Collections.<HashPolicy>emptyList(), TimeUnit.SECONDS.toNanos(15L), null),
+        ImmutableMap.<String, FilterConfig>of());
+    VirtualHost virtualHost =
+        VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
+            Collections.singletonList(route),
+            ImmutableMap.<String, FilterConfig>of());
+
+    resolver = new XdsNameResolver(null, AUTHORITY, "random",
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
+    assertEmptyResolutionResult("random");
+  }
+
+  @Test
+  public void resolving_matchingVirtualHostNotFoundForOverrideAuthority() {
+    resolver = new XdsNameResolver(null, AUTHORITY, AUTHORITY,
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(0L, buildUnmatchedVirtualHosts());
+    assertEmptyResolutionResult(expectedLdsResourceName);
+  }
+
   @Test
   public void resolving_matchingVirtualHostNotFoundInLdsResource() {
     resolver.start(mockListener);
@@ -541,7 +599,7 @@ public class XdsNameResolverTest {
   public void retryPolicyInPerMethodConfigGeneratedByResolverIsValid() {
     ServiceConfigParser realParser = new ScParser(
         true, 5, 5, new AutoConfiguredLoadBalancerFactory("pick-first"));
-    resolver = new XdsNameResolver(null, AUTHORITY, realParser, syncContext, scheduler,
+    resolver = new XdsNameResolver(null, AUTHORITY, null, realParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -744,7 +802,8 @@ public class XdsNameResolverTest {
     // A different resolver/Channel.
     resolver.shutdown();
     reset(mockListener);
-    resolver = new XdsNameResolver(null, AUTHORITY, serviceConfigParser, syncContext, scheduler,
+    resolver = new XdsNameResolver(null, AUTHORITY, null, serviceConfigParser,
+        syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     xdsClient = (FakeXdsClient) resolver.getXdsClient();

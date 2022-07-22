@@ -40,6 +40,7 @@ public class NameResolverTest {
       mock(ScheduledExecutorService.class);
   private final ChannelLogger channelLogger = mock(ChannelLogger.class);
   private final Executor executor = Executors.newSingleThreadExecutor();
+  private final String overrideAuthority = "grpc.io";
 
   @Test
   public void args() {
@@ -51,6 +52,7 @@ public class NameResolverTest {
     assertThat(args.getScheduledExecutorService()).isSameInstanceAs(scheduledExecutorService);
     assertThat(args.getChannelLogger()).isSameInstanceAs(channelLogger);
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
+    assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
 
     NameResolver.Args args2 = args.toBuilder().build();
     assertThat(args2.getDefaultPort()).isEqualTo(defaultPort);
@@ -60,6 +62,7 @@ public class NameResolverTest {
     assertThat(args2.getScheduledExecutorService()).isSameInstanceAs(scheduledExecutorService);
     assertThat(args2.getChannelLogger()).isSameInstanceAs(channelLogger);
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
+    assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
 
     assertThat(args2).isNotSameInstanceAs(args);
     assertThat(args2).isNotEqualTo(args);
@@ -74,6 +77,7 @@ public class NameResolverTest {
         .setScheduledExecutorService(scheduledExecutorService)
         .setChannelLogger(channelLogger)
         .setOffloadExecutor(executor)
+        .setOverrideAuthority(overrideAuthority)
         .build();
   }
 }

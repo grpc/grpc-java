@@ -261,6 +261,7 @@ public abstract class NameResolver {
     @Nullable private final ScheduledExecutorService scheduledExecutorService;
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
+    @Nullable private final String overrideAuthority;
 
     private Args(
         Integer defaultPort,
@@ -269,7 +270,8 @@ public abstract class NameResolver {
         ServiceConfigParser serviceConfigParser,
         @Nullable ScheduledExecutorService scheduledExecutorService,
         @Nullable ChannelLogger channelLogger,
-        @Nullable Executor executor) {
+        @Nullable Executor executor,
+        @Nullable String overrideAuthority) {
       this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
       this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
       this.syncContext = checkNotNull(syncContext, "syncContext not set");
@@ -277,6 +279,7 @@ public abstract class NameResolver {
       this.scheduledExecutorService = scheduledExecutorService;
       this.channelLogger = channelLogger;
       this.executor = executor;
+      this.overrideAuthority = overrideAuthority;
     }
 
     /**
@@ -362,6 +365,19 @@ public abstract class NameResolver {
       return executor;
     }
 
+    /**
+     * Returns the overrideAuthority from channel {@link ManagedChannelBuilder#overrideAuthority}.
+     * Overrides the host name for L7 HTTP virtual host matching.
+     *
+     * @since 1.49.0
+     */
+    @Nullable
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/?")
+    public String getOverrideAuthority() {
+      return overrideAuthority;
+    }
+
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
@@ -372,6 +388,7 @@ public abstract class NameResolver {
           .add("scheduledExecutorService", scheduledExecutorService)
           .add("channelLogger", channelLogger)
           .add("executor", executor)
+          .add("overrideAuthority", overrideAuthority)
           .toString();
     }
 
@@ -389,6 +406,7 @@ public abstract class NameResolver {
       builder.setScheduledExecutorService(scheduledExecutorService);
       builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
+      builder.setOverrideAuthority(overrideAuthority);
       return builder;
     }
 
@@ -414,6 +432,7 @@ public abstract class NameResolver {
       private ScheduledExecutorService scheduledExecutorService;
       private ChannelLogger channelLogger;
       private Executor executor;
+      private String overrideAuthority;
 
       Builder() {
       }
@@ -491,6 +510,17 @@ public abstract class NameResolver {
       }
 
       /**
+       * See {@link Args#getOverrideAuthority()}. This is an optional field.
+       *
+       * @since 1.49.0
+       */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/?")
+      public Builder setOverrideAuthority(String authority) {
+        this.overrideAuthority = authority;
+        return this;
+      }
+
+      /**
        * Builds an {@link Args}.
        *
        * @since 1.21.0
@@ -499,7 +529,7 @@ public abstract class NameResolver {
         return
             new Args(
                 defaultPort, proxyDetector, syncContext, serviceConfigParser,
-                scheduledExecutorService, channelLogger, executor);
+                scheduledExecutorService, channelLogger, executor, overrideAuthority);
       }
     }
   }
