@@ -170,7 +170,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_keepOldBalancer() {
+  public void acceptResolvedAddresses_keepOldBalancer() {
     final List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
     Helper helper = new TestHelper() {
@@ -195,7 +195,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_shutsDownOldBalancer() throws Exception {
+  public void acceptResolvedAddresses_shutsDownOldBalancer() throws Exception {
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"round_robin\": { } } ] }");
     ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(serviceConfig);
@@ -239,7 +239,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void handleResolvedAddressGroups_propagateLbConfigToDelegate() throws Exception {
+  public void acceptResolvedAddresses_propagateLbConfigToDelegate() throws Exception {
     Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
     ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig);
@@ -292,7 +292,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_propagateAddrsToDelegate() throws Exception {
+  public void acceptResolvedAddresses_propagateAddrsToDelegate() throws Exception {
     Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
     ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig);
@@ -331,7 +331,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_delegateDoNotAcceptEmptyAddressList_nothing()
+  public void acceptResolvedAddresses_delegateDoNotAcceptEmptyAddressList_nothing()
       throws Exception {
 
     // The test LB will NOT accept the addresses we give them.
@@ -356,7 +356,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_delegateAcceptsEmptyAddressList()
+  public void acceptResolvedAddresses_delegateAcceptsEmptyAddressList()
       throws Exception {
     Helper helper = new TestHelper();
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
@@ -382,7 +382,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_useSelectedLbPolicy() throws Exception {
+  public void acceptResolvedAddresses_useSelectedLbPolicy() throws Exception {
     Map<String, ?> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
     ConfigOrError lbConfigs = lbf.parseLoadBalancerPolicy(rawServiceConfig);
@@ -411,7 +411,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_noLbPolicySelected_defaultToPickFirst() {
+  public void acceptResolvedAddresses_noLbPolicySelected_defaultToPickFirst() {
     final List<EquivalentAddressGroup> servers =
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
     Helper helper = new TestHelper() {
@@ -432,7 +432,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_noLbPolicySelected_defaultToCustomDefault() {
+  public void acceptResolvedAddresses_noLbPolicySelected_defaultToCustomDefault() {
     AutoConfiguredLoadBalancer lb = new AutoConfiguredLoadBalancerFactory("test_lb")
         .newLoadBalancer(new TestHelper());
     List<EquivalentAddressGroup> servers =
