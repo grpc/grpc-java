@@ -18,6 +18,7 @@ package io.grpc.services;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.ExperimentalApi;
 import java.util.Map;
 
@@ -55,5 +56,15 @@ public final class MetricReport {
 
   public Map<String, Double> getUtilizationMetrics() {
     return utilizationMetrics;
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("cpuUtilization", cpuUtilization)
+        .add("memoryUtilization", memoryUtilization)
+        .add("requestCost", requestCostMetrics)
+        .add("utilization", utilizationMetrics)
+        .toString();
   }
 }
