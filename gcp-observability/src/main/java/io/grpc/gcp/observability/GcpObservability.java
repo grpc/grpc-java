@@ -39,10 +39,15 @@ import io.opencensus.exporter.stats.stackdriver.StackdriverStatsConfiguration;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsExporter;
 import io.opencensus.exporter.trace.stackdriver.StackdriverTraceConfiguration;
 import io.opencensus.exporter.trace.stackdriver.StackdriverTraceExporter;
+import io.opencensus.metrics.LabelKey;
+import io.opencensus.metrics.LabelValue;
+import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.Tracing;
 import io.opencensus.trace.config.TraceConfig;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -78,7 +83,8 @@ public final class GcpObservability implements AutoCloseable {
       instance = grpcInit(sink, observabilityConfig,
           new InternalLoggingChannelInterceptor.FactoryImpl(helper, configFilterHelper),
           new InternalLoggingServerInterceptor.FactoryImpl(helper, configFilterHelper));
-      instance.registerStackDriverExporter(observabilityConfig.getDestinationProjectId());
+      instance.registerStackDriverExporter(observabilityConfig.getDestinationProjectId(),
+          observabilityConfig.getCustomTags());
     }
     return instance;
   }
@@ -139,13 +145,22 @@ public final class GcpObservability implements AutoCloseable {
         clientInterceptors, serverInterceptors, tracerFactories);
   }
 
-  private void registerStackDriverExporter(String projectId) throws IOException {
+  private void registerStackDriverExporter(String projectId, Map<String, String> customTags)
+      throws IOException {
     if (config.isEnableCloudMonitoring()) {
       RpcViews.registerAllGrpcViews();
       StackdriverStatsConfiguration.Builder statsConfigurationBuilder =
           StackdriverStatsConfiguration.builder();
       if (projectId != null) {
         statsConfigurationBuilder.setProjectId(projectId);
+      }
+      if (customTags != null) {
+        Map<LabelKey, LabelValue> constantLabels = new HashMap<>();
+        for (Map.Entry<String, String> mapEntry : customTags.entrySet()) {
+          constantLabels.put(LabelKey.create(mapEntry.getKey(), mapEntry.getKey()),
+              LabelValue.create(mapEntry.getValue()));
+        }
+        statsConfigurationBuilder.setConstantLabels(constantLabels);
       }
       StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
       metricsEnabled = true;
@@ -159,6 +174,14 @@ public final class GcpObservability implements AutoCloseable {
           StackdriverTraceConfiguration.builder();
       if (projectId != null) {
         traceConfigurationBuilder.setProjectId(projectId);
+      }
+      if (customTags != null) {
+        Map<String, AttributeValue> fixedAttributes = new HashMap<>();
+        for (Map.Entry<String, String> mapEntry : customTags.entrySet()) {
+          fixedAttributes.put(mapEntry.getKey(),
+              AttributeValue.stringAttributeValue(mapEntry.getValue()));
+        }
+        traceConfigurationBuilder.setFixedAttributes(fixedAttributes);
       }
       StackdriverTraceExporter.createAndRegister(traceConfigurationBuilder.build());
       tracesEnabled = true;
