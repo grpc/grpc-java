@@ -16,8 +16,6 @@
 
 package io.grpc.gcp.observability;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.util.Strings;
@@ -35,20 +33,16 @@ import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** A container of all global custom tags used for logging (for now). */
-final class GlobalLoggingTags {
-  private static final Logger logger = Logger.getLogger(GlobalLoggingTags.class.getName());
+/** A container of all global location tags used for observability. */
+final class GlobalLocationTags {
+  private static final Logger logger = Logger.getLogger(GlobalLocationTags.class.getName());
 
-  private static final String ENV_KEY_PREFIX = "GRPC_OBSERVABILITY_";
   private final Map<String, String> locationTags;
-  private final Map<String, String> customTags;
 
-  GlobalLoggingTags() {
+  GlobalLocationTags() {
     ImmutableMap.Builder<String, String> locationTagsBuilder = ImmutableMap.builder();
-    ImmutableMap.Builder<String, String> customTagsBuilder = ImmutableMap.builder();
-    populate(locationTagsBuilder, customTagsBuilder);
+    populate(locationTagsBuilder);
     locationTags = locationTagsBuilder.buildOrThrow();
-    customTags = customTagsBuilder.buildOrThrow();
   }
 
   private static String applyTrim(String value) {
@@ -62,40 +56,36 @@ final class GlobalLoggingTags {
     return locationTags;
   }
 
-  Map<String, String> getCustomTags() {
-    return customTags;
-  }
-
   @VisibleForTesting
-  static void populateFromMetadataServer(ImmutableMap.Builder<String, String> customTags) {
+  static void populateFromMetadataServer(ImmutableMap.Builder<String, String> locationTags) {
     MetadataConfig metadataConfig = new MetadataConfig(new DefaultHttpTransportFactory());
     metadataConfig.init();
-    customTags.putAll(metadataConfig.getAllValues());
+    locationTags.putAll(metadataConfig.getAllValues());
   }
 
   @VisibleForTesting
-  static void populateFromKubernetesValues(ImmutableMap.Builder<String, String> customTags,
+  static void populateFromKubernetesValues(ImmutableMap.Builder<String, String> locationTags,
       String namespaceFile,
       String hostnameFile, String cgroupFile) {
     // namespace name: contents of file /var/run/secrets/kubernetes.io/serviceaccount/namespace
-    populateFromFileContents(customTags, "namespace_name",
-        namespaceFile, GlobalLoggingTags::applyTrim);
+    populateFromFileContents(locationTags, "namespace_name",
+        namespaceFile, GlobalLocationTags::applyTrim);
 
     // pod_name: hostname i.e. contents of /etc/hostname
-    populateFromFileContents(customTags, "pod_name", hostnameFile,
-        GlobalLoggingTags::applyTrim);
+    populateFromFileContents(locationTags, "pod_name", hostnameFile,
+        GlobalLocationTags::applyTrim);
 
     // container_id: parsed from /proc/self/cgroup . Note: only works for Linux-based containers
-    populateFromFileContents(customTags, "container_id", cgroupFile,
+    populateFromFileContents(locationTags, "container_id", cgroupFile,
         (value) -> getContainerIdFromFileContents(value));
   }
 
   @VisibleForTesting
-  static void populateFromFileContents(ImmutableMap.Builder<String, String> customTags, String key,
-      String filePath, Function<String, String> parser) {
+  static void populateFromFileContents(ImmutableMap.Builder<String, String> locationTags,
+      String key, String filePath, Function<String, String> parser) {
     String value = parser.apply(readFileContents(filePath));
     if (value != null) {
-      customTags.put(key, value);
+      locationTags.put(key, value);
     }
   }
 
@@ -139,25 +129,7 @@ final class GlobalLoggingTags {
     return null;
   }
 
-  private static void populateFromEnvironmentVars(ImmutableMap.Builder<String, String> customTags) {
-    populateFromMap(System.getenv(), customTags);
-  }
-
-  @VisibleForTesting
-  static void populateFromMap(Map<String, String> map,
-      final ImmutableMap.Builder<String, String> customTags) {
-    checkNotNull(map);
-    map.forEach((k, v) -> {
-      if (k.startsWith(ENV_KEY_PREFIX)) {
-        String customTagKey = k.substring(ENV_KEY_PREFIX.length());
-        customTags.put(customTagKey, v);
-      }
-    });
-  }
-
-  static void populate(ImmutableMap.Builder<String, String> locationTags,
-      ImmutableMap.Builder<String, String> customTags) {
-    populateFromEnvironmentVars(customTags);
+  static void populate(ImmutableMap.Builder<String, String> locationTags) {
     populateFromMetadataServer(locationTags);
     populateFromKubernetesValues(locationTags,
         "/var/run/secrets/kubernetes.io/serviceaccount/namespace",

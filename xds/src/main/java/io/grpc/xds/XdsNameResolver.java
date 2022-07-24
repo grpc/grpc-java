@@ -111,6 +111,7 @@ final class XdsNameResolver extends NameResolver {
   @Nullable
   private final String targetAuthority;
   private final String serviceAuthority;
+  private final String overrideAuthority;
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService scheduler;
@@ -134,22 +135,25 @@ final class XdsNameResolver extends NameResolver {
   private boolean receivedConfig;
 
   XdsNameResolver(
-      @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
+      @Nullable String targetAuthority, String name, @Nullable String overrideAuthority,
+      ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride) {
-    this(targetAuthority, name, serviceConfigParser, syncContext, scheduler,
+    this(targetAuthority, name, overrideAuthority, serviceConfigParser, syncContext, scheduler,
         SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
         FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting
   XdsNameResolver(
-      @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
+      @Nullable String targetAuthority, String name, @Nullable String overrideAuthority,
+      ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
     serviceAuthority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
+    this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
@@ -769,9 +773,10 @@ final class XdsNameResolver extends NameResolver {
     // called in syncContext
     private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
-      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, ldsResourceName);
+      String authority = overrideAuthority != null ? overrideAuthority : ldsResourceName;
+      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, authority);
       if (virtualHost == null) {
-        String error = "Failed to find virtual host matching hostname: " + ldsResourceName;
+        String error = "Failed to find virtual host matching hostname: " + authority;
         logger.log(XdsLogLevel.WARNING, error);
         cleanUpRoutes(error);
         return;

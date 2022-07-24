@@ -20,6 +20,7 @@ import io.grpc.Internal;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.opencensus.trace.Sampler;
 import java.util.List;
+import java.util.Map;
 
 @Internal
 public interface ObservabilityConfig {
@@ -46,6 +47,9 @@ public interface ObservabilityConfig {
 
   /** Get sampler for TraceConfig - when Cloud Tracing is enabled. */
   Sampler getSampler();
+
+  /** Map of all custom tags used for logging, metrics and traces. */
+  Map<String, String> getCustomTags();
 
   /**
    * POJO for representing a filter used in configuration.
