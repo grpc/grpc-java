@@ -17,6 +17,7 @@
 package io.grpc.services;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.InlineMe;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
@@ -92,8 +93,25 @@ public final class CallMetricRecorder {
    *
    * @return this recorder object
    * @since 1.47.0
+   * @deprecated use {@link #recordRequestCostMetric} instead.
+   *     This method will be removed in the future.
    */
+  @Deprecated
+  @InlineMe(replacement = "this.recordRequestCostMetric(name, value)")
   public CallMetricRecorder recordCallMetric(String name, double value) {
+    return recordRequestCostMetric(name, value);
+  }
+
+  /**
+   * Records a call metric measurement for request cost.
+   * If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   * @since 1.48.1
+   */
+  public CallMetricRecorder recordRequestCostMetric(String name, double value) {
     if (disabled) {
       return this;
     }
