@@ -125,10 +125,8 @@ public abstract class LoadBalancer {
    * <p>Implementations should not modify the given {@code servers}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @deprecated override {@link #acceptResolvedAddresses(ResolvedAddresses) instead}
    * @since 1.21.0
    */
-  @Deprecated
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
       // Note that the information about the addresses actually being accepted will be lost
@@ -151,7 +149,6 @@ public abstract class LoadBalancer {
    * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
    * @since 1.49.0
    */
-  @SuppressWarnings("deprecation")
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getAddresses().isEmpty()
         && !canHandleEmptyAddressListFromNameResolution()) {
