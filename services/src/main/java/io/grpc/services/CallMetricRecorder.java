@@ -92,8 +92,33 @@ public final class CallMetricRecorder {
    *
    * @return this recorder object
    * @since 1.47.0
+   * @deprecated use {@link #recordRequestCostMetric} instead.
+   *     This method will be removed in the future.
    */
+  @Deprecated
   public CallMetricRecorder recordCallMetric(String name, double value) {
+    if (disabled) {
+      return this;
+    }
+    if (requestCostMetrics.get() == null) {
+      // The chance of race of creation of the map should be very small, so it should be fine
+      // to create these maps that might be discarded.
+      requestCostMetrics.compareAndSet(null, new ConcurrentHashMap<String, Double>());
+    }
+    requestCostMetrics.get().put(name, value);
+    return this;
+  }
+
+  /**
+   * Records a call metric measurement for request cost.
+   * If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   * @since 1.48.1
+   */
+  public CallMetricRecorder recordRequestCostMetric(String name, double value) {
     if (disabled) {
       return this;
     }
