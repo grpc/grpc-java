@@ -1163,10 +1163,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void nameResolverReturnsEmptySubLists_becomeErrorByDefault() throws Exception {
-    String errorDescription
-        = "The load balancer did not accept the addresses returned from the NameResolver";
-
+  public void nameResolverReturnsEmptySubLists_resolutionRetry() throws Exception {
     // The mock LB is set to reject the addresses.
     when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(false);
 
@@ -1180,13 +1177,6 @@ public class ManagedChannelImplTest {
     nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
-
-    // LoadBalancer received the error
-    verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
-    Status status = statusCaptor.getValue();
-    assertSame(Status.Code.UNAVAILABLE, status.getCode());
-    assertThat(status.getDescription()).startsWith(errorDescription);
 
     // A resolution retry has been scheduled
     assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));

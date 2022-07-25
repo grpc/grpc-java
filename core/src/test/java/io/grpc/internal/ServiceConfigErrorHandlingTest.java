@@ -284,16 +284,10 @@ public class ServiceConfigErrorHandlingTest {
     nameResolverFactory.allResolved();
 
     // 2nd service config without addresses
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(mockLoadBalancer).acceptResolvedAddresses(any(ResolvedAddresses.class));
-    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(statusCaptor.getValue().getDescription())
-        .contains("The load balancer did not accept the addresses returned from the NameResolver.");
-    assertThat(channel.getState(true)).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
-    assertWithMessage("Empty address should schedule NameResolver retry")
-        .that(getNameResolverRefresh())
-        .isNotNull();
+
+    // A resolution retry has been scheduled
+    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
   }
 
   @Test

@@ -1870,10 +1870,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     .build());
 
             if (!addressesAccepted) {
-              handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
-                  "The load balancer did not accept the addresses returned from the NameResolver. "
-                      + "addrs=" + servers + ", attrs=" + attributes + "\n" + resolver
-                      + " was used"));
+              scheduleExponentialBackOffInSyncContext();
             }
           }
         }
