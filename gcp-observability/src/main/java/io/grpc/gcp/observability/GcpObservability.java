@@ -66,10 +66,10 @@ public final class GcpObservability implements AutoCloseable {
    */
   public static synchronized GcpObservability grpcInit() throws IOException {
     if (instance == null) {
-      GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
+      GlobalLocationTags globalLocationTags = new GlobalLocationTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
-          globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
+          globalLocationTags.getLocationTags(), observabilityConfig.getCustomTags(),
           observabilityConfig.getFlushMessageCount());
       // TODO(dnvindhya): Cleanup code for LoggingChannelProvider and LoggingServerProvider
       // once ChannelBuilder and ServerBuilder are used

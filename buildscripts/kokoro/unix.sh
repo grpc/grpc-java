@@ -83,6 +83,9 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   ../gradlew build $GRADLE_FLAGS
   popd
   # TODO(zpencer): also build the GAE examples
+  pushd examples/example-orca
+  ../gradlew build $GRADLE_FLAGS
+  popd
 fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)

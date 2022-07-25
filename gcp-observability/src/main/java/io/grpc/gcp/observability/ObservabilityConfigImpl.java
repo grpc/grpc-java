@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
@@ -48,6 +49,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   private List<LogFilter> logFilters;
   private List<EventType> eventTypes;
   private Sampler sampler;
+  private Map<String, String> customTags;
 
   static ObservabilityConfigImpl getInstance() throws IOException {
     ObservabilityConfigImpl config = new ObservabilityConfigImpl();
@@ -120,6 +122,17 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
           this.sampler = Samplers.probabilitySampler(samplingRate);
         }
       }
+      Map<String, ?> rawCustomTags = JsonUtil.getObject(config, "custom_tags");
+      if (rawCustomTags != null) {
+        ImmutableMap.Builder<String, String> builder = new ImmutableMap.Builder<>();
+        for (Map.Entry<String, ?> entry: rawCustomTags.entrySet()) {
+          checkArgument(
+                  entry.getValue() instanceof String,
+                  "'custom_tags' needs to be a map of <string, string>");
+          builder.put(entry.getKey(), (String) entry.getValue());
+        }
+        customTags = builder.build();
+      }
     }
   }
 
@@ -190,5 +203,10 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   @Override
   public Sampler getSampler() {
     return sampler;
+  }
+
+  @Override
+  public Map<String, String> getCustomTags() {
+    return customTags;
   }
 }

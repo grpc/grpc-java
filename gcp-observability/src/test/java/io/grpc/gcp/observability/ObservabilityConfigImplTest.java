@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -106,6 +107,23 @@ public class ObservabilityConfigImplTest {
       + "    \"global_trace_sampling_rate\": -0.75\n"
       + "}";
 
+  private static final String CUSTOM_TAGS = "{\n"
+          + "    \"enable_cloud_logging\": true,\n"
+          + "    \"custom_tags\": {\n"
+          + "      \"SOURCE_VERSION\" : \"J2e1Cf\",\n"
+          + "      \"SERVICE_NAME\" : \"payment-service\",\n"
+          + "      \"ENTRYPOINT_SCRIPT\" : \"entrypoint.sh\"\n"
+          + "    }\n"
+          + "}";
+
+  private static final String BAD_CUSTOM_TAGS = "{\n"
+          + "    \"enable_cloud_monitoring\": true,\n"
+          + "    \"custom_tags\": {\n"
+          + "      \"SOURCE_VERSION\" : \"J2e1Cf\",\n"
+          + "      \"SERVICE_NAME\" : { \"SUB_SERVICE_NAME\" : \"payment-service\"},\n"
+          + "      \"ENTRYPOINT_SCRIPT\" : \"entrypoint.sh\"\n"
+          + "    }\n"
+          + "}";
 
   ObservabilityConfigImpl observabilityConfig = new ObservabilityConfigImpl();
 
@@ -256,5 +274,27 @@ public class ObservabilityConfigImplTest {
     assertThat(logFilters.get(1).pattern).isEqualTo("service1/Method2");
     assertThat(logFilters.get(1).headerBytes).isNull();
     assertThat(logFilters.get(1).messageBytes).isNull();
+  }
+
+  @Test
+  public void customTags() throws IOException {
+    observabilityConfig.parse(CUSTOM_TAGS);
+    assertTrue(observabilityConfig.isEnableCloudLogging());
+    Map<String, String> customTags = observabilityConfig.getCustomTags();
+    assertThat(customTags).hasSize(3);
+    assertThat(customTags).containsEntry("SOURCE_VERSION", "J2e1Cf");
+    assertThat(customTags).containsEntry("SERVICE_NAME", "payment-service");
+    assertThat(customTags).containsEntry("ENTRYPOINT_SCRIPT", "entrypoint.sh");
+  }
+
+  @Test
+  public void badCustomTags() throws IOException {
+    try {
+      observabilityConfig.parse(BAD_CUSTOM_TAGS);
+      fail("exception expected!");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae.getMessage()).isEqualTo(
+              "'custom_tags' needs to be a map of <string, string>");
+    }
   }
 }
