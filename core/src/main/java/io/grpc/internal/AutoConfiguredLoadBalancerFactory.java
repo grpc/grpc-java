@@ -20,11 +20,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -105,8 +103,6 @@ public final class AutoConfiguredLoadBalancerFactory {
      * support an empty list).
      */
     boolean tryAcceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
-      Attributes attributes = resolvedAddresses.getAttributes();
       PolicySelection policySelection =
           (PolicySelection) resolvedAddresses.getLoadBalancingPolicyConfig();
 
@@ -143,17 +139,12 @@ public final class AutoConfiguredLoadBalancerFactory {
             ChannelLogLevel.DEBUG, "Load-balancing config: {0}", policySelection.config);
       }
 
-      LoadBalancer delegate = getDelegate();
-      if (delegate.acceptResolvedAddresses(
+      return getDelegate().acceptResolvedAddresses(
           ResolvedAddresses.newBuilder()
               .setAddresses(resolvedAddresses.getAddresses())
-              .setAttributes(attributes)
+              .setAttributes(resolvedAddresses.getAttributes())
               .setLoadBalancingPolicyConfig(lbConfig)
-              .build())) {
-        return true;
-      } else {
-        return false;
-      }
+              .build());
     }
 
     void handleNameResolutionError(Status error) {
