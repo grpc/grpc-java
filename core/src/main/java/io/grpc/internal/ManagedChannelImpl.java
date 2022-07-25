@@ -1860,16 +1860,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, healthCheckingConfig)
                   .build();
             }
+            Attributes attributes = attrBuilder.build();
 
-            Status handleResult = helper.lb.tryAcceptResolvedAddresses(
+            boolean addressesAccepted = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
-                    .setAttributes(attrBuilder.build())
+                    .setAttributes(attributes)
                     .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
 
-            if (!handleResult.isOk()) {
-              handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
+            if (!addressesAccepted) {
+              handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
+                  "The load balancer did not accept the addresses returned from the NameResolver. "
+                      + "addrs=" + servers + ", attrs=" + attributes + "\n" + resolver
+                      + " was used"));
             }
           }
         }

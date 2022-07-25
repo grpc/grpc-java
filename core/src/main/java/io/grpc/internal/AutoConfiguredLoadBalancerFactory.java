@@ -104,7 +104,7 @@ public final class AutoConfiguredLoadBalancerFactory {
      * Returns non-OK status if the delegate rejects the resolvedAddresses (e.g. if it does not
      * support an empty list).
      */
-    Status tryAcceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    boolean tryAcceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       Attributes attributes = resolvedAddresses.getAttributes();
       PolicySelection policySelection =
@@ -120,7 +120,7 @@ public final class AutoConfiguredLoadBalancerFactory {
           delegate.shutdown();
           delegateProvider = null;
           delegate = new NoopLoadBalancer();
-          return Status.OK;
+          return true;
         }
         policySelection =
             new PolicySelection(defaultProvider, /* config= */ null);
@@ -150,11 +150,9 @@ public final class AutoConfiguredLoadBalancerFactory {
               .setAttributes(attributes)
               .setLoadBalancingPolicyConfig(lbConfig)
               .build())) {
-        return Status.OK;
+        return true;
       } else {
-        return Status.UNAVAILABLE.withDescription(
-            "The load balancer did not accept the addresses returned from the NameResolver. addrs="
-                + servers + ", attrs=" + attributes);
+        return false;
       }
     }
 
