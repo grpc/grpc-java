@@ -141,7 +141,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       recorder.recordUtilizationMetric(entry.getKey(), entry.getValue());
     }
     for (Map.Entry<String, Double> entry : report.getRequestCostMap().entrySet()) {
-      recorder.recordCallMetric(entry.getKey(), entry.getValue());
+      recorder.recordRequestCostMetric(entry.getKey(), entry.getValue());
     }
   }
 
