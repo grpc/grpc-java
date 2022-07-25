@@ -124,16 +124,24 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
           return result;
         }
         // Installs ORCA per-query metrics reporting listener.
-        return LoadBalancer.PickResult.withSubchannel(
-            result.getSubchannel(),
-            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
-                new OrcaPerRequestUtil.OrcaPerRequestReportListener() {
-                  @Override
-                  public void onLoadReport(MetricReport orcaLoadReport) {
-                    System.out.println("Example load balancer received per-rpc metrics report:\n"
-                        + orcaLoadReport);
-                  }
-                }));
+        final OrcaPerRequestUtil.OrcaPerRequestReportListener orcaListener =
+            new OrcaPerRequestUtil.OrcaPerRequestReportListener() {
+          @Override
+          public void onLoadReport(MetricReport orcaLoadReport) {
+            System.out.println("Example load balancer received per-rpc metrics report:\n"
+                + orcaLoadReport);
+          }
+        };
+        if (result.getStreamTracerFactory() == null) {
+          return LoadBalancer.PickResult.withSubchannel(
+              result.getSubchannel(),
+              OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(orcaListener));
+        } else {
+            return LoadBalancer.PickResult.withSubchannel(
+                result.getSubchannel(),
+                OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
+                    result.getStreamTracerFactory(), orcaListener));
+        }
       }
     }
   }
