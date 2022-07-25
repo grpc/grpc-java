@@ -17,6 +17,7 @@
 package io.grpc.services;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.InlineMe;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
@@ -96,17 +97,9 @@ public final class CallMetricRecorder {
    *     This method will be removed in the future.
    */
   @Deprecated
+  @InlineMe(replacement = "this.recordRequestCostMetric(name, value)")
   public CallMetricRecorder recordCallMetric(String name, double value) {
-    if (disabled) {
-      return this;
-    }
-    if (requestCostMetrics.get() == null) {
-      // The chance of race of creation of the map should be very small, so it should be fine
-      // to create these maps that might be discarded.
-      requestCostMetrics.compareAndSet(null, new ConcurrentHashMap<String, Double>());
-    }
-    requestCostMetrics.get().put(name, value);
-    return this;
+    return recordRequestCostMetric(name, value);
   }
 
   /**
