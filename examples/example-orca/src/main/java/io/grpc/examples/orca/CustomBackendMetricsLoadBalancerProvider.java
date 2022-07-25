@@ -133,9 +133,9 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
           }
         };
         if (result.getStreamTracerFactory() == null) {
-        return LoadBalancer.PickResult.withSubchannel(
-            result.getSubchannel(),
-            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(orcaListener));
+          return LoadBalancer.PickResult.withSubchannel(
+              result.getSubchannel(),
+              OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(orcaListener));
         } else {
             return LoadBalancer.PickResult.withSubchannel(
                 result.getSubchannel(),
