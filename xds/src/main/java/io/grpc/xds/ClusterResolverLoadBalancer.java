@@ -109,7 +109,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL);
@@ -121,8 +121,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       logger.log(XdsLogLevel.DEBUG, "Config: {0}", config);
       delegate.switchTo(new ClusterResolverLbStateFactory());
       this.config = config;
-      delegate.handleResolvedAddresses(resolvedAddresses);
+      return delegate.acceptResolvedAddresses(resolvedAddresses);
     }
+
+    return true;
   }
 
   @Override
@@ -166,7 +168,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       this.resolvedAddresses = resolvedAddresses;
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -184,6 +186,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         clusterStates.put(instance.cluster, state);
         state.start();
       }
+
+      return true;
     }
 
     @Override
@@ -249,7 +253,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       if (childLb == null) {
         childLb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(helper);
       }
-      childLb.handleResolvedAddresses(
+      childLb.acceptResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setLoadBalancingPolicyConfig(childConfig)
               .setAddresses(Collections.unmodifiableList(addresses))

@@ -69,7 +69,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(servers);
@@ -126,6 +126,8 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     for (Subchannel removedSubchannel : removedSubchannels) {
       shutdownSubchannel(removedSubchannel);
     }
+
+    return !resolvedAddresses.getAddresses().isEmpty();
   }
 
   @Override
