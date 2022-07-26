@@ -46,10 +46,10 @@ import io.opencensus.trace.Tracing;
 import io.opencensus.trace.config.TraceConfig;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /** The main class for gRPC Google Cloud Platform Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
@@ -155,11 +155,9 @@ public final class GcpObservability implements AutoCloseable {
         statsConfigurationBuilder.setProjectId(projectId);
       }
       if (customTags != null) {
-        Map<LabelKey, LabelValue> constantLabels = new HashMap<>();
-        for (Map.Entry<String, String> mapEntry : customTags.entrySet()) {
-          constantLabels.put(LabelKey.create(mapEntry.getKey(), mapEntry.getKey()),
-              LabelValue.create(mapEntry.getValue()));
-        }
+        Map<LabelKey, LabelValue> constantLabels = customTags.entrySet().stream()
+            .collect(Collectors.toMap(e -> LabelKey.create(e.getKey(), e.getKey()),
+                e -> LabelValue.create(e.getValue())));
         statsConfigurationBuilder.setConstantLabels(constantLabels);
       }
       StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
@@ -176,11 +174,9 @@ public final class GcpObservability implements AutoCloseable {
         traceConfigurationBuilder.setProjectId(projectId);
       }
       if (customTags != null) {
-        Map<String, AttributeValue> fixedAttributes = new HashMap<>();
-        for (Map.Entry<String, String> mapEntry : customTags.entrySet()) {
-          fixedAttributes.put(mapEntry.getKey(),
-              AttributeValue.stringAttributeValue(mapEntry.getValue()));
-        }
+        Map<String, AttributeValue> fixedAttributes = customTags.entrySet().stream()
+            .collect(Collectors.toMap(e -> e.getKey(),
+                e -> AttributeValue.stringAttributeValue(e.getValue())));
         traceConfigurationBuilder.setFixedAttributes(fixedAttributes);
       }
       StackdriverTraceExporter.createAndRegister(traceConfigurationBuilder.build());
