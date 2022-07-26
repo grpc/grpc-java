@@ -47,7 +47,7 @@ public final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return "priority_experimental";
+    return XdsLbPolicies.PRIORITY_POLICY_NAME;
   }
 
   @Override
