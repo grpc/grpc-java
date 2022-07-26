@@ -94,6 +94,23 @@ public class EchoTestServerTest {
   }
 
   @Test
+  public void preprocessArgsPortsTest() {
+    String[] splitArgs = TEST_ARGS_PORTS.split(" ");
+    Map<String, List<String>> processedArgs = EchoTestServer.preprocessArgs(splitArgs);
+
+    Set<Integer> ports = EchoTestServer.getPorts(processedArgs, "--port");
+    assertThat(ports).containsExactly(18080, 8080, 18081, 18082, 19443, 18083, 18084, 18085,
+        3333, 18443);
+    ports = EchoTestServer.getPorts(processedArgs, "--grpc");
+    assertThat(ports).containsExactly(17070, 17071);
+    ports = EchoTestServer.getPorts(processedArgs, "--tls");
+    assertThat(ports).containsExactly(18443, 19443);
+    ports = EchoTestServer.getPorts(processedArgs, "--xds-grpc-server");
+    assertThat(ports).containsExactly(34012, 12034);
+  }
+
+
+  @Test
   public void echoTest() throws IOException, InterruptedException {
     EchoTestServer echoTestServer = new EchoTestServer();
 
@@ -210,7 +227,7 @@ public class EchoTestServerTest {
     forwardServiceForNonGrpc.responsesToReturn = new ArrayList<>();
     Server nonGrpcEchoServer =
         EchoTestServer.runServer(
-            0, forwardServiceForNonGrpc.bindService(), InsecureServerCredentials.create());
+            0, forwardServiceForNonGrpc.bindService(), InsecureServerCredentials.create(), "");
     int nonGrpcEchoServerPort = nonGrpcEchoServer.getPort();
 
     EchoTestServer echoTestServer = new EchoTestServer();
@@ -346,7 +363,7 @@ public class EchoTestServerTest {
   private static final String[] EXPECTED_KEY_SET = {
       "--server_first",
       "--bind_ip", "--istio-version", "--bind_localhost", "--grpc", "--tls",
-      "--cluster", "--key", "--tcp", "--crt", "--metrics", "--port"
+      "--cluster", "--key", "--tcp", "--crt", "--metrics", "--port", "--version"
   };
 
   private static final String TEST_ARGS =
@@ -357,4 +374,14 @@ public class EchoTestServerTest {
           + " --port=\"18084\" --bind_localhost=18084 --tcp=\"19092\" --port=\"18083\""
           + " --port=\"8080\" --port=\"3333\" --version=\"v1\" --istio-version=3 --crt=/cert.crt"
           + " --key=/cert.key";
+
+  private static final String TEST_ARGS_PORTS =
+      "--metrics=15014 --cluster=\"cluster-0\" --port=\"18080\" --grpc=17070 --port=18085"
+          + " --tcp=\"19090\" --port=\"18443\" --tls=18443 --tcp=16060 --server_first=16060"
+          + " --tcp=\"19091\" --tcp=\"16061\" --server_first=16061 --port=\"18081\""
+          + " --grpc=\"17071\" --port=\"19443\" --tls=\"19443\" --port=\"18082\" --bind_ip=18082"
+          + " --port=\"18084\" --bind_localhost=18084 --tcp=\"19092\" --port=\"18083\""
+          + " --port=\"8080\" --port=3333 --version=\"v1\" --istio-version=3 --crt=/cert.crt"
+          + " --key=/cert.key --xds-grpc-server=12034 --xds-grpc-server=\"34012\"";
+
 }

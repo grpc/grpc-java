@@ -17,6 +17,7 @@
 package io.grpc.testing.istio;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.CharMatcher;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.FutureCallback;
@@ -62,10 +63,13 @@ import java.net.SocketAddress;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -94,27 +98,23 @@ public final class EchoTestServer {
   private static final String HOSTNAME = "Hostname";
   private static final String REQUEST_HEADER = "RequestHeader";
   private static final String IP = "IP";
-  public static final String GRPC_SCHEME = "grpc://";
 
   @VisibleForTesting List<Server> servers;
 
   /**
-   * Preprocess args, for two things:
-   * 1. merge duplicate flags. So "--grpc=8080 --grpc=9090" becomes
+   * Preprocess args, for:
+   * - merging duplicate flags. So "--grpc=8080 --grpc=9090" becomes
    * "--grpc=8080,9090".
    **/
   @VisibleForTesting
   static Map<String, List<String>> preprocessArgs(String[] args) {
     HashMap<String, List<String>> argsMap = new HashMap<>();
     for (String arg : args) {
-      String[] keyValue = arg.split("=", 2);
+      List<String> keyValue = Splitter.on('=').limit(2).splitToList(arg);
 
-      if (keyValue.length == 2) {
-        String key = keyValue[0];
-        if ("--version".equals(key)) {
-          continue;
-        }
-        String value = keyValue[1];
+      if (keyValue.size() == 2) {
+        String key = keyValue.get(0);
+        String value = keyValue.get(1);
         List<String> oldValue = argsMap.get(key);
         if (oldValue == null) {
           oldValue = new ArrayList<>();
@@ -128,11 +128,12 @@ public final class EchoTestServer {
 
   /** Turn ports from a string list to an int list. */
   @VisibleForTesting
-  static List<Integer> getPortsList(Map<String, List<String>> args, String flagName) {
+  static Set<Integer> getPorts(Map<String, List<String>> args, String flagName) {
     List<String> grpcPorts = args.get(flagName);
-    List<Integer> grpcPortsInt = new ArrayList<>(grpcPorts.size());
+    Set<Integer> grpcPortsInt = new HashSet<>(grpcPorts.size());
 
     for (String port : grpcPorts) {
+      port = CharMatcher.is('\"').trimFrom(port);
       grpcPortsInt.add(Integer.parseInt(port));
     }
     return grpcPortsInt;
@@ -153,19 +154,15 @@ public final class EchoTestServer {
    */
   public static void main(String[] args) throws Exception {
     Map<String, List<String>> processedArgs = preprocessArgs(args);
-    List<Integer> grpcPorts = getPortsList(processedArgs, "--grpc");
-    List<Integer> xdsPorts = getPortsList(processedArgs, "--xds-grpc-server");
+    Set<Integer> grpcPorts = getPorts(processedArgs, "--grpc");
+    Set<Integer> xdsPorts = getPorts(processedArgs, "--xds-grpc-server");
     // If an xds port does not exist in gRPC ports set, add it.
-    for (Integer xdsPort : xdsPorts) {
-      if (!grpcPorts.contains(xdsPort)) {
-        grpcPorts.add(xdsPort);
-      }
-    }
+    grpcPorts.addAll(xdsPorts);
     // which ports are supposed to use tls
-    List<Integer> tlsPorts = getPortsList(processedArgs, "--tls");
-    List<String> forwardingAddress = processedArgs.get("--forwarding-adddress");
+    Set<Integer> tlsPorts = getPorts(processedArgs, "--tls");
+    List<String> forwardingAddress = processedArgs.get("--forwarding-address");
     if (forwardingAddress.size() > 1) {
-      logger.severe("More than one value for --forwarding-adddress not allowed");
+      logger.severe("More than one value for --forwarding-address not allowed");
       System.exit(1);
     } else if (forwardingAddress.size() == 0) {
       forwardingAddress.add("0.0.0.0:7072");
@@ -206,27 +203,32 @@ public final class EchoTestServer {
     echoTestServer.blockUntilShutdown();
   }
 
-  void runServers(String hostname, List<Integer> grpcPorts, List<Integer> xdsPorts,
-      List<Integer> tlsPorts, String forwardingAddress, ServerCredentials tlsServerCredentials)
+  void runServers(String hostname, Collection<Integer> grpcPorts, Collection<Integer> xdsPorts,
+      Collection<Integer> tlsPorts, String forwardingAddress,
+      ServerCredentials tlsServerCredentials)
       throws IOException {
     ServerServiceDefinition service = ServerInterceptors.intercept(
         new EchoTestServiceImpl(hostname, forwardingAddress), new EchoTestServerInterceptor());
     servers = new ArrayList<>(grpcPorts.size() + 1);
     for (int port : grpcPorts) {
       ServerCredentials serverCredentials = InsecureServerCredentials.create();
+      String credTypeString = "over plaintext";
       if (xdsPorts.contains(port)) {
         serverCredentials = XdsServerCredentials.create(InsecureServerCredentials.create());
+        credTypeString = "over xDS-configured mTLS";
       } else if (tlsPorts.contains(port)) {
         serverCredentials = tlsServerCredentials;
+        credTypeString = "over TLS";
       }
-      servers.add(runServer(port, service, serverCredentials));
+      servers.add(runServer(port, service, serverCredentials, credTypeString));
     }
   }
 
   static Server runServer(
-      int port, ServerServiceDefinition service, ServerCredentials serverCredentials)
+      int port, ServerServiceDefinition service, ServerCredentials serverCredentials,
+      String credTypeString)
       throws IOException {
-    logger.log(Level.INFO, "Listening GRPC on " + port);
+    logger.log(Level.INFO, "Listening GRPC ({0}) on {1}", new Object[]{credTypeString, port});
     return Grpc.newServerBuilderForPort(port, serverCredentials)
         .addService(service)
         .build()
@@ -346,25 +348,25 @@ public final class EchoTestServer {
       ForwardEchoResponse.Builder forwardEchoResponseBuilder
           = ForwardEchoResponse.newBuilder();
       String rawUrl = request.getUrl();
-      List<String> parts = Splitter.on(':').limit(2).splitToList(rawUrl);
-      if (parts.size() < 2) {
+      List<String> urlParts = Splitter.on(':').limit(2).splitToList(rawUrl);
+      if (urlParts.size() < 2) {
         throw new StatusRuntimeException(
             Status.INVALID_ARGUMENT.withDescription("No protocol configured for url " + rawUrl));
       }
       ChannelCredentials creds;
       String target = null;
-      if ("grpc".equals(parts.get(0))) {
+      if ("grpc".equals(urlParts.get(0))) {
         // We don't really want to test this but the istio test infrastructure needs
         // this to be supported. If we ever decide to add support for this properly,
         // we would need to add support for TLS creds here.
         creds = InsecureChannelCredentials.create();
-        target = parts.get(1).substring(2);
-      } else if ("xds".equals(parts.get(0))) {
+        target = urlParts.get(1).substring(2);
+      } else if ("xds".equals(urlParts.get(0))) {
         creds = XdsChannelCredentials.create(InsecureChannelCredentials.create());
         target = rawUrl;
       } else {
         logger.log(Level.INFO, "Protocol {0} not supported. Forwarding to {1}",
-            new String[]{parts.get(0), forwardingAddress});
+            new String[]{urlParts.get(0), forwardingAddress});
         return forwardingStub.withDeadline(Context.current().getDeadline()).forwardEcho(request);
       }
 
