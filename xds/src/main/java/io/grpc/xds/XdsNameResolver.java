@@ -281,7 +281,7 @@ final class XdsNameResolver extends NameResolver {
     Map<String, ?> rawServiceConfig = ImmutableMap.of(
         "loadBalancingConfig",
         ImmutableList.of(ImmutableMap.of(
-            "cluster_manager_experimental",
+            XdsLbPolicies.CLUSTER_MANAGER_POLICY_NAME,
             ImmutableMap.of("childPolicy", childPolicy.buildOrThrow()))));
 
     if (logger.isLoggable(XdsLogLevel.INFO)) {
@@ -1014,13 +1014,15 @@ final class XdsNameResolver extends NameResolver {
 
     private Map<String, ?> toLbPolicy() {
       if (traditionalCluster != null) {
-        return ImmutableMap.of("cds_experimental", ImmutableMap.of("cluster", traditionalCluster));
+        return ImmutableMap.of(
+            XdsLbPolicies.CDS_POLICY_NAME,
+            ImmutableMap.of("cluster", traditionalCluster));
       } else {
         ImmutableMap<String, ?> rlsConfig = new ImmutableMap.Builder<String, Object>()
             .put("routeLookupConfig", rlsPluginConfig.config())
             .put(
                 "childPolicy",
-                ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
+                ImmutableList.of(ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of())))
             .put("childPolicyConfigTargetFieldName", "cluster")
             .buildOrThrow();
         return ImmutableMap.of("rls_experimental", rlsConfig);

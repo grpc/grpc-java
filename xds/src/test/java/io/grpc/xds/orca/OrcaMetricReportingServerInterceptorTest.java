@@ -90,7 +90,7 @@ public class OrcaMetricReportingServerInterceptorTest {
                   entry.getValue());
             }
             for (Map.Entry<String, Double> entry : applicationCostMetrics.entrySet()) {
-              CallMetricRecorder.getCurrent().recordCallMetric(entry.getKey(),
+              CallMetricRecorder.getCurrent().recordRequestCostMetric(entry.getKey(),
                   entry.getValue());
             }
             CallMetricRecorder.getCurrent().recordCpuUtilizationMetric(cpuUtilizationMetrics);
