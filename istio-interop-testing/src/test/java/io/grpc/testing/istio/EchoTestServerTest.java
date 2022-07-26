@@ -60,6 +60,30 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class EchoTestServerTest {
 
+  private static final String[] EXPECTED_KEY_SET = {
+      "--server_first", "--forwarding-address",
+      "--bind_ip", "--istio-version", "--bind_localhost", "--grpc", "--tls",
+      "--cluster", "--key", "--tcp", "--crt", "--metrics", "--port", "--version"
+  };
+
+  private static final String TEST_ARGS =
+      "--metrics=15014 --cluster=\"cluster-0\" --port=\"18080\" --grpc=\"17070\" --port=\"18085\""
+          + " --tcp=\"19090\" --port=\"18443\" --tls=18443 --tcp=\"16060\" --server_first=16060"
+          + " --tcp=\"19091\" --tcp=\"16061\" --server_first=16061 --port=\"18081\""
+          + " --grpc=\"17071\" --port=\"19443\" --tls=19443 --port=\"18082\" --bind_ip=18082"
+          + " --port=\"18084\" --bind_localhost=18084 --tcp=\"19092\" --port=\"18083\""
+          + " --port=\"8080\" --port=\"3333\" --version=\"v1\" --istio-version=3 --crt=/cert.crt"
+          + " --key=/cert.key --forwarding-address=192.168.1.10:7072";
+
+  private static final String TEST_ARGS_PORTS =
+      "--metrics=15014 --cluster=\"cluster-0\" --port=\"18080\" --grpc=17070 --port=18085"
+          + " --tcp=\"19090\" --port=\"18443\" --tls=18443 --tcp=16060 --server_first=16060"
+          + " --tcp=\"19091\" --tcp=\"16061\" --server_first=16061 --port=\"18081\""
+          + " --grpc=\"17071\" --port=\"19443\" --tls=\"19443\" --port=\"18082\" --bind_ip=18082"
+          + " --port=\"18084\" --bind_localhost=18084 --tcp=\"19092\" --port=\"18083\""
+          + " --port=\"8080\" --port=3333 --version=\"v1\" --istio-version=3 --crt=/cert.crt"
+          + " --key=/cert.key --xds-grpc-server=12034 --xds-grpc-server=\"34012\"";
+
   @Test
   public void preprocessArgsTest() {
     String[] splitArgs = TEST_ARGS.split(" ");
@@ -78,6 +102,7 @@ public class EchoTestServerTest {
     assertEquals(processedArgs.get("--istio-version"), ImmutableList.of("3"));
     assertEquals(processedArgs.get("--crt"), ImmutableList.of("/cert.crt"));
     assertEquals(processedArgs.get("--metrics"), ImmutableList.of("15014"));
+    assertEquals(ImmutableList.of("192.168.1.10:7072"), processedArgs.get("--forwarding-address"));
     assertEquals(
         processedArgs.get("--port"),
         ImmutableList.of(
@@ -227,7 +252,8 @@ public class EchoTestServerTest {
     forwardServiceForNonGrpc.responsesToReturn = new ArrayList<>();
     Server nonGrpcEchoServer =
         EchoTestServer.runServer(
-            0, forwardServiceForNonGrpc.bindService(), InsecureServerCredentials.create(), "");
+            0, forwardServiceForNonGrpc.bindService(), InsecureServerCredentials.create(),
+                "", false);
     int nonGrpcEchoServerPort = nonGrpcEchoServer.getPort();
 
     EchoTestServer echoTestServer = new EchoTestServer();
@@ -359,29 +385,4 @@ public class EchoTestServerTest {
       responseObserver.onError(new IllegalArgumentException("Unknown type in responsesToReturn"));
     }
   }
-
-  private static final String[] EXPECTED_KEY_SET = {
-      "--server_first",
-      "--bind_ip", "--istio-version", "--bind_localhost", "--grpc", "--tls",
-      "--cluster", "--key", "--tcp", "--crt", "--metrics", "--port", "--version"
-  };
-
-  private static final String TEST_ARGS =
-      "--metrics=15014 --cluster=\"cluster-0\" --port=\"18080\" --grpc=\"17070\" --port=\"18085\""
-          + " --tcp=\"19090\" --port=\"18443\" --tls=18443 --tcp=\"16060\" --server_first=16060"
-          + " --tcp=\"19091\" --tcp=\"16061\" --server_first=16061 --port=\"18081\""
-          + " --grpc=\"17071\" --port=\"19443\" --tls=19443 --port=\"18082\" --bind_ip=18082"
-          + " --port=\"18084\" --bind_localhost=18084 --tcp=\"19092\" --port=\"18083\""
-          + " --port=\"8080\" --port=\"3333\" --version=\"v1\" --istio-version=3 --crt=/cert.crt"
-          + " --key=/cert.key";
-
-  private static final String TEST_ARGS_PORTS =
-      "--metrics=15014 --cluster=\"cluster-0\" --port=\"18080\" --grpc=17070 --port=18085"
-          + " --tcp=\"19090\" --port=\"18443\" --tls=18443 --tcp=16060 --server_first=16060"
-          + " --tcp=\"19091\" --tcp=\"16061\" --server_first=16061 --port=\"18081\""
-          + " --grpc=\"17071\" --port=\"19443\" --tls=\"19443\" --port=\"18082\" --bind_ip=18082"
-          + " --port=\"18084\" --bind_localhost=18084 --tcp=\"19092\" --port=\"18083\""
-          + " --port=\"8080\" --port=3333 --version=\"v1\" --istio-version=3 --crt=/cert.crt"
-          + " --key=/cert.key --xds-grpc-server=12034 --xds-grpc-server=\"34012\"";
-
 }

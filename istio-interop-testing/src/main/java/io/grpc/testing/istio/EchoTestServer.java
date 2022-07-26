@@ -34,6 +34,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerCredentials;
@@ -43,6 +44,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.TlsServerCredentials;
+import io.grpc.services.AdminInterface;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.XdsChannelCredentials;
@@ -164,7 +166,8 @@ public final class EchoTestServer {
     if (forwardingAddress.size() > 1) {
       logger.severe("More than one value for --forwarding-address not allowed");
       System.exit(1);
-    } else if (forwardingAddress.size() == 0) {
+    }
+    if (forwardingAddress.size() == 0) {
       forwardingAddress.add("0.0.0.0:7072");
     }
     List<String> key = processedArgs.get("key");
@@ -210,6 +213,7 @@ public final class EchoTestServer {
     ServerServiceDefinition service = ServerInterceptors.intercept(
         new EchoTestServiceImpl(hostname, forwardingAddress), new EchoTestServerInterceptor());
     servers = new ArrayList<>(grpcPorts.size() + 1);
+    boolean runAdminServices = Boolean.getBoolean("EXPOSE_GRPC_ADMIN");
     for (int port : grpcPorts) {
       ServerCredentials serverCredentials = InsecureServerCredentials.create();
       String credTypeString = "over plaintext";
@@ -220,19 +224,21 @@ public final class EchoTestServer {
         serverCredentials = tlsServerCredentials;
         credTypeString = "over TLS";
       }
-      servers.add(runServer(port, service, serverCredentials, credTypeString));
+      servers.add(runServer(port, service, serverCredentials, credTypeString, runAdminServices));
     }
   }
 
   static Server runServer(
       int port, ServerServiceDefinition service, ServerCredentials serverCredentials,
-      String credTypeString)
+      String credTypeString, boolean runAdminServices)
       throws IOException {
     logger.log(Level.INFO, "Listening GRPC ({0}) on {1}", new Object[]{credTypeString, port});
-    return Grpc.newServerBuilderForPort(port, serverCredentials)
-        .addService(service)
-        .build()
-        .start();
+    ServerBuilder<?> builder = Grpc.newServerBuilderForPort(port, serverCredentials)
+        .addService(service);
+    if (runAdminServices) {
+      builder = builder.addServices(AdminInterface.getStandardServices());
+    }
+    return builder.build().start();
   }
 
   void stopServers() {
@@ -338,7 +344,7 @@ public final class EchoTestServer {
       }
     }
 
-    private static class EchoCall {
+    private static final class EchoCall {
       EchoResponse response;
       Status status;
     }
@@ -442,8 +448,8 @@ public final class EchoTestServer {
       // just the message.
       StringBuilder sb = new StringBuilder();
       sb.append(String.format("[%d] grpcecho.Echo(%s)\n", i, requestMessage));
-      List<String> content = Splitter.on('\n').splitToList(echoCalls[i].response.getMessage());
-      for (String line : content) {
+      Iterable<String> iterable = Splitter.on('\n').split(echoCalls[i].response.getMessage());
+      for (String line : iterable) {
         if (!line.isEmpty()) {
           sb.append(String.format("[%d body] %s\n", i, line));
         }
