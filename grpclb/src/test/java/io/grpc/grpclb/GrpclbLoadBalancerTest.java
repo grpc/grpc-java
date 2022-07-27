@@ -791,7 +791,7 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void nameResolutionFailsThenRecover() {
-    Status error = Status.NOT_FOUND.withDescription("www.google.com not found");
+    Status error = Status.UNAVAILABLE.withDescription("www.google.com not found");
     deliverNameResolutionError(error);
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     assertThat(logs)
@@ -832,7 +832,7 @@ public class GrpclbLoadBalancerTest {
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
 
     // Let name resolution fail before round-robin list is ready
-    Status error = Status.NOT_FOUND.withDescription("www.google.com not found");
+    Status error = Status.UNAVAILABLE.withDescription("www.google.com not found");
     deliverNameResolutionError(error);
 
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());

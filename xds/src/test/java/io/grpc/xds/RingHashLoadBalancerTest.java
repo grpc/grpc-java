@@ -463,6 +463,7 @@ public class RingHashLoadBalancerTest {
     pickerCaptor.getValue().pickSubchannel(args);
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     Subchannel subchannel = result.getSubchannel();
+    assertThat(subchannel).isNotNull();
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
 
     List<EquivalentAddressGroup> updatedServers = new ArrayList<>();
@@ -508,6 +509,7 @@ public class RingHashLoadBalancerTest {
     pickerCaptor.getValue().pickSubchannel(args);
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     Subchannel subchannel = result.getSubchannel();
+    assertThat(subchannel).isNotNull();
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
 
     servers = createWeightedServerAddrs(1, 1, 1, 1, 1);  // server2, server3, server4 added
@@ -1042,7 +1044,7 @@ public class RingHashLoadBalancerTest {
         Iterables.getOnlyElement(subchannels.values()), ConnectivityStateInfo.forNonError(READY));
     verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
 
-    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("target not found"));
+    loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("target not found"));
     verifyNoMoreInteractions(helper);
   }
 

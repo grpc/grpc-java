@@ -453,7 +453,7 @@ public class GracefulSwitchLoadBalancerTest {
     verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     assertThat(picker.pickSubchannel(mock(PickSubchannelArgs.class)).getStatus().getCode())
-        .isEqualTo(Status.Code.DATA_LOSS);
+        .isEqualTo(Status.Code.INTERNAL);
   }
 
   @Deprecated

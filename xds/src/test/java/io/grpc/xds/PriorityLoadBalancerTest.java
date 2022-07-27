@@ -304,7 +304,7 @@ public class PriorityLoadBalancerTest {
     assertCurrentPickerPicksSubchannel(subchannel0);
 
     // p0 fails over to p1 immediately.
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED));
+    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.CANCELLED));
     assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(2);
     assertThat(fooHelpers).hasSize(2);
@@ -361,7 +361,7 @@ public class PriorityLoadBalancerTest {
     // p3 fails then the picker should have error status updated
     helper3.updateBalancingState(
         TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS.withDescription("foo")));
-    assertCurrentPickerReturnsError(Status.Code.DATA_LOSS, "foo");
+    assertCurrentPickerReturnsError(Status.Code.INTERNAL, "foo");
 
     // p2 gets back to READY
     final Subchannel subchannel3 = mock(Subchannel.class);
@@ -562,7 +562,7 @@ public class PriorityLoadBalancerTest {
     assertCurrentPickerIsBufferPicker();
 
     // p0 fails over to p1 immediately.
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED));
+    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.CANCELLED));
     assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(2);
     assertThat(fooHelpers).hasSize(2);
@@ -607,7 +607,7 @@ public class PriorityLoadBalancerTest {
     // p3 fails then the picker should have error status updated
     helper3.updateBalancingState(
         TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS.withDescription("foo")));
-    assertCurrentPickerReturnsError(Status.Code.DATA_LOSS, "foo");
+    assertCurrentPickerReturnsError(Status.Code.INTERNAL, "foo");
 
     // p2 gets back to IDLE
     helper2.updateBalancingState(

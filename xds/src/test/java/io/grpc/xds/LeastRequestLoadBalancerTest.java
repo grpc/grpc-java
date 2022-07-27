@@ -427,14 +427,12 @@ public class LeastRequestLoadBalancerTest {
     assertEquals(3, loadBalancer.getSubchannels().size());
 
     List<Subchannel> subchannels = Lists.newArrayList(loadBalancer.getSubchannels());
+    assertThat(subchannels).isNotNull();
 
     // Make sure all inFlight counters have started at 0
-    assertEquals(0,
-        subchannels.get(0).getAttributes().get(IN_FLIGHTS).get());
-    assertEquals(0,
-        subchannels.get(1).getAttributes().get(IN_FLIGHTS).get());
-    assertEquals(0,
-        subchannels.get(2).getAttributes().get(IN_FLIGHTS).get());
+    assertEquals(0, subchannels.get(0).getAttributes().get(IN_FLIGHTS).get());
+    assertEquals(0, subchannels.get(1).getAttributes().get(IN_FLIGHTS).get());
+    assertEquals(0, subchannels.get(2).getAttributes().get(IN_FLIGHTS).get());
 
     for (Subchannel sc : subchannels) {
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(READY));
@@ -453,6 +451,7 @@ public class LeastRequestLoadBalancerTest {
     when(mockRandom.nextInt(subchannels.size())).thenReturn(0, 2);
     PickResult pickResult1 = picker.pickSubchannel(mockArgs);
     verify(mockRandom, times(choiceCount)).nextInt(subchannels.size());
+    assertThat(pickResult1).isNotNull();
     assertEquals(subchannels.get(0), pickResult1.getSubchannel());
     // This simulates sending the actual RPC on the picked channel
     ClientStreamTracer streamTracer1 =
@@ -485,14 +484,14 @@ public class LeastRequestLoadBalancerTest {
   public void pickerEmptyList() throws Exception {
     SubchannelPicker picker = new EmptyPicker(Status.UNKNOWN);
 
-    assertEquals(null, picker.pickSubchannel(mockArgs).getSubchannel());
+    assertNull(picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(Status.UNKNOWN,
         picker.pickSubchannel(mockArgs).getStatus());
   }
 
   @Test
   public void nameResolutionErrorWithNoChannels() throws Exception {
-    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
+    Status error = Status.UNAVAILABLE.withDescription("nameResolutionError");
     loadBalancer.handleNameResolutionError(error);
     verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     LoadBalancer.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
@@ -510,7 +509,8 @@ public class LeastRequestLoadBalancerTest {
             .setLoadBalancingPolicyConfig(new LeastRequestConfig(choiceCount))
             .setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
-    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    loadBalancer.handleNameResolutionError(
+        Status.UNAVAILABLE.withDescription("nameResolutionError"));
 
     verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(mockHelper, times(2))

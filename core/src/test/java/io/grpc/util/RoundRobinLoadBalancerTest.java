@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.util.RoundRobinLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -260,8 +261,8 @@ public class RoundRobinLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
-    Ref<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
-        STATE_INFO);
+    Ref<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(STATE_INFO);
+    assertNotNull(subchannelStateInfo);
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
     assertThat(subchannelStateInfo.value).isEqualTo(ConnectivityStateInfo.forNonError(IDLE));
@@ -331,8 +332,8 @@ public class RoundRobinLoadBalancerTest {
       deliverSubchannelState(
           sc,
           ConnectivityStateInfo.forNonError(CONNECTING));
-      Ref<ConnectivityStateInfo> scStateInfo = sc.getAttributes().get(
-          STATE_INFO);
+      Ref<ConnectivityStateInfo> scStateInfo = sc.getAttributes().get(STATE_INFO);
+      assertNotNull(scStateInfo);
       assertThat(scStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
       assertThat(scStateInfo.value.getStatus()).isEqualTo(error);
     }
@@ -401,14 +402,13 @@ public class RoundRobinLoadBalancerTest {
   public void pickerEmptyList() throws Exception {
     SubchannelPicker picker = new EmptyPicker(Status.UNKNOWN);
 
-    assertEquals(null, picker.pickSubchannel(mockArgs).getSubchannel());
-    assertEquals(Status.UNKNOWN,
-        picker.pickSubchannel(mockArgs).getStatus());
+    assertNull(picker.pickSubchannel(mockArgs).getSubchannel());
+    assertEquals(Status.UNKNOWN, picker.pickSubchannel(mockArgs).getStatus());
   }
 
   @Test
   public void nameResolutionErrorWithNoChannels() throws Exception {
-    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
+    Status error = Status.INTERNAL.withDescription("nameResolutionError");
     loadBalancer.handleNameResolutionError(error);
     verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     LoadBalancer.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
@@ -423,7 +423,7 @@ public class RoundRobinLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
-    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    loadBalancer.handleNameResolutionError(Status.INTERNAL.withDescription("nameResolutionError"));
 
     verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(mockHelper, times(2))

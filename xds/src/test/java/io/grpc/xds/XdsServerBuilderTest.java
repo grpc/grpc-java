@@ -249,7 +249,7 @@ public class XdsServerBuilderTest {
             tlsContextManager);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
     verifyServer(future, mockXdsServingStatusListener, null);
-    xdsClient.ldsWatcher.onError(Status.ABORTED);
+    xdsClient.ldsWatcher.onError(Status.CANCELLED);
     verifyServer(null, mockXdsServingStatusListener, null);
   }
 

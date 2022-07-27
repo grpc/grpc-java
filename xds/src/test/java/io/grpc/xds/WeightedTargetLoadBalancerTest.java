@@ -268,7 +268,7 @@ public class WeightedTargetLoadBalancerTest {
 
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(pickResult.getStatus().getCode()).isEqualTo(Status.Code.DATA_LOSS);
+    assertThat(pickResult.getStatus().getCode()).isEqualTo(Status.Code.INTERNAL);
 
     // Child configs updated.
     Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
@@ -288,11 +288,11 @@ public class WeightedTargetLoadBalancerTest {
     verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
 
     // Error after child balancers created.
-    weightedTargetLb.handleNameResolutionError(Status.ABORTED);
+    weightedTargetLb.handleNameResolutionError(Status.CANCELLED);
 
     for (LoadBalancer childBalancer : childBalancers) {
       verify(childBalancer).handleNameResolutionError(statusCaptor.capture());
-      assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.ABORTED);
+      assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.CANCELLED);
     }
   }
 
@@ -322,9 +322,9 @@ public class WeightedTargetLoadBalancerTest {
         mock(SubchannelPicker.class)};
     final SubchannelPicker[] failurePickers = new SubchannelPicker[]{
         new ErrorPicker(Status.CANCELLED),
-        new ErrorPicker(Status.ABORTED),
-        new ErrorPicker(Status.DATA_LOSS),
-        new ErrorPicker(Status.DATA_LOSS)
+        new ErrorPicker(Status.CANCELLED),
+        new ErrorPicker(Status.INTERNAL),
+        new ErrorPicker(Status.INTERNAL)
     };
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
 

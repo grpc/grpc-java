@@ -170,6 +170,50 @@ public class RlsLoadBalancerTest {
   }
 
   @Test
+  public void lb_serverStatusCodeConversion() throws Exception {
+    deliverResolvedAddresses();
+    InOrder inOrder = inOrder(helper);
+    inOrder.verify(helper)
+        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    Metadata headers = new Metadata();
+    PickResult res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    FakeSubchannel subchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(subchannel).isNotNull();
+
+    subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
+
+    // Convert to something other than INTERNAL
+    checkConversion(picker, headers, subchannel, Status.ABORTED, Status.Code.UNKNOWN);
+    checkConversion(picker, headers, subchannel, Status.NOT_FOUND, Status.Code.UNAVAILABLE);
+
+    // Convert to INTERNAL
+    checkConversion(picker, headers, subchannel, Status.ALREADY_EXISTS, Status.Code.INTERNAL);
+    checkConversion(picker, headers, subchannel, Status.DATA_LOSS, Status.Code.INTERNAL);
+    checkConversion(picker, headers, subchannel, Status.FAILED_PRECONDITION, Status.Code.INTERNAL);
+    checkConversion(picker, headers, subchannel, Status.INVALID_ARGUMENT, Status.Code.INTERNAL);
+    checkConversion(picker, headers, subchannel, Status.OUT_OF_RANGE, Status.Code.INTERNAL);
+
+    // Pass through without conversion
+    checkConversion(picker, headers, subchannel, Status.CANCELLED, Status.Code.CANCELLED);
+    checkConversion(picker, headers, subchannel,
+        Status.DEADLINE_EXCEEDED, Status.Code.DEADLINE_EXCEEDED);
+    checkConversion(picker, headers, subchannel, Status.INTERNAL, Status.Code.INTERNAL);
+    checkConversion(picker, headers, subchannel,
+        Status.PERMISSION_DENIED, Status.Code.PERMISSION_DENIED);
+    checkConversion(picker, headers, subchannel,
+        Status.RESOURCE_EXHAUSTED, Status.Code.RESOURCE_EXHAUSTED);
+    checkConversion(picker, headers, subchannel,
+        Status.UNAUTHENTICATED, Status.Code.UNAUTHENTICATED);
+    checkConversion(picker, headers, subchannel, Status.UNAVAILABLE, Status.Code.UNAVAILABLE);
+    checkConversion(picker, headers, subchannel, Status.UNIMPLEMENTED, Status.Code.UNIMPLEMENTED);
+  }
+
+  @Test
   public void lb_working_withDefaultTarget_rlsResponding() throws Exception {
     deliverResolvedAddresses();
     InOrder inOrder = inOrder(helper);
@@ -210,7 +254,7 @@ public class RlsLoadBalancerTest {
     FakeSubchannel rescueSubchannel = subchannels.getLast();
 
     // search subchannel is down, rescue subchannel is connecting
-    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
+    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -223,7 +267,7 @@ public class RlsLoadBalancerTest {
     // subchannel is in failure mode
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
   }
 
@@ -243,6 +287,7 @@ public class RlsLoadBalancerTest {
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     FakeSubchannel fallbackSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(fallbackSubchannel).isNotNull();
 
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
@@ -270,6 +315,7 @@ public class RlsLoadBalancerTest {
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
     FakeSubchannel searchSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(searchSubchannel).isNotNull();
     searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     // create rescue subchannel
@@ -278,6 +324,7 @@ public class RlsLoadBalancerTest {
     assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
     assertThat(res.getSubchannel()).isNotSameInstanceAs(searchSubchannel);
     FakeSubchannel rescueSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(rescueSubchannel).isNotNull();
     rescueSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     // all channels are failed
@@ -287,7 +334,7 @@ public class RlsLoadBalancerTest {
 
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(res.getSubchannel()).isNull();
   }
 
@@ -417,6 +464,18 @@ public class RlsLoadBalancerTest {
         .setLoadBalancingPolicyConfig(parsedConfigOrError.getConfig())
         .build());
     verify(helper).createResolvingOobChannelBuilder(anyString(), any(ChannelCredentials.class));
+  }
+
+  private void checkConversion(SubchannelPicker picker,
+                               Metadata headers,
+                               FakeSubchannel searchSubchannel,
+                               Status serverState,
+                               Status.Code targetState) {
+    PickResult res;
+    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(serverState));
+    res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    assertThat(res.getStatus().getCode()).isEqualTo(targetState);
   }
 
   @SuppressWarnings("unchecked")

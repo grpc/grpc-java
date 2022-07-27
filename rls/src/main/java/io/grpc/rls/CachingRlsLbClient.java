@@ -936,7 +936,7 @@ final class CachingRlsLbClient {
         if (hasFallback) {
           return useFallback(args);
         }
-        return PickResult.withError(response.getStatus());
+        return PickResult.withError(Status.convertServerStatus(response.getStatus()));
       } else {
         return PickResult.withNoResult();
       }
@@ -980,4 +980,5 @@ final class CachingRlsLbClient {
           .toString();
     }
   }
+
 }

@@ -121,7 +121,7 @@ public class ConfigSelectingClientCallTest {
     InternalConfigSelector configSelector = new InternalConfigSelector() {
       @Override
       public Result selectConfig(PickSubchannelArgs args) {
-        return Result.forError(Status.FAILED_PRECONDITION);
+        return Result.forError(Status.INTERNAL);
       }
     };
 
@@ -134,7 +134,7 @@ public class ConfigSelectingClientCallTest {
     configSelectingClientCall.start(callListener, new Metadata());
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.INTERNAL);
 
     // The call should not delegate to null and fail methods with NPE.
     configSelectingClientCall.request(1);
