@@ -76,8 +76,6 @@ public final class GcpObservability implements AutoCloseable {
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
           globalLocationTags.getLocationTags(), observabilityConfig.getCustomTags(),
           observabilityConfig.getFlushMessageCount());
-      // TODO(dnvindhya): Cleanup code for LoggingChannelProvider and LoggingServerProvider
-      // once ChannelBuilder and ServerBuilder are used
       LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
       instance = grpcInit(sink, observabilityConfig,
@@ -97,13 +95,8 @@ public final class GcpObservability implements AutoCloseable {
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory)
       throws IOException {
     if (instance == null) {
-      instance =
-          new GcpObservability(sink, config, channelInterceptorFactory, serverInterceptorFactory);
-      LogHelper logHelper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
-      ConfigFilterHelper logFilterHelper = ConfigFilterHelper.factory(config);
-      instance.setProducer(
-          new InternalLoggingChannelInterceptor.FactoryImpl(logHelper, logFilterHelper),
-          new InternalLoggingServerInterceptor.FactoryImpl(logHelper, logFilterHelper));
+      instance = new GcpObservability(sink, config);
+      instance.setProducer(channelInterceptorFactory, serverInterceptorFactory);
     }
     return instance;
   }
@@ -116,8 +109,6 @@ public final class GcpObservability implements AutoCloseable {
         throw new IllegalStateException("GcpObservability already closed!");
       }
       unRegisterStackDriverExporter();
-      LoggingChannelProvider.shutdown();
-      LoggingServerProvider.shutdown();
       sink.close();
       instance = null;
     }
@@ -208,13 +199,8 @@ public final class GcpObservability implements AutoCloseable {
 
   private GcpObservability(
       Sink sink,
-      ObservabilityConfig config,
-      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
-      InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
+      ObservabilityConfig config) {
     this.sink = checkNotNull(sink);
     this.config = checkNotNull(config);
-
-    LoggingChannelProvider.init(checkNotNull(channelInterceptorFactory));
-    LoggingServerProvider.init(checkNotNull(serverInterceptorFactory));
   }
 }

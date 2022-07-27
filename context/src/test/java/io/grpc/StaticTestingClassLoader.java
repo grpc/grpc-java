@@ -37,6 +37,7 @@ public final class StaticTestingClassLoader extends ClassLoader {
   @Override
   protected Class<?> findClass(String name) throws ClassNotFoundException {
     if (!classesToDefine.matcher(name).matches()) {
+      System.out.println("NF class: " + name);
       throw new ClassNotFoundException(name);
     }
     InputStream is = getResourceAsStream(name.replace('.', '/') + ".class");

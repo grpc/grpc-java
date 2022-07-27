@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -45,6 +46,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -98,32 +100,31 @@ public class GcpLogSinkTest {
       .putFields("rpc_id", Value.newBuilder().setStringValue(rpcId).build())
       .build();
   private Logging mockLogging;
+  private GcpLogSink spySink;
 
   @Before
   public void setUp() {
     mockLogging = mock(Logging.class);
+    spySink = spy(new GcpLogSink(destProjectName, locationTags,
+        customTags, flushLimit));
+    Mockito.doReturn(mockLogging).when(spySink).createLoggingClient();
   }
 
   @Test
   public void createSink() {
-    Sink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
-        customTags, flushLimit);
-    assertThat(mockSink).isInstanceOf(GcpLogSink.class);
+    assertThat(spySink).isInstanceOf(GcpLogSink.class);
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWrite() throws Exception {
-    Sink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
-        customTags, flushLimit);
-    mockSink.write(logProto);
+    spySink.write(logProto);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
     verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
-      System.out.println(entry);
       assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
       assertThat(entry.getLogName()).isEqualTo(expectedLogName);
     }
@@ -133,10 +134,8 @@ public class GcpLogSinkTest {
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWriteWithTags() {
-    GcpLogSink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
-        customTags, flushLimit);
     MonitoredResource expectedMonitoredResource = GcpLogSink.getResource(locationTags);
-    mockSink.write(logProto);
+    spySink.write(logProto);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
@@ -157,9 +156,10 @@ public class GcpLogSinkTest {
   public void emptyCustomTags_labelsNotSet() {
     Map<String, String> emptyCustomTags = null;
     Map<String, String> expectedEmptyLabels = new HashMap<>();
-    GcpLogSink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
-        emptyCustomTags, flushLimit);
-    mockSink.write(logProto);
+    GcpLogSink spySink2 = spy(new GcpLogSink(destProjectName, locationTags,
+        emptyCustomTags, flushLimit));
+    Mockito.doReturn(mockLogging).when(spySink2).createLoggingClient();
+    spySink2.write(logProto);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
@@ -178,9 +178,10 @@ public class GcpLogSinkTest {
     String destinationProjectId = "DESTINATION_PROJECT";
     Map<String, String> expectedLabels = GcpLogSink.getCustomTags(emptyCustomTags, locationTags,
         destinationProjectId);
-    GcpLogSink mockSink = new GcpLogSink(mockLogging, destinationProjectId, locationTags,
-        emptyCustomTags, flushLimit);
-    mockSink.write(logProto);
+    GcpLogSink spySink2 = spy(new GcpLogSink(destinationProjectId, locationTags,
+        emptyCustomTags, flushLimit));
+    Mockito.doReturn(mockLogging).when(spySink2).createLoggingClient();
+    spySink2.write(logProto);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
@@ -195,24 +196,26 @@ public class GcpLogSinkTest {
   @Test
   public void verifyFlush() {
     long lowerFlushLimit = 2L;
-    GcpLogSink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
-        customTags, lowerFlushLimit);
-    mockSink.write(logProto);
+    GcpLogSink spySink2 = spy(new GcpLogSink(destProjectName, locationTags,
+        customTags, lowerFlushLimit));
+    Mockito.doReturn(mockLogging).when(spySink2).createLoggingClient();
+    spySink2.write(logProto);
     verify(mockLogging, never()).flush();
-    mockSink.write(logProto);
+    spySink2.write(logProto);
     verify(mockLogging, times(1)).flush();
-    mockSink.write(logProto);
-    mockSink.write(logProto);
+    spySink2.write(logProto);
+    spySink2.write(logProto);
     verify(mockLogging, times(2)).flush();
   }
 
   @Test
   public void verifyClose() throws Exception {
-    Sink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
-        customTags, flushLimit);
-    mockSink.write(logProto);
+    GcpLogSink spySink2 = spy(new GcpLogSink(destProjectName, locationTags,
+        customTags, flushLimit));
+    Mockito.doReturn(mockLogging).when(spySink2).createLoggingClient();
+    spySink2.write(logProto);
     verify(mockLogging, times(1)).write(anyIterable());
-    mockSink.close();
+    spySink2.close();
     verify(mockLogging).close();
     verifyNoMoreInteractions(mockLogging);
   }

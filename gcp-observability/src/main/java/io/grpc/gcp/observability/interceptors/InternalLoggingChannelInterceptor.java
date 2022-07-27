@@ -40,7 +40,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * A logging interceptor for {@code LoggingChannelProvider}.
+ * A logging client interceptor for Observability.
  */
 @Internal
 public final class InternalLoggingChannelInterceptor implements ClientInterceptor {

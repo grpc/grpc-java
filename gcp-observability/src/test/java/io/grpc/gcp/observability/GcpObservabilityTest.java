@@ -28,13 +28,11 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.InternalGlobalInterceptors;
-import io.grpc.ManagedChannelProvider;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
-import io.grpc.ServerProvider;
 import io.grpc.StaticTestingClassLoader;
 import io.grpc.gcp.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
@@ -85,8 +83,6 @@ public class GcpObservabilityTest {
     @Override
     public void run() {
       // TODO(dnvindhya) : Remove usage of Providers on cleaning up Logging*Provider
-      ManagedChannelProvider prevChannelProvider = ManagedChannelProvider.provider();
-      ServerProvider prevServerProvider = ServerProvider.provider();
       Sink sink = mock(Sink.class);
       ObservabilityConfig config = mock(ObservabilityConfig.class);
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
@@ -98,16 +94,12 @@ public class GcpObservabilityTest {
         GcpObservability observability =
             GcpObservability.grpcInit(
               sink, config, channelInterceptorFactory, serverInterceptorFactory);
-        assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
-        assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
         observability1 =
             GcpObservability.grpcInit(
                 sink, config, channelInterceptorFactory, serverInterceptorFactory);
         assertThat(observability1).isSameInstanceAs(observability);
         observability.close();
         verify(sink).close();
-        assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(prevChannelProvider);
-        assertThat(ServerProvider.provider()).isSameInstanceAs(prevServerProvider);
         try {
           observability1.close();
           fail("should have failed for calling close() second time");
