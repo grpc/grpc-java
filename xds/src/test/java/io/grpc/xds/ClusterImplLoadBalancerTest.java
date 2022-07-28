@@ -282,7 +282,7 @@ public class ClusterImplLoadBalancerTest {
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, null,
         Collections.singletonList(DropOverload.create("lb", 1_000_000)),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.singletonList(endpoint))
             .setAttributes(
@@ -571,7 +571,7 @@ public class ClusterImplLoadBalancerTest {
 
   private void deliverAddressesAndConfig(List<EquivalentAddressGroup> addresses,
       ClusterImplConfig config) {
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(addresses)
             .setAttributes(
@@ -677,11 +677,10 @@ public class ClusterImplLoadBalancerTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
       attributes = resolvedAddresses.getAttributes();
-      return true;
     }
 
     @Override

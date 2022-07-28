@@ -124,46 +124,39 @@ public abstract class LoadBalancer {
    *
    * <p>Implementations should not modify the given {@code servers}.
    *
-   * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @since 1.21.0
+   * @param servers the resolved server addresses, never empty.
+   * @param attributes extra information from naming system.
+   * @deprecated override {@link #handleResolvedAddresses(ResolvedAddresses) instead}
+   * @since 1.2.0
    */
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  @Deprecated
+  public void handleResolvedAddressGroups(
+      List<EquivalentAddressGroup> servers,
+      @NameResolver.ResolutionResultAttr Attributes attributes) {
     if (recursionCount++ == 0) {
-      // Note that the information about the addresses actually being accepted will be lost
-      // if you rely on this method for backward compatibility.
-      acceptResolvedAddresses(resolvedAddresses);
+      handleResolvedAddresses(
+          ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     }
     recursionCount = 0;
   }
 
   /**
-   * Accepts newly resolved addresses from the name resolution system. The {@link
-   * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
-   * single list if needed.
+   * Handles newly resolved server groups and metadata attributes from name resolution system.
+   * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
+   * but may be flattened into a single list if needed.
    *
-   * <p>Implementations can choose to reject the given addresses by returning {@code false}.
-   *
-   * <p>Implementations should not modify the given {@code addresses}.
+   * <p>Implementations should not modify the given {@code servers}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
-   * @since 1.49.0
+   * @since 1.21.0
    */
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (resolvedAddresses.getAddresses().isEmpty()
-        && !canHandleEmptyAddressListFromNameResolution()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
-              + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
-    } else {
-      if (recursionCount++ == 0) {
-        handleResolvedAddresses(resolvedAddresses);
-      }
-      recursionCount = 0;
-
-      return true;
+  @SuppressWarnings("deprecation")
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    if (recursionCount++ == 0) {
+      handleResolvedAddressGroups(
+          resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
     }
+    recursionCount = 0;
   }
 
   /**

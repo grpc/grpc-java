@@ -129,7 +129,7 @@ public class WrrLocalityLoadBalancerTest {
 
     // Assert that the child policy and the locality weights were correctly mapped to a
     // WeightedTargetConfig.
-    verify(mockWeightedTargetLb).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(mockWeightedTargetLb).handleResolvedAddresses(resolvedAddressesCaptor.capture());
     Object config = resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig();
     assertThat(config).isInstanceOf(WeightedTargetConfig.class);
     WeightedTargetConfig wtConfig = (WeightedTargetConfig) config;
@@ -190,7 +190,7 @@ public class WrrLocalityLoadBalancerTest {
 
     // Assert that the child policy and the locality weights were correctly mapped to a
     // WeightedTargetConfig.
-    verify(mockWeightedTargetLb).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(mockWeightedTargetLb).handleResolvedAddresses(resolvedAddressesCaptor.capture());
     assertThat(resolvedAddressesCaptor.getValue().getAttributes()
         .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).isNull();
   }
@@ -219,7 +219,7 @@ public class WrrLocalityLoadBalancerTest {
   }
 
   private void deliverAddresses(WrrLocalityConfig config, Map<Locality, Integer> localityWeights) {
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(ImmutableList.of(eag)).setAttributes(
                 Attributes.newBuilder()
                     .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS, localityWeights).build())
