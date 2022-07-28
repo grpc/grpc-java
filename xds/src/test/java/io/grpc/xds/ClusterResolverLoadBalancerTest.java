@@ -985,7 +985,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private void deliverLbConfig(ClusterResolverConfig config) {
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(
@@ -1221,11 +1221,10 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
       attributes = resolvedAddresses.getAttributes();
-      return true;
     }
 
     @Override

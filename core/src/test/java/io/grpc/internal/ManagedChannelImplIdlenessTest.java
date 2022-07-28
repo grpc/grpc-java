@@ -154,7 +154,6 @@ public class ManagedChannelImplIdlenessTest {
   @Before
   @SuppressWarnings("deprecation") // For NameResolver.Listener
   public void setUp() {
-    when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     when(mockNameResolver.getServiceAuthority()).thenReturn(AUTHORITY);
     when(mockNameResolverFactory
@@ -221,7 +220,7 @@ public class ManagedChannelImplIdlenessTest {
 
     ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
+    verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
     assertThat(resolvedAddressCaptor.getValue().getAddresses())
         .containsExactlyElementsIn(servers);
   }

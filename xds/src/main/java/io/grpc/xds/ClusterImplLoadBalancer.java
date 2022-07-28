@@ -102,7 +102,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
@@ -129,7 +129,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
-    return childLb.acceptResolvedAddresses(
+    childLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
@@ -160,6 +160,11 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
+  }
+
+  @Override
+  public boolean canHandleEmptyAddressListFromNameResolution() {
+    return true;
   }
 
   /**

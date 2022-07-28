@@ -156,7 +156,7 @@ public class RingHashLoadBalancerTest {
   public void subchannelLazyConnectUntilPicked() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
@@ -187,7 +187,7 @@ public class RingHashLoadBalancerTest {
   public void subchannelNotAutoReconnectAfterReenteringIdle() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
@@ -217,7 +217,7 @@ public class RingHashLoadBalancerTest {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
     InOrder inOrder = Mockito.inOrder(helper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     inOrder.verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -278,7 +278,7 @@ public class RingHashLoadBalancerTest {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1);
     InOrder inOrder = Mockito.inOrder(helper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     inOrder.verify(helper, times(4)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -336,7 +336,7 @@ public class RingHashLoadBalancerTest {
   public void subchannelStayInTransientFailureUntilBecomeReady() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -378,7 +378,7 @@ public class RingHashLoadBalancerTest {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     InOrder inOrder = Mockito.inOrder(helper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -394,7 +394,7 @@ public class RingHashLoadBalancerTest {
     verifyConnection(1);
 
     servers = createWeightedServerAddrs(1,1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     inOrder.verify(helper)
@@ -422,7 +422,7 @@ public class RingHashLoadBalancerTest {
   public void ignoreShutdownSubchannelStateChange() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -442,7 +442,7 @@ public class RingHashLoadBalancerTest {
   public void deterministicPickWithHostsPartiallyRemoved() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     InOrder inOrder = Mockito.inOrder(helper);
@@ -470,7 +470,7 @@ public class RingHashLoadBalancerTest {
       Attributes attr = addr.getAttributes().toBuilder().set(CUSTOM_KEY, "custom value").build();
       updatedServers.add(new EquivalentAddressGroup(addr.getAddresses(), attr));
     }
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(updatedServers).setLoadBalancingPolicyConfig(config).build());
     verify(subchannels.get(Collections.singletonList(servers.get(0))))
@@ -487,7 +487,7 @@ public class RingHashLoadBalancerTest {
   public void deterministicPickWithNewHostsAdded() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);  // server0 and server1
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     InOrder inOrder = Mockito.inOrder(helper);
@@ -511,7 +511,7 @@ public class RingHashLoadBalancerTest {
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
 
     servers = createWeightedServerAddrs(1, 1, 1, 1, 1);  // server2, server3, server4 added
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     inOrder.verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -526,7 +526,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -583,7 +583,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -649,7 +649,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -687,7 +687,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -718,7 +718,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -749,7 +749,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -784,7 +784,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -822,7 +822,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -864,7 +864,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -908,7 +908,7 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -943,7 +943,7 @@ public class RingHashLoadBalancerTest {
   public void hostSelectionProportionalToWeights() {
     RingHashConfig config = new RingHashConfig(10000, 100000);  // large ring
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 10, 100); // 1:10:100
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -979,7 +979,7 @@ public class RingHashLoadBalancerTest {
   public void hostSelectionProportionalToRepeatedAddressCount() {
     RingHashConfig config = new RingHashConfig(10000, 100000);
     List<EquivalentAddressGroup> servers = createRepeatedServerAddrs(1, 10, 100);  // 1:10:100
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -1027,7 +1027,7 @@ public class RingHashLoadBalancerTest {
   public void nameResolutionErrorWithActiveSubchannels() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));

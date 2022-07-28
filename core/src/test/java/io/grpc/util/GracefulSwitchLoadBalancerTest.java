@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.util.GracefulSwitchLoadBalancer.BUFFER_PICKER;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -86,6 +87,35 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  public void canHandleEmptyAddressListFromNameResolutionForwardedToLatestPolicy() {
+    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
+    LoadBalancer lb0 = balancers.get(lbPolicies[0]);
+    Helper helper0 = helpers.get(lb0);
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    helper0.updateBalancingState(READY, picker);
+
+    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isFalse();
+    doReturn(true).when(lb0).canHandleEmptyAddressListFromNameResolution();
+    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
+
+    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[1]));
+    LoadBalancer lb1 = balancers.get(lbPolicies[1]);
+
+    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isFalse();
+
+    doReturn(true).when(lb1).canHandleEmptyAddressListFromNameResolution();
+    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
+
+    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[2]));
+    LoadBalancer lb2 = balancers.get(lbPolicies[2]);
+
+    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isFalse();
+
+    doReturn(true).when(lb2).canHandleEmptyAddressListFromNameResolution();
+    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
+  }
+
+  @Test
   public void handleResolvedAddressesAndNameResolutionErrorForwardedToLatestPolicy() {
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -94,17 +124,17 @@ public class GracefulSwitchLoadBalancerTest {
     helper0.updateBalancingState(READY, picker);
 
     ResolvedAddresses addresses = newFakeAddresses();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses);
-    verify(lb0).acceptResolvedAddresses(addresses);
+    gracefulSwitchLb.handleResolvedAddresses(addresses);
+    verify(lb0).handleResolvedAddresses(addresses);
     gracefulSwitchLb.handleNameResolutionError(Status.DATA_LOSS);
     verify(lb0).handleNameResolutionError(Status.DATA_LOSS);
 
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[1]));
     LoadBalancer lb1 = balancers.get(lbPolicies[1]);
     addresses = newFakeAddresses();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses);
-    verify(lb0, never()).acceptResolvedAddresses(addresses);
-    verify(lb1).acceptResolvedAddresses(addresses);
+    gracefulSwitchLb.handleResolvedAddresses(addresses);
+    verify(lb0, never()).handleResolvedAddresses(addresses);
+    verify(lb1).handleResolvedAddresses(addresses);
     gracefulSwitchLb.handleNameResolutionError(Status.ALREADY_EXISTS);
     verify(lb0, never()).handleNameResolutionError(Status.ALREADY_EXISTS);
     verify(lb1).handleNameResolutionError(Status.ALREADY_EXISTS);
@@ -113,10 +143,10 @@ public class GracefulSwitchLoadBalancerTest {
     verify(lb1).shutdown();
     LoadBalancer lb2 = balancers.get(lbPolicies[2]);
     addresses = newFakeAddresses();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses);
-    verify(lb0, never()).acceptResolvedAddresses(addresses);
-    verify(lb1, never()).acceptResolvedAddresses(addresses);
-    verify(lb2).acceptResolvedAddresses(addresses);
+    gracefulSwitchLb.handleResolvedAddresses(addresses);
+    verify(lb0, never()).handleResolvedAddresses(addresses);
+    verify(lb1, never()).handleResolvedAddresses(addresses);
+    verify(lb2).handleResolvedAddresses(addresses);
     gracefulSwitchLb.handleNameResolutionError(Status.CANCELLED);
     verify(lb0, never()).handleNameResolutionError(Status.CANCELLED);
     verify(lb1, never()).handleNameResolutionError(Status.CANCELLED);

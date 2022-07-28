@@ -121,7 +121,7 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void pickAfterResolved() throws Exception {
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
 
     verify(mockHelper).createSubchannel(createArgsCaptor.capture());
@@ -139,7 +139,7 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void requestConnectionPicker() throws Exception {
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
 
     InOrder inOrder = inOrder(mockHelper, mockSubchannel);
@@ -164,7 +164,7 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void refreshNameResolutionAfterSubchannelConnectionBroken() {
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     verify(mockHelper).createSubchannel(any(CreateSubchannelArgs.class));
 
@@ -196,11 +196,11 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void pickAfterResolvedAndUnchanged() throws Exception {
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     verify(mockSubchannel).start(any(SubchannelStateListener.class));
     verify(mockSubchannel).requestConnection();
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     verify(mockSubchannel).updateAddresses(eq(servers));
     verifyNoMoreInteractions(mockSubchannel);
@@ -223,7 +223,7 @@ public class PickFirstLoadBalancerTest {
 
     InOrder inOrder = inOrder(mockHelper, mockSubchannel);
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     verify(mockSubchannel).start(any(SubchannelStateListener.class));
@@ -233,7 +233,7 @@ public class PickFirstLoadBalancerTest {
     verify(mockSubchannel).requestConnection();
     assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
     inOrder.verify(mockSubchannel).updateAddresses(eq(newServers));
 
@@ -245,7 +245,7 @@ public class PickFirstLoadBalancerTest {
   public void pickAfterStateChangeAfterResolution() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     CreateSubchannelArgs args = createArgsCaptor.getValue();
@@ -297,7 +297,7 @@ public class PickFirstLoadBalancerTest {
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
     verify(mockSubchannel, never()).requestConnection();
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     CreateSubchannelArgs args = createArgsCaptor.getValue();
@@ -318,7 +318,7 @@ public class PickFirstLoadBalancerTest {
   @Test
   public void nameResolutionErrorWithStateChanges() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     verify(mockSubchannel).start(stateListenerCaptor.capture());
@@ -358,7 +358,7 @@ public class PickFirstLoadBalancerTest {
     loadBalancer.requestConnection();
 
     verify(mockSubchannel, never()).requestConnection();
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     verify(mockSubchannel).requestConnection();
 

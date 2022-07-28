@@ -148,7 +148,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void pickAfterResolved() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
 
@@ -199,7 +199,7 @@ public class RoundRobinLoadBalancerTest {
 
     InOrder inOrder = inOrder(mockHelper);
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(currentServers).setAttributes(affinity)
             .build());
 
@@ -221,7 +221,7 @@ public class RoundRobinLoadBalancerTest {
     // This time with Attributes
     List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(latestServers).setAttributes(affinity).build());
 
     verify(newSubchannel, times(1)).requestConnection();
@@ -241,7 +241,7 @@ public class RoundRobinLoadBalancerTest {
     assertThat(getList(picker)).containsExactly(oldSubchannel, newSubchannel);
 
     // test going from non-empty to empty
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(affinity)
@@ -256,7 +256,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
@@ -296,7 +296,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void ignoreShutdownSubchannelStateChange() {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
@@ -315,7 +315,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void stayTransientFailureUntilReady() {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
 
@@ -353,7 +353,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void refreshNameResolutionWhenSubchannelConnectionBroken() {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
 
@@ -420,7 +420,7 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void nameResolutionErrorWithActiveChannels() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
@@ -449,7 +449,7 @@ public class RoundRobinLoadBalancerTest {
     Subchannel sc2 = subchannelIterator.next();
     Subchannel sc3 = subchannelIterator.next();
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     verify(sc1, times(1)).requestConnection();

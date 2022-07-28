@@ -130,7 +130,7 @@ public class CdsLoadBalancer2Test {
     lbRegistry.register(new FakeLoadBalancerProvider("least_request_experimental",
         new LeastRequestLoadBalancerProvider()));
     loadBalancer = new CdsLoadBalancer2(helper, lbRegistry);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(
@@ -627,9 +627,8 @@ public class CdsLoadBalancer2Test {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
-      return true;
     }
 
     @Override

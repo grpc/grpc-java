@@ -49,7 +49,7 @@ final class RlsLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(ChannelLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     LbPolicyConfiguration lbPolicyConfiguration =
         (LbPolicyConfiguration) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -78,8 +78,6 @@ final class RlsLoadBalancer extends LoadBalancer {
       //  not required.
       this.lbPolicyConfiguration = lbPolicyConfiguration;
     }
-
-    return true;
   }
 
   @Override

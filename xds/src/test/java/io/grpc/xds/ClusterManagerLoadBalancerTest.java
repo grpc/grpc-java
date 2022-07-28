@@ -267,7 +267,7 @@ public class ClusterManagerLoadBalancerTest {
   }
 
   private void deliverResolvedAddresses(final Map<String, String> childPolicies, boolean failing) {
-    clusterManagerLoadBalancer.acceptResolvedAddresses(
+    clusterManagerLoadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setLoadBalancingPolicyConfig(buildConfig(childPolicies, failing))
@@ -348,14 +348,12 @@ public class ClusterManagerLoadBalancerTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
 
       if (failing) {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
       }
-
-      return !failing;
     }
 
     @Override

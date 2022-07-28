@@ -155,7 +155,7 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void pickAfterResolved() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
 
@@ -206,7 +206,7 @@ public class LeastRequestLoadBalancerTest {
 
     InOrder inOrder = inOrder(mockHelper);
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(currentServers).setAttributes(affinity)
             .build());
 
@@ -228,7 +228,7 @@ public class LeastRequestLoadBalancerTest {
     // This time with Attributes
     List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(latestServers).setAttributes(affinity).build());
 
     verify(newSubchannel, times(1)).requestConnection();
@@ -248,7 +248,7 @@ public class LeastRequestLoadBalancerTest {
     assertThat(getList(picker)).containsExactly(oldSubchannel, newSubchannel);
 
     // test going from non-empty to empty
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(affinity)
@@ -263,7 +263,7 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
@@ -305,7 +305,7 @@ public class LeastRequestLoadBalancerTest {
     final LeastRequestConfig oldConfig = new LeastRequestConfig(4);
     final LeastRequestConfig newConfig = new LeastRequestConfig(6);
     final Subchannel readySubchannel = subchannels.values().iterator().next();
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
             .setLoadBalancingPolicyConfig(oldConfig).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
@@ -317,7 +317,7 @@ public class LeastRequestLoadBalancerTest {
     pickerCaptor.getValue().pickSubchannel(mockArgs);
     verify(mockRandom, times(oldConfig.choiceCount)).nextInt(1);
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
             .setLoadBalancingPolicyConfig(newConfig).build());
     verify(mockHelper, times(3))
@@ -332,7 +332,7 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void ignoreShutdownSubchannelStateChange() {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
@@ -351,7 +351,7 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void stayTransientFailureUntilReady() {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
 
@@ -389,7 +389,7 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void refreshNameResolutionWhenSubchannelConnectionBroken() {
     InOrder inOrder = inOrder(mockHelper);
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
 
@@ -419,7 +419,7 @@ public class LeastRequestLoadBalancerTest {
   public void pickerLeastRequest() throws Exception {
     int choiceCount = 2;
     // This should add inFlight counters to all subchannels.
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .setLoadBalancingPolicyConfig(new LeastRequestConfig(choiceCount))
             .build());
@@ -505,7 +505,7 @@ public class LeastRequestLoadBalancerTest {
   public void nameResolutionErrorWithActiveChannels() throws Exception {
     int choiceCount = 8;
     final Subchannel readySubchannel = subchannels.values().iterator().next();
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setLoadBalancingPolicyConfig(new LeastRequestConfig(choiceCount))
             .setAddresses(servers).setAttributes(affinity).build());
@@ -538,7 +538,7 @@ public class LeastRequestLoadBalancerTest {
     Subchannel sc2 = subchannelIterator.next();
     Subchannel sc3 = subchannelIterator.next();
 
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     verify(sc1, times(1)).requestConnection();

@@ -88,7 +88,7 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     LeastRequestConfig config =
         (LeastRequestConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     // Config may be null if least_request is used outside xDS
@@ -146,8 +146,6 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
     for (Subchannel removedSubchannel : removedSubchannels) {
       shutdownSubchannel(removedSubchannel);
     }
-
-    return true;
   }
 
   @Override
