@@ -6,6 +6,7 @@ load("//:java_grpc_library.bzl", "java_grpc_library")
 # Maven Central.
 java_library(
     name = "xds_maven",
+    visibility = ["//visibility:public"],
     runtime_deps = [
         ":orca",
         ":xds",

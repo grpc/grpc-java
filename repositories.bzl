@@ -87,7 +87,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-services": "@io_grpc_grpc_java//services:services_maven",
     "io.grpc:grpc-stub": "@io_grpc_grpc_java//stub",
     "io.grpc:grpc-testing": "@io_grpc_grpc_java//testing",
-    "io.grpc:grpc-xds": "@io_grpc_grpc_java//xds",
+    "io.grpc:grpc-xds": "@io_grpc_grpc_java//xds:xds_maven",
 }
 
 def grpc_java_repositories():
