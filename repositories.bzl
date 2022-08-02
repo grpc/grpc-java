@@ -84,7 +84,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-protobuf": "@io_grpc_grpc_java//protobuf",
     "io.grpc:grpc-protobuf-lite": "@io_grpc_grpc_java//protobuf-lite",
     "io.grpc:grpc-rls": "@io_grpc_grpc_java//rls",
-    "io.grpc:grpc-services": "@io_grpc_grpc_java//services",
+    "io.grpc:grpc-services": "@io_grpc_grpc_java//services:services_maven",
     "io.grpc:grpc-stub": "@io_grpc_grpc_java//stub",
     "io.grpc:grpc-testing": "@io_grpc_grpc_java//testing",
     "io.grpc:grpc-xds": "@io_grpc_grpc_java//xds",
