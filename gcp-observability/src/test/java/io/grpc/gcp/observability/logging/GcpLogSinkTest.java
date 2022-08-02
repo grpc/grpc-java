@@ -67,7 +67,7 @@ public class GcpLogSinkTest {
   private static final Map<String, String> customTags = ImmutableMap.of("KEY1", "Value1",
       "KEY2", "VALUE2");
   private static final long flushLimit = 10L;
-  // gRPC is expected to alway use this log name when reporting to GCP cloud logging.
+  // gRPC is expected to always use this log name when reporting to GCP cloud logging.
   private static final String expectedLogName =
       "microservices.googleapis.com%2Fobservability%2Fgrpc";
   private final long seqId = 1;

@@ -34,6 +34,7 @@ import io.grpc.gcp.observability.interceptors.LogHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
 import io.grpc.internal.TimeProvider;
+import io.opencensus.common.Duration;
 import io.opencensus.contrib.grpc.metrics.RpcViews;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsConfiguration;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsExporter;
@@ -55,6 +56,7 @@ import java.util.stream.Collectors;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class GcpObservability implements AutoCloseable {
   private static final Logger logger = Logger.getLogger(GcpObservability.class.getName());
+  private static final int METRICS_EXPORT_INTERVAL = 30;
   private static GcpObservability instance = null;
   private final Sink sink;
   private final ObservabilityConfig config;
@@ -136,7 +138,8 @@ public final class GcpObservability implements AutoCloseable {
         clientInterceptors, serverInterceptors, tracerFactories);
   }
 
-  private void registerStackDriverExporter(String projectId, Map<String, String> customTags)
+  @VisibleForTesting
+  void registerStackDriverExporter(String projectId, Map<String, String> customTags)
       throws IOException {
     if (config.isEnableCloudMonitoring()) {
       RpcViews.registerAllGrpcViews();
@@ -151,6 +154,7 @@ public final class GcpObservability implements AutoCloseable {
                 e -> LabelValue.create(e.getValue())));
         statsConfigurationBuilder.setConstantLabels(constantLabels);
       }
+      statsConfigurationBuilder.setExportInterval(Duration.create(METRICS_EXPORT_INTERVAL, 0));
       StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
       metricsEnabled = true;
     }
