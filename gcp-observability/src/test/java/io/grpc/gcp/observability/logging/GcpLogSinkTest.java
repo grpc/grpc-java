@@ -18,9 +18,7 @@ package io.grpc.gcp.observability.logging;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.anyIterable;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -40,13 +38,12 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
+import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -66,18 +63,18 @@ public class GcpLogSinkTest {
       "pod_name", "app1-6c7c58f897-n92c5");
   private static final Map<String, String> customTags = ImmutableMap.of("KEY1", "Value1",
       "KEY2", "VALUE2");
-  private static final long flushLimit = 10L;
+  private static final long FLUSH_LIMIT = 10L;
   // gRPC is expected to always use this log name when reporting to GCP cloud logging.
   private static final String expectedLogName =
       "microservices.googleapis.com%2Fobservability%2Fgrpc";
-  private final long seqId = 1;
-  private final String destProjectName = "PROJECT";
-  private final String serviceName = "service";
-  private final String methodName = "method";
-  private final String authority = "authority";
-  private final Duration timeout = Durations.fromMillis(1234);
-  private final String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
-  private final GrpcLogRecord logProto = GrpcLogRecord.newBuilder()
+  private static final long seqId = 1;
+  private static final String destProjectName = "PROJECT";
+  private static final String serviceName = "service";
+  private static final String methodName = "method";
+  private static final String authority = "authority";
+  private static final Duration timeout = Durations.fromMillis(1234);
+  private static final String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
+  private static final GrpcLogRecord LOG_PROTO = GrpcLogRecord.newBuilder()
       .setSequenceId(seqId)
       .setServiceName(serviceName)
       .setMethodName(methodName)
@@ -87,7 +84,7 @@ public class GcpLogSinkTest {
       .setEventLogger(EventLogger.LOGGER_CLIENT)
       .setRpcId(rpcId)
       .build();
-  private final Struct expectedStructLogProto = Struct.newBuilder()
+  private static final Struct EXPECTED_STRUCT_LOG_PROTO = Struct.newBuilder()
       .putFields("sequence_id", Value.newBuilder().setStringValue(String.valueOf(seqId)).build())
       .putFields("service_name", Value.newBuilder().setStringValue(serviceName).build())
       .putFields("method_name", Value.newBuilder().setStringValue(methodName).build())
@@ -99,33 +96,29 @@ public class GcpLogSinkTest {
           String.valueOf(EventLogger.LOGGER_CLIENT)).build())
       .putFields("rpc_id", Value.newBuilder().setStringValue(rpcId).build())
       .build();
+  @Mock
   private Logging mockLogging;
-  private GcpLogSink spySink;
-
-  @Before
-  public void setUp() {
-    mockLogging = mock(Logging.class);
-    spySink = spy(new GcpLogSink(destProjectName, locationTags,
-        customTags, flushLimit));
-    Mockito.doReturn(mockLogging).when(spySink).createLoggingClient();
-  }
 
   @Test
   public void createSink() {
-    assertThat(spySink).isInstanceOf(GcpLogSink.class);
+    GcpLogSink sink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, FLUSH_LIMIT);
+    assertThat(sink).isInstanceOf(Sink.class);
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWrite() throws Exception {
-    spySink.write(logProto);
+    GcpLogSink sink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, FLUSH_LIMIT);
+    sink.write(LOG_PROTO);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
     verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
-      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
+      assertThat(entry.getPayload().getData()).isEqualTo(EXPECTED_STRUCT_LOG_PROTO);
       assertThat(entry.getLogName()).isEqualTo(expectedLogName);
     }
     verifyNoMoreInteractions(mockLogging);
@@ -134,8 +127,10 @@ public class GcpLogSinkTest {
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWriteWithTags() {
+    GcpLogSink sink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, FLUSH_LIMIT);
     MonitoredResource expectedMonitoredResource = GcpLogSink.getResource(locationTags);
-    spySink.write(logProto);
+    sink.write(LOG_PROTO);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
@@ -145,7 +140,7 @@ public class GcpLogSinkTest {
       LogEntry entry = it.next();
       assertThat(entry.getResource()).isEqualTo(expectedMonitoredResource);
       assertThat(entry.getLabels()).isEqualTo(customTags);
-      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
+      assertThat(entry.getPayload().getData()).isEqualTo(EXPECTED_STRUCT_LOG_PROTO);
       assertThat(entry.getLogName()).isEqualTo(expectedLogName);
     }
     verifyNoMoreInteractions(mockLogging);
@@ -156,10 +151,9 @@ public class GcpLogSinkTest {
   public void emptyCustomTags_labelsNotSet() {
     Map<String, String> emptyCustomTags = null;
     Map<String, String> expectedEmptyLabels = new HashMap<>();
-    GcpLogSink spySink2 = spy(new GcpLogSink(destProjectName, locationTags,
-        emptyCustomTags, flushLimit));
-    Mockito.doReturn(mockLogging).when(spySink2).createLoggingClient();
-    spySink2.write(logProto);
+    GcpLogSink sink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        emptyCustomTags, FLUSH_LIMIT);
+    sink.write(LOG_PROTO);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
@@ -167,7 +161,7 @@ public class GcpLogSinkTest {
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
       assertThat(entry.getLabels()).isEqualTo(expectedEmptyLabels);
-      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
+      assertThat(entry.getPayload().getData()).isEqualTo(EXPECTED_STRUCT_LOG_PROTO);
     }
   }
 
@@ -178,10 +172,9 @@ public class GcpLogSinkTest {
     String destinationProjectId = "DESTINATION_PROJECT";
     Map<String, String> expectedLabels = GcpLogSink.getCustomTags(emptyCustomTags, locationTags,
         destinationProjectId);
-    GcpLogSink spySink2 = spy(new GcpLogSink(destinationProjectId, locationTags,
-        emptyCustomTags, flushLimit));
-    Mockito.doReturn(mockLogging).when(spySink2).createLoggingClient();
-    spySink2.write(logProto);
+    GcpLogSink sink = new GcpLogSink(mockLogging, destinationProjectId, locationTags,
+        emptyCustomTags, FLUSH_LIMIT);
+    sink.write(LOG_PROTO);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
@@ -189,33 +182,31 @@ public class GcpLogSinkTest {
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
       assertThat(entry.getLabels()).isEqualTo(expectedLabels);
-      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
+      assertThat(entry.getPayload().getData()).isEqualTo(EXPECTED_STRUCT_LOG_PROTO);
     }
   }
 
   @Test
   public void verifyFlush() {
     long lowerFlushLimit = 2L;
-    GcpLogSink spySink2 = spy(new GcpLogSink(destProjectName, locationTags,
-        customTags, lowerFlushLimit));
-    Mockito.doReturn(mockLogging).when(spySink2).createLoggingClient();
-    spySink2.write(logProto);
+    GcpLogSink sink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, lowerFlushLimit);
+    sink.write(LOG_PROTO);
     verify(mockLogging, never()).flush();
-    spySink2.write(logProto);
+    sink.write(LOG_PROTO);
     verify(mockLogging, times(1)).flush();
-    spySink2.write(logProto);
-    spySink2.write(logProto);
+    sink.write(LOG_PROTO);
+    sink.write(LOG_PROTO);
     verify(mockLogging, times(2)).flush();
   }
 
   @Test
   public void verifyClose() throws Exception {
-    GcpLogSink spySink2 = spy(new GcpLogSink(destProjectName, locationTags,
-        customTags, flushLimit));
-    Mockito.doReturn(mockLogging).when(spySink2).createLoggingClient();
-    spySink2.write(logProto);
+    GcpLogSink sink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, FLUSH_LIMIT);
+    sink.write(LOG_PROTO);
     verify(mockLogging, times(1)).write(anyIterable());
-    spySink2.close();
+    sink.close();
     verify(mockLogging).close();
     verifyNoMoreInteractions(mockLogging);
   }

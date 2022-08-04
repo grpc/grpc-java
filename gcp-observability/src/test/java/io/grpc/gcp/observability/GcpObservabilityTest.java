@@ -82,7 +82,6 @@ public class GcpObservabilityTest {
 
     @Override
     public void run() {
-      // TODO(dnvindhya) : Remove usage of Providers on cleaning up Logging*Provider
       Sink sink = mock(Sink.class);
       ObservabilityConfig config = mock(ObservabilityConfig.class);
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =

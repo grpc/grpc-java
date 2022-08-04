@@ -28,6 +28,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.StaticTestingClassLoader;
 import io.grpc.gcp.observability.interceptors.ConfigFilterHelper;
 import io.grpc.gcp.observability.interceptors.ConfigFilterHelper.FilterParams;
 import io.grpc.gcp.observability.interceptors.InternalLoggingChannelInterceptor;
@@ -42,19 +43,19 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.IOException;
 import java.util.Map;
+import java.util.regex.Pattern;
+import org.junit.ClassRule;
 import org.junit.Ignore;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mockito;
 
-//TODO(dnvindhya): Update tests to use StaticTestingClassLoader to test GlobalInterceptors usage
 @RunWith(JUnit4.class)
 public class LoggingTest {
 
-  @Rule
-  public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @ClassRule
+  public static final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
   private static final String PROJECT_ID = "PROJECT";
   private static final Map<String, String> locationTags = ImmutableMap.of(
@@ -66,7 +67,10 @@ public class LoggingTest {
   private static final Map<String, String> customTags = ImmutableMap.of(
       "KEY1", "Value1",
       "KEY2", "VALUE2");
-  private static final long flushLimit = 100L;
+  private static final long FLUSH_LIMIT = 100L;
+
+  private final StaticTestingClassLoader classLoader =
+      new StaticTestingClassLoader(getClass().getClassLoader(), Pattern.compile("io\\.grpc\\..*"));
 
   /**
    * Cloud logging test using GlobalInterceptors.
@@ -77,127 +81,169 @@ public class LoggingTest {
    * 2. Assign permissions to service account to write logs to project specified by
    * variable PROJECT_ID
    * 3. Comment @Ignore annotation
+   * 4. This test is expected to pass when ran with above setup. This has been verified manually.
    * </p>
    */
   @Ignore
   @Test
-  public void clientServer_interceptorCalled_logAlways()
-      throws IOException {
-    Sink sink = new GcpLogSink(PROJECT_ID, locationTags, customTags, flushLimit);
-    ObservabilityConfig config = mock(ObservabilityConfig.class);
-    LogHelper spyLogHelper = spy(new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER));
-    ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
-    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
-        new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
-    InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
-        new InternalLoggingServerInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
-
-    when(config.isEnableCloudLogging()).thenReturn(true);
-    FilterParams logAlwaysFilterParams =
-        FilterParams.create(true, 0, 0);
-    when(mockFilterHelper.isMethodToBeLogged(any(MethodDescriptor.class)))
-        .thenReturn(logAlwaysFilterParams);
-    when(mockFilterHelper.isEventToBeLogged(any(GrpcLogRecord.EventType.class)))
-        .thenReturn(true);
-
-    GcpObservability unused =
-        GcpObservability.grpcInit(
-            sink, config, channelInterceptorFactory, serverInterceptorFactory);
-    Server server = ServerBuilder.forPort(0).addService(new LoggingTestHelper.SimpleServiceImpl())
-        .build().start();
-    int port = cleanupRule.register(server).getPort();
-    SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(
-        cleanupRule.register(ManagedChannelBuilder.forAddress("localhost", port)
-            .usePlaintext().build()));
-    assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
-        .isEqualTo("Hello buddy");
-    assertThat(Mockito.mockingDetails(spyLogHelper).getInvocations().size()).isGreaterThan(11);
-    sink.close();
-  }
-
-  @Ignore
-  @Test
-  public void clientServer_interceptorCalled_logNever() throws IOException {
-    Sink mockSink = mock(GcpLogSink.class);
-    ObservabilityConfig config = mock(ObservabilityConfig.class);
-    LogHelper spyLogHelper = spy(new LogHelper(mockSink, TimeProvider.SYSTEM_TIME_PROVIDER));
-    ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
-    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
-        new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
-    InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
-        new InternalLoggingServerInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
-
-    when(config.isEnableCloudLogging()).thenReturn(true);
-    FilterParams logNeverFilterParams =
-        FilterParams.create(false, 0, 0);
-    when(mockFilterHelper.isMethodToBeLogged(any(MethodDescriptor.class)))
-        .thenReturn(logNeverFilterParams);
-    when(mockFilterHelper.isEventToBeLogged(any(GrpcLogRecord.EventType.class)))
-        .thenReturn(true);
-
-    GcpObservability observability =
-        GcpObservability.grpcInit(
-            mockSink, config, channelInterceptorFactory, serverInterceptorFactory);
-    Server server = ServerBuilder.forPort(0).addService(new LoggingTestHelper.SimpleServiceImpl())
-        .build().start();
-    int port = cleanupRule.register(server).getPort();
-    SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(
-        cleanupRule.register(ManagedChannelBuilder.forAddress("localhost", port)
-            .usePlaintext().build()));
-    assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
-        .isEqualTo("Hello buddy");
-    verifyNoInteractions(spyLogHelper);
-    verifyNoInteractions(mockSink);
-    observability.close();
+  public void clientServer_interceptorCalled_logAlways() throws Exception {
+    Class<?> runnable =
+        classLoader.loadClass(LoggingTest.StaticTestingClassEndtoEndLogging.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
   @Test
-  public void clientServer_interceptorCalled_doNotLogMessageEvents() throws IOException {
-    Sink mockSink = mock(GcpLogSink.class);
-    ObservabilityConfig config = mock(ObservabilityConfig.class);
-    LogHelper mockLogHelper = mock(LogHelper.class);
-    ConfigFilterHelper mockFilterHelper2 = mock(ConfigFilterHelper.class);
-    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
-        new InternalLoggingChannelInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper2);
-    InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
-        new InternalLoggingServerInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper2);
+  public void clientServer_interceptorCalled_logNever() throws Exception {
+    Class<?> runnable =
+        classLoader.loadClass(LoggingTest.StaticTestingClassLogNever.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
 
-    when(config.isEnableCloudLogging()).thenReturn(true);
-    FilterParams logAlwaysFilterParams =
-        FilterParams.create(true, 0, 0);
-    when(mockFilterHelper2.isMethodToBeLogged(any(MethodDescriptor.class)))
-        .thenReturn(logAlwaysFilterParams);
-    when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_HEADER))
-        .thenReturn(true);
-    when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_HEADER))
-        .thenReturn(true);
-    when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_HALF_CLOSE))
-        .thenReturn(true);
-    when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_TRAILER))
-        .thenReturn(true);
-    when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_CANCEL))
-        .thenReturn(true);
-    when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_MESSAGE))
-        .thenReturn(false);
-    when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_MESSAGE))
-        .thenReturn(false);
+  @Test
+  public void clientServer_interceptorCalled_logFewEvents() throws Exception {
+    Class<?> runnable =
+        classLoader.loadClass(LoggingTest.StaticTestingClassLogFewEvents.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
 
-    GcpObservability observability =
-        GcpObservability.grpcInit(
-            mockSink, config, channelInterceptorFactory, serverInterceptorFactory);
-    Server server = ServerBuilder.forPort(0).addService(new LoggingTestHelper.SimpleServiceImpl())
-        .build().start();
-    int port = cleanupRule.register(server).getPort();
-    SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(
-        cleanupRule.register(ManagedChannelBuilder.forAddress("localhost", port)
-            .usePlaintext().build()));
-    assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
-        .isEqualTo("Hello buddy");
-    // Total number of calls should have been 14 (6 from client and 6 from server)
-    // Since cancel is not invoked, it will be 12.
-    // Request message(Total count:2 (1 from client and 1 from server) and Response message(count:2)
-    // events are not in the event_types list, i.e  14 - 2(cancel) - 2(req_msg) - 2(resp_msg) = 8
-    assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(8);
-    observability.close();
+  // UsedReflectively
+  public static final class StaticTestingClassEndtoEndLogging implements Runnable {
+
+    @Override
+    public void run() {
+      Sink sink = new GcpLogSink(PROJECT_ID, locationTags, customTags, FLUSH_LIMIT);
+      ObservabilityConfig config = mock(ObservabilityConfig.class);
+      LogHelper spyLogHelper = spy(new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER));
+      ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+          new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+          new InternalLoggingServerInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
+
+      when(config.isEnableCloudLogging()).thenReturn(true);
+      FilterParams logAlwaysFilterParams = FilterParams.create(true, 0, 0);
+      when(mockFilterHelper.isMethodToBeLogged(any(MethodDescriptor.class)))
+          .thenReturn(logAlwaysFilterParams);
+      when(mockFilterHelper.isEventToBeLogged(any(GrpcLogRecord.EventType.class))).thenReturn(true);
+
+      try (GcpObservability unused =
+          GcpObservability.grpcInit(
+              sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+        Server server =
+            ServerBuilder.forPort(0)
+                .addService(new LoggingTestHelper.SimpleServiceImpl())
+                .build()
+                .start();
+        int port = cleanupRule.register(server).getPort();
+        SimpleServiceGrpc.SimpleServiceBlockingStub stub =
+            SimpleServiceGrpc.newBlockingStub(
+                cleanupRule.register(
+                    ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
+        assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+            .isEqualTo("Hello buddy");
+        assertThat(Mockito.mockingDetails(spyLogHelper).getInvocations().size()).isGreaterThan(11);
+      } catch (IOException e) {
+        throw new AssertionError("Exception while testing logging", e);
+      }
+    }
+  }
+
+  public static final class StaticTestingClassLogNever implements Runnable {
+
+    @Override
+    public void run() {
+      Sink mockSink = mock(GcpLogSink.class);
+      ObservabilityConfig config = mock(ObservabilityConfig.class);
+      LogHelper spyLogHelper = spy(new LogHelper(mockSink, TimeProvider.SYSTEM_TIME_PROVIDER));
+      ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+          new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+          new InternalLoggingServerInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
+
+      when(config.isEnableCloudLogging()).thenReturn(true);
+      FilterParams logNeverFilterParams = FilterParams.create(false, 0, 0);
+      when(mockFilterHelper.isMethodToBeLogged(any(MethodDescriptor.class)))
+          .thenReturn(logNeverFilterParams);
+      when(mockFilterHelper.isEventToBeLogged(any(GrpcLogRecord.EventType.class))).thenReturn(true);
+
+      try (GcpObservability unused =
+          GcpObservability.grpcInit(
+              mockSink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+        Server server =
+            ServerBuilder.forPort(0)
+                .addService(new LoggingTestHelper.SimpleServiceImpl())
+                .build()
+                .start();
+        int port = cleanupRule.register(server).getPort();
+        SimpleServiceGrpc.SimpleServiceBlockingStub stub =
+            SimpleServiceGrpc.newBlockingStub(
+                cleanupRule.register(
+                    ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
+        assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+            .isEqualTo("Hello buddy");
+        verifyNoInteractions(spyLogHelper);
+        verifyNoInteractions(mockSink);
+      } catch (IOException e) {
+        throw new AssertionError("Exception while testing logging event filter", e);
+      }
+    }
+  }
+
+  public static final class StaticTestingClassLogFewEvents implements Runnable {
+
+    @Override
+    public void run() {
+      Sink mockSink = mock(GcpLogSink.class);
+      ObservabilityConfig config = mock(ObservabilityConfig.class);
+      LogHelper mockLogHelper = mock(LogHelper.class);
+      ConfigFilterHelper mockFilterHelper2 = mock(ConfigFilterHelper.class);
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+          new InternalLoggingChannelInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper2);
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+          new InternalLoggingServerInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper2);
+
+      when(config.isEnableCloudLogging()).thenReturn(true);
+      FilterParams logAlwaysFilterParams = FilterParams.create(true, 0, 0);
+      when(mockFilterHelper2.isMethodToBeLogged(any(MethodDescriptor.class)))
+          .thenReturn(logAlwaysFilterParams);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_HEADER))
+          .thenReturn(true);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_HEADER))
+          .thenReturn(true);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_HALF_CLOSE)).thenReturn(true);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_TRAILER)).thenReturn(true);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_CANCEL)).thenReturn(true);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_MESSAGE))
+          .thenReturn(false);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_MESSAGE))
+          .thenReturn(false);
+
+      try (GcpObservability observability =
+          GcpObservability.grpcInit(
+              mockSink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+        Server server =
+            ServerBuilder.forPort(0)
+                .addService(new LoggingTestHelper.SimpleServiceImpl())
+                .build()
+                .start();
+        int port = cleanupRule.register(server).getPort();
+        SimpleServiceGrpc.SimpleServiceBlockingStub stub =
+            SimpleServiceGrpc.newBlockingStub(
+                cleanupRule.register(
+                    ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
+        assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+            .isEqualTo("Hello buddy");
+        // Total number of calls should have been 14 (6 from client and 6 from server)
+        // Since cancel is not invoked, it will be 12.
+        // Request message(Total count:2 (1 from client and 1 from server) and Response
+        // message(count:2)
+        // events are not in the event_types list, i.e  14 - 2(cancel) - 2(req_msg) - 2(resp_msg)
+        // = 8
+        assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(8);
+      } catch (IOException e) {
+        throw new AssertionError("Exception while testing logging event filter", e);
+      }
+    }
   }
 }

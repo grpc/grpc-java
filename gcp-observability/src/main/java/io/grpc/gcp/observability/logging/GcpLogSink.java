@@ -58,8 +58,17 @@ public class GcpLogSink implements Sink {
   private final Map<String, String> customTags;
   private final MonitoredResource kubernetesResource;
   private final Long flushLimit;
-  private Logging gcpLoggingClient;
+  /** Lazily initialize cloud logging client to avoid circular initialization. Because cloud
+   * logging APIs also uses gRPC. */
+  private volatile Logging gcpLoggingClient;
   private long flushCounter;
+
+  @VisibleForTesting
+  GcpLogSink(Logging loggingClient, String destinationProjectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Long flushLimit) {
+    this(destinationProjectId, locationTags, customTags, flushLimit);
+    this.gcpLoggingClient = loggingClient;
+  }
 
   /**
    * Retrieves a single instance of GcpLogSink.
@@ -84,7 +93,9 @@ public class GcpLogSink implements Sink {
   public void write(GrpcLogRecord logProto) {
     if (gcpLoggingClient == null) {
       synchronized (this) {
-        gcpLoggingClient = createLoggingClient();
+        if (gcpLoggingClient == null) {
+          gcpLoggingClient = createLoggingClient();
+        }
       }
     }
     if (SERVICE_TO_EXCLUDE.equals(logProto.getServiceName())) {
