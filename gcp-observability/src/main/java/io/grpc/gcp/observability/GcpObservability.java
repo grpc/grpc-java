@@ -19,6 +19,7 @@ package io.grpc.gcp.observability;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.ClientInterceptor;
 import io.grpc.ExperimentalApi;
 import io.grpc.InternalGlobalInterceptors;
@@ -27,6 +28,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.census.InternalCensusStatsAccessor;
 import io.grpc.census.InternalCensusTracingAccessor;
+import io.grpc.gcp.observability.interceptors.ConditionalClientInterceptor;
 import io.grpc.gcp.observability.interceptors.ConfigFilterHelper;
 import io.grpc.gcp.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
@@ -57,6 +59,9 @@ import java.util.stream.Collectors;
 public final class GcpObservability implements AutoCloseable {
   private static final Logger logger = Logger.getLogger(GcpObservability.class.getName());
   private static final int METRICS_EXPORT_INTERVAL = 30;
+  private static final ImmutableSet<String> SERVICES_TO_EXCLUDE = ImmutableSet.of(
+      "google.logging.v2.LoggingServiceV2", "google.monitoring.v3.MetricService",
+      "google.devtools.cloudtrace.v2.TraceService");
   private static GcpObservability instance = null;
   private final Sink sink;
   private final ObservabilityConfig config;
@@ -77,7 +82,7 @@ public final class GcpObservability implements AutoCloseable {
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
           globalLocationTags.getLocationTags(), observabilityConfig.getCustomTags(),
-          observabilityConfig.getFlushMessageCount());
+          observabilityConfig.getFlushMessageCount(), SERVICES_TO_EXCLUDE);
       LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
       instance = grpcInit(sink, observabilityConfig,
@@ -126,18 +131,24 @@ public final class GcpObservability implements AutoCloseable {
       serverInterceptors.add(serverInterceptorFactory.create());
     }
     if (config.isEnableCloudMonitoring()) {
-      clientInterceptors.add(
-          InternalCensusStatsAccessor.getClientInterceptor(true, true, true, true));
+      clientInterceptors.add(getConditionalInterceptor(
+          InternalCensusStatsAccessor.getClientInterceptor(true, true, true, true)));
       tracerFactories.add(
           InternalCensusStatsAccessor.getServerStreamTracerFactory(true, true, true));
     }
     if (config.isEnableCloudTracing()) {
-      clientInterceptors.add(InternalCensusTracingAccessor.getClientInterceptor());
+      clientInterceptors.add(
+          getConditionalInterceptor(InternalCensusTracingAccessor.getClientInterceptor()));
       tracerFactories.add(InternalCensusTracingAccessor.getServerStreamTracerFactory());
     }
 
     InternalGlobalInterceptors.setInterceptorsTracers(
         clientInterceptors, serverInterceptors, tracerFactories);
+  }
+
+  static ConditionalClientInterceptor getConditionalInterceptor(ClientInterceptor interceptor) {
+    return new ConditionalClientInterceptor(interceptor,
+        (m, c) -> !SERVICES_TO_EXCLUDE.contains(m.getServiceName()));
   }
 
   @VisibleForTesting
