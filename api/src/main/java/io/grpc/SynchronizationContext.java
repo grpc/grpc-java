@@ -163,6 +163,36 @@ public final class SynchronizationContext implements Executor {
     return new ScheduledHandle(runnable, future);
   }
 
+  /**
+   * Schedules a task to be added and run via {@link #execute} after an inital delay and then
+   * repeated after the delay until cancelled.
+   *
+   * @param task the task being scheduled
+   * @param initialDelay the delay before the first run
+   * @param delay the delay after the first run.
+   * @param unit the time unit for the delay
+   * @param timerService the {@code ScheduledExecutorService} that provides delayed execution
+   *
+   * @return an object for checking the status and/or cancel the scheduled task
+   */
+  public final ScheduledHandle scheduleWithFixedDelay(
+      final Runnable task, long initialDelay, long delay, TimeUnit unit, ScheduledExecutorService timerService) {
+    final ManagedRunnable runnable = new ManagedRunnable(task);
+    ScheduledFuture<?> future = timerService.scheduleWithFixedDelay(new Runnable() {
+      @Override
+      public void run() {
+        execute(runnable);
+      }
+
+      @Override
+      public String toString() {
+        return task.toString() + "(scheduled in SynchronizationContext)";
+      }
+    }, initialDelay, delay, unit);
+    return new ScheduledHandle(runnable, future);
+  }
+
+
   private static class ManagedRunnable implements Runnable {
     final Runnable task;
     boolean isCancelled;
