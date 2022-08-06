@@ -1453,8 +1453,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final class LbHelperImpl extends LoadBalancer.Helper {
     AutoConfiguredLoadBalancer lb;
-    boolean nsRefreshedByLb;
-    boolean ignoreRefreshNsCheck;
 
     @Override
     public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
@@ -1493,7 +1491,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void refreshNameResolution() {
       syncContext.throwIfNotInThisSynchronizationContext();
-      nsRefreshedByLb = true;
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
@@ -1502,11 +1499,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       syncContext.execute(new LoadBalancerRefreshNameResolution());
-    }
-
-    @Override
-    public void ignoreRefreshNameResolutionCheck() {
-      ignoreRefreshNsCheck = true;
     }
 
     @Override
@@ -1979,16 +1971,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
           checkState(listener != null, "listener is null");
           listener.onSubchannelState(newState);
-          if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-            if (!helper.ignoreRefreshNsCheck && !helper.nsRefreshedByLb) {
-              logger.log(Level.WARNING,
-                  "LoadBalancer should call Helper.refreshNameResolution() to refresh name "
-                      + "resolution if subchannel state becomes TRANSIENT_FAILURE or IDLE. "
-                      + "This will no longer happen automatically in the future releases");
-              refreshAndResetNameResolution();
-              helper.nsRefreshedByLb = true;
-            }
-          }
         }
 
         @Override
