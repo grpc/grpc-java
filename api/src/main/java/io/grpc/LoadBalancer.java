@@ -1073,8 +1073,10 @@ public abstract class LoadBalancer {
      * that need to be updated for the new expected behavior.
      *
      * @since 1.38.0
+     * @deprecated Warning has been removed
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8088")
+    @Deprecated
     public void ignoreRefreshNameResolutionCheck() {
       // no-op
     }
@@ -1356,13 +1358,19 @@ public abstract class LoadBalancer {
      * unnecessary delays of RPCs. Please refer to {@link PickResult#withSubchannel
      * PickResult.withSubchannel()}'s javadoc for more information.
      *
+     * <p>When a subchannel's state is IDLE or TRANSIENT_FAILURE and the address for the subchannel
+     * was received in {@link LoadBalancer#handleResolvedAddresses}, load balancers should call
+     * {@link Helper#refreshNameResolution} to inform polling name resolvers that it is an
+     * appropriate time to refresh the addresses. Without the refresh, changes to the addresses may
+     * never be detected.
+     *
      * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
      * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The
      * other is that Channel is doing a {@link ManagedChannel#shutdownNow forced shutdown} or has
      * already terminated, thus there won't be further requests to LoadBalancer.  Therefore, the
      * LoadBalancer usually don't need to react to a SHUTDOWN state.
-     * @param newState the new state
      *
+     * @param newState the new state
      * @since 1.22.0
      */
     void onSubchannelState(ConnectivityStateInfo newState);
