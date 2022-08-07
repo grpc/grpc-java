@@ -26,5 +26,33 @@ public class WriteBenchmark {
     Context.Key<Object> key4 = Context.key("key4");
     Context context;
     Object val = new Object();
+
+    @Setup
+    public void setup() {
+      context = Context.ROOT;
+      for (int i = 0; i < preexistingKeys; i++) {
+        context = context.withValue(
+          Context.key("preexisting_key" + i),
+          val
+        );
+      }
+    }
+  }
+
+  /**
+   * Write
+   * @param state The ContextState instance
+   * @param blackhole The Blackhole instance
+   */
+  @Benchmark
+  @BenchmarkMode(Mode.SampleTime)
+  @OutputTimeUnit(TimeUnit.NANOSECONDS)
+  public Context doWrite(ContextState state, Blackhole blackhole) {
+    return state.context.withValues(
+      state.key1, state.val,
+      state.key2, state.val,
+      state.key3, state.val,
+      state.key4, state.val
+    );
   }
 }
