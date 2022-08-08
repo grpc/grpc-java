@@ -52,6 +52,7 @@ public class ConditionalClientInterceptorTest {
   private MethodDescriptor<?, ?> method;
 
   @Before
+  @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
     conditionalClientInterceptor = new ConditionalClientInterceptor(
