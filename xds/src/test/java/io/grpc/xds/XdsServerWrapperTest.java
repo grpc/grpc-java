@@ -57,9 +57,8 @@ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHan
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsClient.LdsResourceWatcher;
-import io.grpc.xds.XdsClient.RdsResourceWatcher;
-import io.grpc.xds.XdsClient.RdsUpdate;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
@@ -187,7 +186,9 @@ public class XdsServerWrapperTest {
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")
         .build();
     XdsClient xdsClient = mock(XdsClient.class);
+    XdsListenerResource listenerResource = mock(XdsListenerResource.class);
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
+    when(xdsClient.getXdsResourceTypeByType(any())).thenReturn(listenerResource);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
     Executors.newSingleThreadExecutor().execute(new Runnable() {
@@ -200,10 +201,11 @@ public class XdsServerWrapperTest {
         }
       }
     });
-    verify(xdsClient, timeout(5000)).watchLdsResource(
+    verify(xdsClient, timeout(5000)).watchXdsResource(
+        eq(listenerResource),
         eq("xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/"
             + "%5B::FFFF:129.144.52.38%5D:80"),
-        any(LdsResourceWatcher.class));
+        any(ResourceWatcher.class));
   }
 
   @Test
@@ -727,7 +729,7 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onError(Status.INTERNAL);
     assertThat(selectorManager.getSelectorToUpdateSelector())
         .isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
-    RdsResourceWatcher saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
+    ResourceWatcher saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     verify(mockBuilder, times(1)).build();
     verify(listener, times(2)).onNotServing(any(StatusException.class));
     assertThat(sslSupplier0.isShutdown()).isFalse();

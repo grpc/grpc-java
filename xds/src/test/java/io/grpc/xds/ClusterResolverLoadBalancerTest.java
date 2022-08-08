@@ -17,6 +17,8 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.AbstractXdsClient.ResourceType;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
@@ -171,7 +173,7 @@ public class ClusterResolverLoadBalancerTest {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private int xdsClientRefs;
   private ClusterResolverLoadBalancer loadBalancer;
-
+  private static XdsEndpointResource edsResource;
 
   @Before
   public void setUp() throws URISyntaxException {
@@ -201,6 +203,7 @@ public class ClusterResolverLoadBalancerTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(5L), TimeUnit.SECONDS.toNanos(50L));
     loadBalancer = new ClusterResolverLoadBalancer(helper, lbRegistry, backoffPolicyProvider);
+    edsResource = new XdsEndpointResource(syncContext);
   }
 
   @After
@@ -1072,16 +1075,26 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private static final class FakeXdsClient extends XdsClient {
-    private final Map<String, EdsResourceWatcher> watchers = new HashMap<>();
+    private final Map<String, ResourceWatcher> watchers = new HashMap<>();
+
 
     @Override
-    void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
+    void watchXdsResource(XdsResourceType type, String resourceName,
+                          ResourceWatcher watcher) {
+      assertThat(type.typeName()).isEqualTo(EDS);
       assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, watcher);
     }
 
     @Override
-    void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
+    XdsResourceType getXdsResourceTypeByType(ResourceType type) {
+      return edsResource;
+    }
+
+    @Override
+    void cancelXdsResourceWatch(XdsResourceType type, String resourceName,
+                                ResourceWatcher watcher) {
+      assertThat(type.typeName()).isEqualTo(EDS);
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }
@@ -1107,7 +1120,7 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     void deliverError(Status error) {
-      for (EdsResourceWatcher watcher : watchers.values()) {
+      for (ResourceWatcher watcher : watchers.values()) {
         watcher.onError(error);
       }
     }

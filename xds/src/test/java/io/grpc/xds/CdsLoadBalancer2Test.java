@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -86,7 +87,7 @@ public class CdsLoadBalancer2Test {
   private final UpstreamTlsContext upstreamTlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
 
-  private final SynchronizationContext syncContext = new SynchronizationContext(
+  private static final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
@@ -117,6 +118,8 @@ public class CdsLoadBalancer2Test {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private int xdsClientRefs;
   private CdsLoadBalancer2  loadBalancer;
+  private final XdsClusterResource clusterResource = new XdsClusterResource(syncContext,
+      null, lbRegistry);
 
   @Before
   public void setUp() {
@@ -643,17 +646,30 @@ public class CdsLoadBalancer2Test {
     }
   }
 
-  private static final class FakeXdsClient extends XdsClient {
-    private final Map<String, CdsResourceWatcher> watchers = new HashMap<>();
+  private final class FakeXdsClient extends XdsClient {
+    private final Map<String, ResourceWatcher> watchers = new HashMap<>();
 
     @Override
-    void watchCdsResource(String resourceName, CdsResourceWatcher watcher) {
+    XdsResourceType getXdsResourceTypeByType(AbstractXdsClient.ResourceType type) {
+      switch (type) {
+        case CDS:
+          return clusterResource;
+        default:
+          return null;
+      }
+    }
+
+    @Override
+    void watchXdsResource(XdsResourceType type, String resourceName, ResourceWatcher watcher) {
+      assertThat(type.typeName()).isEqualTo(CDS);
       assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, watcher);
     }
 
     @Override
-    void cancelCdsResourceWatch(String resourceName, CdsResourceWatcher watcher) {
+    void cancelXdsResourceWatch(XdsResourceType type, String resourceName,
+                                ResourceWatcher watcher) {
+      assertThat(type.typeName()).isEqualTo(CDS);
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }
@@ -671,7 +687,7 @@ public class CdsLoadBalancer2Test {
     }
 
     private void deliverError(Status error) {
-      for (CdsResourceWatcher watcher : watchers.values()) {
+      for (ResourceWatcher watcher : watchers.values()) {
         watcher.onError(error);
       }
     }

@@ -22,7 +22,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -30,7 +32,8 @@ import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.VirtualHost.Route;
-import io.grpc.xds.XdsClient.LdsUpdate;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -58,6 +61,17 @@ public class XdsServerTestHelper {
           .node(BOOTSTRAP_NODE)
           .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
           .build();
+  private static final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+  private static XdsListenerResource listenerResource = new XdsListenerResource(
+      syncContext, BOOTSTRAP_INFO, FilterRegistry.getDefaultRegistry());
+  private static XdsRouteConfigureResource routeConfigureResource =
+      new XdsRouteConfigureResource(syncContext, FilterRegistry.getDefaultRegistry());
 
   static void generateListenerUpdate(FakeXdsClient xdsClient,
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
@@ -163,9 +177,9 @@ public class XdsServerTestHelper {
   static final class FakeXdsClient extends XdsClient {
     boolean shutdown;
     SettableFuture<String> ldsResource = SettableFuture.create();
-    LdsResourceWatcher ldsWatcher;
+    ResourceWatcher ldsWatcher;
     CountDownLatch rdsCount = new CountDownLatch(1);
-    final Map<String, RdsResourceWatcher> rdsWatchers = new HashMap<>();
+    final Map<String, ResourceWatcher> rdsWatchers = new HashMap<>();
 
     @Override
     public TlsContextManager getTlsContextManager() {
@@ -178,28 +192,48 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
-      assertThat(ldsWatcher).isNull();
-      ldsWatcher = watcher;
-      ldsResource.set(resourceName);
+    XdsResourceType getXdsResourceTypeByType(ResourceType type) {
+      switch (type) {
+        case LDS:
+          return listenerResource;
+        case RDS:
+          return routeConfigureResource;
+        default:
+          return null;
+      }
     }
 
     @Override
-    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
-      assertThat(ldsWatcher).isNotNull();
-      ldsResource = null;
-      ldsWatcher = null;
+    void watchXdsResource(XdsResourceType resourceType, String resourceName,
+                          ResourceWatcher watcher) {
+      switch (resourceType.typeName()) {
+        case LDS:
+          assertThat(ldsWatcher).isNull();
+          ldsWatcher = watcher;
+          ldsResource.set(resourceName);
+          break;
+        case RDS:
+          assertThat(rdsWatchers.put(resourceName, watcher)).isNull(); //re-register is not allowed.
+          rdsCount.countDown();
+          break;
+        default:
+      }
     }
 
     @Override
-    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
-      assertThat(rdsWatchers.put(resourceName, watcher)).isNull(); //re-register is not allowed.
-      rdsCount.countDown();
-    }
-
-    @Override
-    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
-      rdsWatchers.remove(resourceName);
+    void cancelXdsResourceWatch(XdsResourceType type, String resourceName,
+                                ResourceWatcher watcher) {
+      switch (type.typeName()) {
+        case LDS:
+          assertThat(ldsWatcher).isNotNull();
+          ldsResource = null;
+          ldsWatcher = null;
+          break;
+        case RDS:
+          rdsWatchers.remove(resourceName);
+          break;
+        default:
+      }
     }
 
     @Override

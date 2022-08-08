@@ -86,7 +86,9 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -159,6 +161,8 @@ public class XdsNameResolverTest {
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
   private boolean originalEnableTimeout;
+  private static XdsListenerResource listenerResource;
+  private static XdsRouteConfigureResource routeConfigureResource;
 
   @Before
   public void setUp() {
@@ -170,6 +174,8 @@ public class XdsNameResolverTest {
     resolver = new XdsNameResolver(null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, filterRegistry, null);
+    listenerResource = new XdsListenerResource(syncContext, bootstrapInfo, filterRegistry);
+    routeConfigureResource = new XdsRouteConfigureResource(syncContext, filterRegistry);
   }
 
   @After
@@ -2071,8 +2077,8 @@ public class XdsNameResolverTest {
     // Should never be subscribing to more than one LDS and RDS resource at any point of time.
     private String ldsResource;  // should always be AUTHORITY
     private String rdsResource;
-    private LdsResourceWatcher ldsWatcher;
-    private RdsResourceWatcher rdsWatcher;
+    private ResourceWatcher ldsWatcher;
+    private ResourceWatcher rdsWatcher;
 
     @Override
     BootstrapInfo getBootstrapInfo() {
@@ -2080,37 +2086,57 @@ public class XdsNameResolverTest {
     }
 
     @Override
-    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
-      assertThat(ldsResource).isNull();
-      assertThat(ldsWatcher).isNull();
-      assertThat(resourceName).isEqualTo(expectedLdsResourceName);
-      ldsResource = resourceName;
-      ldsWatcher = watcher;
+    XdsResourceType getXdsResourceTypeByType(AbstractXdsClient.ResourceType type) {
+      switch (type) {
+        case LDS:
+          return listenerResource;
+        case RDS:
+          return routeConfigureResource;
+        default:
+          return null;
+      }
     }
 
     @Override
-    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
-      assertThat(ldsResource).isNotNull();
-      assertThat(ldsWatcher).isNotNull();
-      assertThat(resourceName).isEqualTo(expectedLdsResourceName);
-      ldsResource = null;
-      ldsWatcher = null;
+    void watchXdsResource(XdsResourceType resourceType, String resourceName,
+                          ResourceWatcher watcher) {
+      switch (resourceType.typeName()) {
+        case LDS:
+          assertThat(ldsResource).isNull();
+          assertThat(ldsWatcher).isNull();
+          assertThat(resourceName).isEqualTo(expectedLdsResourceName);
+          ldsResource = resourceName;
+          ldsWatcher = watcher;
+          break;
+        case RDS:
+          assertThat(rdsResource).isNull();
+          assertThat(rdsWatcher).isNull();
+          rdsResource = resourceName;
+          rdsWatcher = watcher;
+          break;
+        default:
+      }
     }
 
     @Override
-    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
-      assertThat(rdsResource).isNull();
-      assertThat(rdsWatcher).isNull();
-      rdsResource = resourceName;
-      rdsWatcher = watcher;
-    }
-
-    @Override
-    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
-      assertThat(rdsResource).isNotNull();
-      assertThat(rdsWatcher).isNotNull();
-      rdsResource = null;
-      rdsWatcher = null;
+    void cancelXdsResourceWatch(XdsResourceType type, String resourceName,
+                                ResourceWatcher watcher) {
+      switch (type.typeName()) {
+        case LDS:
+          assertThat(ldsResource).isNotNull();
+          assertThat(ldsWatcher).isNotNull();
+          assertThat(resourceName).isEqualTo(expectedLdsResourceName);
+          ldsResource = null;
+          ldsWatcher = null;
+          break;
+        case RDS:
+          assertThat(rdsResource).isNotNull();
+          assertThat(rdsWatcher).isNotNull();
+          rdsResource = null;
+          rdsWatcher = null;
+          break;
+        default:
+      }
     }
 
     void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {

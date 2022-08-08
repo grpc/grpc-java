@@ -18,6 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
+import static io.grpc.xds.XdsClient.ResourceUpdate;
+import static io.grpc.xds.XdsClient.ResourceWatcher;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -48,7 +51,6 @@ import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
-import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
@@ -343,7 +345,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       }
     }
 
-    private final class EdsClusterState extends ClusterState implements EdsResourceWatcher {
+    private final class EdsClusterState extends ClusterState implements ResourceWatcher {
       @Nullable
       private final String edsServiceName;
       private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
@@ -360,7 +362,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       void start() {
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Start watching EDS resource {0}", resourceName);
-        xdsClient.watchEdsResource(resourceName, this);
+        xdsClient.watchXdsResource(xdsClient.getXdsResourceTypeByType(EDS), resourceName, this);
       }
 
       @Override
@@ -368,27 +370,29 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         super.shutdown();
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Stop watching EDS resource {0}", resourceName);
-        xdsClient.cancelEdsResourceWatch(resourceName, this);
+        xdsClient.cancelXdsResourceWatch(
+            xdsClient.getXdsResourceTypeByType(EDS), resourceName, this);
       }
 
       @Override
-      public void onChanged(final EdsUpdate update) {
+      public void onChanged(final ResourceUpdate update) {
         class EndpointsUpdated implements Runnable {
           @Override
           public void run() {
             if (shutdown) {
               return;
             }
+            EdsUpdate edsUpdate = (EdsUpdate) update;
             logger.log(XdsLogLevel.DEBUG, "Received endpoint update {0}", update);
             if (logger.isLoggable(XdsLogLevel.INFO)) {
               logger.log(XdsLogLevel.INFO, "Cluster {0}: {1} localities, {2} drop categories",
-                  update.clusterName, update.localityLbEndpointsMap.size(),
-                  update.dropPolicies.size());
+                  edsUpdate.clusterName, edsUpdate.localityLbEndpointsMap.size(),
+                  edsUpdate.dropPolicies.size());
             }
             Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
-                update.localityLbEndpointsMap;
+                edsUpdate.localityLbEndpointsMap;
             Map<Locality, Integer> localityWeights = new HashMap<>();
-            List<DropOverload> dropOverloads = update.dropPolicies;
+            List<DropOverload> dropOverloads = edsUpdate.dropPolicies;
             List<EquivalentAddressGroup> addresses = new ArrayList<>();
             Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
             List<String> sortedPriorityNames = generatePriorityNames(name, localityLbEndpoints);
@@ -430,7 +434,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             if (prioritizedLocalityWeights.isEmpty()) {
               // Will still update the result, as if the cluster resource is revoked.
               logger.log(XdsLogLevel.INFO,
-                  "Cluster {0} has no usable priority/locality/endpoint", update.clusterName);
+                  "Cluster {0} has no usable priority/locality/endpoint", edsUpdate.clusterName);
             }
             sortedPriorityNames.retainAll(prioritizedLocalityWeights.keySet());
             Map<String, PriorityChildConfig> priorityChildConfigs =

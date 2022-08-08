@@ -33,7 +33,6 @@ import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
@@ -117,60 +116,7 @@ abstract class XdsClient {
     return Joiner.on('/').join(encodedSegs);
   }
 
-  @AutoValue
-  abstract static class LdsUpdate implements ResourceUpdate {
-    // Http level api listener configuration.
-    @Nullable
-    abstract HttpConnectionManager httpConnectionManager();
 
-    // Tcp level listener configuration.
-    @Nullable
-    abstract Listener listener();
-
-    static LdsUpdate forApiListener(HttpConnectionManager httpConnectionManager) {
-      checkNotNull(httpConnectionManager, "httpConnectionManager");
-      return new AutoValue_XdsClient_LdsUpdate(httpConnectionManager, null);
-    }
-
-    static LdsUpdate forTcpListener(Listener listener) {
-      checkNotNull(listener, "listener");
-      return new AutoValue_XdsClient_LdsUpdate(null, listener);
-    }
-  }
-
-  static final class RdsUpdate implements ResourceUpdate {
-    // The list virtual hosts that make up the route table.
-    final List<VirtualHost> virtualHosts;
-
-    RdsUpdate(List<VirtualHost> virtualHosts) {
-      this.virtualHosts = Collections.unmodifiableList(
-          new ArrayList<>(checkNotNull(virtualHosts, "virtualHosts")));
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("virtualHosts", virtualHosts)
-          .toString();
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(virtualHosts);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RdsUpdate that = (RdsUpdate) o;
-      return Objects.equals(virtualHosts, that.virtualHosts);
-    }
-  }
 
   /** xDS resource update for cluster-level configuration. */
   @AutoValue
@@ -416,22 +362,8 @@ abstract class XdsClient {
      * @param resourceName name of the resource requested in discovery request.
      */
     void onResourceDoesNotExist(String resourceName);
-  }
 
-  interface LdsResourceWatcher extends ResourceWatcher {
-    void onChanged(LdsUpdate update);
-  }
-
-  interface RdsResourceWatcher extends ResourceWatcher {
-    void onChanged(RdsUpdate update);
-  }
-
-  interface CdsResourceWatcher extends ResourceWatcher {
-    void onChanged(CdsUpdate update);
-  }
-
-  interface EdsResourceWatcher extends ResourceWatcher {
-    void onChanged(EdsUpdate update);
+    void onChanged(ResourceUpdate update);
   }
 
   /**
@@ -599,58 +531,23 @@ abstract class XdsClient {
   }
 
   /**
-   * Registers a data watcher for the given LDS resource.
+   * Registers a data watcher for the given Xds resource.
    */
-  void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+  void watchXdsResource(XdsResourceType type, String resourceName, ResourceWatcher watcher) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Unregisters the given LDS resource watcher.
+   * Unregisters the given resource watcher.
    */
-  void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+  void cancelXdsResourceWatch(XdsResourceType type, String resourceName, ResourceWatcher watcher) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Registers a data watcher for the given RDS resource.
+   * Get XdsResourceType instance corresponding to the resource type.
    */
-  void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Unregisters the given RDS resource watcher.
-   */
-  void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Registers a data watcher for the given CDS resource.
-   */
-  void watchCdsResource(String resourceName, CdsResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Unregisters the given CDS resource watcher.
-   */
-  void cancelCdsResourceWatch(String resourceName, CdsResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Registers a data watcher for the given EDS resource.
-   */
-  void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Unregisters the given EDS resource watcher.
-   */
-  void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
+  XdsResourceType getXdsResourceTypeByType(ResourceType type) {
     throw new UnsupportedOperationException();
   }
 
@@ -681,21 +578,10 @@ abstract class XdsClient {
   }
 
   interface XdsResponseHandler {
-    /** Called when an LDS response is received. */
-    void handleLdsResponse(
-        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
-
-    /** Called when an RDS response is received. */
-    void handleRdsResponse(
-        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
-
-    /** Called when an CDS response is received. */
-    void handleCdsResponse(
-        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
-
-    /** Called when an EDS response is received. */
-    void handleEdsResponse(
-        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+    /** Called when a xds response is received. */
+    void handleResourceResponse(
+        ResourceType resourceType, ServerInfo serverInfo, String versionInfo, List<Any> resources,
+        String nonce);
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.
@@ -717,5 +603,8 @@ abstract class XdsClient {
     // Must be synchronized.
     @Nullable
     Collection<String> getSubscribedResources(ServerInfo serverInfo, ResourceType type);
+
+    @Nullable
+    XdsResourceType getXdsResourceTypeByType(ResourceType type);
   }
 }
