@@ -31,9 +31,12 @@ import io.grpc.ClientInterceptor;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import java.util.function.BiPredicate;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 /**
  * Tests for {@link ConditionalClientInterceptor}.
@@ -41,22 +44,29 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ConditionalClientInterceptorTest {
 
-  @Test
-  @SuppressWarnings("unchecked")
-  public void predicateFalse() {
-    ClientInterceptor delegate = mock(ClientInterceptor.class);
-    BiPredicate<MethodDescriptor<?, ?>, CallOptions> predicate = mock(BiPredicate.class);
-    ConditionalClientInterceptor conditionalClientInterceptor = new ConditionalClientInterceptor(
-        delegate, predicate);
-    Channel channel = mock(Channel.class);
+  private ConditionalClientInterceptor conditionalClientInterceptor;
+  @Mock private ClientInterceptor delegate;
+  @Mock private BiPredicate<MethodDescriptor<?, ?>, CallOptions> predicate;
+  @Mock private Channel channel;
+  @Mock private ClientCall<?, ?> returnedCall;
+  private MethodDescriptor<?, ?> method;
 
-    when(predicate.test(any(MethodDescriptor.class), any(CallOptions.class))).thenReturn(false);
-    MethodDescriptor<?, ?> method = MethodDescriptor.newBuilder().setType(MethodType.UNARY)
+  @Before
+  public void setUp() throws Exception {
+    MockitoAnnotations.initMocks(this);
+    conditionalClientInterceptor = new ConditionalClientInterceptor(
+        delegate, predicate);
+    method = MethodDescriptor.newBuilder().setType(MethodType.UNARY)
         .setFullMethodName("service/method")
         .setRequestMarshaller(mock(MethodDescriptor.Marshaller.class))
         .setResponseMarshaller(mock(MethodDescriptor.Marshaller.class))
         .build();
-    ClientCall<?, ?> returnedCall = mock(ClientCall.class);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void predicateFalse() {
+    when(predicate.test(any(MethodDescriptor.class), any(CallOptions.class))).thenReturn(false);
     doReturn(returnedCall).when(channel).newCall(method, CallOptions.DEFAULT);
     ClientCall<?, ?> clientCall = conditionalClientInterceptor.interceptCall(method,
         CallOptions.DEFAULT, channel);
@@ -68,19 +78,7 @@ public class ConditionalClientInterceptorTest {
   @Test
   @SuppressWarnings("unchecked")
   public void predicateTrue() {
-    ClientInterceptor delegate = mock(ClientInterceptor.class);
-    BiPredicate<MethodDescriptor<?, ?>, CallOptions> predicate = mock(BiPredicate.class);
-    ConditionalClientInterceptor conditionalClientInterceptor = new ConditionalClientInterceptor(
-        delegate, predicate);
-    Channel channel = mock(Channel.class);
-
     when(predicate.test(any(MethodDescriptor.class), any(CallOptions.class))).thenReturn(true);
-    MethodDescriptor<?, ?> method = MethodDescriptor.newBuilder().setType(MethodType.UNARY)
-        .setFullMethodName("service/method")
-        .setRequestMarshaller(mock(MethodDescriptor.Marshaller.class))
-        .setResponseMarshaller(mock(MethodDescriptor.Marshaller.class))
-        .build();
-    ClientCall<?, ?> returnedCall = mock(ClientCall.class);
     doReturn(returnedCall).when(delegate).interceptCall(method, CallOptions.DEFAULT, channel);
     ClientCall<?, ?> clientCall = conditionalClientInterceptor.interceptCall(method,
         CallOptions.DEFAULT, channel);
