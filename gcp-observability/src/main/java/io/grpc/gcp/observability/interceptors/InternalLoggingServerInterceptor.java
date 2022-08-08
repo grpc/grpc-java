@@ -51,6 +51,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
   private final LogHelper helper;
   private final ConfigFilterHelper filterHelper;
 
+  // TODO(dnvindhya): Remove factory and use interceptors directly
   public interface Factory {
     ServerInterceptor create();
   }

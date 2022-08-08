@@ -116,6 +116,8 @@ public final class GcpObservability implements AutoCloseable {
     }
   }
 
+  // TODO(dnvindhya): Remove <channel/server>InterceptorFactory and replace with respective
+  // interceptors
   private void setProducer(
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {

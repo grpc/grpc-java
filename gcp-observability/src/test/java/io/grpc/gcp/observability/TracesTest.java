@@ -61,7 +61,7 @@ public class TracesTest {
   private static final String CUSTOM_TAG_KEY = "service";
   private static final String CUSTOM_TAG_VALUE =
       String.format("payment-%s", String.valueOf(System.currentTimeMillis()));
-  private static final Map<String, String> customTags =
+  private static final Map<String, String> CUSTOM_TAGS =
       Collections.singletonMap(CUSTOM_TAG_KEY, CUSTOM_TAG_VALUE);
 
   private final StaticTestingClassLoader classLoader =
@@ -106,7 +106,7 @@ public class TracesTest {
         GcpObservability observability =
             GcpObservability.grpcInit(
                 mockSink, mockConfig, mockChannelInterceptorFactory, mockServerInterceptorFactory);
-        observability.registerStackDriverExporter(PROJECT_ID, customTags);
+        observability.registerStackDriverExporter(PROJECT_ID, CUSTOM_TAGS);
 
         Server server =
             ServerBuilder.forPort(0)

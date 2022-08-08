@@ -42,7 +42,6 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.IOException;
-import java.util.Map;
 import java.util.regex.Pattern;
 import org.junit.ClassRule;
 import org.junit.Ignore;
@@ -58,13 +57,13 @@ public class LoggingTest {
   public static final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
   private static final String PROJECT_ID = "PROJECT";
-  private static final Map<String, String> locationTags = ImmutableMap.of(
+  private static final ImmutableMap<String, String> LOCATION_TAGS = ImmutableMap.of(
       "project_id", "PROJECT",
       "location", "us-central1-c",
       "cluster_name", "grpc-observability-cluster",
       "namespace_name", "default" ,
       "pod_name", "app1-6c7c58f897-n92c5");
-  private static final Map<String, String> customTags = ImmutableMap.of(
+  private static final ImmutableMap<String, String> CUSTOM_TAGS = ImmutableMap.of(
       "KEY1", "Value1",
       "KEY2", "VALUE2");
   private static final long FLUSH_LIMIT = 100L;
@@ -111,7 +110,7 @@ public class LoggingTest {
 
     @Override
     public void run() {
-      Sink sink = new GcpLogSink(PROJECT_ID, locationTags, customTags, FLUSH_LIMIT);
+      Sink sink = new GcpLogSink(PROJECT_ID, LOCATION_TAGS, CUSTOM_TAGS, FLUSH_LIMIT);
       ObservabilityConfig config = mock(ObservabilityConfig.class);
       LogHelper spyLogHelper = spy(new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER));
       ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
