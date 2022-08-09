@@ -427,12 +427,14 @@ public class LeastRequestLoadBalancerTest {
     assertEquals(3, loadBalancer.getSubchannels().size());
 
     List<Subchannel> subchannels = Lists.newArrayList(loadBalancer.getSubchannels());
-    assertThat(subchannels).isNotNull();
 
     // Make sure all inFlight counters have started at 0
-    assertEquals(0, subchannels.get(0).getAttributes().get(IN_FLIGHTS).get());
-    assertEquals(0, subchannels.get(1).getAttributes().get(IN_FLIGHTS).get());
-    assertEquals(0, subchannels.get(2).getAttributes().get(IN_FLIGHTS).get());
+    assertEquals(0,
+        subchannels.get(0).getAttributes().get(IN_FLIGHTS).get());
+    assertEquals(0,
+        subchannels.get(1).getAttributes().get(IN_FLIGHTS).get());
+    assertEquals(0,
+        subchannels.get(2).getAttributes().get(IN_FLIGHTS).get());
 
     for (Subchannel sc : subchannels) {
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(READY));
@@ -451,7 +453,6 @@ public class LeastRequestLoadBalancerTest {
     when(mockRandom.nextInt(subchannels.size())).thenReturn(0, 2);
     PickResult pickResult1 = picker.pickSubchannel(mockArgs);
     verify(mockRandom, times(choiceCount)).nextInt(subchannels.size());
-    assertThat(pickResult1).isNotNull();
     assertEquals(subchannels.get(0), pickResult1.getSubchannel());
     // This simulates sending the actual RPC on the picked channel
     ClientStreamTracer streamTracer1 =
@@ -484,7 +485,7 @@ public class LeastRequestLoadBalancerTest {
   public void pickerEmptyList() throws Exception {
     SubchannelPicker picker = new EmptyPicker(Status.UNKNOWN);
 
-    assertNull(picker.pickSubchannel(mockArgs).getSubchannel());
+    assertEquals(null, picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(Status.UNKNOWN,
         picker.pickSubchannel(mockArgs).getStatus());
   }
