@@ -575,7 +575,8 @@ public class CachingRlsLbClientTest {
                   @Override
                   public PickResult pickSubchannel(PickSubchannelArgs args) {
                     return PickResult.withError(
-                        Status.UNAVAILABLE.withDescription("fallback not available"));
+                        Status.convertServerStatus(
+                            Status.UNAVAILABLE.withDescription("fallback not available")));
                   }
                 });
           } else {
@@ -597,7 +598,7 @@ public class CachingRlsLbClientTest {
           class ErrorPicker extends SubchannelPicker {
             @Override
             public PickResult pickSubchannel(PickSubchannelArgs args) {
-              return PickResult.withError(error);
+              return PickResult.withError(Status.convertServerStatus(error));
             }
           }
 

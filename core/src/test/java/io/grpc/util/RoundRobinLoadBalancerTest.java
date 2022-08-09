@@ -408,7 +408,7 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void nameResolutionErrorWithNoChannels() throws Exception {
-    Status error = Status.INTERNAL.withDescription("nameResolutionError");
+    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
     loadBalancer.handleNameResolutionError(error);
     verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     LoadBalancer.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
@@ -423,7 +423,7 @@ public class RoundRobinLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
-    loadBalancer.handleNameResolutionError(Status.INTERNAL.withDescription("nameResolutionError"));
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
 
     verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(mockHelper, times(2))

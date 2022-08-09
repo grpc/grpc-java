@@ -681,6 +681,13 @@ public class RlsLoadBalancerTest {
     }
 
     public void updateState(ConnectivityStateInfo newState) {
+      if (newState.getState() == ConnectivityState.TRANSIENT_FAILURE) {
+        Status convertedStatus = Status.convertServerStatus(newState.getStatus());
+        if (!newState.getStatus().equals(convertedStatus)) {
+          newState = ConnectivityStateInfo.forTransientFailure(convertedStatus);
+        }
+      }
+
       listener.onSubchannelState(newState);
       isReady = newState.getState().equals(ConnectivityState.READY);
     }

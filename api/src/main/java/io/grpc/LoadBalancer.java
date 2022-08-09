@@ -573,7 +573,8 @@ public abstract class LoadBalancer {
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(
-          checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK, false);
+          checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK,
+          false);
     }
 
     /**
@@ -595,8 +596,7 @@ public abstract class LoadBalancer {
      */
     public static PickResult withError(Status error) {
       Preconditions.checkArgument(!error.isOk(), "error status shouldn't be OK");
-      Status safeError = Status.convertServerStatus(error);
-      return new PickResult(null, null, safeError, false);
+      return new PickResult(null, null, error, false);
     }
 
     /**
@@ -608,8 +608,7 @@ public abstract class LoadBalancer {
      */
     public static PickResult withDrop(Status status) {
       Preconditions.checkArgument(!status.isOk(), "drop status shouldn't be OK");
-      Status safeError = Status.convertServerStatus(status);
-      return new PickResult(null, null, safeError, true);
+      return new PickResult(null, null, status, true);
     }
 
     /**

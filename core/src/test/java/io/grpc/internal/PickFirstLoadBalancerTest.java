@@ -278,7 +278,7 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void nameResolutionError() throws Exception {
-    Status error = Status.INTERNAL.withDescription("nameResolutionError");
+    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
     loadBalancer.handleNameResolutionError(error);
     verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
@@ -292,7 +292,7 @@ public class PickFirstLoadBalancerTest {
   public void nameResolutionSuccessAfterError() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
 
-    loadBalancer.handleNameResolutionError(Status.INTERNAL.withDescription("nameResolutionError"));
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
     inOrder.verify(mockHelper)
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
     verify(mockSubchannel, never()).requestConnection();
@@ -334,7 +334,7 @@ public class PickFirstLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
-    Status error = Status.INTERNAL.withDescription("nameResolutionError");
+    Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
     loadBalancer.handleNameResolutionError(error);
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
 
@@ -342,7 +342,7 @@ public class PickFirstLoadBalancerTest {
     assertEquals(null, pickResult.getSubchannel());
     assertEquals(error, pickResult.getStatus());
 
-    Status error2 = Status.INTERNAL.withDescription("nameResolutionError2");
+    Status error2 = Status.NOT_FOUND.withDescription("nameResolutionError2");
     loadBalancer.handleNameResolutionError(error2);
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
 

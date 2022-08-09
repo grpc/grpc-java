@@ -390,7 +390,7 @@ public class ServiceConfigErrorHandlingTest {
 
   @Test
   public void invalidConfig_noDefaultConfig() throws Exception {
-    Status error = Status.INTERNAL.withDescription("service config error");
+    Status error = Status.NOT_FOUND.withDescription("service config error");
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup))

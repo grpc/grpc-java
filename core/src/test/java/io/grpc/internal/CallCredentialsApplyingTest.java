@@ -264,7 +264,7 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void fail_inline() {
-    final Status error = Status.UNAUTHENTICATED.withDescription("channel not secure for creds");
+    final Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
     when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
     doAnswer(new Answer<Void>() {
         @Override
@@ -405,7 +405,7 @@ public class CallCredentialsApplyingTest {
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
 
-    Status error = Status.UNAUTHENTICATED.withDescription("channel not secure for creds");
+    Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
     applierCaptor.getValue().fail(error);
 
     verify(mockTransport, never()).newStream(

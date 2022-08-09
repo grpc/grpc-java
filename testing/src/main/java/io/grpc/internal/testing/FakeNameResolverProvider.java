@@ -72,7 +72,7 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
     @Override
     public void start(Listener2 listener) {
       if (shutdown) {
-        listener.onError(Status.UNAVAILABLE.withDescription("Resolver is shutdown"));
+        listener.onError(Status.FAILED_PRECONDITION.withDescription("Resolver is shutdown"));
       } else {
         listener.onResult(
             ResolutionResult.newBuilder()

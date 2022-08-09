@@ -1044,7 +1044,7 @@ public class RingHashLoadBalancerTest {
         Iterables.getOnlyElement(subchannels.values()), ConnectivityStateInfo.forNonError(READY));
     verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
 
-    loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("target not found"));
+    loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("target not found"));
     verifyNoMoreInteractions(helper);
   }
 
