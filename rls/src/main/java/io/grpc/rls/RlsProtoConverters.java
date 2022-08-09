@@ -112,13 +112,28 @@ final class RlsProtoConverters {
       ImmutableList<GrpcKeyBuilder> grpcKeybuilders =
           GrpcKeyBuilderConverter.covertAll(
               checkNotNull(JsonUtil.getListOfObjects(json, "grpcKeybuilders"), "grpcKeybuilders"));
+
+      // Validate grpc_keybuilders
       checkArgument(!grpcKeybuilders.isEmpty(), "must have at least one GrpcKeyBuilder");
       Set<Name> names = new HashSet<>();
+      Set<String> keys = new HashSet<>();
+      Set<String> extraKeys = new HashSet<>();
       for (GrpcKeyBuilder keyBuilder : grpcKeybuilders) {
         for (Name name : keyBuilder.names()) {
           checkArgument(names.add(name), "duplicate names in grpc_keybuilders: " + name);
         }
+        for (NameMatcher header : keyBuilder.headers()) {
+          checkKeys(keys, header.key(), "header");
+        }
+        for (String key : keyBuilder.constantKeys().keySet()) {
+          checkKeys(keys, key, "constant");
+        }
+        String extraKeyStr = keyToString(keyBuilder.extraKeys());
+        checkArgument(extraKeys.add(extraKeyStr),
+            "duplicate extra keys in grpc_keybuilders: " + extraKeyStr);
       }
+
+      // Validate lookup_service
       String lookupService = JsonUtil.getString(json, "lookupService");
       checkArgument(!Strings.isNullOrEmpty(lookupService), "lookupService must not be empty");
       try {
@@ -157,6 +172,11 @@ final class RlsProtoConverters {
           .build();
     }
 
+    private static String keyToString(ExtraKeys extraKeys) {
+      return String.format("host: %s, service: %s, method: %s",
+          extraKeys.host(), extraKeys.service(), extraKeys.method());
+    }
+
     private static <T> T orDefault(@Nullable T value, T defaultValue) {
       if (value == null) {
         return checkNotNull(defaultValue, "defaultValue");
@@ -168,6 +188,12 @@ final class RlsProtoConverters {
     protected Map<String, Object> doBackward(RouteLookupConfig routeLookupConfig) {
       throw new UnsupportedOperationException();
     }
+  }
+
+  private static void checkKeys(Set<String> keys, String key, String keyType) {
+    checkArgument(key != null, "unset " + keyType + "  key");
+    checkArgument(!key.isEmpty(), "Empty string for " + keyType + " key");
+    checkArgument(keys.add(key), "duplicate " + keyType + " keys in grpc_keybuilders: " + key);
   }
 
   private static final class GrpcKeyBuilderConverter {

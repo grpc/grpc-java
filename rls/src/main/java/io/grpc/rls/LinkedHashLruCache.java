@@ -118,6 +118,10 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     return 1;
   }
 
+  protected long estimatedMaxSizeBytes() {
+    return estimatedMaxSizeBytes;
+  }
+
   /** Updates size for given key if entry exists. It is useful if the cache value is mutated. */
   public void updateEntrySize(K key) {
     synchronized (lock) {
@@ -233,15 +237,18 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     }
   }
 
+  protected long now() {
+    return ticker.read();
+  }
+
   /**
-   * Resizes cache. If new size is smaller than current estimated size, it will free up space by
+   * Cleans up cache if needed to fit into max size bytes by
    * removing expired entries and removing oldest entries by LRU order.
    */
-  public final void resize(int newSizeBytes) {
+  protected final void fitToLimit() {
     long now = ticker.read();
     synchronized (lock) {
-      this.estimatedMaxSizeBytes = newSizeBytes;
-      if (estimatedSizeBytes.get() <= newSizeBytes) {
+      if (estimatedSizeBytes.get() <= estimatedMaxSizeBytes) {
         // new size is larger no need to do cleanup
         return;
       }
@@ -252,10 +259,24 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       Iterator<Map.Entry<K, SizedValue>> lruIter = delegate.entrySet().iterator();
       while (lruIter.hasNext() && estimatedMaxSizeBytes < this.estimatedSizeBytes.get()) {
         Map.Entry<K, SizedValue> entry = lruIter.next();
+        if (!shouldInvalidateEldestEntry(entry.getKey(), entry.getValue().value)) {
+          break; // Violates some constraint like minimum age so stop our cleanup
+        }
         lruIter.remove();
         // eviction listener will update the estimatedSizeBytes
         evictionListener.onEviction(entry.getKey(), entry.getValue(), EvictionType.SIZE);
       }
+    }
+  }
+
+  /**
+   * Resizes cache. If new size is smaller than current estimated size, it will free up space by
+   * removing expired entries and removing oldest entries by LRU order.
+   */
+  public final void resize(long newSizeBytes) {
+    synchronized (lock) {
+      this.estimatedMaxSizeBytes = newSizeBytes;
+      fitToLimit();
     }
   }
 

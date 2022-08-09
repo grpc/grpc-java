@@ -86,7 +86,7 @@ final class CachingRlsLbClient {
   private final Object lock = new Object();
   // LRU cache based on access order (BACKOFF and actual data will be here)
   @GuardedBy("lock")
-  private final LinkedHashLruCache<RouteLookupRequest, CacheEntry> linkedHashLruCache;
+  private final RlsAsyncLruCache linkedHashLruCache;
   // any RPC on the fly will cached in this map
   @GuardedBy("lock")
   private final Map<RouteLookupRequest, PendingCacheEntry> pendingCallCache = new HashMap<>();
@@ -274,12 +274,12 @@ final class CachingRlsLbClient {
         try {
           RouteLookupResponse response = asyncCall.get();
           DataCacheEntry dataEntry = new DataCacheEntry(request, response);
-          linkedHashLruCache.cache(request, dataEntry);
+          linkedHashLruCache.cacheAndClean(request, dataEntry);
           return CachedRouteLookupResponse.dataEntry(dataEntry);
         } catch (Exception e) {
           BackoffCacheEntry backoffEntry =
               new BackoffCacheEntry(request, Status.fromThrowable(e), backoffProvider.get());
-          linkedHashLruCache.cache(request, backoffEntry);
+          linkedHashLruCache.cacheAndClean(request, backoffEntry);
           return CachedRouteLookupResponse.backoffEntry(backoffEntry);
         }
       }
@@ -475,14 +475,14 @@ final class CachingRlsLbClient {
             ChannelLogLevel.DEBUG,
             "Transition to data cache: routeLookupResponse={0}",
             routeLookupResponse);
-        linkedHashLruCache.cache(request, new DataCacheEntry(request, routeLookupResponse));
+        linkedHashLruCache.cacheAndClean(request, new DataCacheEntry(request, routeLookupResponse));
       }
     }
 
     private void transitionToBackOff(Status status) {
       synchronized (lock) {
         logger.log(ChannelLogLevel.DEBUG, "Transition to back off: status={0}", status);
-        linkedHashLruCache.cache(request, new BackoffCacheEntry(request, status, backoffPolicy));
+        linkedHashLruCache.cacheAndClean(request, new BackoffCacheEntry(request, status, backoffPolicy));
       }
     }
 
@@ -512,11 +512,16 @@ final class CachingRlsLbClient {
     abstract boolean isExpired(long now);
 
     abstract void cleanup();
+
+    protected long getMinEvictionTime() {
+      return 0L;
+    }
   }
 
   /** Implementation of {@link CacheEntry} contains valid data. */
   final class DataCacheEntry extends CacheEntry {
     private final RouteLookupResponse response;
+    private final long minEvictionTime;
     private final long expireTime;
     private final long staleTime;
     private final List<ChildPolicyWrapper> childPolicyWrappers;
@@ -530,6 +535,7 @@ final class CachingRlsLbClient {
           refCountedChildPolicyWrapperFactory
               .createOrGet(response.targets());
       long now = ticker.read();
+      minEvictionTime = now + TimeUnit.SECONDS.toNanos(5);
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
     }
@@ -561,13 +567,13 @@ final class CachingRlsLbClient {
           // async call returned finished future is most likely throttled
           try {
             RouteLookupResponse response = asyncCall.get();
-            linkedHashLruCache.cache(request, new DataCacheEntry(request, response));
+            linkedHashLruCache.cacheAndClean(request, new DataCacheEntry(request, response));
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
           } catch (Exception e) {
             BackoffCacheEntry backoffEntry =
                 new BackoffCacheEntry(request, Status.fromThrowable(e), backoffProvider.get());
-            linkedHashLruCache.cache(request, backoffEntry);
+            linkedHashLruCache.cacheAndClean(request, backoffEntry);
           }
         }
       }
@@ -598,11 +604,19 @@ final class CachingRlsLbClient {
       return response.getHeaderData();
     }
 
+    // Assume UTF-16 and overhead of object is 38 bytes
+    int calcStringSize(String target) {
+      return target.length() * 2 + 38;
+    }
+
     @Override
     int getSizeBytes() {
-      // size of strings and java object overhead, actual memory usage is more than this.
-      return
-          (response.targets().get(0).length() + response.getHeaderData().length()) * 2 + 38 * 2;
+      int targetSize =
+          response.targets().stream()
+              .mapToInt(this::calcStringSize)
+              .sum();
+      return targetSize + calcStringSize(response.getHeaderData()) + 16 // response size
+          + Long.SIZE * 2 + 16; // Other fields
     }
 
     @Override
@@ -612,6 +626,11 @@ final class CachingRlsLbClient {
 
     boolean isStaled(long now) {
       return staleTime - now <= 0;
+    }
+
+    @Override
+    protected long getMinEvictionTime() {
+      return minEvictionTime;
     }
 
     @Override
@@ -687,11 +706,11 @@ final class CachingRlsLbClient {
         } else {
           try {
             RouteLookupResponse response = call.get();
-            linkedHashLruCache.cache(request, new DataCacheEntry(request, response));
+            linkedHashLruCache.cacheAndClean(request, new DataCacheEntry(request, response));
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
           } catch (Exception e) {
-            linkedHashLruCache.cache(
+            linkedHashLruCache.cacheAndClean(
                 request,
                 new BackoffCacheEntry(request, Status.fromThrowable(e), backoffPolicy));
           }
@@ -705,7 +724,7 @@ final class CachingRlsLbClient {
 
     @Override
     int getSizeBytes() {
-      return 0;
+      return 16 * 3 + Long.SIZE + 8; // 3 java objects, 1 long and a boolean
     }
 
     @Override
@@ -863,8 +882,17 @@ final class CachingRlsLbClient {
     @Override
     protected boolean shouldInvalidateEldestEntry(
         RouteLookupRequest eldestKey, CacheEntry eldestValue) {
+      if (eldestValue.getMinEvictionTime() > super.now())
+        return false;
+
       // eldest entry should be evicted if size limit exceeded
-      return true;
+      return this.estimatedSizeBytes() > this.estimatedMaxSizeBytes();
+    }
+
+    public CacheEntry cacheAndClean(RouteLookupRequest key, CacheEntry value) {
+      CacheEntry retVal = cache(key, value);
+      fitToLimit(); // force cleanup if new entry pushed cache over max size (in bytes)
+      return retVal;
     }
   }
 
