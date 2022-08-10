@@ -34,6 +34,7 @@ import io.grpc.gcp.observability.interceptors.LogHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
 import io.grpc.internal.TimeProvider;
+import io.opencensus.common.Duration;
 import io.opencensus.contrib.grpc.metrics.RpcViews;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsConfiguration;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsExporter;
@@ -55,6 +56,7 @@ import java.util.stream.Collectors;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class GcpObservability implements AutoCloseable {
   private static final Logger logger = Logger.getLogger(GcpObservability.class.getName());
+  private static final int METRICS_EXPORT_INTERVAL = 30;
   private static GcpObservability instance = null;
   private final Sink sink;
   private final ObservabilityConfig config;
@@ -76,8 +78,6 @@ public final class GcpObservability implements AutoCloseable {
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
           globalLocationTags.getLocationTags(), observabilityConfig.getCustomTags(),
           observabilityConfig.getFlushMessageCount());
-      // TODO(dnvindhya): Cleanup code for LoggingChannelProvider and LoggingServerProvider
-      // once ChannelBuilder and ServerBuilder are used
       LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
       instance = grpcInit(sink, observabilityConfig,
@@ -97,13 +97,8 @@ public final class GcpObservability implements AutoCloseable {
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory)
       throws IOException {
     if (instance == null) {
-      instance =
-          new GcpObservability(sink, config, channelInterceptorFactory, serverInterceptorFactory);
-      LogHelper logHelper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
-      ConfigFilterHelper logFilterHelper = ConfigFilterHelper.factory(config);
-      instance.setProducer(
-          new InternalLoggingChannelInterceptor.FactoryImpl(logHelper, logFilterHelper),
-          new InternalLoggingServerInterceptor.FactoryImpl(logHelper, logFilterHelper));
+      instance = new GcpObservability(sink, config);
+      instance.setProducer(channelInterceptorFactory, serverInterceptorFactory);
     }
     return instance;
   }
@@ -116,13 +111,13 @@ public final class GcpObservability implements AutoCloseable {
         throw new IllegalStateException("GcpObservability already closed!");
       }
       unRegisterStackDriverExporter();
-      LoggingChannelProvider.shutdown();
-      LoggingServerProvider.shutdown();
       sink.close();
       instance = null;
     }
   }
 
+  // TODO(dnvindhya): Remove <channel/server>InterceptorFactory and replace with respective
+  // interceptors
   private void setProducer(
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
@@ -145,7 +140,8 @@ public final class GcpObservability implements AutoCloseable {
         clientInterceptors, serverInterceptors, tracerFactories);
   }
 
-  private void registerStackDriverExporter(String projectId, Map<String, String> customTags)
+  @VisibleForTesting
+  void registerStackDriverExporter(String projectId, Map<String, String> customTags)
       throws IOException {
     if (config.isEnableCloudMonitoring()) {
       RpcViews.registerAllGrpcViews();
@@ -160,6 +156,7 @@ public final class GcpObservability implements AutoCloseable {
                 e -> LabelValue.create(e.getValue())));
         statsConfigurationBuilder.setConstantLabels(constantLabels);
       }
+      statsConfigurationBuilder.setExportInterval(Duration.create(METRICS_EXPORT_INTERVAL, 0));
       StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
       metricsEnabled = true;
     }
@@ -208,13 +205,8 @@ public final class GcpObservability implements AutoCloseable {
 
   private GcpObservability(
       Sink sink,
-      ObservabilityConfig config,
-      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
-      InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
+      ObservabilityConfig config) {
     this.sink = checkNotNull(sink);
     this.config = checkNotNull(config);
-
-    LoggingChannelProvider.init(checkNotNull(channelInterceptorFactory));
-    LoggingServerProvider.init(checkNotNull(serverInterceptorFactory));
   }
 }

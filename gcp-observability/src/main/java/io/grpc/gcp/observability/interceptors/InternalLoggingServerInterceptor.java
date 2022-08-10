@@ -40,7 +40,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * A logging interceptor for {@code LoggingServerProvider}.
+ * A logging server interceptor for Observability.
  */
 @Internal
 public final class InternalLoggingServerInterceptor implements ServerInterceptor {
@@ -51,6 +51,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
   private final LogHelper helper;
   private final ConfigFilterHelper filterHelper;
 
+  // TODO(dnvindhya): Remove factory and use interceptors directly
   public interface Factory {
     ServerInterceptor create();
   }

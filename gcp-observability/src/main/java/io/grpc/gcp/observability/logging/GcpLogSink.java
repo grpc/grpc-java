@@ -54,18 +54,20 @@ public class GcpLogSink implements Sink {
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
       "pod_name", "container_name");
   private static final long FALLBACK_FLUSH_LIMIT = 100L;
+  private final String projectId;
   private final Map<String, String> customTags;
-  private final Logging gcpLoggingClient;
   private final MonitoredResource kubernetesResource;
   private final Long flushLimit;
+  /** Lazily initialize cloud logging client to avoid circular initialization. Because cloud
+   * logging APIs also uses gRPC. */
+  private volatile Logging gcpLoggingClient;
   private long flushCounter;
 
-  private static Logging createLoggingClient(String projectId) {
-    LoggingOptions.Builder builder = LoggingOptions.newBuilder();
-    if (!Strings.isNullOrEmpty(projectId)) {
-      builder.setProjectId(projectId);
-    }
-    return builder.build().getService();
+  @VisibleForTesting
+  GcpLogSink(Logging loggingClient, String destinationProjectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Long flushLimit) {
+    this(destinationProjectId, locationTags, customTags, flushLimit);
+    this.gcpLoggingClient = loggingClient;
   }
 
   /**
@@ -75,15 +77,7 @@ public class GcpLogSink implements Sink {
    */
   public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
       Map<String, String> customTags, Long flushLimit) {
-    this(createLoggingClient(destinationProjectId), destinationProjectId, locationTags,
-        customTags, flushLimit);
-
-  }
-
-  @VisibleForTesting
-  GcpLogSink(Logging client, String destinationProjectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Long flushLimit) {
-    this.gcpLoggingClient = client;
+    this.projectId = destinationProjectId;
     this.customTags = getCustomTags(customTags, locationTags, destinationProjectId);
     this.kubernetesResource = getResource(locationTags);
     this.flushLimit = flushLimit != null ? flushLimit : FALLBACK_FLUSH_LIMIT;
@@ -98,8 +92,11 @@ public class GcpLogSink implements Sink {
   @Override
   public void write(GrpcLogRecord logProto) {
     if (gcpLoggingClient == null) {
-      logger.log(Level.SEVERE, "Attempt to write after GcpLogSink is closed.");
-      return;
+      synchronized (this) {
+        if (gcpLoggingClient == null) {
+          gcpLoggingClient = createLoggingClient();
+        }
+      }
     }
     if (SERVICE_TO_EXCLUDE.equals(logProto.getServiceName())) {
       return;
@@ -131,6 +128,14 @@ public class GcpLogSink implements Sink {
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
     }
+  }
+
+  Logging createLoggingClient() {
+    LoggingOptions.Builder builder = LoggingOptions.newBuilder();
+    if (!Strings.isNullOrEmpty(projectId)) {
+      builder.setProjectId(projectId);
+    }
+    return builder.build().getService();
   }
 
   @VisibleForTesting
