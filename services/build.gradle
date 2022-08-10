@@ -32,7 +32,7 @@ dependencies {
             libraries.netty.transport.epoll, // for DomainSocketAddress
             project(':grpc-core').sourceSets.test.output  // for FakeClock
     testCompileOnly libraries.javax.annotation
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature libraries.signature.java
 }
 
 configureProtoCompilation()

@@ -1,6 +1,8 @@
 plugins {
     id "java-library"
     id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
 }
 
 description = 'gRPC: Census'
@@ -18,6 +20,9 @@ dependencies {
             project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),
             libraries.opencensus.impl
+
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 tasks.named("javadoc").configure {
