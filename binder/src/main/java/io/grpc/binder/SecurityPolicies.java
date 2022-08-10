@@ -25,7 +25,6 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.Signature;
 import android.os.Build;
 import android.os.Build.VERSION;
-import android.os.Build.VERSION_CODES;
 import android.os.Process;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
@@ -184,7 +183,9 @@ public final class SecurityPolicies {
   public static SecurityPolicy isDeviceOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
-    return anyPackageWithUidSatisfies(applicationContext, devicePolicyManager::isDeviceOwnerApp,
+    return anyPackageWithUidSatisfies(
+        applicationContext,
+        pkg -> VERSION.SDK_INT >= 18 && devicePolicyManager.isDeviceOwnerApp(pkg),
         "Rejected by device owner policy. No packages found for UID.",
         "Rejected by device owner policy");
   }
@@ -196,25 +197,13 @@ public final class SecurityPolicies {
   public static SecurityPolicy isProfileOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
-    return anyPackageWithUidSatisfies(applicationContext,
-        pkg -> VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP && devicePolicyManager.isProfileOwnerApp(
-            pkg), "Rejected by profile owner policy. No packages found for UID.",
+    return anyPackageWithUidSatisfies(
+        applicationContext,
+        pkg -> VERSION.SDK_INT >= 21 && devicePolicyManager.isProfileOwnerApp(pkg),
+        "Rejected by profile owner policy. No packages found for UID.",
         "Rejected by profile owner policy");
   }
 
-  /**
-   * Creates {@link SecurityPolicy} which checks if the app is a profile owner app. See
-   * {@link DevicePolicyManager}.
-   */
-  public static SecurityPolicy isDeviceOwnerOrProfileOwner(Context applicationContext) {
-    DevicePolicyManager devicePolicyManager =
-        (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
-    return anyPackageWithUidSatisfies(applicationContext,
-        pkg -> devicePolicyManager.isDeviceOwnerApp(pkg) || (
-            VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP && devicePolicyManager.isProfileOwnerApp(
-                pkg)), "Rejected by profile owner policy. No packages found for UID.",
-        "Rejected by profile owner policy");
-  }
   /**
    * Creates {@link SecurityPolicy} which checks if the app is a profile owner app on an
    * organization-owned device. See {@link DevicePolicyManager}.
@@ -222,11 +211,12 @@ public final class SecurityPolicies {
   public static SecurityPolicy isProfileOwnerOnOrganizationOwnedDevice(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
-    return anyPackageWithUidSatisfies(applicationContext,
-        pkg -> VERSION.SDK_INT >= VERSION_CODES.R && devicePolicyManager.isProfileOwnerApp(pkg)
+    return anyPackageWithUidSatisfies(
+        applicationContext,
+        pkg -> VERSION.SDK_INT >= 30
+            && devicePolicyManager.isProfileOwnerApp(pkg)
             && devicePolicyManager.isOrganizationOwnedDeviceWithManagedProfile(),
-        "Rejected by profile owner on organization-owned device policy."
-            + " No packages found for UID.",
+        "Rejected by profile owner on organization-owned device policy. No packages found for UID.",
         "Rejected by profile owner on organization-owned device policy");
   }
 
@@ -463,8 +453,11 @@ public final class SecurityPolicies {
     return Status.OK;
   }
 
-  private static SecurityPolicy anyPackageWithUidSatisfies(Context applicationContext,
-      Predicate<String> condition, String errorMessageForNoPackages, String errorMessageForDenied) {
+  private static SecurityPolicy anyPackageWithUidSatisfies(
+      Context applicationContext,
+      Predicate<String> condition,
+      String errorMessageForNoPackages,
+      String errorMessageForDenied) {
     return new SecurityPolicy() {
       @Override
       public Status checkAuthorization(int uid) {
@@ -472,6 +465,7 @@ public final class SecurityPolicies {
         if (packages == null || packages.length == 0) {
           return Status.UNAUTHENTICATED.withDescription(errorMessageForNoPackages);
         }
+
         for (String pkg : packages) {
           if (condition.apply(pkg)) {
             return Status.OK;

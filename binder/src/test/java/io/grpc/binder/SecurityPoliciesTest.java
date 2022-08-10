@@ -24,10 +24,15 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static org.robolectric.Shadows.shadowOf;
 
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.os.Build;
+import android.os.Build.VERSION;
+import android.os.Build.VERSION_CODES;
 import android.os.Process;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
@@ -40,6 +45,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
 public final class SecurityPoliciesTest {
@@ -59,6 +65,7 @@ public final class SecurityPoliciesTest {
 
   private Context appContext;
   private PackageManager packageManager;
+  private DevicePolicyManager devicePolicyManager;
 
   private SecurityPolicy policy;
 
@@ -66,6 +73,8 @@ public final class SecurityPoliciesTest {
   public void setUp() {
     appContext = ApplicationProvider.getApplicationContext();
     packageManager = appContext.getPackageManager();
+    devicePolicyManager =
+        (DevicePolicyManager) appContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
   }
 
   @SuppressWarnings("deprecation")
@@ -321,6 +330,171 @@ public final class SecurityPoliciesTest {
         .contains(WRITE_EXTERNAL_STORAGE);
     assertThat(policy.checkAuthorization(OTHER_UID).getDescription())
         .contains(OTHER_UID_PACKAGE_NAME);
+  }
+
+  @Test
+  @Config(sdk = 18)
+  public void testIsDeviceOwner_succeedsForDeviceOwner() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+    shadowOf(devicePolicyManager)
+        .setDeviceOwner(new ComponentName(OTHER_UID_PACKAGE_NAME, "foo"));
+
+    policy = SecurityPolicies.isDeviceOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  @Config(sdk = 18)
+  public void testIsDeviceOwner_failsForNotDeviceOwner() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
+    policy = SecurityPolicies.isDeviceOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  @Config(sdk = 18)
+  public void testIsDeviceOwner_failsWhenNoPackagesForUid() throws Exception {
+    policy = SecurityPolicies.isDeviceOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.UNAUTHENTICATED.getCode());
+  }
+
+  @Test
+  @Config(sdk = 17)
+  public void testIsDeviceOwner_failsForSdkLevelTooLow() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
+    policy = SecurityPolicies.isDeviceOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  @Config(sdk = 21)
+  public void testIsProfileOwner_succeedsForProfileOwner() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+    shadowOf(devicePolicyManager)
+        .setProfileOwner(new ComponentName(OTHER_UID_PACKAGE_NAME, "foo"));
+
+    policy = SecurityPolicies.isProfileOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  @Config(sdk = 21)
+  public void testIsProfileOwner_failsForNotProfileOwner() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
+    policy = SecurityPolicies.isProfileOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  @Config(sdk = 21)
+  public void testIsProfileOwner_failsWhenNoPackagesForUid() throws Exception {
+    policy = SecurityPolicies.isProfileOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.UNAUTHENTICATED.getCode());
+  }
+
+  @Test
+  @Config(sdk = 19)
+  public void testIsProfileOwner_failsForSdkLevelTooLow() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
+    policy = SecurityPolicies.isProfileOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  @Config(sdk = 30)
+  public void testIsProfileOwnerOnOrgOwned_succeedsForProfileOwnerOnOrgOwned() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+    shadowOf(devicePolicyManager)
+        .setProfileOwner(new ComponentName(OTHER_UID_PACKAGE_NAME, "foo"));
+    shadowOf(devicePolicyManager).setOrganizationOwnedDeviceWithManagedProfile(true);
+
+    policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+
+  }
+
+  @Test
+  @Config(sdk = 30)
+  public void testIsProfileOwnerOnOrgOwned_failsForProfileOwnerOnNonOrgOwned() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+    shadowOf(devicePolicyManager)
+        .setProfileOwner(new ComponentName(OTHER_UID_PACKAGE_NAME, "foo"));
+    shadowOf(devicePolicyManager).setOrganizationOwnedDeviceWithManagedProfile(false);
+
+    policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  @Config(sdk = 21)
+  public void testIsProfileOwnerOnOrgOwned_failsForNotProfileOwner() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
+    policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  @Config(sdk = 21)
+  public void testIsProfileOwnerOnOrgOwned_failsWhenNoPackagesForUid() throws Exception {
+    policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.UNAUTHENTICATED.getCode());
+  }
+
+  @Test
+  @Config(sdk = 29)
+  public void testIsProfileOwnerOnOrgOwned_failsForSdkLevelTooLow() throws Exception {
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+
+    installPackages(OTHER_UID, info);
+
+    policy = SecurityPolicies.isProfileOwner(appContext);
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
   }
 
   private static PackageInfoBuilder newBuilder() {
