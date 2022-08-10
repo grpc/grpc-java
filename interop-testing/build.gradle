@@ -5,6 +5,7 @@ plugins {
 
     id "com.github.johnrengelman.shadow"
     id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Integration Testing"
@@ -56,6 +57,9 @@ dependencies {
             libraries.okhttp
     alpnagent libraries.jetty.alpn.agent
     shadow configurations.implementation.getDependencies().minus(xdsDependency)
+
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 configureProtoCompilation()
