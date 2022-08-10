@@ -188,7 +188,7 @@ public class RlsLoadBalancerTest {
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
 
     // Convert to something other than INTERNAL
-    checkConversion(picker, headers, subchannel, Status.ABORTED, Status.Code.UNKNOWN);
+    checkConversion(picker, headers, subchannel, Status.ABORTED, Status.Code.UNAVAILABLE);
     checkConversion(picker, headers, subchannel, Status.NOT_FOUND, Status.Code.UNAVAILABLE);
 
     // Convert to INTERNAL
@@ -682,7 +682,7 @@ public class RlsLoadBalancerTest {
 
     public void updateState(ConnectivityStateInfo newState) {
       if (newState.getState() == ConnectivityState.TRANSIENT_FAILURE) {
-        Status convertedStatus = Status.convertServerStatus(newState.getStatus());
+        Status convertedStatus = CachingRlsLbClient.convertServerStatus(newState.getStatus(), null);
         if (!newState.getStatus().equals(convertedStatus)) {
           newState = ConnectivityStateInfo.forTransientFailure(convertedStatus);
         }

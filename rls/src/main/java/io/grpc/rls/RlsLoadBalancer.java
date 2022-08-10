@@ -95,7 +95,7 @@ final class RlsLoadBalancer extends LoadBalancer {
     class ErrorPicker extends SubchannelPicker {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withError(Status.convertServerStatus(error));
+        return PickResult.withError(CachingRlsLbClient.convertServerStatus(error, args));
       }
 
       @Override
