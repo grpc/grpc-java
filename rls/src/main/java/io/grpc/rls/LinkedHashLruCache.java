@@ -244,13 +244,15 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   /**
    * Cleans up cache if needed to fit into max size bytes by
    * removing expired entries and removing oldest entries by LRU order.
+   * Returns TRUE if any unexpired entries were removed
    */
-  protected final void fitToLimit() {
+  protected final boolean fitToLimit() {
     long now = ticker.read();
+    boolean removedAnyUnexpired = false;
     synchronized (lock) {
       if (estimatedSizeBytes.get() <= estimatedMaxSizeBytes) {
         // new size is larger no need to do cleanup
-        return;
+        return false;
       }
       // cleanup expired entries
       cleanupExpiredEntries(now);
@@ -265,8 +267,10 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
         lruIter.remove();
         // eviction listener will update the estimatedSizeBytes
         evictionListener.onEviction(entry.getKey(), entry.getValue(), EvictionType.SIZE);
+        removedAnyUnexpired = true;
       }
     }
+    return removedAnyUnexpired;
   }
 
   /**

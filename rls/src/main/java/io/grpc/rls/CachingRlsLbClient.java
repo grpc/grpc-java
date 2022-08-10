@@ -323,6 +323,10 @@ final class CachingRlsLbClient {
         }
       });
     }
+
+    void triggerPendingRPCProcessing() {
+      super.updateBalancingState(state, picker);
+    }
   }
 
   /**
@@ -515,6 +519,10 @@ final class CachingRlsLbClient {
 
     protected long getMinEvictionTime() {
       return 0L;
+    }
+
+    protected void triggerPendingRPCProcessing() {
+      helper.triggerPendingRPCProcessing();
     }
   }
 
@@ -891,7 +899,11 @@ final class CachingRlsLbClient {
 
     public CacheEntry cacheAndClean(RouteLookupRequest key, CacheEntry value) {
       CacheEntry retVal = cache(key, value);
-      fitToLimit(); // force cleanup if new entry pushed cache over max size (in bytes)
+
+      // force cleanup if new entry pushed cache over max size (in bytes)
+      if (fitToLimit()) {
+        value.triggerPendingRPCProcessing();
+      }
       return retVal;
     }
   }
