@@ -176,7 +176,8 @@ public final class SynchronizationContext implements Executor {
    * @return an object for checking the status and/or cancel the scheduled task
    */
   public final ScheduledHandle scheduleWithFixedDelay(
-      final Runnable task, long initialDelay, long delay, TimeUnit unit, ScheduledExecutorService timerService) {
+      final Runnable task, long initialDelay, long delay, TimeUnit unit,
+      ScheduledExecutorService timerService) {
     final ManagedRunnable runnable = new ManagedRunnable(task);
     ScheduledFuture<?> future = timerService.scheduleWithFixedDelay(new Runnable() {
       @Override

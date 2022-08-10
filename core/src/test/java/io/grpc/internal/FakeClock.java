@@ -159,8 +159,10 @@ public final class FakeClock {
     }
 
     @Override public ScheduledFuture<?> scheduleWithFixedDelay(
-        Runnable command, long initialDelay, long delay, TimeUnit unit) {
-      throw new UnsupportedOperationException();
+        Runnable cmd, long initialDelay, long delay, TimeUnit unit) {
+      ScheduledTask task = new ScheduleWithFixedDelayTask(cmd, delay, unit);
+      schedule(task, initialDelay, unit);
+      return task;
     }
 
     @Override public boolean awaitTermination(long timeout, TimeUnit unit) {
@@ -231,6 +233,25 @@ public final class FakeClock {
         command.run();
         if (!isCancelled()) {
           schedule(this, startTimeNanos + periodNanos - currentTimeNanos, TimeUnit.NANOSECONDS);
+        }
+      }
+    }
+
+    class ScheduleWithFixedDelayTask extends ScheduledTask {
+
+      final long delayNanos;
+
+      ScheduleWithFixedDelayTask(Runnable command, long delay, TimeUnit unit) {
+        super(command);
+        this.delayNanos = unit.toNanos(delay);
+      }
+
+      @Override
+      void run() {
+        long startTimeNanos = currentTimeNanos;
+        command.run();
+        if (!isCancelled()) {
+          schedule(this, delayNanos, TimeUnit.NANOSECONDS);
         }
       }
     }
