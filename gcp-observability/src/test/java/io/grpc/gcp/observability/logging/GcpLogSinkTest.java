@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.cloud.MonitoredResource;
@@ -35,6 +36,7 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -105,7 +107,7 @@ public class GcpLogSinkTest {
   @SuppressWarnings("unchecked")
   public void verifyWrite() throws Exception {
     GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
-        CUSTOM_TAGS, FLUSH_LIMIT);
+        CUSTOM_TAGS, FLUSH_LIMIT, Collections.emptySet());
     sink.write(LOG_PROTO);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
@@ -123,7 +125,7 @@ public class GcpLogSinkTest {
   @SuppressWarnings("unchecked")
   public void verifyWriteWithTags() {
     GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
-        CUSTOM_TAGS, FLUSH_LIMIT);
+        CUSTOM_TAGS, FLUSH_LIMIT, Collections.emptySet());
     MonitoredResource expectedMonitoredResource = GcpLogSink.getResource(LOCATION_TAGS);
     sink.write(LOG_PROTO);
 
@@ -147,7 +149,7 @@ public class GcpLogSinkTest {
     Map<String, String> emptyCustomTags = null;
     Map<String, String> expectedEmptyLabels = new HashMap<>();
     GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
-        emptyCustomTags, FLUSH_LIMIT);
+        emptyCustomTags, FLUSH_LIMIT, Collections.emptySet());
     sink.write(LOG_PROTO);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
@@ -168,7 +170,7 @@ public class GcpLogSinkTest {
     Map<String, String> expectedLabels = GcpLogSink.getCustomTags(emptyCustomTags, LOCATION_TAGS,
         destinationProjectId);
     GcpLogSink sink = new GcpLogSink(mockLogging, destinationProjectId, LOCATION_TAGS,
-        emptyCustomTags, FLUSH_LIMIT);
+        emptyCustomTags, FLUSH_LIMIT, Collections.emptySet());
     sink.write(LOG_PROTO);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
@@ -185,7 +187,7 @@ public class GcpLogSinkTest {
   public void verifyFlush() {
     long lowerFlushLimit = 2L;
     GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
-        CUSTOM_TAGS, lowerFlushLimit);
+        CUSTOM_TAGS, lowerFlushLimit, Collections.emptySet());
     sink.write(LOG_PROTO);
     verify(mockLogging, never()).flush();
     sink.write(LOG_PROTO);
@@ -198,11 +200,19 @@ public class GcpLogSinkTest {
   @Test
   public void verifyClose() throws Exception {
     GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
-        CUSTOM_TAGS, FLUSH_LIMIT);
+        CUSTOM_TAGS, FLUSH_LIMIT, Collections.emptySet());
     sink.write(LOG_PROTO);
     verify(mockLogging, times(1)).write(anyIterable());
     sink.close();
     verify(mockLogging).close();
     verifyNoMoreInteractions(mockLogging);
+  }
+
+  @Test
+  public void verifyExclude() throws Exception {
+    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+        CUSTOM_TAGS, FLUSH_LIMIT, Collections.singleton("service"));
+    mockSink.write(LOG_PROTO);
+    verifyNoInteractions(mockLogging);
   }
 }

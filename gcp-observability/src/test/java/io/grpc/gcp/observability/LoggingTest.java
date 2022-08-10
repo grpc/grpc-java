@@ -42,6 +42,7 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.regex.Pattern;
 import org.junit.ClassRule;
 import org.junit.Ignore;
@@ -110,7 +111,9 @@ public class LoggingTest {
 
     @Override
     public void run() {
-      Sink sink = new GcpLogSink(PROJECT_ID, LOCATION_TAGS, CUSTOM_TAGS, FLUSH_LIMIT);
+      Sink sink =
+          new GcpLogSink(
+              PROJECT_ID, LOCATION_TAGS, CUSTOM_TAGS, FLUSH_LIMIT, Collections.emptySet());
       ObservabilityConfig config = mock(ObservabilityConfig.class);
       LogHelper spyLogHelper = spy(new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER));
       ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
