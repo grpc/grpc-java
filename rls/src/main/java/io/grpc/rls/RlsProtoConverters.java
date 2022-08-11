@@ -116,12 +116,12 @@ final class RlsProtoConverters {
       // Validate grpc_keybuilders
       checkArgument(!grpcKeybuilders.isEmpty(), "must have at least one GrpcKeyBuilder");
       Set<Name> names = new HashSet<>();
-      Set<String> keys = new HashSet<>();
-      Set<String> extraKeys = new HashSet<>();
       for (GrpcKeyBuilder keyBuilder : grpcKeybuilders) {
         for (Name name : keyBuilder.names()) {
           checkArgument(names.add(name), "duplicate names in grpc_keybuilders: " + name);
         }
+
+        Set<String> keys = new HashSet<>();
         for (NameMatcher header : keyBuilder.headers()) {
           checkKeys(keys, header.key(), "header");
         }
@@ -129,8 +129,8 @@ final class RlsProtoConverters {
           checkKeys(keys, key, "constant");
         }
         String extraKeyStr = keyToString(keyBuilder.extraKeys());
-        checkArgument(extraKeys.add(extraKeyStr),
-            "duplicate extra keys in grpc_keybuilders: " + extraKeyStr);
+        checkArgument(keys.add(extraKeyStr),
+            "duplicate extra key in grpc_keybuilders: " + extraKeyStr);
       }
 
       // Validate lookup_service
@@ -193,7 +193,7 @@ final class RlsProtoConverters {
   private static void checkKeys(Set<String> keys, String key, String keyType) {
     checkArgument(key != null, "unset " + keyType + "  key");
     checkArgument(!key.isEmpty(), "Empty string for " + keyType + " key");
-    checkArgument(keys.add(key), "duplicate " + keyType + " keys in grpc_keybuilders: " + key);
+    checkArgument(keys.add(key), "duplicate " + keyType + " key in grpc_keybuilders: " + key);
   }
 
   private static final class GrpcKeyBuilderConverter {

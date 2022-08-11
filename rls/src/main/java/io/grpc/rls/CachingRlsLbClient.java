@@ -324,7 +324,7 @@ final class CachingRlsLbClient {
       });
     }
 
-    void triggerPendingRPCProcessing() {
+    void triggerPendingRpcProcessing() {
       super.updateBalancingState(state, picker);
     }
   }
@@ -486,7 +486,8 @@ final class CachingRlsLbClient {
     private void transitionToBackOff(Status status) {
       synchronized (lock) {
         logger.log(ChannelLogLevel.DEBUG, "Transition to back off: status={0}", status);
-        linkedHashLruCache.cacheAndClean(request, new BackoffCacheEntry(request, status, backoffPolicy));
+        linkedHashLruCache.cacheAndClean(request,
+            new BackoffCacheEntry(request, status, backoffPolicy));
       }
     }
 
@@ -521,8 +522,8 @@ final class CachingRlsLbClient {
       return 0L;
     }
 
-    protected void triggerPendingRPCProcessing() {
-      helper.triggerPendingRPCProcessing();
+    protected void triggerPendingRpcProcessing() {
+      helper.triggerPendingRpcProcessing();
     }
   }
 
@@ -619,10 +620,10 @@ final class CachingRlsLbClient {
 
     @Override
     int getSizeBytes() {
-      int targetSize =
-          response.targets().stream()
-              .mapToInt(this::calcStringSize)
-              .sum();
+      int targetSize = 0;
+      for (String target : response.targets()) {
+        targetSize += calcStringSize(target);
+      }
       return targetSize + calcStringSize(response.getHeaderData()) + 16 // response size
           + Long.SIZE * 2 + 16; // Other fields
     }
@@ -890,8 +891,9 @@ final class CachingRlsLbClient {
     @Override
     protected boolean shouldInvalidateEldestEntry(
         RouteLookupRequest eldestKey, CacheEntry eldestValue) {
-      if (eldestValue.getMinEvictionTime() > super.now())
+      if (eldestValue.getMinEvictionTime() > super.now()) {
         return false;
+      }
 
       // eldest entry should be evicted if size limit exceeded
       return this.estimatedSizeBytes() > this.estimatedMaxSizeBytes();
@@ -902,7 +904,7 @@ final class CachingRlsLbClient {
 
       // force cleanup if new entry pushed cache over max size (in bytes)
       if (fitToLimit()) {
-        value.triggerPendingRPCProcessing();
+        value.triggerPendingRpcProcessing();
       }
       return retVal;
     }
