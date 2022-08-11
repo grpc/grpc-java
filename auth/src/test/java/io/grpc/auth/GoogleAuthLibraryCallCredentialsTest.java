@@ -379,6 +379,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
             .setClientEmail("test-email@example.com")
             .setPrivateKey(pair.getPrivate())
             .setPrivateKeyId("test-private-key-id")
+            .setQuotaProjectId("test-quota-project-id")
             .build();
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
@@ -401,6 +402,8 @@ public class GoogleAuthLibraryCallCredentialsTest {
         || "https://example.com:123/a.service".equals(payload.get("aud")));
     assertEquals("test-email@example.com", payload.get("iss"));
     assertEquals("test-email@example.com", payload.get("sub"));
+
+    assertEquals("test-quota-project-id", callCredentials.getQuotaProjectId());
   }
 
   private int runPendingRunnables() {
