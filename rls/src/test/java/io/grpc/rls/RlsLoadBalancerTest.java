@@ -177,40 +177,27 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     Metadata headers = new Metadata();
-    PickResult res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    PickSubchannelArgsImpl fakeSearchMethodArgs =
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
+    PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
     FakeSubchannel subchannel = (FakeSubchannel) res.getSubchannel();
     assertThat(subchannel).isNotNull();
 
     subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
 
     // Convert to something other than INTERNAL
-    checkConversion(picker, headers, subchannel, Status.ABORTED, Status.Code.UNAVAILABLE);
-    checkConversion(picker, headers, subchannel, Status.NOT_FOUND, Status.Code.UNAVAILABLE);
-
-    // Convert to INTERNAL
-    checkConversion(picker, headers, subchannel, Status.ALREADY_EXISTS, Status.Code.INTERNAL);
-    checkConversion(picker, headers, subchannel, Status.DATA_LOSS, Status.Code.INTERNAL);
-    checkConversion(picker, headers, subchannel, Status.FAILED_PRECONDITION, Status.Code.INTERNAL);
-    checkConversion(picker, headers, subchannel, Status.INVALID_ARGUMENT, Status.Code.INTERNAL);
-    checkConversion(picker, headers, subchannel, Status.OUT_OF_RANGE, Status.Code.INTERNAL);
-
-    // Pass through without conversion
-    checkConversion(picker, headers, subchannel, Status.CANCELLED, Status.Code.CANCELLED);
-    checkConversion(picker, headers, subchannel,
-        Status.DEADLINE_EXCEEDED, Status.Code.DEADLINE_EXCEEDED);
-    checkConversion(picker, headers, subchannel, Status.INTERNAL, Status.Code.INTERNAL);
-    checkConversion(picker, headers, subchannel,
-        Status.PERMISSION_DENIED, Status.Code.PERMISSION_DENIED);
-    checkConversion(picker, headers, subchannel,
-        Status.RESOURCE_EXHAUSTED, Status.Code.RESOURCE_EXHAUSTED);
-    checkConversion(picker, headers, subchannel,
-        Status.UNAUTHENTICATED, Status.Code.UNAUTHENTICATED);
-    checkConversion(picker, headers, subchannel, Status.UNAVAILABLE, Status.Code.UNAVAILABLE);
-    checkConversion(picker, headers, subchannel, Status.UNIMPLEMENTED, Status.Code.UNIMPLEMENTED);
+    Throwable cause = new Throwable("cause");
+    Status aborted = Status.ABORTED.withCause(cause).withDescription("base desc");
+    Status serverStatus =
+        CachingRlsLbClient.convertServerStatus(aborted, fakeSearchMethodArgs);
+    assertThat(serverStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(serverStatus.getCause()).isEqualTo(cause);
+    assertThat(serverStatus.getDescription()).contains("RLS server returned: ");
+    assertThat(serverStatus.getDescription()).endsWith("ABORTED: base desc.");
+    assertThat(serverStatus.getDescription()).contains(
+        "method=" + fakeSearchMethod.getBareMethodName());
   }
 
   @Test
@@ -466,18 +453,6 @@ public class RlsLoadBalancerTest {
     verify(helper).createResolvingOobChannelBuilder(anyString(), any(ChannelCredentials.class));
   }
 
-  private void checkConversion(SubchannelPicker picker,
-                               Metadata headers,
-                               FakeSubchannel searchSubchannel,
-                               Status serverState,
-                               Status.Code targetState) {
-    PickResult res;
-    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(serverState));
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    assertThat(res.getStatus().getCode()).isEqualTo(targetState);
-  }
-
   @SuppressWarnings("unchecked")
   private Map<String, Object> getServiceConfig() throws IOException {
     String serviceConfig = "{"
@@ -681,13 +656,6 @@ public class RlsLoadBalancerTest {
     }
 
     public void updateState(ConnectivityStateInfo newState) {
-      if (newState.getState() == ConnectivityState.TRANSIENT_FAILURE) {
-        Status convertedStatus = CachingRlsLbClient.convertServerStatus(newState.getStatus(), null);
-        if (!newState.getStatus().equals(convertedStatus)) {
-          newState = ConnectivityStateInfo.forTransientFailure(convertedStatus);
-        }
-      }
-
       listener.onSubchannelState(newState);
       isReady = newState.getState().equals(ConnectivityState.READY);
     }

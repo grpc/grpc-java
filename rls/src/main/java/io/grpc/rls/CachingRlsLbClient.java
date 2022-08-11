@@ -183,43 +183,15 @@ final class CachingRlsLbClient {
    * @param args Used for error description
    * @return Transformed status or argument depending on the Status.code
    */
-  static Status convertServerStatus(Status status, @Nullable PickSubchannelArgs args) {
-    if (status == null) {
-      return  null;
-    }
+  static Status convertServerStatus(Status status, PickSubchannelArgs args) {
+    String serviceName = args.getMethodDescriptor().getServiceName();
+    String methodName = args.getMethodDescriptor().getBareMethodName();
+    Metadata headers = args.getHeaders();
 
-    Status.Code newCode;
-    switch (status.getCode()) {
-      case OUT_OF_RANGE:
-      case DATA_LOSS:
-      case INVALID_ARGUMENT:
-      case ALREADY_EXISTS:
-      case FAILED_PRECONDITION:
-        newCode = Status.Code.INTERNAL;
-        break;
-      case NOT_FOUND:
-      case ABORTED:
-        newCode = Status.Code.UNAVAILABLE;
-        break;
-      case OK:
-        return status;
-      default:
-        newCode = status.getCode();
-    }
-
-    if (args != null) {
-      String serviceName = args.getMethodDescriptor().getServiceName();
-      String methodName = args.getMethodDescriptor().getBareMethodName();
-      Metadata headers = args.getHeaders();
-      return newCode.toStatus().withCause(status.getCause()).withDescription(
-          String.format("Unable to retrieve RLS targets for service=%s, method=%s, headers=%s.  "
-                  + "RLS server returned: %s: %s.",
-              serviceName, methodName, headers, status.getCode(), status.getDescription()));
-    } else {
-      return newCode.toStatus().withCause(status.getCause()).withDescription(
-          String.format("Unable to retrieve RLS targets.  RLS server returned: %s: %s.",
-              status.getCode(), status.getDescription()));
-    }
+    return Status.Code.UNAVAILABLE.toStatus().withCause(status.getCause()).withDescription(
+        String.format("Unable to retrieve RLS targets for service=%s, method=%s, headers=%s.  "
+                + "RLS server returned: %s: %s.",
+            serviceName, methodName, headers, status.getCode(), status.getDescription()));
   }
 
   @CheckReturnValue
@@ -982,8 +954,7 @@ final class CachingRlsLbClient {
         if (hasFallback) {
           return useFallback(args);
         }
-        return PickResult.withError(
-            convertServerStatus(response.getStatus(), args));
+        return PickResult.withError(convertServerStatus(response.getStatus(), args));
       } else {
         return PickResult.withNoResult();
       }
