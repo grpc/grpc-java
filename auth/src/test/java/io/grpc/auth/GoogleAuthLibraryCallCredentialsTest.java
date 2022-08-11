@@ -403,7 +403,9 @@ public class GoogleAuthLibraryCallCredentialsTest {
     assertEquals("test-email@example.com", payload.get("iss"));
     assertEquals("test-email@example.com", payload.get("sub"));
 
-    assertEquals("test-quota-project-id", callCredentials.creds.getQuotaProjectId());
+    assertTrue(callCredentials.creds instanceof ServiceAccountJwtAccessCredentials);
+    ServiceAccountJwtAccessCredentials serviceAccountJwtCred = (ServiceAccountJwtAccessCredentials)callCredentials.creds;
+    assertEquals("test-quota-project-id", serviceAccountJwtCred.getQuotaProjectId());
   }
 
   private int runPendingRunnables() {
