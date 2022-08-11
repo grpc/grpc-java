@@ -676,5 +676,4 @@ public final class Status {
   public int hashCode() {
     return super.hashCode();
   }
-
 }
