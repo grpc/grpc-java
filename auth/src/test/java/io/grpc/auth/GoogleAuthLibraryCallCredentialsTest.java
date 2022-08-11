@@ -403,7 +403,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
     assertEquals("test-email@example.com", payload.get("iss"));
     assertEquals("test-email@example.com", payload.get("sub"));
 
-    assertEquals("test-quota-project-id", callCredentials.getQuotaProjectId());
+    assertEquals("test-quota-project-id", callCredentials.creds.getQuotaProjectId());
   }
 
   private int runPendingRunnables() {
