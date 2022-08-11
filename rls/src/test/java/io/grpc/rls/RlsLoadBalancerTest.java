@@ -183,21 +183,20 @@ public class RlsLoadBalancerTest {
     FakeSubchannel subchannel = (FakeSubchannel) res.getSubchannel();
     assertThat(subchannel).isNotNull();
 
+    // Ensure happy path is unaffected
     subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
 
-    // Convert to something other than INTERNAL
+    // Check on conversion
     Throwable cause = new Throwable("cause");
     Status aborted = Status.ABORTED.withCause(cause).withDescription("base desc");
-    Status serverStatus =
-        CachingRlsLbClient.convertServerStatus(aborted, fakeSearchMethodArgs);
+    Status serverStatus = CachingRlsLbClient.convertRlsServerStatus(aborted, "conv.test");
     assertThat(serverStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(serverStatus.getCause()).isEqualTo(cause);
     assertThat(serverStatus.getDescription()).contains("RLS server returned: ");
     assertThat(serverStatus.getDescription()).endsWith("ABORTED: base desc.");
-    assertThat(serverStatus.getDescription()).contains(
-        "method=" + fakeSearchMethod.getBareMethodName());
+    assertThat(serverStatus.getDescription()).contains("RLS server conv.test");
   }
 
   @Test

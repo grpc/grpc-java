@@ -577,8 +577,7 @@ public class CachingRlsLbClientTest {
                   @Override
                   public PickResult pickSubchannel(PickSubchannelArgs args) {
                     return PickResult.withError(
-                        CachingRlsLbClient.convertServerStatus(
-                            Status.UNAVAILABLE.withDescription("fallback not available"), args));
+                            Status.UNAVAILABLE.withDescription("fallback not available"));
                   }
                 });
           } else {
@@ -600,7 +599,10 @@ public class CachingRlsLbClientTest {
           class ErrorPicker extends SubchannelPicker {
             @Override
             public PickResult pickSubchannel(PickSubchannelArgs args) {
-              return PickResult.withError(CachingRlsLbClient.convertServerStatus(error, args));
+              return PickResult.withError(
+                  Status.Code.UNAVAILABLE.toStatus().withCause(error.getCause()).withDescription(
+                      String.format("Name resolution failed with: %s: %s.",
+                          error.getCode(), error.getDescription())));
             }
           }
 
