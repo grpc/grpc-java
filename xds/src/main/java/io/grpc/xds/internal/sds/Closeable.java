@@ -19,5 +19,5 @@ package io.grpc.xds.internal.sds;
 public interface Closeable extends java.io.Closeable {
 
   @Override
-  public void close();
+  void close();
 }

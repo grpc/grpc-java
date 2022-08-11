@@ -86,7 +86,7 @@ public interface TsiHandshaker {
    *
    * @return the extracted peer.
    */
-  public Object extractPeerObject() throws GeneralSecurityException;
+  Object extractPeerObject() throws GeneralSecurityException;
 
   /**
    * Creates a frame protector from a completed handshake. No other methods may be called after the

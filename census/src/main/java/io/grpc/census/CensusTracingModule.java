@@ -65,7 +65,7 @@ final class CensusTracingModule {
 
   @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
 
-  /**
+  /*
    * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their JDK
    * reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
    * (potentially racy) direct updates of the volatile variables.

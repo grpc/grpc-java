@@ -236,7 +236,7 @@ public class ServiceConfigErrorHandlingTest {
   public void emptyAddresses_validConfig_firstResolution_lbNeedsAddress() throws Exception {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setServers(Collections.emptyList())
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
@@ -299,7 +299,7 @@ public class ServiceConfigErrorHandlingTest {
   public void emptyAddresses_validConfig_lbDoesNotNeedAddress() throws Exception {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setServers(Collections.emptyList())
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
@@ -316,7 +316,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEmpty();
-    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("val");;
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("val");
 
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);

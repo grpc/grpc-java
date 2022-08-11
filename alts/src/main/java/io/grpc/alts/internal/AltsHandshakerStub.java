@@ -69,7 +69,7 @@ class AltsHandshakerStub {
     if (!result.isPresent()) {
       maybeThrowIoException();
     }
-    return result.get();
+    return result.orNull();
   }
 
   /** Create a new writer if the writer is null. */

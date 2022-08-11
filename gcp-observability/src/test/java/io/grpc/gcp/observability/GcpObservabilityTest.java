@@ -169,7 +169,7 @@ public class GcpObservabilityTest {
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
           mock(InternalLoggingChannelInterceptor.Factory.class);
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
-          mock(InternalLoggingServerInterceptor.Factory.class);;
+          mock(InternalLoggingServerInterceptor.Factory.class);
 
       try (GcpObservability unused =
           GcpObservability.grpcInit(
