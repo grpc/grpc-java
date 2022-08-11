@@ -298,6 +298,11 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
         Method setter = builderClass.getMethod("setPrivateKeyId", getter.getReturnType());
         methodPairs.add(new MethodPair(getter, setter));
       }
+      {
+        Method getter = serviceAccountClass.getMethod("getQuotaProjectId");
+        Method setter = builderClass.getMethod("setQuotaProjectId", getter.getReturnType());
+        methodPairs.add(new MethodPair(getter, setter));
+      }
     }
 
     /**
