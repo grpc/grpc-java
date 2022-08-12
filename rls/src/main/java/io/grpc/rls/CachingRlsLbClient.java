@@ -944,8 +944,8 @@ final class CachingRlsLbClient {
         if (picker == null) {
           return PickResult.withNoResult();
         }
-        // Happy path goes through here
-        return pickResultOrError(picker.pickSubchannel(args), request.keyMap().get("server"));
+        // Happy path
+        return picker.pickSubchannel(args);
       } else if (response.hasError()) {
         if (hasFallback) {
           return useFallback(args);
@@ -955,14 +955,6 @@ final class CachingRlsLbClient {
       } else {
         return PickResult.withNoResult();
       }
-    }
-
-    private PickResult pickResultOrError(PickResult pickSubchannel, String server) {
-      if (pickSubchannel == null || pickSubchannel.getStatus().isOk()) {
-        return pickSubchannel;
-      }
-
-      return PickResult.withError(convertRlsServerStatus(pickSubchannel.getStatus(), server));
     }
 
     private ChildPolicyWrapper fallbackChildPolicyWrapper;

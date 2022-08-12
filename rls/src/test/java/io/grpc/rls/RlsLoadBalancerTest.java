@@ -195,7 +195,7 @@ public class RlsLoadBalancerTest {
     assertThat(serverStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(serverStatus.getCause()).isEqualTo(cause);
     assertThat(serverStatus.getDescription()).contains("RLS server returned: ");
-    assertThat(serverStatus.getDescription()).endsWith("ABORTED: base desc.");
+    assertThat(serverStatus.getDescription()).endsWith("ABORTED: base desc");
     assertThat(serverStatus.getDescription()).contains("RLS server conv.test");
   }
 
@@ -314,9 +314,9 @@ public class RlsLoadBalancerTest {
     rescueSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     // all channels are failed
-    rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
-    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
-    fallbackSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
+    rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    fallbackSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
