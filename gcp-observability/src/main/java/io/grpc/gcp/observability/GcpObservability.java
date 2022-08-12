@@ -50,14 +50,11 @@ import io.opencensus.trace.config.TraceConfig;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /** The main class for gRPC Google Cloud Platform Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class GcpObservability implements AutoCloseable {
-  private static final Logger logger = Logger.getLogger(GcpObservability.class.getName());
   private static final int METRICS_EXPORT_INTERVAL = 30;
   private static final ImmutableSet<String> SERVICES_TO_EXCLUDE = ImmutableSet.of(
       "google.logging.v2.LoggingServiceV2", "google.monitoring.v3.MetricService",
@@ -68,8 +65,6 @@ public final class GcpObservability implements AutoCloseable {
   private final ArrayList<ClientInterceptor> clientInterceptors = new ArrayList<>();
   private final ArrayList<ServerInterceptor> serverInterceptors = new ArrayList<>();
   private final ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
-  private boolean metricsEnabled;
-  private boolean tracesEnabled;
 
   /**
    * Initialize grpc-observability.
@@ -115,7 +110,6 @@ public final class GcpObservability implements AutoCloseable {
       if (instance == null) {
         throw new IllegalStateException("GcpObservability already closed!");
       }
-      unRegisterStackDriverExporter();
       sink.close();
       instance = null;
     }
@@ -169,7 +163,6 @@ public final class GcpObservability implements AutoCloseable {
       }
       statsConfigurationBuilder.setExportInterval(Duration.create(METRICS_EXPORT_INTERVAL, 0));
       StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
-      metricsEnabled = true;
     }
 
     if (config.isEnableCloudTracing()) {
@@ -188,29 +181,6 @@ public final class GcpObservability implements AutoCloseable {
         traceConfigurationBuilder.setFixedAttributes(fixedAttributes);
       }
       StackdriverTraceExporter.createAndRegister(traceConfigurationBuilder.build());
-      tracesEnabled = true;
-    }
-  }
-
-  private void unRegisterStackDriverExporter() {
-    if (metricsEnabled) {
-      try {
-        StackdriverStatsExporter.unregister();
-      } catch (IllegalStateException e) {
-        logger.log(
-            Level.SEVERE, "Failed to unregister Stackdriver stats exporter, " + e.getMessage());
-      }
-      metricsEnabled = false;
-    }
-
-    if (tracesEnabled) {
-      try {
-        StackdriverTraceExporter.unregister();
-      } catch (IllegalStateException e) {
-        logger.log(
-            Level.SEVERE, "Failed to unregister Stackdriver trace exporter, " + e.getMessage());
-      }
-      tracesEnabled = false;
     }
   }
 

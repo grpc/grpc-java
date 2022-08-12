@@ -148,6 +148,7 @@ public class GcpLogSink implements Sink {
     ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
     String sourceProjectId = locationTags.get("project_id");
     if (!Strings.isNullOrEmpty(destinationProjectId)
+        && !Strings.isNullOrEmpty(sourceProjectId)
         && !Objects.equals(sourceProjectId, destinationProjectId)) {
       tagsBuilder.put("source_project_id", sourceProjectId);
     }
