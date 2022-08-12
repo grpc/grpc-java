@@ -599,10 +599,7 @@ public class CachingRlsLbClientTest {
           class ErrorPicker extends SubchannelPicker {
             @Override
             public PickResult pickSubchannel(PickSubchannelArgs args) {
-              return PickResult.withError(
-                  Status.Code.UNAVAILABLE.toStatus().withCause(error.getCause()).withDescription(
-                      String.format("Name resolution failed with: %s: %s.",
-                          error.getCode(), error.getDescription())));
+              return PickResult.withError(error);
             }
           }
 
