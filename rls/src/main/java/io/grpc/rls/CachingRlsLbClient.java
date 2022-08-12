@@ -183,9 +183,9 @@ final class CachingRlsLbClient {
    * @return Transformed status
    */
   static Status convertRlsServerStatus(Status status, String serverName) {
-    return Status.Code.UNAVAILABLE.toStatus().withCause(status.getCause()).withDescription(
+    return Status.UNAVAILABLE.withCause(status.getCause()).withDescription(
         String.format("Unable to retrieve RLS targets from RLS server %s.  "
-                + "RLS server returned: %s: %s.",
+                + "RLS server returned: %s: %s",
             serverName, status.getCode(), status.getDescription()));
   }
 
