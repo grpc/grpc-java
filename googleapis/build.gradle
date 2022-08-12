@@ -15,7 +15,7 @@ dependencies {
                    libraries.guava
     testImplementation project(':grpc-core').sourceSets.test.output
 
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature libraries.signature.java
 }
 
 publishing {

@@ -77,7 +77,7 @@ dependencies {
     shadow configurations.implementation.getDependencies().minus([nettyDependency])
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature libraries.signature.java
     testRuntimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
     testRuntimeOnly (libraries.netty.tcnative) {

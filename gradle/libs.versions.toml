@@ -68,4 +68,6 @@ protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 re2j = "com.google.re2j:re2j:1.6"
 robolectric = "org.robolectric:robolectric:4.8.1"
+signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4"
+signature-java = "org.codehaus.mojo.signature:java18:1.0"
 truth = "com.google.truth:truth:1.0.1"
