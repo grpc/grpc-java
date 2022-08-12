@@ -19,6 +19,7 @@ package io.grpc;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Metadata.AsciiMarshaller;
 import io.grpc.Metadata.BinaryStreamMarshaller;
+import java.io.InputStream;
 import java.nio.charset.Charset;
 
 /**
@@ -100,7 +101,7 @@ public final class InternalMetadata {
   /**
    * Creates a holder for a pre-parsed value read by the transport.
    *
-   * @param marshaller The {@link Metadata#BinaryStreamMarshaller} associated with this value.
+   * @param marshaller The {@link Metadata.BinaryStreamMarshaller} associated with this value.
    * @param value The value to store.
    * @return an object holding the pre-parsed value for this key.
    */
