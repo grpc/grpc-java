@@ -485,7 +485,7 @@ public class XdsNameResolverTest {
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverLdsUpdate(0L, Collections.singletonList(virtualHost));
+    xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
@@ -508,7 +508,7 @@ public class XdsNameResolverTest {
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverLdsUpdate(0L, Collections.singletonList(virtualHost));
+    xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
     assertEmptyResolutionResult("random");
   }
 
