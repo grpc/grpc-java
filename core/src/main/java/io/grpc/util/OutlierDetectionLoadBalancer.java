@@ -52,8 +52,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /**
- * Wraps a child {@code LoadBalancer} while monitoring for outliers backends and removing them from
- * use by the child LB.
+ * Wraps a child {@code LoadBalancer} while monitoring for outlier backends and removing them from
+ * the use of the child LB.
  *
  * <p>This implements the outlier detection gRFC:
  * https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
@@ -462,6 +462,10 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       return ((double) inactiveCallCounter.successCount.get()) / volume();
     }
 
+    double failureRate() {
+      return ((double)inactiveCallCounter.failureCount.get()) / volume();
+    }
+
     void clearCallCounters() {
       activeCallCounter.successCount.set(0);
       activeCallCounter.failureCount.set(0);
@@ -622,7 +626,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
           ejectedAddresses++;
         }
       }
-      return ((double)ejectedAddresses + 1 / totalAddresses) * 100;
+      return ((double)(ejectedAddresses + 1) / totalAddresses) * 100;
     }
   }
 
@@ -650,6 +654,11 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
   }
 
+  /**
+   * This algorithm ejects addresses that don't maintain a required rate of successful calls. The
+   * required rate is not fixed, but is based on the mean and standard deviation of the success
+   * rates of all of the addresses.
+   */
   static class SuccessRateOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
 
     private final OutlierDetectionLoadBalancerConfig config;
@@ -737,18 +746,8 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       // If this address does not have enough volume to be considered, skip to the next one.
       for (AddressTracker tracker : trackerMap.values()) {
-        // If we have already ejected addresses past the max percentage, stop here.
-        int totalAddresses = 0;
-        int ejectedAddresses = 0;
-        for (AddressTracker t : trackerMap.values()) {
-          totalAddresses++;
-          if (t.subchannelsEjected()) {
-            ejectedAddresses++;
-          }
-        }
-        double ejectedPercentage = (ejectedAddresses / totalAddresses) * 100;
-
-        if (ejectedPercentage > config.maxEjectionPercent) {
+        // If an ejection now would take us past the max configured ejection percentagem stop here.
+        if (trackerMap.nextEjectionPercentage() > config.maxEjectionPercent) {
           return;
         }
 
@@ -756,11 +755,10 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
           continue;
         }
 
-        // If the failure percentage is above the threshold.
-        long failurePercentage =
-            (tracker.activeCallCounter.failureCount.get() / tracker.volume()) * 100;
-        if (failurePercentage > config.failurePercentageEjection.threshold) {
-          // Only eject some addresses based on the enforcement percentage.
+        // If the failure rate is above the threshold, we should eject...
+        double maxFailureRate = ((double)config.failurePercentageEjection.threshold) / 100;
+        if (tracker.failureRate() > maxFailureRate) {
+          // ...but only enforce this based on the enforcement percentage.
           if (new Random().nextInt(100) < config.failurePercentageEjection.enforcementPercentage) {
             tracker.ejectSubchannels(ejectionTimeMillis);
           }
@@ -968,11 +966,5 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       // One of the two supported algorithms needs to be configured.
       return successRateEjection != null || failurePercentageEjection != null;
     }
-  }
-
-  /** Math needed in outlier detection. */
-  static class OutlierDetectionMath {
-
-
   }
 }
