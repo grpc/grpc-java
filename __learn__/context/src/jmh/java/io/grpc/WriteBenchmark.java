@@ -40,7 +40,7 @@ public class WriteBenchmark {
   }
 
   /**
-   * Write
+   * Write the benchmark
    * @param state The ContextState instance
    * @param blackhole The Blackhole instance
    */
