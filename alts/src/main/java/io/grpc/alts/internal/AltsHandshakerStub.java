@@ -64,12 +64,18 @@ class AltsHandshakerStub {
     if (!responseQueue.isEmpty()) {
       throw new IOException("Received an unexpected response.");
     }
+
     writer.onNext(req);
     Optional<HandshakerResp> result = responseQueue.take();
-    if (!result.isPresent()) {
-      maybeThrowIoException();
+    if (result.isPresent()) {
+      return result.get();
     }
-    return result.orNull();
+
+    if (exceptionMessage.get() != null) {
+      throw new IOException(exceptionMessage.get());
+    } else {
+      throw new IOException("No handshaker response received");
+    }
   }
 
   /** Create a new writer if the writer is null. */
