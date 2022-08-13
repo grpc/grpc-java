@@ -17,27 +17,27 @@
 package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -52,11 +52,14 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.StandardLoadBalancerProvider;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig.SuccessRateEjection;
+import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionMath;
+import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionSubchannel;
+import io.grpc.util.OutlierDetectionLoadBalancer.SuccessRateOutlierEjectionAlgorithm;
 import io.grpc.util.RoundRobinLoadBalancer.ReadyPicker;
 import java.net.SocketAddress;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -113,10 +116,9 @@ public class OutlierDetectionLoadBalancerTest {
       "round_robin") {
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      return roundRobinLoadBalancer;
+      return new RoundRobinLoadBalancer(helper);
     }
   };
-  private RoundRobinLoadBalancer roundRobinLoadBalancer;
 
   private final FakeClock fakeClock = new FakeClock();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -131,12 +133,17 @@ public class OutlierDetectionLoadBalancerTest {
 
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
-  private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners
-      = Maps.newLinkedHashMap();
+  private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners = Maps.newLinkedHashMap();
+
+  private Subchannel subchannel1;
+  private Subchannel subchannel2;
+  private Subchannel subchannel3;
+  private Subchannel subchannel4;
+  private Subchannel subchannel5;
 
   @Before
   public void setUp() {
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 5; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       EquivalentAddressGroup eag = new EquivalentAddressGroup(addr);
       servers.add(eag);
@@ -144,32 +151,36 @@ public class OutlierDetectionLoadBalancerTest {
       subchannels.put(Arrays.asList(eag), sc);
     }
 
+    Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
+    subchannel1 = subchannelIterator.next();
+    subchannel2 = subchannelIterator.next();
+    subchannel3 = subchannelIterator.next();
+    subchannel4 = subchannelIterator.next();
+    subchannel5 = subchannelIterator.next();
+
     when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
     when(mockHelper.getScheduledExecutorService()).thenReturn(
         fakeClock.getScheduledExecutorService());
-    when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
-        .then(new Answer<Subchannel>() {
+    when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class))).then(
+        new Answer<Subchannel>() {
           @Override
           public Subchannel answer(InvocationOnMock invocation) throws Throwable {
             CreateSubchannelArgs args = (CreateSubchannelArgs) invocation.getArguments()[0];
             final Subchannel subchannel = subchannels.get(args.getAddresses());
             when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
             when(subchannel.getAttributes()).thenReturn(args.getAttributes());
-            doAnswer(
-                new Answer<Void>() {
-                  @Override
-                  public Void answer(InvocationOnMock invocation) throws Throwable {
-                    subchannelStateListeners.put(
-                        subchannel, (SubchannelStateListener) invocation.getArguments()[0]);
-                    return null;
-                  }
-                }).when(subchannel).start(any(SubchannelStateListener.class));
+            doAnswer(new Answer<Void>() {
+              @Override
+              public Void answer(InvocationOnMock invocation) throws Throwable {
+                subchannelStateListeners.put(subchannel,
+                    (SubchannelStateListener) invocation.getArguments()[0]);
+                return null;
+              }
+            }).when(subchannel).start(any(SubchannelStateListener.class));
             return subchannel;
           }
         });
 
-    roundRobinLoadBalancer = new RoundRobinLoadBalancer(mockHelper);
-    //lbRegistry.register(mockChildLbProvider);
     lbRegistry.register(roundRobinLbProvider);
 
     loadBalancer = new OutlierDetectionLoadBalancer(mockHelper, fakeClock.getTimeProvider());
@@ -186,26 +197,38 @@ public class OutlierDetectionLoadBalancerTest {
 
   @Test
   public void handleNameResolutionError_withChildLb() {
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(defaultSuccessRateConfig(mockChildLbProvider),
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(
+        new OutlierDetectionLoadBalancerConfig.Builder()
+            .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+            .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build(),
         new EquivalentAddressGroup(mockSocketAddress)));
     loadBalancer.handleNameResolutionError(Status.DEADLINE_EXCEEDED);
 
     verify(mockChildLb).handleNameResolutionError(Status.DEADLINE_EXCEEDED);
   }
 
-  /** {@code shutdown()} is simply delegated. */
+  /**
+   * {@code shutdown()} is simply delegated.
+   */
   @Test
   public void shutdown() {
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(defaultSuccessRateConfig(mockChildLbProvider),
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(
+        new OutlierDetectionLoadBalancerConfig.Builder()
+            .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+            .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build(),
         new EquivalentAddressGroup(mockSocketAddress)));
     loadBalancer.shutdown();
     verify(mockChildLb).shutdown();
   }
 
-  /** Base case for accepting new resolved addresses. */
+  /**
+   * Base case for accepting new resolved addresses.
+   */
   @Test
   public void handleResolvedAddresses() {
-    OutlierDetectionLoadBalancerConfig config = defaultSuccessRateConfig(mockChildLbProvider);
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
@@ -222,10 +245,14 @@ public class OutlierDetectionLoadBalancerTest {
     assertThat(task.getDelay(TimeUnit.SECONDS)).isEqualTo(config.intervalSecs);
   }
 
-  /** Outlier detection first enabled, then removed. */
+  /**
+   * Outlier detection first enabled, then removed.
+   */
   @Test
   public void handleResolvedAddresses_outlierDetectionDisabled() {
-    OutlierDetectionLoadBalancerConfig config = defaultSuccessRateConfig(mockChildLbProvider);
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
@@ -236,29 +263,37 @@ public class OutlierDetectionLoadBalancerTest {
     // There is a single pending task to run the outlier detection algorithm
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
 
+    config = new OutlierDetectionLoadBalancerConfig.Builder().setChildPolicy(
+        new PolicySelection(mockChildLbProvider, null)).build();
     loadBalancer.handleResolvedAddresses(
-        buildResolvedAddress(disabledConfig(), new EquivalentAddressGroup(mockSocketAddress)));
+        buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
 
     // Pending task should be gone since OD is disabled.
     assertThat(fakeClock.getPendingTasks()).isEmpty();
 
   }
 
-  /** Tests different scenarios when the timer interval in the config changes. */
+  /**
+   * Tests different scenarios when the timer interval in the config changes.
+   */
   @Test
   public void handleResolvedAddresses_intervalUpdate() {
-    OutlierDetectionLoadBalancerConfig config = customIntervalConfig(null);
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
     loadBalancer.handleResolvedAddresses(resolvedAddresses);
 
     // Config update has doubled the interval
-    config = customIntervalConfig(config.intervalSecs * 2);
+    config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setIntervalSecs(config.intervalSecs * 2)
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
 
     loadBalancer.handleResolvedAddresses(
-        buildResolvedAddress(config,
-            new EquivalentAddressGroup(mockSocketAddress)));
+        buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
 
     // If the timer has not run yet the task is just rescheduled to run after the new delay.
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
@@ -280,46 +315,219 @@ public class OutlierDetectionLoadBalancerTest {
     fakeClock.forwardTime(4, TimeUnit.SECONDS);
     task = fakeClock.getPendingTasks().iterator().next();
     loadBalancer.handleResolvedAddresses(
-        buildResolvedAddress(config,
-            new EquivalentAddressGroup(mockSocketAddress)));
+        buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
     assertThat(task.dueTimeNanos).isEqualTo(
         TimeUnit.SECONDS.toNanos(config.intervalSecs + config.intervalSecs + 1));
   }
 
-  // @Test
-  // public void pickAfterResolved() throws Exception {
-  //   final Subchannel readySubchannel = subchannels.values().iterator().next();
-  //
-  //   loadBalancer.handleResolvedAddresses(
-  //       buildResolvedAddress(defaultSuccessRateConfig(roundRobinLbProvider), servers));
-  //
-  //   deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
-  //
-  //   verify(mockHelper, times(3)).createSubchannel(createArgsCaptor.capture());
-  //
-  //   List<List<EquivalentAddressGroup>> capturedAddrs = new ArrayList<>();
-  //   for (CreateSubchannelArgs arg : createArgsCaptor.getAllValues()) {
-  //     capturedAddrs.add(arg.getAddresses());
-  //   }
-  //
-  //   assertThat(capturedAddrs).containsAtLeastElementsIn(subchannels.keySet());
-  //   for (Subchannel subchannel : subchannels.values()) {
-  //     verify(subchannel).requestConnection();
-  //     verify(subchannel, never()).shutdown();
-  //   }
-  //   //
-  //   // verify(mockHelper, times(2))
-  //   //     .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
-  //   //
-  //   // assertEquals(CONNECTING, stateCaptor.getAllValues().get(0));
-  //   // assertEquals(READY, stateCaptor.getAllValues().get(1));
-  //   // assertThat(getList(pickerCaptor.getValue())).containsExactly(readySubchannel);
-  //   //
-  //   // verifyNoMoreInteractions(mockHelper);
-  // }
+  /**
+   * Confirm basic picking works by delegating to round_robin.
+   */
+  @Test
+  public void delegatePick() throws Exception {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+
+    // Make one of the subchannels READY.
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(3)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+
+    // Make sure that we can pick the single READY subchannel.
+    SubchannelPicker picker = pickerCaptor.getAllValues().get(2);
+    PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate()).isEqualTo(
+        readySubchannel);
+  }
+
+  /**
+   * The success rate algorithm leaves a healthy set of addresses alone.
+   */
+  @Test
+  public void successRateNoOutliers() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder().setMaxEjectionPercent(
+            50).setSuccessRateEjection(
+            new SuccessRateEjection.Builder().setMinimumHosts(3).setRequestVolume(10).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(config, ImmutableMap.of());
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    assertThat(loadBalancer.trackerMap.get(servers.get(0)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(1)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(2)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(3)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(4)).subchannelsEjected()).isFalse();
+  }
+
+  /**
+   * The success rate algorithm ejects the outlier.
+   */
+  @Test
+  public void successRateOneOutlier() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    generateLoad(config, ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertThat(loadBalancer.trackerMap.get(servers.get(0)).subchannelsEjected()).isTrue();
+    assertThat(loadBalancer.trackerMap.get(servers.get(1)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(2)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(3)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(4)).subchannelsEjected()).isFalse();
+  }
+
+  /**
+   * The success rate algorithm ignores addresses without enough volume..
+   */
+  @Test
+  public void successRateOneOutlier_notEnoughVolume() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(100).build()) // We won't produce this much volume...
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    generateLoad(config, ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertThat(loadBalancer.trackerMap.get(servers.get(0)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(1)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(2)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(3)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(4)).subchannelsEjected()).isFalse();
+  }
+
+  /**
+   * The success rate algorithm does not apply if enough addresses have the required volume.
+   */
+  @Test
+  public void successRateOneOutlier_notEnoughAddressesWithVolume() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(6) // We don't have this many hosts...
+                .setRequestVolume(10).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    generateLoad(config, ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // No subchannels should have been ejected.
+    assertThat(loadBalancer.trackerMap.get(servers.get(0)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(1)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(2)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(3)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(4)).subchannelsEjected()).isFalse();
+  }
+
+  /**
+   * Two outliers get ejected.
+   */
+  @Test
+  public void successRateTwoOutliers() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10)
+                .setStdevFactor(1).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    generateLoad(config, ImmutableMap.of(
+        subchannel1, Status.DEADLINE_EXCEEDED,
+        subchannel2, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertThat(loadBalancer.trackerMap.get(servers.get(0)).subchannelsEjected()).isTrue();
+    assertThat(loadBalancer.trackerMap.get(servers.get(1)).subchannelsEjected()).isTrue();
+    assertThat(loadBalancer.trackerMap.get(servers.get(2)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(3)).subchannelsEjected()).isFalse();
+    assertThat(loadBalancer.trackerMap.get(servers.get(4)).subchannelsEjected()).isFalse();
+  }
+
+  /**
+   * Two outliers. but only one gets ejected because we have reached the max ejection percentage.
+   */
+  @Test
+  public void successRateTwoOutliers_maxEjectionPercentage() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(20)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10)
+                .setStdevFactor(1).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    generateLoad(config, ImmutableMap.of(
+        subchannel1, Status.DEADLINE_EXCEEDED,
+        subchannel2, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    int totalEjected = 0;
+    for (EquivalentAddressGroup address: servers) {
+      totalEjected += loadBalancer.trackerMap.get(address).subchannelsEjected() ? 1 : 0;
+    }
+
+    // Even if all subchannels were failing, we should have not ejected more than the configured
+    // maximum percentage.
+    assertThat((double) totalEjected / servers.size()).isAtMost(
+        (double) config.maxEjectionPercent / 100);
+  }
+
+  /**
+   * The failure percentage algorithm leaves a healthy set of addresses alone.
+   */
+  @Test
+  public void failurePercentageHealthy() {
+  }
+
+
+  @Test
+  public void mathChecksOut() {
+    ImmutableList<Double> values = ImmutableList.of(600d, 470d, 170d, 430d, 300d);
+    double mean = SuccessRateOutlierEjectionAlgorithm.mean(values);
+    double stdev = SuccessRateOutlierEjectionAlgorithm.standardDeviation(values, mean);
+
+    assertThat(mean).isEqualTo(394);
+    assertThat(stdev).isEqualTo(147.32277488562318);
+  }
 
   private static class FakeSocketAddress extends SocketAddress {
+
     final String name;
 
     FakeSocketAddress(String name) {
@@ -330,25 +538,6 @@ public class OutlierDetectionLoadBalancerTest {
     public String toString() {
       return "FakeSocketAddress-" + name;
     }
-  }
-
-  private OutlierDetectionLoadBalancerConfig defaultSuccessRateConfig(
-      LoadBalancerProvider childLbProvider) {
-    return new OutlierDetectionLoadBalancerConfig(new PolicySelection(childLbProvider, null),
-        null, null, null, null,
-        new SuccessRateEjection(null, null, null, null), null);
-  }
-
-  private OutlierDetectionLoadBalancerConfig customIntervalConfig(Long intervalSecs) {
-    return new OutlierDetectionLoadBalancerConfig(new PolicySelection(mockChildLbProvider, null),
-        intervalSecs != null ? intervalSecs : null, null, null, null,
-        new SuccessRateEjection(null, null, null, null), null);
-  }
-
-  private OutlierDetectionLoadBalancerConfig disabledConfig() {
-    return new OutlierDetectionLoadBalancerConfig(new PolicySelection(mockChildLbProvider, null),
-        null, null, null, null,
-        null, null);
   }
 
   private ResolvedAddresses buildResolvedAddress(OutlierDetectionLoadBalancerConfig config,
@@ -368,7 +557,35 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   private static List<Subchannel> getList(SubchannelPicker picker) {
-    return picker instanceof ReadyPicker ? ((ReadyPicker) picker).getList() :
-        Collections.<Subchannel>emptyList();
+    return picker instanceof ReadyPicker ? ((ReadyPicker) picker).getList()
+        : Collections.<Subchannel>emptyList();
+  }
+
+  // Generates 30 calls, 10 each across the subchannels.
+  private void generateLoad(OutlierDetectionLoadBalancerConfig config,
+      Map<Subchannel, Status> statusMap) {
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel5, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(7)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getAllValues().get(6);
+
+    for (int i = 0; i < 100; i++) {
+      PickResult pickResult = picker
+          .pickSubchannel(mock(PickSubchannelArgs.class));
+      ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+          .newClientStreamTracer(null, null);
+
+      // Fail all the calls for the first subchannel.
+      Subchannel subchannel = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
+      clientStreamTracer.streamClosed(
+          statusMap.containsKey(subchannel) ? statusMap.get(subchannel) : Status.OK);
+    }
   }
 }
