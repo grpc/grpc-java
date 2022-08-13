@@ -951,7 +951,8 @@ final class CachingRlsLbClient {
           return useFallback(args);
         }
         return PickResult.withError(
-            convertRlsServerStatus(response.getStatus(), request.keyMap().get("server")));
+            convertRlsServerStatus(response.getStatus(),
+                lbPolicyConfig.getRouteLookupConfig().lookupService()));
       } else {
         return PickResult.withNoResult();
       }
