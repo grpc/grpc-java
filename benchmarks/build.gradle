@@ -5,6 +5,7 @@ plugins {
 
     id "com.google.protobuf"
     id "me.champeau.jmh"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "grpc Benchmarks"
@@ -39,6 +40,8 @@ dependencies {
 
     testImplementation libraries.junit,
             libraries.mockito.core
+
+    signature libraries.signature.java
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

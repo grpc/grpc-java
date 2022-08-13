@@ -16,6 +16,8 @@
 
 package io.grpc.gcp.observability.logging;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.cloud.MonitoredResource;
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
@@ -31,6 +33,7 @@ import io.grpc.Internal;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -45,8 +48,6 @@ import java.util.logging.Logger;
 public class GcpLogSink implements Sink {
   private final Logger logger = Logger.getLogger(GcpLogSink.class.getName());
 
-  // TODO(DNVindhya): Make cloud logging service a configurable value
-  private static final String SERVICE_TO_EXCLUDE = "google.logging.v2.LoggingServiceV2";
   private static final String DEFAULT_LOG_NAME =
       "microservices.googleapis.com%2Fobservability%2Fgrpc";
   private static final String K8S_MONITORED_RESOURCE_TYPE = "k8s_container";
@@ -54,40 +55,37 @@ public class GcpLogSink implements Sink {
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
       "pod_name", "container_name");
   private static final long FALLBACK_FLUSH_LIMIT = 100L;
+  private final String projectId;
   private final Map<String, String> customTags;
-  private final Logging gcpLoggingClient;
   private final MonitoredResource kubernetesResource;
   private final Long flushLimit;
+  /** Lazily initialize cloud logging client to avoid circular initialization. Because cloud
+   * logging APIs also uses gRPC. */
+  private volatile Logging gcpLoggingClient;
   private long flushCounter;
+  private final Collection<String> servicesToExclude;
 
-  private static Logging createLoggingClient(String projectId) {
-    LoggingOptions.Builder builder = LoggingOptions.newBuilder();
-    if (!Strings.isNullOrEmpty(projectId)) {
-      builder.setProjectId(projectId);
-    }
-    return builder.build().getService();
+  @VisibleForTesting
+  GcpLogSink(Logging loggingClient, String destinationProjectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Long flushLimit, Collection<String> servicesToExclude) {
+    this(destinationProjectId, locationTags, customTags, flushLimit, servicesToExclude);
+    this.gcpLoggingClient = loggingClient;
   }
 
   /**
    * Retrieves a single instance of GcpLogSink.
    *
    * @param destinationProjectId cloud project id to write logs
+   * @param servicesToExclude service names for which log entries should not be generated
    */
   public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Long flushLimit) {
-    this(createLoggingClient(destinationProjectId), destinationProjectId, locationTags,
-        customTags, flushLimit);
-
-  }
-
-  @VisibleForTesting
-  GcpLogSink(Logging client, String destinationProjectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Long flushLimit) {
-    this.gcpLoggingClient = client;
+      Map<String, String> customTags, Long flushLimit, Collection<String> servicesToExclude) {
+    this.projectId = destinationProjectId;
     this.customTags = getCustomTags(customTags, locationTags, destinationProjectId);
     this.kubernetesResource = getResource(locationTags);
     this.flushLimit = flushLimit != null ? flushLimit : FALLBACK_FLUSH_LIMIT;
     this.flushCounter = 0L;
+    this.servicesToExclude = checkNotNull(servicesToExclude, "servicesToExclude");
   }
 
   /**
@@ -98,10 +96,13 @@ public class GcpLogSink implements Sink {
   @Override
   public void write(GrpcLogRecord logProto) {
     if (gcpLoggingClient == null) {
-      logger.log(Level.SEVERE, "Attempt to write after GcpLogSink is closed.");
-      return;
+      synchronized (this) {
+        if (gcpLoggingClient == null) {
+          gcpLoggingClient = createLoggingClient();
+        }
+      }
     }
-    if (SERVICE_TO_EXCLUDE.equals(logProto.getServiceName())) {
+    if (servicesToExclude.contains(logProto.getServiceName())) {
       return;
     }
     try {
@@ -133,12 +134,21 @@ public class GcpLogSink implements Sink {
     }
   }
 
+  Logging createLoggingClient() {
+    LoggingOptions.Builder builder = LoggingOptions.newBuilder();
+    if (!Strings.isNullOrEmpty(projectId)) {
+      builder.setProjectId(projectId);
+    }
+    return builder.build().getService();
+  }
+
   @VisibleForTesting
   static Map<String, String> getCustomTags(Map<String, String> customTags,
       Map<String, String> locationTags, String destinationProjectId) {
     ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
     String sourceProjectId = locationTags.get("project_id");
     if (!Strings.isNullOrEmpty(destinationProjectId)
+        && !Strings.isNullOrEmpty(sourceProjectId)
         && !Objects.equals(sourceProjectId, destinationProjectId)) {
       tagsBuilder.put("source_project_id", sourceProjectId);
     }

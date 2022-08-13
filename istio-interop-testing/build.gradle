@@ -4,6 +4,7 @@ plugins {
 
     id "com.google.protobuf"
     id 'com.google.cloud.tools.jib'
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Istio Interop testing"
@@ -34,6 +35,8 @@ dependencies {
             libraries.junit,
             libraries.truth
     alpnagent libraries.jetty.alpn.agent
+
+    signature libraries.signature.java
 }
 
 sourceSets {

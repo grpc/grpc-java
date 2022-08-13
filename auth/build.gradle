@@ -13,6 +13,6 @@ dependencies {
     implementation libraries.guava
     testImplementation project(':grpc-testing'),
             libraries.google.auth.oauth2Http
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
