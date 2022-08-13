@@ -9,6 +9,7 @@ plugins {
     id "maven-publish"
 
     id "com.github.johnrengelman.shadow"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Netty Shaded"
@@ -61,6 +62,8 @@ dependencies {
     shadow project(':grpc-netty').configurations.runtimeClasspath.allDependencies.matching {
         it.group != 'io.netty'
     }
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 tasks.named("jar").configure {

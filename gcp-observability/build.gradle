@@ -50,7 +50,7 @@ dependencies {
         exclude group: 'junit', module: 'junit'
     }
 
-    signature "org.codehaus.mojo.signature:java18:1.0@signature"
+    signature libraries.signature.java
 }
 
 configureProtoCompilation()

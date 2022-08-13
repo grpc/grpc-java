@@ -27,6 +27,8 @@ buildscript {
 plugins {
     id "java"
     id "war"
+
+    id "ru.vyarus.animalsniffer"
 }
 
 description = 'gRPC: gae interop testing (jdk8)'
@@ -53,6 +55,7 @@ dependencies {
     implementation libraries.junit
     implementation libraries.protobuf.java
     runtimeOnly libraries.netty.tcnative, libraries.netty.tcnative.classes
+    signature libraries.signature.java
 }
 
 tasks.named("compileJava").configure {
