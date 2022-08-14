@@ -248,7 +248,6 @@ public final class FakeClock {
 
       @Override
       void run() {
-        long startTimeNanos = currentTimeNanos;
         command.run();
         if (!isCancelled()) {
           schedule(this, delayNanos, TimeUnit.NANOSECONDS);
