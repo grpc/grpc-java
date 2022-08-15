@@ -268,7 +268,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         if (trackerMap.containsKey(getAddresses())) {
           AddressTracker tracker = trackerMap.get(getAddresses());
           tracker.removeSubchannel(this);
-          tracker.clearCallCounters();
+          tracker.resetCallCounters();
         }
       } else if (getAllAddresses().size() > 1 && addresses.size() == 1) {
         // We go from, previously uneligble, multiple address mode to a single address. If the map
@@ -472,11 +472,9 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       return ((double)inactiveCallCounter.failureCount.get()) / inactiveVolume();
     }
 
-    void clearCallCounters() {
-      activeCallCounter.successCount.set(0);
-      activeCallCounter.failureCount.set(0);
-      inactiveCallCounter.successCount.set(0);
-      inactiveCallCounter.failureCount.set(0);
+    void resetCallCounters() {
+      activeCallCounter.reset();
+      inactiveCallCounter.reset();
     }
 
     void decrementEjectionTimeMultiplier() {
@@ -489,6 +487,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     void swapCounters() {
+      inactiveCallCounter.reset();
       CallCounter tempCounter = activeCallCounter;
       activeCallCounter = inactiveCallCounter;
       inactiveCallCounter = tempCounter;
@@ -529,9 +528,13 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     private static class CallCounter {
-
       AtomicLong successCount = new AtomicLong();
       AtomicLong failureCount = new AtomicLong();
+
+      void reset() {
+        successCount.set(0);
+        failureCount.set(0);
+      }
     }
   }
 
@@ -563,7 +566,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     /** Resets the call counters for all the trackers in the map. */
     void resetCallCounters() {
       for (AddressTracker tracker : trackerMap.values()) {
-        tracker.clearCallCounters();
+        tracker.resetCallCounters();
       }
     }
 
