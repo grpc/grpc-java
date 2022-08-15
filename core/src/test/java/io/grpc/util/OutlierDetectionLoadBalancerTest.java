@@ -810,6 +810,86 @@ public class OutlierDetectionLoadBalancerTest {
     assertThat(subchannel.isEjected()).isFalse();
   }
 
+  /** Both algorithms configured, but no outliers. */
+  @Test
+  public void successRateAndFailurePercentage_noOutliers() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(ImmutableMap.of());
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // No outliers, no ejections.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /** Both algorithms configured, success rate detects an outlier. */
+  @Test
+  public void successRateAndFailurePercentage_successRateOutlier() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10)
+                .setEnforcementPercentage(0).build()) // Configured, but not enforcing.
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0)));
+  }
+
+  /** Both algorithms configured, error percentage detects an outlier. */
+  @Test
+  public void successRateAndFailurePercentage_errorPercentageOutlier() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10)
+                .setEnforcementPercentage(0).build())
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build()) // Configured, but not enforcing.
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0)));
+  }
+
   @Test
   public void mathChecksOut() {
     ImmutableList<Double> values = ImmutableList.of(600d, 470d, 170d, 430d, 300d);

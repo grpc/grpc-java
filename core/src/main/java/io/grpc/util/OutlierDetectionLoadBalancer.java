@@ -24,6 +24,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ForwardingMap;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
@@ -164,8 +165,9 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       trackerMap.swapCounters();
 
-      OutlierEjectionAlgorithm.forConfig(config)
-          .ejectOutliers(trackerMap, detectionTimerStartNanos);
+      for (OutlierEjectionAlgorithm algo : OutlierEjectionAlgorithm.forConfig(config)) {
+        algo.ejectOutliers(trackerMap, detectionTimerStartNanos);
+      }
 
       trackerMap.maybeUnejectOutliers(detectionTimerStartNanos);
     }
@@ -649,14 +651,15 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeMillis);
 
     @Nullable
-    static OutlierEjectionAlgorithm forConfig(OutlierDetectionLoadBalancerConfig config) {
+    static List<OutlierEjectionAlgorithm> forConfig(OutlierDetectionLoadBalancerConfig config) {
+      ImmutableList.Builder<OutlierEjectionAlgorithm> algoListBuilder = ImmutableList.builder();
       if (config.successRateEjection != null) {
-        return new SuccessRateOutlierEjectionAlgorithm(config);
-      } else if (config.failurePercentageEjection != null) {
-        return new FailurePercentageOutlierEjectionAlgorithm(config);
-      } else {
-        return null;
+        algoListBuilder.add(new SuccessRateOutlierEjectionAlgorithm(config));
       }
+      if (config.failurePercentageEjection != null) {
+        algoListBuilder.add(new FailurePercentageOutlierEjectionAlgorithm(config));
+      }
+      return algoListBuilder.build();
     }
   }
 
@@ -752,7 +755,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       // If this address does not have enough volume to be considered, skip to the next one.
       for (AddressTracker tracker : trackerMap.values()) {
-        // If an ejection now would take us past the max configured ejection percentagem stop here.
+        // If an ejection now would take us past the max configured ejection percentage stop here.
         if (trackerMap.nextEjectionPercentage() > config.maxEjectionPercent) {
           return;
         }
