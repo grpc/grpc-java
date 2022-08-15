@@ -420,6 +420,10 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       this.config = config;
     }
 
+    /**
+     * Adds a subchannel to the tracker, while assuring that the subchannel ejection status is
+     * updated to match the tracker's if needed.
+     */
     boolean addSubchannel(OutlierDetectionSubchannel subchannel) {
       // Make sure that the subchannel is in the same ejection state as the new tracker it is
       // associated with.
@@ -488,6 +492,13 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       ejectionTimeMultiplier = 0;
     }
 
+    /**
+     * Swaps the active and inactive counters.
+     *
+     * <p>Note that this method is not thread safe as the swap is not done atomically. This is
+     * expected to only be called from the timer that is scheduled at a fixed delay, assuring that
+     * only one timer is active at a time.
+     */
     void swapCounters() {
       inactiveCallCounter.reset();
       CallCounter tempCounter = activeCallCounter;
@@ -529,6 +540,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       return currentTimeNanos > maxEjectionTimeNanos;
     }
 
+    /** Tracks both successful and failed call counts. */
     private static class CallCounter {
       AtomicLong successCount = new AtomicLong();
       AtomicLong failureCount = new AtomicLong();
