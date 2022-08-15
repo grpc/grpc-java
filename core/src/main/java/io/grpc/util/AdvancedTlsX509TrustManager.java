@@ -295,7 +295,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
   // Mainly used to avoid throwing IO Exceptions in java.io.Closeable.
   public interface Closeable extends java.io.Closeable {
-    @Override public void close();
+    @Override
+    void close();
   }
 
   public static Builder newBuilder() {
