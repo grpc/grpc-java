@@ -58,6 +58,7 @@ import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionSubchannel;
 import io.grpc.util.OutlierDetectionLoadBalancer.SuccessRateOutlierEjectionAlgorithm;
 import java.net.SocketAddress;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -422,7 +423,7 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
-   * The success rate algorithm ignores addresses without enough volume..
+   * The success rate algorithm ignores addresses without enough volume.
    */
   @Test
   public void successRateOneOutlier_notEnoughVolume() {
@@ -431,17 +432,20 @@ public class OutlierDetectionLoadBalancerTest {
         .setSuccessRateEjection(
             new SuccessRateEjection.Builder()
                 .setMinimumHosts(3)
-                .setRequestVolume(100).build()) // We won't produce this much volume...
+                .setRequestVolume(20).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    // We produce an outlier, but don't give it enough calls to reach the minimum volume.
+    generateLoad(
+        ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
+        ImmutableMap.of(subchannel1, 19));
 
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
-    // The address should not have been ejected..
+    // The address should not have been ejected.
     assertEjectedSubchannels(ImmutableSet.of());
   }
 
@@ -846,8 +850,13 @@ public class OutlierDetectionLoadBalancerTest {
     subchannelStateListeners.get(subchannel).onSubchannelState(newState);
   }
 
-  // Generates 100 calls, 20 each across the subchannels. Default status is OK.
   private void generateLoad(Map<Subchannel, Status> statusMap) {
+    generateLoad(statusMap, null);
+  }
+
+  // Generates 100 calls, 20 each across the subchannels. Default status is OK.
+  private void generateLoad(Map<Subchannel, Status> statusMap,
+      Map<Subchannel, Integer> maxCallsMap) {
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
@@ -858,6 +867,7 @@ public class OutlierDetectionLoadBalancerTest {
         pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getAllValues().get(6);
 
+    HashMap<Subchannel, Integer> callCountMap = new HashMap<>();
     for (int i = 0; i < 100; i++) {
       PickResult pickResult = picker
           .pickSubchannel(mock(PickSubchannelArgs.class));
@@ -865,8 +875,16 @@ public class OutlierDetectionLoadBalancerTest {
           .newClientStreamTracer(null, null);
 
       Subchannel subchannel = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
-      clientStreamTracer.streamClosed(
-          statusMap.containsKey(subchannel) ? statusMap.get(subchannel) : Status.OK);
+
+      int maxCalls =
+          maxCallsMap != null && maxCallsMap.containsKey(subchannel)
+              ? maxCallsMap.get(subchannel) : Integer.MAX_VALUE;
+      int calls = callCountMap.containsKey(subchannel) ? callCountMap.get(subchannel) : 0;
+      if (calls < maxCalls) {
+        callCountMap.put(subchannel, ++calls);
+        clientStreamTracer.streamClosed(
+            statusMap.containsKey(subchannel) ? statusMap.get(subchannel) : Status.OK);
+      }
     }
   }
 

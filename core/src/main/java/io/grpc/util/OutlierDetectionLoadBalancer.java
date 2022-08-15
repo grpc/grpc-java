@@ -693,7 +693,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       double mean = mean(successRates);
       double stdev = standardDeviation(successRates, mean);
 
-      for (AddressTracker tracker : trackerMap.values()) {
+      for (AddressTracker tracker : trackersWithVolume) {
         // If an ejection now would take us past the max configured ejection percentagem stop here.
         if (trackerMap.nextEjectionPercentage() > config.maxEjectionPercent) {
           return;
