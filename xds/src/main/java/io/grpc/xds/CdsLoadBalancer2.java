@@ -304,7 +304,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
             discovered = true;
             result = update;
-            if (result.clusterType() == ClusterType.AGGREGATE) {
+            if (update.clusterType() == ClusterType.AGGREGATE) {
               isLeaf = false;
               logger.log(XdsLogLevel.INFO, "Aggregate cluster {0}, underlying clusters: {1}",
                   update.clusterName(), update.prioritizedClusterNames());

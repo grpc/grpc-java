@@ -74,14 +74,14 @@ import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.XdsClusterResource.CdsUpdate;
-import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
-import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
-import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
@@ -595,14 +595,16 @@ public abstract class ClientXdsClientTestBase {
     String ldsResourceName = useProtocolV3()
         ? "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1"
         : "xdstp://unknown.example.com/envoy.api.v2.Listener/listener1";
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),ldsResourceName, ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),ldsResourceName,
+        ldsResourceWatcher);
     verify(ldsResourceWatcher).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
     assertThat(error.getDescription()).isEqualTo(
         "Wrong configuration: xds server does not exist for resource " + ldsResourceName);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
-    xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(),ldsResourceName, ldsResourceWatcher);
+    xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(),ldsResourceName,
+        ldsResourceWatcher);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
 
@@ -1051,14 +1053,16 @@ public abstract class ClientXdsClientTestBase {
     String cdsResourceName = useProtocolV3()
         ? "xdstp://unknown.example.com/envoy.config.cluster.v3.Cluster/cluster1"
         : "xdstp://unknown.example.com/envoy.api.v2.Cluster/cluster1";
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),cdsResourceName, cdsResourceWatcher);
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),cdsResourceName,
+        cdsResourceWatcher);
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
     assertThat(error.getDescription()).isEqualTo(
         "Wrong configuration: xds server does not exist for resource " + cdsResourceName);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
-    xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(),cdsResourceName, cdsResourceWatcher);
+    xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(),cdsResourceName,
+        cdsResourceWatcher);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
 
@@ -1405,7 +1409,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void rdsResourceFound() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, rdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
+        RDS_RESOURCE, rdsResourceWatcher);
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
 
     // Client sends an ACK RDS request.
@@ -1419,7 +1424,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void wrappedRdsResource() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, rdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
+        RDS_RESOURCE, rdsResourceWatcher);
     call.sendResponse(RDS, mf.buildWrappedResource(testRouteConfig), VERSION_1, "0000");
 
     // Client sends an ACK RDS request.
@@ -1434,7 +1440,8 @@ public abstract class ClientXdsClientTestBase {
   @Test
   @SuppressWarnings("unchecked")
   public void cachedRdsResource_data() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, rdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
+        RDS_RESOURCE, rdsResourceWatcher);
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
 
     // Client sends an ACK RDS request.
@@ -1452,7 +1459,8 @@ public abstract class ClientXdsClientTestBase {
   @Test
   @SuppressWarnings("unchecked")
   public void cachedRdsResource_absent() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, rdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
+        RDS_RESOURCE, rdsResourceWatcher);
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     // Add another watcher.
@@ -1466,7 +1474,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void rdsResourceUpdated() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, rdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
+        RDS_RESOURCE, rdsResourceWatcher);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
 
     // Initial RDS response.
@@ -1532,8 +1541,10 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void rdsResourcesDeletedByLdsTcpListener() {
     Assume.assumeTrue(useProtocolV3());
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LISTENER_RESOURCE, ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE, rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
+        ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
+        rdsResourceWatcher);
     verifyResourceMetadataRequested(LDS, LISTENER_RESOURCE);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
@@ -1660,7 +1671,7 @@ public abstract class ClientXdsClientTestBase {
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
     // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
+    verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -1877,7 +1888,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void cdsResourceFound() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(),
+        CDS_RESOURCE, cdsResourceWatcher);
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
@@ -2122,7 +2134,7 @@ public abstract class ClientXdsClientTestBase {
             + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: "
             + "ca_certificate_provider_instance is required in upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
@@ -2132,7 +2144,8 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void cdsResponseErrorHandling_badTransportSocketName() {
     Assume.assumeTrue(useProtocolV3());
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher);
 
     // Management server sends back CDS response with UpstreamTlsContext.
     List<Any> clusters = ImmutableList.of(Any
@@ -2145,14 +2158,15 @@ public abstract class ClientXdsClientTestBase {
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
         + "transport-socket with name envoy.transport_sockets.bad not supported.";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void cachedCdsResource_data() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher);
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
 
     // Client sends an ACK CDS request.
@@ -2172,9 +2186,10 @@ public abstract class ClientXdsClientTestBase {
   @Test
   @SuppressWarnings("unchecked")
   public void cachedCdsResource_absent() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher);
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
+    verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     ResourceWatcher<CdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(),CDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(CDS_RESOURCE);
@@ -2185,7 +2200,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void cdsResourceUpdated() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher);
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
 
     // Initial CDS response.
@@ -2239,7 +2255,8 @@ public abstract class ClientXdsClientTestBase {
   // Assures that CDS updates identical to the current config are ignored.
   @Test
   public void cdsResourceUpdatedWithDuplicate() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher);
 
     String edsService = "eds-service-bar.googleapis.com";
     String transportSocketName = "envoy.transport_sockets.tls";
@@ -2287,7 +2304,8 @@ public abstract class ClientXdsClientTestBase {
   public void cdsResourceDeleted() {
     Assume.assumeFalse(ignoreResourceDeletion());
 
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher);
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
 
     // Initial CDS response.
@@ -2302,7 +2320,7 @@ public abstract class ClientXdsClientTestBase {
     // Empty CDS response deletes the cluster.
     call.sendResponse(CDS, Collections.<Any>emptyList(), VERSION_2, "0001");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_2, "0001", NODE);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
+    verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
@@ -2315,7 +2333,8 @@ public abstract class ClientXdsClientTestBase {
   public void cdsResourceDeleted_ignoreResourceDeletion() {
     Assume.assumeTrue(ignoreResourceDeletion());
 
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher);
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
 
     // Initial CDS response.
@@ -2365,7 +2384,7 @@ public abstract class ClientXdsClientTestBase {
     verifySubscribedResourcesMetadataSizes(0, 2, 0, 0);
 
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
+    verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(cdsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(cdsResourceTwo);
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
@@ -2428,7 +2447,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void edsResourceNotFound() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
     Any clusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(
         "cluster-bar.googleapis.com",
         ImmutableList.of(lbEndpointHealthy),
@@ -2450,7 +2470,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void edsResponseErrorHandling_allResourcesFailedUnpack() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
     call.sendResponse(EDS, ImmutableList.of(FAILING_ANY, FAILING_ANY), VERSION_1, "0000");
 
@@ -2466,7 +2487,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void edsResponseErrorHandling_someResourcesFailedUnpack() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
 
     // Correct resource is in the middle to ensure processing continues on errors.
@@ -2587,7 +2609,8 @@ public abstract class ClientXdsClientTestBase {
   @Test
   @SuppressWarnings("unchecked")
   public void cachedEdsResource_data() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
     call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
 
     // Client sent an ACK EDS request.
@@ -2606,7 +2629,8 @@ public abstract class ClientXdsClientTestBase {
   @Test
   @SuppressWarnings("unchecked")
   public void cachedEdsResource_absent() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     ResourceWatcher<EdsUpdate> watcher = mock(ResourceWatcher.class);
@@ -2619,7 +2643,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void edsResourceUpdated() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
 
     // Initial EDS response.
@@ -2655,7 +2680,8 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void edsDuplicateLocalityInTheSamePriority() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
 
     // Updated EDS response.
@@ -2780,7 +2806,7 @@ public abstract class ClientXdsClientTestBase {
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
 
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
+    verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(edsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(edsResourceTwo);
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
@@ -2825,7 +2851,7 @@ public abstract class ClientXdsClientTestBase {
             LocalityLbEndpoints.create(
                 ImmutableList.of(
                     LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
-    verifyNoMoreInteractions(ldsResourceWatcher);
+    verifyNoMoreInteractions(edsResourceWatcher);
     verifyResourceMetadataAcked(
         EDS, edsResourceTwo, clusterLoadAssignmentTwo, VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(
@@ -2839,7 +2865,8 @@ public abstract class ClientXdsClientTestBase {
     CancellableContext cancellableContext = Context.current().withCancellation();
     Context prevContext = cancellableContext.attach();
     try {
-      DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+      DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+          ldsResourceWatcher);
 
       // The inbound RPC finishes and closes its context. The outbound RPC's control plane RPC
       // should not be impacted.
@@ -2857,7 +2884,8 @@ public abstract class ClientXdsClientTestBase {
   public void streamClosedAndRetryWithBackoff() {
     InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE, rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE,
+        rdsResourceWatcher);
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(),CDS_RESOURCE, cdsResourceWatcher);
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),EDS_RESOURCE, edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
@@ -3015,7 +3043,8 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void streamClosedAndRetryRestartsResourceInitialFetchTimerForUnresolvedResources() {
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
+        rdsResourceWatcher);
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
@@ -3082,7 +3111,8 @@ public abstract class ClientXdsClientTestBase {
   public void serverSideListenerFound() {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
-        startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE, ldsResourceWatcher);
+        startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
+            ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         "route-foo.googleapis.com", null,
         Collections.singletonList(mf.buildTerminalFilter()));
@@ -3118,7 +3148,8 @@ public abstract class ClientXdsClientTestBase {
   public void serverSideListenerNotFound() {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
-        startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE, ldsResourceWatcher);
+        startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
+            ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         "route-foo.googleapis.com", null,
         Collections.singletonList(mf.buildTerminalFilter()));
@@ -3145,7 +3176,8 @@ public abstract class ClientXdsClientTestBase {
   public void serverSideListenerResponseErrorHandling_badDownstreamTlsContext() {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
-            startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE, ldsResourceWatcher);
+            startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
+                ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
             "route-foo.googleapis.com", null,
         Collections.singletonList(mf.buildTerminalFilter()));
@@ -3171,7 +3203,8 @@ public abstract class ClientXdsClientTestBase {
   public void serverSideListenerResponseErrorHandling_badTransportSocketName() {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
-        startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE, ldsResourceWatcher);
+        startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
+            ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         "route-foo.googleapis.com", null,
         Collections.singletonList(mf.buildTerminalFilter()));
@@ -3200,19 +3233,19 @@ public abstract class ClientXdsClientTestBase {
     switch (type.typeName()) {
       case LDS:
         timeoutTaskFilter = LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type,name, watcher);
+        xdsClient.watchXdsResource(type, name, watcher);
         break;
       case RDS:
         timeoutTaskFilter = RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type,name, watcher);
+        xdsClient.watchXdsResource(type, name, watcher);
         break;
       case CDS:
         timeoutTaskFilter = CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type,name, watcher);
+        xdsClient.watchXdsResource(type, name, watcher);
         break;
       case EDS:
         timeoutTaskFilter = EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type,name, watcher);
+        xdsClient.watchXdsResource(type, name, watcher);
         break;
       case UNKNOWN:
       default:

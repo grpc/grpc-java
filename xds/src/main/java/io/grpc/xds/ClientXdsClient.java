@@ -18,6 +18,10 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 import static io.grpc.xds.XdsResourceType.ParsedResource;
 import static io.grpc.xds.XdsResourceType.ValidatedResourceUpdate;
@@ -92,6 +96,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   private final Map<XdsResourceType<? extends ResourceUpdate>,
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
       resourceSubscribers = new HashMap<>();
+  private final Map<ResourceType, XdsResourceType<? extends ResourceUpdate>> xdsResourceTypeMap =
+      ImmutableMap.of(
+      LDS, XdsListenerResource.getInstance(),
+      RDS, XdsRouteConfigureResource.getInstance(),
+      CDS, XdsClusterResource.getInstance(),
+      EDS, XdsEndpointResource.getInstance());
   private final LoadStatsManager2 loadStatsManager;
   private final Map<ServerInfo, LoadReportClient> serverLrsClientMap = new HashMap<>();
   private final XdsChannelFactory xdsChannelFactory;
@@ -160,13 +170,16 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       String nonce) {
     syncContext.throwIfNotInThisSynchronizationContext();
     XdsResourceType<? extends ResourceUpdate> xdsResourceType =
-        ResourceType.xdsResourceInstance(resourceType);
+        xdsResourceTypeMap.get(resourceType);
     if (xdsResourceType == null) {
       logger.log(XdsLogLevel.WARNING, "Ignore an unknown type of DiscoveryResponse");
       return;
     }
+    Set<String> toParseResourceNames = (resourceType == LDS || resourceType == RDS ) ? null :
+        resourceSubscribers.get(xdsResourceType).keySet();
     XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
-        bootstrapInfo, filterRegistry, loadBalancerRegistry, tlsContextManager);
+        bootstrapInfo, filterRegistry, loadBalancerRegistry, tlsContextManager,
+        toParseResourceNames);
     handleResourceUpdate(args, resources, xdsResourceType);
   }
 
@@ -223,10 +236,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     return isShutdown;
   }
 
-  private Map<String, ResourceSubscriber<? extends ResourceUpdate>>
-  getSubscribedResourcesMap(XdsResourceType<? extends ResourceUpdate> type) {
-    if (resourceSubscribers.containsKey(type)) {
-      return resourceSubscribers.get(type);
+  private Map<String, ResourceSubscriber<? extends ResourceUpdate>> getSubscribedResourcesMap(
+      ResourceType type) {
+    XdsResourceType<? extends ResourceUpdate> xdsResourceType = xdsResourceTypeMap.get(type);
+    if (resourceSubscribers.containsKey(xdsResourceType)) {
+      return resourceSubscribers.get(xdsResourceType);
     } else {
       return Collections.emptyMap();
     }
@@ -234,8 +248,14 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   @Nullable
   @Override
+  public XdsResourceType<? extends ResourceUpdate> getXdsResourceType(ResourceType type) {
+    return xdsResourceTypeMap.get(type);
+  }
+
+  @Nullable
+  @Override
   public Collection<String> getSubscribedResources(ServerInfo serverInfo,
-                                                   XdsResourceType<? extends ResourceUpdate> type) {
+                                                   ResourceType type) {
     Map<String, ResourceSubscriber<? extends ResourceUpdate>> resources =
         getSubscribedResourcesMap(type);
     ImmutableSet.Builder<String> builder = ImmutableSet.builder();
@@ -259,16 +279,18 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         // A map from a "resource type" to a map ("resource name": "resource metadata")
         ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>> metadataSnapshot =
             ImmutableMap.builder();
-        for (XdsResourceType<? extends ResourceUpdate> type :
-            ResourceType.xdsResourceTypeMap.values()) {
+        for (XdsResourceType<? extends ResourceUpdate> resourceType: xdsResourceTypeMap.values()) {
           ImmutableMap.Builder<String, ResourceMetadata> metadataMap = ImmutableMap.builder();
-          Map<String, ResourceSubscriber<? extends ResourceUpdate>> map =
-              getSubscribedResourcesMap(type);
+          Map<String, ResourceSubscriber<? extends ResourceUpdate>> resourceSubscriberMap =
+              Collections.emptyMap();
+          if (resourceSubscribers.containsKey(resourceType)) {
+            resourceSubscriberMap = resourceSubscribers.get(resourceType);
+          }
           for (Map.Entry<String, ResourceSubscriber<? extends ResourceUpdate>> resourceEntry
-              : map.entrySet()) {
+              : resourceSubscriberMap.entrySet()) {
             metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
           }
-          metadataSnapshot.put(type.typeName(), metadataMap.buildOrThrow());
+          metadataSnapshot.put(resourceType.typeName(), metadataMap.buildOrThrow());
         }
         future.set(metadataSnapshot.buildOrThrow());
       }
@@ -396,7 +418,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     String errorDetail = null;
     if (errors.isEmpty()) {
       checkArgument(invalidResources.isEmpty(), "found invalid resources but missing errors");
-      serverChannelMap.get(args.serverInfo).ackResponse(xdsResourceType, args.versionInfo, args.nonce);
+      serverChannelMap.get(args.serverInfo).ackResponse(xdsResourceType, args.versionInfo,
+          args.nonce);
     } else {
       errorDetail = Joiner.on('\n').join(errors);
       logger.log(XdsLogLevel.WARNING,
@@ -406,19 +429,20 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     }
 
     long updateTime = timeProvider.currentTimeNanos();
-    for (Map.Entry<String, ResourceSubscriber<?>> entry : getSubscribedResourcesMap(xdsResourceType).entrySet()) {
+    for (Map.Entry<String, ResourceSubscriber<?>> entry :
+        getSubscribedResourcesMap(xdsResourceType.typeName()).entrySet()) {
       String resourceName = entry.getKey();
       ResourceSubscriber<T> subscriber = (ResourceSubscriber<T>) entry.getValue();
 
       if (parsedResources.containsKey(resourceName)) {
         // Happy path: the resource updated successfully. Notify the watchers of the update.
-        subscriber.onData(parsedResources.get(resourceName), xdsResourceType.version, updateTime);
+        subscriber.onData(parsedResources.get(resourceName), args.versionInfo, updateTime);
         continue;
       }
 
       if (invalidResources.contains(resourceName)) {
         // The resource update is invalid. Capture the error without notifying the watchers.
-        subscriber.onRejected(xdsResourceType.version, updateTime, errorDetail);
+        subscriber.onRejected(args.versionInfo, updateTime, errorDetail);
       }
 
       // Nothing else to do for incremental ADS resources.
@@ -451,10 +475,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     // LDS/CDS responses represents the state of the world, RDS/EDS resources not referenced in
     // LDS/CDS resources should be deleted.
     if (xdsResourceType.dependentResource() != null) {
-      XdsResourceType<T> resourceType = (XdsResourceType<T>)ResourceType.xdsResourceInstance(
-          xdsResourceType.dependentResource());
+      XdsResourceType<?> dependency = xdsResourceTypeMap.get(xdsResourceType.dependentResource());
       Map<String, ResourceSubscriber<? extends ResourceUpdate>> dependentSubscribers =
-          resourceSubscribers.get(resourceType);
+          resourceSubscribers.get(dependency);
       if (dependentSubscribers == null) {
         return;
       }
@@ -472,13 +495,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       return;
     }
     String resourceName = null;
-    if (subscriber.type == ResourceType.LDS) {
+    if (subscriber.type == LDS) {
       LdsUpdate ldsUpdate = (LdsUpdate) subscriber.data;
       io.grpc.xds.HttpConnectionManager hcm = ldsUpdate.httpConnectionManager();
       if (hcm != null) {
         resourceName = hcm.rdsName();
       }
-    } else if (subscriber.type == ResourceType.CDS) {
+    } else if (subscriber.type == CDS) {
       CdsUpdate cdsUpdate = (CdsUpdate) subscriber.data;
       resourceName = cdsUpdate.edsServiceName();
     }
@@ -648,7 +671,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       // and the resource is reusable.
       boolean ignoreResourceDeletionEnabled =
           serverInfo != null && serverInfo.ignoreResourceDeletion();
-      boolean isStateOfTheWorld = (type == ResourceType.LDS || type == ResourceType.CDS);
+      boolean isStateOfTheWorld = (type == LDS || type == CDS);
       if (ignoreResourceDeletionEnabled && isStateOfTheWorld && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.FORCE_WARNING,

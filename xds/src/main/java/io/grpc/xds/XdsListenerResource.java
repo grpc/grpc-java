@@ -22,6 +22,8 @@ import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import static io.grpc.xds.XdsClient.ResourceUpdate;
+import static io.grpc.xds.XdsClusterResource.validateCommonTlsContext;
+import static io.grpc.xds.XdsRouteConfigureResource.extractVirtualHosts;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.auto.value.AutoValue;

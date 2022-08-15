@@ -658,8 +658,9 @@ public class CdsLoadBalancer2Test {
 
     @Override
     @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type, String resourceName,
-                                ResourceWatcher<T> watcher) {
+    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                           String resourceName,
+                                                           ResourceWatcher<T> watcher) {
       assertThat(type.typeName()).isEqualTo(CDS);
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);

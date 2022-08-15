@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 import static io.grpc.xds.XdsClient.ResourceWatcher;
 
@@ -708,9 +707,8 @@ final class XdsNameResolver extends NameResolver {
           if (stopped) {
             return;
           }
-          LdsUpdate ldsUpdate = update;
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-          HttpConnectionManager httpConnectionManager = ldsUpdate.httpConnectionManager();
+          HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
           List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
           String rdsName = httpConnectionManager.rdsName();
           cleanUpRouteDiscoveryState();

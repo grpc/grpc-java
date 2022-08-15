@@ -34,14 +34,16 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -300,6 +302,134 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     return upstreamTlsContext;
   }
 
+  @VisibleForTesting
+  static void validateCommonTlsContext(
+      CommonTlsContext commonTlsContext, Set<String> certProviderInstances, boolean server)
+      throws ResourceInvalidException {
+    if (commonTlsContext.hasCustomHandshaker()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with custom_handshaker is not supported");
+    }
+    if (commonTlsContext.hasTlsParams()) {
+      throw new ResourceInvalidException("common-tls-context with tls_params is not supported");
+    }
+    if (commonTlsContext.hasValidationContextSdsSecretConfig()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_sds_secret_config is not supported");
+    }
+    if (commonTlsContext.hasValidationContextCertificateProvider()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_certificate_provider is not supported");
+    }
+    if (commonTlsContext.hasValidationContextCertificateProviderInstance()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_certificate_provider_instance is not"
+              + " supported");
+    }
+    String certInstanceName = getIdentityCertInstanceName(commonTlsContext);
+    if (certInstanceName == null) {
+      if (server) {
+        throw new ResourceInvalidException(
+            "tls_certificate_provider_instance is required in downstream-tls-context");
+      }
+      if (commonTlsContext.getTlsCertificatesCount() > 0) {
+        throw new ResourceInvalidException(
+            "tls_certificate_provider_instance is unset");
+      }
+      if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
+        throw new ResourceInvalidException(
+            "tls_certificate_provider_instance is unset");
+      }
+      if (commonTlsContext.hasTlsCertificateCertificateProvider()) {
+        throw new ResourceInvalidException(
+            "tls_certificate_provider_instance is unset");
+      }
+    } else if (certProviderInstances == null || !certProviderInstances.contains(certInstanceName)) {
+      throw new ResourceInvalidException(
+          "CertificateProvider instance name '" + certInstanceName
+              + "' not defined in the bootstrap file.");
+    }
+    String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
+    if (rootCaInstanceName == null) {
+      if (!server) {
+        throw new ResourceInvalidException(
+            "ca_certificate_provider_instance is required in upstream-tls-context");
+      }
+    } else {
+      if (certProviderInstances == null || !certProviderInstances.contains(rootCaInstanceName)) {
+        throw new ResourceInvalidException(
+            "ca_certificate_provider_instance name '" + rootCaInstanceName
+                + "' not defined in the bootstrap file.");
+      }
+      CertificateValidationContext certificateValidationContext = null;
+      if (commonTlsContext.hasValidationContext()) {
+        certificateValidationContext = commonTlsContext.getValidationContext();
+      } else if (commonTlsContext.hasCombinedValidationContext() && commonTlsContext
+          .getCombinedValidationContext().hasDefaultValidationContext()) {
+        certificateValidationContext = commonTlsContext.getCombinedValidationContext()
+            .getDefaultValidationContext();
+      }
+      if (certificateValidationContext != null) {
+        if (certificateValidationContext.getMatchSubjectAltNamesCount() > 0 && server) {
+          throw new ResourceInvalidException(
+              "match_subject_alt_names only allowed in upstream_tls_context");
+        }
+        if (certificateValidationContext.getVerifyCertificateSpkiCount() > 0) {
+          throw new ResourceInvalidException(
+              "verify_certificate_spki in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.getVerifyCertificateHashCount() > 0) {
+          throw new ResourceInvalidException(
+              "verify_certificate_hash in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.hasRequireSignedCertificateTimestamp()) {
+          throw new ResourceInvalidException(
+              "require_signed_certificate_timestamp in default_validation_context is not "
+                  + "supported");
+        }
+        if (certificateValidationContext.hasCrl()) {
+          throw new ResourceInvalidException("crl in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.hasCustomValidatorConfig()) {
+          throw new ResourceInvalidException(
+              "custom_validator_config in default_validation_context is not supported");
+        }
+      }
+    }
+  }
+
+  private static String getIdentityCertInstanceName(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
+    } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName();
+    }
+    return null;
+  }
+
+  private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasValidationContext()) {
+      if (commonTlsContext.getValidationContext().hasCaCertificateProviderInstance()) {
+        return commonTlsContext.getValidationContext().getCaCertificateProviderInstance()
+            .getInstanceName();
+      }
+    } else if (commonTlsContext.hasCombinedValidationContext()) {
+      CommonTlsContext.CombinedCertificateValidationContext combinedCertificateValidationContext
+          = commonTlsContext.getCombinedValidationContext();
+      if (combinedCertificateValidationContext.hasDefaultValidationContext()
+          && combinedCertificateValidationContext.getDefaultValidationContext()
+          .hasCaCertificateProviderInstance()) {
+        return combinedCertificateValidationContext.getDefaultValidationContext()
+            .getCaCertificateProviderInstance().getInstanceName();
+      } else if (combinedCertificateValidationContext
+          .hasValidationContextCertificateProviderInstance()) {
+        return combinedCertificateValidationContext
+            .getValidationContextCertificateProviderInstance().getInstanceName();
+      }
+    }
+    return null;
+  }
+
   /** xDS resource update for cluster-level configuration. */
   @AutoValue
   abstract static class CdsUpdate implements ResourceUpdate {
@@ -376,7 +506,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     }
 
     static Builder forLogicalDns(String clusterName, String dnsHostName,
-                                 @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
+                                 @Nullable ServerInfo lrsServerInfo,
+                                 @Nullable Long maxConcurrentRequests,
                                  @Nullable UpstreamTlsContext upstreamTlsContext) {
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)

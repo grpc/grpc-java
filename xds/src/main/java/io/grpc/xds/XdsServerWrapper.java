@@ -18,10 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
-import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.ResourceWatcher;
 
 import com.google.auto.value.AutoValue;
@@ -382,16 +379,15 @@ final class XdsServerWrapper extends Server {
             return;
           }
           logger.log(Level.FINEST, "Received Lds update {0}", update);
-          LdsUpdate ldsUpdate = update;
-          checkNotNull(ldsUpdate.listener(), "update");
+          checkNotNull(update.listener(), "update");
           if (!pendingRds.isEmpty()) {
             // filter chain state has not yet been applied to filterChainSelectorManager and there
             // are two sets of sslContextProviderSuppliers, so we release the old ones.
             releaseSuppliersInFlight();
             pendingRds.clear();
           }
-          filterChains = ldsUpdate.listener().filterChains();
-          defaultFilterChain = ldsUpdate.listener().defaultFilterChain();
+          filterChains = update.listener().filterChains();
+          defaultFilterChain = update.listener().defaultFilterChain();
           List<FilterChain> allFilterChains = filterChains;
           if (defaultFilterChain != null) {
             allFilterChains = new ArrayList<>(filterChains);
@@ -646,14 +642,13 @@ final class XdsServerWrapper extends Server {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            RdsUpdate rdsUpdate = update;
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
             if (savedVirtualHosts == null && !isPending) {
               logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
             }
-            savedVirtualHosts = ImmutableList.copyOf(rdsUpdate.virtualHosts);
+            savedVirtualHosts = ImmutableList.copyOf(update.virtualHosts);
             updateRdsRoutingConfig();
             maybeUpdateSelector();
           }

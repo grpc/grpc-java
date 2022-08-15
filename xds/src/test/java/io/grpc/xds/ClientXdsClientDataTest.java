@@ -837,7 +837,7 @@ public class ClientXdsClientDataTest {
             .setWeight(UInt32Value.newBuilder().setValue(30))
             .build();
     ClusterWeight clusterWeight =
-        XdsClusterResource.parseClusterWeight(proto, filterRegistry, false).getStruct();
+        XdsRouteConfigureResource.parseClusterWeight(proto, filterRegistry, false).getStruct();
     assertThat(clusterWeight.name()).isEqualTo("cluster-foo");
     assertThat(clusterWeight.weight()).isEqualTo(30);
   }
@@ -1059,8 +1059,8 @@ public class ClientXdsClientDataTest {
                   .setValue(rawStruct1)
                   .build())
     );
-    Map<String, FilterConfig> map = XdsListenerResource.parseOverrideFilterConfigs(rawFilterMap,
-        filterRegistry).getStruct();
+    Map<String, FilterConfig> map = XdsRouteConfigureResource.parseOverrideFilterConfigs(
+        rawFilterMap, filterRegistry).getStruct();
     assertThat(((SimpleFilterConfig)map.get("struct-0")).getConfig()).isEqualTo(rawStruct0);
     assertThat(((SimpleFilterConfig)map.get("struct-1")).getConfig()).isEqualTo(rawStruct1);
   }
@@ -1238,7 +1238,8 @@ public class ClientXdsClientDataTest {
             .build();
     Map<String, Any> configOverrides = ImmutableMap.of("envoy.auth", Any.pack(rbacPerRoute));
     Map<String, FilterConfig> parsedConfigs =
-        XdsListenerResource.parseOverrideFilterConfigs(configOverrides, filterRegistry).getStruct();
+        XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+            .getStruct();
     assertThat(parsedConfigs).hasSize(1);
     assertThat(parsedConfigs).containsKey("envoy.auth");
     assertThat(parsedConfigs.get("envoy.auth")).isInstanceOf(RbacConfig.class);
@@ -1258,7 +1259,8 @@ public class ClientXdsClientDataTest {
             .setIsOptional(true).setConfig(Any.pack(StringValue.of("string value")))
             .build()));
     Map<String, FilterConfig> parsedConfigs =
-        XdsListenerResource.parseOverrideFilterConfigs(configOverrides, filterRegistry).getStruct();
+        XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+            .getStruct();
     assertThat(parsedConfigs).hasSize(1);
     assertThat(parsedConfigs).containsKey("envoy.fault");
   }
@@ -1276,7 +1278,7 @@ public class ClientXdsClientDataTest {
         Any.pack(io.envoyproxy.envoy.config.route.v3.FilterConfig.newBuilder()
             .setIsOptional(false).setConfig(Any.pack(StringValue.of("string value")))
             .build()));
-    assertThat(XdsListenerResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+    assertThat(XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
         .getErrorDetail()).isEqualTo(
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported");
@@ -1286,7 +1288,7 @@ public class ClientXdsClientDataTest {
         Any.pack(httpFault),
         "unsupported.filter",
         Any.pack(StringValue.of("string value")));
-    assertThat(XdsListenerResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+    assertThat(XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
         .getErrorDetail()).isEqualTo(
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported");
@@ -2310,7 +2312,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context with tls_params is not supported");
-    XdsListenerResource.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2320,7 +2322,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context with custom_handshaker is not supported");
-    XdsListenerResource.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2330,7 +2332,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("ca_certificate_provider_instance is required in upstream-tls-context");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2342,7 +2344,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "common-tls-context with validation_context_sds_secret_config is not supported");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2356,7 +2358,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "common-tls-context with validation_context_certificate_provider is not supported");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2371,7 +2373,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "common-tls-context with validation_context_certificate_provider_instance is not "
             + "supported");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2382,7 +2384,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "tls_certificate_provider_instance is required in downstream-tls-context");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, true);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, true);
   }
 
   @Test
@@ -2393,7 +2395,7 @@ public class ClientXdsClientDataTest {
         .setTlsCertificateProviderInstance(
             CertificateProviderPluginInstance.newBuilder().setInstanceName("name1").build())
         .build();
-    XdsResourceType
+    XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
   }
 
@@ -2405,7 +2407,7 @@ public class ClientXdsClientDataTest {
         .setTlsCertificateCertificateProviderInstance(
             CertificateProviderInstance.newBuilder().setInstanceName("name1").build())
         .build();
-    XdsResourceType
+    XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
   }
 
@@ -2420,7 +2422,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "CertificateProvider instance name 'bad-name' not defined in the bootstrap file.");
-    XdsResourceType
+    XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
   }
 
@@ -2435,7 +2437,7 @@ public class ClientXdsClientDataTest {
                     CertificateProviderInstance.newBuilder().setInstanceName("name1").build())
                 .build())
         .build();
-    XdsResourceType
+    XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), false);
   }
 
@@ -2453,7 +2455,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "ca_certificate_provider_instance name 'bad-name' not defined in the bootstrap file.");
-    XdsResourceType
+    XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), false);
   }
 
@@ -2465,7 +2467,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("tls_certificate_provider_instance is unset");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2477,7 +2479,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "tls_certificate_provider_instance is unset");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2491,7 +2493,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "tls_certificate_provider_instance is unset");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2501,7 +2503,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("ca_certificate_provider_instance is required in upstream-tls-context");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2514,7 +2516,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "ca_certificate_provider_instance is required in upstream-tls-context");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, null, false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -2534,7 +2536,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("match_subject_alt_names only allowed in upstream_tls_context");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), true);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), true);
   }
 
   @Test
@@ -2554,7 +2556,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("verify_certificate_spki in default_validation_context is not "
         + "supported");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -2574,7 +2576,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("verify_certificate_hash in default_validation_context is not "
         + "supported");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -2595,7 +2597,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "require_signed_certificate_timestamp in default_validation_context is not "
             + "supported");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -2614,7 +2616,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("crl in default_validation_context is not supported");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -2634,7 +2636,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("custom_validator_config in default_validation_context is not "
         + "supported");
-    XdsResourceType.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test

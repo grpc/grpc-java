@@ -187,7 +187,7 @@ public class XdsServerWrapperTest {
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")
         .build();
     XdsClient xdsClient = mock(XdsClient.class);
-    XdsListenerResource listenerResource = mock(XdsListenerResource.class);
+    XdsListenerResource listenerResource = XdsListenerResource.getInstance();
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);

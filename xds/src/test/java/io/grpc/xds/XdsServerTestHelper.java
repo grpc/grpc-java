@@ -59,6 +59,7 @@ public class XdsServerTestHelper {
           .node(BOOTSTRAP_NODE)
           .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
           .build();
+
   static void generateListenerUpdate(FakeXdsClient xdsClient,
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
                                      TlsContextManager tlsContextManager) {
@@ -189,7 +190,8 @@ public class XdsServerTestHelper {
           ldsResource.set(resourceName);
           break;
         case RDS:
-          assertThat(rdsWatchers.put(resourceName, (ResourceWatcher<RdsUpdate>)watcher)).isNull(); //re-register is not allowed.
+          //re-register is not allowed.
+          assertThat(rdsWatchers.put(resourceName, (ResourceWatcher<RdsUpdate>)watcher)).isNull();
           rdsCount.countDown();
           break;
         default:
@@ -197,7 +199,8 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type, String resourceName,
+    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                           String resourceName,
                                 ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case LDS:

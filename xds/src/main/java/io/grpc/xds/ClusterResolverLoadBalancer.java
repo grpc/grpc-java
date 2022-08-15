@@ -18,8 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
-import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.ResourceWatcher;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
@@ -381,17 +379,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             if (shutdown) {
               return;
             }
-            EdsUpdate edsUpdate = update;
             logger.log(XdsLogLevel.DEBUG, "Received endpoint update {0}", update);
             if (logger.isLoggable(XdsLogLevel.INFO)) {
               logger.log(XdsLogLevel.INFO, "Cluster {0}: {1} localities, {2} drop categories",
-                  edsUpdate.clusterName, edsUpdate.localityLbEndpointsMap.size(),
-                  edsUpdate.dropPolicies.size());
+                  update.clusterName, update.localityLbEndpointsMap.size(),
+                  update.dropPolicies.size());
             }
             Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
-                edsUpdate.localityLbEndpointsMap;
+                update.localityLbEndpointsMap;
             Map<Locality, Integer> localityWeights = new HashMap<>();
-            List<DropOverload> dropOverloads = edsUpdate.dropPolicies;
+            List<DropOverload> dropOverloads = update.dropPolicies;
             List<EquivalentAddressGroup> addresses = new ArrayList<>();
             Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
             List<String> sortedPriorityNames = generatePriorityNames(name, localityLbEndpoints);
@@ -433,7 +430,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             if (prioritizedLocalityWeights.isEmpty()) {
               // Will still update the result, as if the cluster resource is revoked.
               logger.log(XdsLogLevel.INFO,
-                  "Cluster {0} has no usable priority/locality/endpoint", edsUpdate.clusterName);
+                  "Cluster {0} has no usable priority/locality/endpoint", update.clusterName);
             }
             sortedPriorityNames.retainAll(prioritizedLocalityWeights.keySet());
             Map<String, PriorityChildConfig> priorityChildConfigs =

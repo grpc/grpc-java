@@ -369,7 +369,9 @@ abstract class XdsClient {
      */
     // Must be synchronized.
     @Nullable
-    Collection<String> getSubscribedResources(ServerInfo serverInfo,
-                                              XdsResourceType<? extends ResourceUpdate> type);
+    Collection<String> getSubscribedResources(ServerInfo serverInfo, ResourceType type);
+
+    @Nullable
+    XdsResourceType<? extends ResourceUpdate> getXdsResourceType(ResourceType type);
   }
 }
