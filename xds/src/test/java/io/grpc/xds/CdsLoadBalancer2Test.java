@@ -54,7 +54,7 @@ import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.Dis
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
-import io.grpc.xds.XdsClient.CdsUpdate;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -118,8 +118,6 @@ public class CdsLoadBalancer2Test {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private int xdsClientRefs;
   private CdsLoadBalancer2  loadBalancer;
-  private final XdsClusterResource clusterResource = new XdsClusterResource(syncContext,
-      null, lbRegistry);
 
   @Before
   public void setUp() {
@@ -647,28 +645,21 @@ public class CdsLoadBalancer2Test {
   }
 
   private final class FakeXdsClient extends XdsClient {
-    private final Map<String, ResourceWatcher> watchers = new HashMap<>();
+    private final Map<String, ResourceWatcher<CdsUpdate>> watchers = new HashMap<>();
 
     @Override
-    XdsResourceType getXdsResourceTypeByType(AbstractXdsClient.ResourceType type) {
-      switch (type) {
-        case CDS:
-          return clusterResource;
-        default:
-          return null;
-      }
-    }
-
-    @Override
-    void watchXdsResource(XdsResourceType type, String resourceName, ResourceWatcher watcher) {
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
+                          ResourceWatcher<T> watcher) {
       assertThat(type.typeName()).isEqualTo(CDS);
       assertThat(watchers).doesNotContainKey(resourceName);
-      watchers.put(resourceName, watcher);
+      watchers.put(resourceName, (ResourceWatcher<CdsUpdate>)watcher);
     }
 
     @Override
-    void cancelXdsResourceWatch(XdsResourceType type, String resourceName,
-                                ResourceWatcher watcher) {
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type, String resourceName,
+                                ResourceWatcher<T> watcher) {
       assertThat(type.typeName()).isEqualTo(CDS);
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
@@ -687,7 +678,7 @@ public class CdsLoadBalancer2Test {
     }
 
     private void deliverError(Status error) {
-      for (ResourceWatcher watcher : watchers.values()) {
+      for (ResourceWatcher<CdsUpdate> watcher : watchers.values()) {
         watcher.onError(error);
       }
     }

@@ -161,8 +161,6 @@ public class XdsNameResolverTest {
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
   private boolean originalEnableTimeout;
-  private static XdsListenerResource listenerResource;
-  private static XdsRouteConfigureResource routeConfigureResource;
 
   @Before
   public void setUp() {
@@ -174,8 +172,6 @@ public class XdsNameResolverTest {
     resolver = new XdsNameResolver(null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, filterRegistry, null);
-    listenerResource = new XdsListenerResource(syncContext, bootstrapInfo, filterRegistry);
-    routeConfigureResource = new XdsRouteConfigureResource(syncContext, filterRegistry);
   }
 
   @After
@@ -2077,8 +2073,8 @@ public class XdsNameResolverTest {
     // Should never be subscribing to more than one LDS and RDS resource at any point of time.
     private String ldsResource;  // should always be AUTHORITY
     private String rdsResource;
-    private ResourceWatcher ldsWatcher;
-    private ResourceWatcher rdsWatcher;
+    private ResourceWatcher<LdsUpdate> ldsWatcher;
+    private ResourceWatcher<RdsUpdate> rdsWatcher;
 
     @Override
     BootstrapInfo getBootstrapInfo() {
@@ -2086,41 +2082,33 @@ public class XdsNameResolverTest {
     }
 
     @Override
-    XdsResourceType getXdsResourceTypeByType(AbstractXdsClient.ResourceType type) {
-      switch (type) {
-        case LDS:
-          return listenerResource;
-        case RDS:
-          return routeConfigureResource;
-        default:
-          return null;
-      }
-    }
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
+                                                    String resourceName,
+                                                    ResourceWatcher<T> watcher) {
 
-    @Override
-    void watchXdsResource(XdsResourceType resourceType, String resourceName,
-                          ResourceWatcher watcher) {
       switch (resourceType.typeName()) {
         case LDS:
           assertThat(ldsResource).isNull();
           assertThat(ldsWatcher).isNull();
           assertThat(resourceName).isEqualTo(expectedLdsResourceName);
           ldsResource = resourceName;
-          ldsWatcher = watcher;
+          ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
           break;
         case RDS:
           assertThat(rdsResource).isNull();
           assertThat(rdsWatcher).isNull();
           rdsResource = resourceName;
-          rdsWatcher = watcher;
+          rdsWatcher = (ResourceWatcher<RdsUpdate>) watcher;
           break;
         default:
       }
     }
 
     @Override
-    void cancelXdsResourceWatch(XdsResourceType type, String resourceName,
-                                ResourceWatcher watcher) {
+    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                           String resourceName,
+                                                           ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case LDS:
           assertThat(ldsResource).isNotNull();

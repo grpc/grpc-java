@@ -22,9 +22,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -61,18 +59,6 @@ public class XdsServerTestHelper {
           .node(BOOTSTRAP_NODE)
           .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
           .build();
-  private static final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          throw new AssertionError(e);
-        }
-      });
-  private static XdsListenerResource listenerResource = new XdsListenerResource(
-      syncContext, BOOTSTRAP_INFO, FilterRegistry.getDefaultRegistry());
-  private static XdsRouteConfigureResource routeConfigureResource =
-      new XdsRouteConfigureResource(syncContext, FilterRegistry.getDefaultRegistry());
-
   static void generateListenerUpdate(FakeXdsClient xdsClient,
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
                                      TlsContextManager tlsContextManager) {
@@ -177,9 +163,9 @@ public class XdsServerTestHelper {
   static final class FakeXdsClient extends XdsClient {
     boolean shutdown;
     SettableFuture<String> ldsResource = SettableFuture.create();
-    ResourceWatcher ldsWatcher;
+    ResourceWatcher<LdsUpdate> ldsWatcher;
     CountDownLatch rdsCount = new CountDownLatch(1);
-    final Map<String, ResourceWatcher> rdsWatchers = new HashMap<>();
+    final Map<String, ResourceWatcher<RdsUpdate>> rdsWatchers = new HashMap<>();
 
     @Override
     public TlsContextManager getTlsContextManager() {
@@ -192,28 +178,18 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    XdsResourceType getXdsResourceTypeByType(ResourceType type) {
-      switch (type) {
-        case LDS:
-          return listenerResource;
-        case RDS:
-          return routeConfigureResource;
-        default:
-          return null;
-      }
-    }
-
-    @Override
-    void watchXdsResource(XdsResourceType resourceType, String resourceName,
-                          ResourceWatcher watcher) {
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
+                                                     String resourceName,
+                                                     ResourceWatcher<T> watcher) {
       switch (resourceType.typeName()) {
         case LDS:
           assertThat(ldsWatcher).isNull();
-          ldsWatcher = watcher;
+          ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
           ldsResource.set(resourceName);
           break;
         case RDS:
-          assertThat(rdsWatchers.put(resourceName, watcher)).isNull(); //re-register is not allowed.
+          assertThat(rdsWatchers.put(resourceName, (ResourceWatcher<RdsUpdate>)watcher)).isNull(); //re-register is not allowed.
           rdsCount.countDown();
           break;
         default:
@@ -221,8 +197,8 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    void cancelXdsResourceWatch(XdsResourceType type, String resourceName,
-                                ResourceWatcher watcher) {
+    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type, String resourceName,
+                                ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case LDS:
           assertThat(ldsWatcher).isNotNull();
@@ -247,7 +223,7 @@ public class XdsServerTestHelper {
     }
 
     void deliverLdsUpdate(List<FilterChain> filterChains,
-                                       FilterChain defaultFilterChain) {
+                          FilterChain defaultFilterChain) {
       ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
               "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
     }

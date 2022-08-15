@@ -346,7 +346,7 @@ final class XdsServerWrapper extends Server {
     }
   }
 
-  private final class DiscoveryState implements ResourceWatcher {
+  private final class DiscoveryState implements ResourceWatcher<LdsUpdate> {
     private final String resourceName;
     // RDS resource name is the key.
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
@@ -370,11 +370,11 @@ final class XdsServerWrapper extends Server {
 
     private DiscoveryState(String resourceName) {
       this.resourceName = checkNotNull(resourceName, "resourceName");
-      xdsClient.watchXdsResource(xdsClient.getXdsResourceTypeByType(LDS), resourceName, this);
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), resourceName, this);
     }
 
     @Override
-    public void onChanged(final ResourceUpdate update) {
+    public void onChanged(final LdsUpdate update) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -382,7 +382,7 @@ final class XdsServerWrapper extends Server {
             return;
           }
           logger.log(Level.FINEST, "Received Lds update {0}", update);
-          LdsUpdate ldsUpdate = (LdsUpdate) update;
+          LdsUpdate ldsUpdate = update;
           checkNotNull(ldsUpdate.listener(), "update");
           if (!pendingRds.isEmpty()) {
             // filter chain state has not yet been applied to filterChainSelectorManager and there
@@ -405,7 +405,7 @@ final class XdsServerWrapper extends Server {
               if (rdsState == null) {
                 rdsState = new RouteDiscoveryState(hcm.rdsName());
                 routeDiscoveryStates.put(hcm.rdsName(), rdsState);
-                xdsClient.watchXdsResource(xdsClient.getXdsResourceTypeByType(RDS),
+                xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
                     hcm.rdsName(), rdsState);
               }
               if (rdsState.isPending) {
@@ -416,7 +416,7 @@ final class XdsServerWrapper extends Server {
           }
           for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
             if (!allRds.contains(entry.getKey())) {
-              xdsClient.cancelXdsResourceWatch(xdsClient.getXdsResourceTypeByType(RDS),
+              xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(),
                   entry.getKey(), entry.getValue());
             }
           }
@@ -463,7 +463,7 @@ final class XdsServerWrapper extends Server {
       stopped = true;
       cleanUpRouteDiscoveryStates();
       logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);
-      xdsClient.cancelXdsResourceWatch(xdsClient.getXdsResourceTypeByType(LDS), resourceName, this);
+      xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), resourceName, this);
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorManager.updateSelector(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
@@ -593,7 +593,7 @@ final class XdsServerWrapper extends Server {
       for (RouteDiscoveryState rdsState : routeDiscoveryStates.values()) {
         String rdsName = rdsState.resourceName;
         logger.log(Level.FINE, "Stop watching RDS resource {0}", rdsName);
-        xdsClient.cancelXdsResourceWatch(xdsClient.getXdsResourceTypeByType(RDS), rdsName,
+        xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(), rdsName,
             rdsState);
       }
       routeDiscoveryStates.clear();
@@ -632,7 +632,7 @@ final class XdsServerWrapper extends Server {
       }
     }
 
-    private final class RouteDiscoveryState implements ResourceWatcher {
+    private final class RouteDiscoveryState implements ResourceWatcher<RdsUpdate> {
       private final String resourceName;
       private ImmutableList<VirtualHost> savedVirtualHosts;
       private boolean isPending = true;
@@ -642,11 +642,11 @@ final class XdsServerWrapper extends Server {
       }
 
       @Override
-      public void onChanged(final ResourceUpdate update) {
+      public void onChanged(final RdsUpdate update) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            RdsUpdate rdsUpdate = (RdsUpdate) update;
+            RdsUpdate rdsUpdate = update;
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }

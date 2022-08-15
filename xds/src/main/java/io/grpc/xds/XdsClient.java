@@ -19,21 +19,14 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
-import com.google.auto.value.AutoValue;
 import com.google.common.base.Joiner;
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
 import io.grpc.Status;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.Endpoints.DropOverload;
-import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.net.URI;
@@ -41,10 +34,8 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -116,233 +107,13 @@ abstract class XdsClient {
     return Joiner.on('/').join(encodedSegs);
   }
 
-
-
-  /** xDS resource update for cluster-level configuration. */
-  @AutoValue
-  abstract static class CdsUpdate implements ResourceUpdate {
-    abstract String clusterName();
-
-    abstract ClusterType clusterType();
-
-    abstract ImmutableMap<String, ?> lbPolicyConfig();
-
-    // Only valid if lbPolicy is "ring_hash_experimental".
-    abstract long minRingSize();
-
-    // Only valid if lbPolicy is "ring_hash_experimental".
-    abstract long maxRingSize();
-
-    // Only valid if lbPolicy is "least_request_experimental".
-    abstract int choiceCount();
-
-    // Alternative resource name to be used in EDS requests.
-    /// Only valid for EDS cluster.
-    @Nullable
-    abstract String edsServiceName();
-
-    // Corresponding DNS name to be used if upstream endpoints of the cluster is resolvable
-    // via DNS.
-    // Only valid for LOGICAL_DNS cluster.
-    @Nullable
-    abstract String dnsHostName();
-
-    // Load report server info for reporting loads via LRS.
-    // Only valid for EDS or LOGICAL_DNS cluster.
-    @Nullable
-    abstract ServerInfo lrsServerInfo();
-
-    // Max number of concurrent requests can be sent to this cluster.
-    // Only valid for EDS or LOGICAL_DNS cluster.
-    @Nullable
-    abstract Long maxConcurrentRequests();
-
-    // TLS context used to connect to connect to this cluster.
-    // Only valid for EDS or LOGICAL_DNS cluster.
-    @Nullable
-    abstract UpstreamTlsContext upstreamTlsContext();
-
-    // List of underlying clusters making of this aggregate cluster.
-    // Only valid for AGGREGATE cluster.
-    @Nullable
-    abstract ImmutableList<String> prioritizedClusterNames();
-
-    static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
-      checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
-      return new AutoValue_XdsClient_CdsUpdate.Builder()
-          .clusterName(clusterName)
-          .clusterType(ClusterType.AGGREGATE)
-          .minRingSize(0)
-          .maxRingSize(0)
-          .choiceCount(0)
-          .prioritizedClusterNames(ImmutableList.copyOf(prioritizedClusterNames));
-    }
-
-    static Builder forEds(String clusterName, @Nullable String edsServiceName,
-        @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-        @Nullable UpstreamTlsContext upstreamTlsContext) {
-      return new AutoValue_XdsClient_CdsUpdate.Builder()
-          .clusterName(clusterName)
-          .clusterType(ClusterType.EDS)
-          .minRingSize(0)
-          .maxRingSize(0)
-          .choiceCount(0)
-          .edsServiceName(edsServiceName)
-          .lrsServerInfo(lrsServerInfo)
-          .maxConcurrentRequests(maxConcurrentRequests)
-          .upstreamTlsContext(upstreamTlsContext);
-    }
-
-    static Builder forLogicalDns(String clusterName, String dnsHostName,
-        @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-        @Nullable UpstreamTlsContext upstreamTlsContext) {
-      return new AutoValue_XdsClient_CdsUpdate.Builder()
-          .clusterName(clusterName)
-          .clusterType(ClusterType.LOGICAL_DNS)
-          .minRingSize(0)
-          .maxRingSize(0)
-          .choiceCount(0)
-          .dnsHostName(dnsHostName)
-          .lrsServerInfo(lrsServerInfo)
-          .maxConcurrentRequests(maxConcurrentRequests)
-          .upstreamTlsContext(upstreamTlsContext);
-    }
-
-    enum ClusterType {
-      EDS, LOGICAL_DNS, AGGREGATE
-    }
-
-    enum LbPolicy {
-      ROUND_ROBIN, RING_HASH, LEAST_REQUEST
-    }
-
-    // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
-    @Override
-    public final String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("clusterName", clusterName())
-          .add("clusterType", clusterType())
-          .add("lbPolicyConfig", lbPolicyConfig())
-          .add("minRingSize", minRingSize())
-          .add("maxRingSize", maxRingSize())
-          .add("choiceCount", choiceCount())
-          .add("edsServiceName", edsServiceName())
-          .add("dnsHostName", dnsHostName())
-          .add("lrsServerInfo", lrsServerInfo())
-          .add("maxConcurrentRequests", maxConcurrentRequests())
-          // Exclude upstreamTlsContext as its string representation is cumbersome.
-          .add("prioritizedClusterNames", prioritizedClusterNames())
-          .toString();
-    }
-
-    @AutoValue.Builder
-    abstract static class Builder {
-      // Private, use one of the static factory methods instead.
-      protected abstract Builder clusterName(String clusterName);
-
-      // Private, use one of the static factory methods instead.
-      protected abstract Builder clusterType(ClusterType clusterType);
-
-      protected abstract Builder lbPolicyConfig(ImmutableMap<String, ?> lbPolicyConfig);
-
-      Builder roundRobinLbPolicy() {
-        return this.lbPolicyConfig(ImmutableMap.of("round_robin", ImmutableMap.of()));
-      }
-
-      Builder ringHashLbPolicy(Long minRingSize, Long maxRingSize) {
-        return this.lbPolicyConfig(ImmutableMap.of("ring_hash_experimental",
-            ImmutableMap.of("minRingSize", minRingSize.doubleValue(), "maxRingSize",
-                maxRingSize.doubleValue())));
-      }
-
-      Builder leastRequestLbPolicy(Integer choiceCount) {
-        return this.lbPolicyConfig(ImmutableMap.of("least_request_experimental",
-            ImmutableMap.of("choiceCount", choiceCount.doubleValue())));
-      }
-
-      // Private, use leastRequestLbPolicy(int).
-      protected abstract Builder choiceCount(int choiceCount);
-
-      // Private, use ringHashLbPolicy(long, long).
-      protected abstract Builder minRingSize(long minRingSize);
-
-      // Private, use ringHashLbPolicy(long, long).
-      protected abstract Builder maxRingSize(long maxRingSize);
-
-      // Private, use CdsUpdate.forEds() instead.
-      protected abstract Builder edsServiceName(String edsServiceName);
-
-      // Private, use CdsUpdate.forLogicalDns() instead.
-      protected abstract Builder dnsHostName(String dnsHostName);
-
-      // Private, use one of the static factory methods instead.
-      protected abstract Builder lrsServerInfo(ServerInfo lrsServerInfo);
-
-      // Private, use one of the static factory methods instead.
-      protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
-
-      // Private, use one of the static factory methods instead.
-      protected abstract Builder upstreamTlsContext(UpstreamTlsContext upstreamTlsContext);
-
-      // Private, use CdsUpdate.forAggregate() instead.
-      protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
-
-      abstract CdsUpdate build();
-    }
-  }
-
-  static final class EdsUpdate implements ResourceUpdate {
-    final String clusterName;
-    final Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
-    final List<DropOverload> dropPolicies;
-
-    EdsUpdate(String clusterName, Map<Locality, LocalityLbEndpoints> localityLbEndpoints,
-        List<DropOverload> dropPolicies) {
-      this.clusterName = checkNotNull(clusterName, "clusterName");
-      this.localityLbEndpointsMap = Collections.unmodifiableMap(
-          new LinkedHashMap<>(checkNotNull(localityLbEndpoints, "localityLbEndpoints")));
-      this.dropPolicies = Collections.unmodifiableList(
-          new ArrayList<>(checkNotNull(dropPolicies, "dropPolicies")));
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      EdsUpdate that = (EdsUpdate) o;
-      return Objects.equals(clusterName, that.clusterName)
-          && Objects.equals(localityLbEndpointsMap, that.localityLbEndpointsMap)
-          && Objects.equals(dropPolicies, that.dropPolicies);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(clusterName, localityLbEndpointsMap, dropPolicies);
-    }
-
-    @Override
-    public String toString() {
-      return
-          MoreObjects
-              .toStringHelper(this)
-              .add("clusterName", clusterName)
-              .add("localityLbEndpointsMap", localityLbEndpointsMap)
-              .add("dropPolicies", dropPolicies)
-              .toString();
-    }
-  }
-
   interface ResourceUpdate {
   }
 
   /**
    * Watcher interface for a single requested xDS resource.
    */
-  interface ResourceWatcher {
+  interface ResourceWatcher<T extends ResourceUpdate> {
 
     /**
      * Called when the resource discovery RPC encounters some transient error.
@@ -363,7 +134,7 @@ abstract class XdsClient {
      */
     void onResourceDoesNotExist(String resourceName);
 
-    void onChanged(ResourceUpdate update);
+    void onChanged(T update);
   }
 
   /**
@@ -533,21 +304,17 @@ abstract class XdsClient {
   /**
    * Registers a data watcher for the given Xds resource.
    */
-  void watchXdsResource(XdsResourceType type, String resourceName, ResourceWatcher watcher) {
+  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
+                                                   ResourceWatcher<T> watcher) {
     throw new UnsupportedOperationException();
   }
 
   /**
    * Unregisters the given resource watcher.
    */
-  void cancelXdsResourceWatch(XdsResourceType type, String resourceName, ResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Get XdsResourceType instance corresponding to the resource type.
-   */
-  XdsResourceType getXdsResourceTypeByType(ResourceType type) {
+  <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                         String resourceName,
+                                                         ResourceWatcher<T> watcher) {
     throw new UnsupportedOperationException();
   }
 
@@ -602,9 +369,7 @@ abstract class XdsClient {
      */
     // Must be synchronized.
     @Nullable
-    Collection<String> getSubscribedResources(ServerInfo serverInfo, ResourceType type);
-
-    @Nullable
-    XdsResourceType getXdsResourceTypeByType(ResourceType type);
+    Collection<String> getSubscribedResources(ServerInfo serverInfo,
+                                              XdsResourceType<? extends ResourceUpdate> type);
   }
 }

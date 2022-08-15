@@ -19,12 +19,11 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType;
-import static io.grpc.xds.Bootstrapper.ServerInfo;
+import static io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 
 import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.grpc.SynchronizationContext;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import java.util.ArrayList;
@@ -35,17 +34,19 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
-class XdsRouteConfigureResource extends XdsResourceType {
+class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   static final String ADS_TYPE_URL_RDS_V2 =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
   static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
-  private final FilterRegistry filterRegistry;
 
-  public XdsRouteConfigureResource(SynchronizationContext syncContext,
-                                   FilterRegistry filterRegistry) {
-    super(syncContext);
-    this.filterRegistry = filterRegistry;
+  private static XdsRouteConfigureResource instance;
+
+  public static XdsRouteConfigureResource getInstance() {
+    if (instance == null) {
+      instance = new XdsRouteConfigureResource();
+    }
+    return instance;
   }
 
   @Override
@@ -84,14 +85,14 @@ class XdsRouteConfigureResource extends XdsResourceType {
   }
 
   @Override
-  ResourceUpdate doParse(ServerInfo serverInfo, Message unpackedMessage,
+  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage,
                          Set<String> retainedResources, boolean isResourceV3)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
     return processRouteConfiguration((RouteConfiguration) unpackedMessage,
-        filterRegistry, enableFaultInjection && isResourceV3);
+        args.filterRegistry, enableFaultInjection && isResourceV3);
   }
 
   private static RdsUpdate processRouteConfiguration(

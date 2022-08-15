@@ -176,6 +176,7 @@ public class XdsServerWrapperTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void testBootstrap_templateWithXdstp() throws Exception {
     Bootstrapper.BootstrapInfo b = Bootstrapper.BootstrapInfo.builder()
         .servers(Arrays.asList(
@@ -188,7 +189,6 @@ public class XdsServerWrapperTest {
     XdsClient xdsClient = mock(XdsClient.class);
     XdsListenerResource listenerResource = mock(XdsListenerResource.class);
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
-    when(xdsClient.getXdsResourceTypeByType(any())).thenReturn(listenerResource);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
     Executors.newSingleThreadExecutor().execute(new Runnable() {
@@ -729,7 +729,7 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onError(Status.INTERNAL);
     assertThat(selectorManager.getSelectorToUpdateSelector())
         .isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
-    ResourceWatcher saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
+    ResourceWatcher<RdsUpdate> saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     verify(mockBuilder, times(1)).build();
     verify(listener, times(2)).onNotServing(any(StatusException.class));
     assertThat(sslSupplier0.isShutdown()).isFalse();

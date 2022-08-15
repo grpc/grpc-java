@@ -16,40 +16,47 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.AbstractXdsClient.ResourceType;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
-import static io.grpc.xds.Bootstrapper.ServerInfo;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.SynchronizationContext;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.XdsClient.EdsUpdate;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import javax.annotation.Nullable;
 
-class XdsEndpointResource extends XdsResourceType {
+class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   static final String ADS_TYPE_URL_EDS_V2 =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
-  public XdsEndpointResource(SynchronizationContext syncContext) {
-    super(syncContext);
+  private static XdsEndpointResource instance;
+
+  public static XdsEndpointResource getInstance() {
+    if (instance == null) {
+      instance = new XdsEndpointResource();
+    }
+    return instance;
   }
 
   @Override
@@ -88,7 +95,7 @@ class XdsEndpointResource extends XdsResourceType {
   }
 
   @Override
-  ResourceUpdate doParse(ServerInfo serverInfo, Message unpackedMessage,
+  EdsUpdate doParse(Args args, Message unpackedMessage,
                          Set<String> retainedResources, boolean isResourceV3)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof ClusterLoadAssignment)) {
@@ -138,8 +145,7 @@ class XdsEndpointResource extends XdsResourceType {
         : assignment.getPolicy().getDropOverloadsList()) {
       dropOverloads.add(parseDropOverload(dropOverloadProto));
     }
-    return new XdsClient.EdsUpdate(assignment.getClusterName(), localityLbEndpointsMap,
-        dropOverloads);
+    return new EdsUpdate(assignment.getClusterName(), localityLbEndpointsMap, dropOverloads);
   }
 
   private static Locality parseLocality(io.envoyproxy.envoy.config.core.v3.Locality proto) {
@@ -207,5 +213,50 @@ class XdsEndpointResource extends XdsResourceType {
     }
     return StructOrError.fromStruct(Endpoints.LocalityLbEndpoints.create(
         endpoints, proto.getLoadBalancingWeight().getValue(), proto.getPriority()));
+  }
+
+  static final class EdsUpdate implements ResourceUpdate {
+    final String clusterName;
+    final Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
+    final List<DropOverload> dropPolicies;
+
+    EdsUpdate(String clusterName, Map<Locality, LocalityLbEndpoints> localityLbEndpoints,
+              List<DropOverload> dropPolicies) {
+      this.clusterName = checkNotNull(clusterName, "clusterName");
+      this.localityLbEndpointsMap = Collections.unmodifiableMap(
+          new LinkedHashMap<>(checkNotNull(localityLbEndpoints, "localityLbEndpoints")));
+      this.dropPolicies = Collections.unmodifiableList(
+          new ArrayList<>(checkNotNull(dropPolicies, "dropPolicies")));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      EdsUpdate that = (EdsUpdate) o;
+      return Objects.equals(clusterName, that.clusterName)
+          && Objects.equals(localityLbEndpointsMap, that.localityLbEndpointsMap)
+          && Objects.equals(dropPolicies, that.dropPolicies);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(clusterName, localityLbEndpointsMap, dropPolicies);
+    }
+
+    @Override
+    public String toString() {
+      return
+          MoreObjects
+              .toStringHelper(this)
+              .add("clusterName", clusterName)
+              .add("localityLbEndpointsMap", localityLbEndpointsMap)
+              .add("dropPolicies", dropPolicies)
+              .toString();
+    }
   }
 }

@@ -51,7 +51,7 @@ import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
-import io.grpc.xds.XdsClient.EdsUpdate;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.URI;
@@ -345,7 +345,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       }
     }
 
-    private final class EdsClusterState extends ClusterState implements ResourceWatcher {
+    private final class EdsClusterState extends ClusterState implements ResourceWatcher<EdsUpdate> {
       @Nullable
       private final String edsServiceName;
       private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
@@ -362,7 +362,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       void start() {
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Start watching EDS resource {0}", resourceName);
-        xdsClient.watchXdsResource(xdsClient.getXdsResourceTypeByType(EDS), resourceName, this);
+        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), resourceName, this);
       }
 
       @Override
@@ -370,19 +370,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         super.shutdown();
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Stop watching EDS resource {0}", resourceName);
-        xdsClient.cancelXdsResourceWatch(
-            xdsClient.getXdsResourceTypeByType(EDS), resourceName, this);
+        xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), resourceName, this);
       }
 
       @Override
-      public void onChanged(final ResourceUpdate update) {
+      public void onChanged(final EdsUpdate update) {
         class EndpointsUpdated implements Runnable {
           @Override
           public void run() {
             if (shutdown) {
               return;
             }
-            EdsUpdate edsUpdate = (EdsUpdate) update;
+            EdsUpdate edsUpdate = update;
             logger.log(XdsLogLevel.DEBUG, "Received endpoint update {0}", update);
             if (logger.isLoggable(XdsLogLevel.INFO)) {
               logger.log(XdsLogLevel.INFO, "Cluster {0}: {1} localities, {2} drop categories",

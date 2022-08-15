@@ -31,6 +31,7 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
@@ -49,6 +50,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ResourceStore;
+import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.Collection;
@@ -146,7 +148,7 @@ final class AbstractXdsClient {
    * Updates the resource subscription for the given resource type.
    */
   // Must be synchronized.
-  void adjustResourceSubscription(ResourceType type) {
+  void adjustResourceSubscription(XdsResourceType<? extends ResourceUpdate> type) {
     if (isInBackoff()) {
       return;
     }
@@ -155,7 +157,7 @@ final class AbstractXdsClient {
     }
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
     if (resources != null) {
-      adsStream.sendDiscoveryRequest(type, resources);
+      adsStream.sendDiscoveryRequest(type.typeName(), resources);
     }
   }
 
@@ -164,12 +166,14 @@ final class AbstractXdsClient {
    * and sends an ACK request to the management server.
    */
   // Must be synchronized.
-  void ackResponse(XdsResourceType xdsResourceType, String versionInfo, String nonce) {
+  <T extends ResourceUpdate> void ackResponse(XdsResourceType<T> xdsResourceType,
+                                              String versionInfo, String nonce) {
     xdsResourceType.version = versionInfo;
     ResourceType type = xdsResourceType.typeName();
     logger.log(XdsLogLevel.INFO, "Sending ACK for {0} update, nonce: {1}, current version: {2}",
         type, nonce, versionInfo);
-    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
+    Collection<String> resources = resourceStore.getSubscribedResources(
+        serverInfo, xdsResourceType);
     if (resources == null) {
       resources = Collections.emptyList();
     }
@@ -181,12 +185,13 @@ final class AbstractXdsClient {
    * accepted version) to the management server.
    */
   // Must be synchronized.
-  void nackResponse(XdsResourceType xdsResourceType, String nonce, String errorDetail) {
+  <T extends ResourceUpdate> void nackResponse(XdsResourceType<T> xdsResourceType, String nonce, String errorDetail) {
     String versionInfo = xdsResourceType.version;
     ResourceType type = xdsResourceType.typeName();
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",
         type, nonce, versionInfo);
-    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
+    Collection<String> resources = resourceStore.getSubscribedResources(
+        serverInfo, xdsResourceType);
     if (resources == null) {
       resources = Collections.emptyList();
     }
@@ -231,13 +236,11 @@ final class AbstractXdsClient {
         return;
       }
       startRpcStream();
-      for (ResourceType type : ResourceType.values()) {
-        if (type == ResourceType.UNKNOWN) {
-          continue;
-        }
+      for (XdsResourceType<? extends ResourceUpdate> type :
+          ResourceType.xdsResourceTypeMap.values()) {
         Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
         if (resources != null) {
-          adsStream.sendDiscoveryRequest(type, resources);
+          adsStream.sendDiscoveryRequest(type.typeName(), resources);
         }
       }
       xdsResponseHandler.handleStreamRestarted(serverInfo);
@@ -246,6 +249,18 @@ final class AbstractXdsClient {
 
   enum ResourceType {
     UNKNOWN, LDS, RDS, CDS, EDS;
+
+    static final Map<ResourceType, XdsResourceType<? extends ResourceUpdate>> xdsResourceTypeMap =
+        ImmutableMap.of(
+        LDS, XdsListenerResource.getInstance(),
+        RDS, XdsRouteConfigureResource.getInstance(),
+        CDS, XdsClusterResource.getInstance(),
+        EDS, XdsEndpointResource.getInstance()
+    );
+
+    static XdsResourceType<? extends ResourceUpdate> xdsResourceInstance(ResourceType type) {
+      return xdsResourceTypeMap.get(type);
+    }
 
     String typeUrl() {
       switch (this) {
@@ -330,9 +345,8 @@ final class AbstractXdsClient {
      * Sends a client-initiated discovery request.
      */
     final void sendDiscoveryRequest(ResourceType type, Collection<String> resources) {
-      XdsResourceType xdsResourceType = resourceStore.getXdsResourceTypeByType(type);
       logger.log(XdsLogLevel.INFO, "Sending {0} request for resources: {1}", type, resources);
-      sendDiscoveryRequest(type, xdsResourceType.version, resources,
+      sendDiscoveryRequest(type, ResourceType.xdsResourceInstance(type).version, resources,
           respNonces.containsKey(type) ? respNonces.get(type) : "", null);
     }
 

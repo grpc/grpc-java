@@ -18,10 +18,8 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
-import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.ResourceWatcher;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -688,7 +686,7 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
-  private class ResolveState implements ResourceWatcher {
+  private class ResolveState implements ResourceWatcher<LdsUpdate> {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
     private final String ldsResourceName;
@@ -703,14 +701,14 @@ final class XdsNameResolver extends NameResolver {
     }
 
     @Override
-    public void onChanged(final ResourceUpdate update) {
+    public void onChanged(final LdsUpdate update) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
           if (stopped) {
             return;
           }
-          LdsUpdate ldsUpdate = (LdsUpdate) update;
+          LdsUpdate ldsUpdate = update;
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
           HttpConnectionManager httpConnectionManager = ldsUpdate.httpConnectionManager();
           List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
@@ -724,7 +722,7 @@ final class XdsNameResolver extends NameResolver {
                 rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
                 httpConnectionManager.httpFilterConfigs());
             logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
-            xdsClient.watchXdsResource(xdsClient.getXdsResourceTypeByType(RDS),
+            xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
                 rdsName, routeDiscoveryState);
           }
         }
@@ -764,15 +762,14 @@ final class XdsNameResolver extends NameResolver {
 
     private void start() {
       logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", ldsResourceName);
-      xdsClient.watchXdsResource(xdsClient.getXdsResourceTypeByType(LDS), ldsResourceName, this);
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName, this);
     }
 
     private void stop() {
       logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", ldsResourceName);
       stopped = true;
       cleanUpRouteDiscoveryState();
-      xdsClient.cancelXdsResourceWatch(xdsClient.getXdsResourceTypeByType(LDS),
-          ldsResourceName, this);
+      xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), ldsResourceName, this);
     }
 
     // called in syncContext
@@ -908,8 +905,8 @@ final class XdsNameResolver extends NameResolver {
       if (routeDiscoveryState != null) {
         String rdsName = routeDiscoveryState.resourceName;
         logger.log(XdsLogLevel.INFO, "Stop watching RDS resource {0}", rdsName);
-        xdsClient.cancelXdsResourceWatch(xdsClient.getXdsResourceTypeByType(RDS),
-            rdsName, routeDiscoveryState);
+        xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(), rdsName,
+            routeDiscoveryState);
         routeDiscoveryState = null;
       }
     }
@@ -918,7 +915,7 @@ final class XdsNameResolver extends NameResolver {
      * Discovery state for RouteConfiguration resource. One instance for each Listener resource
      * update.
      */
-    private class RouteDiscoveryState implements ResourceWatcher {
+    private class RouteDiscoveryState implements ResourceWatcher<RdsUpdate> {
       private final String resourceName;
       private final long httpMaxStreamDurationNano;
       @Nullable
@@ -932,7 +929,7 @@ final class XdsNameResolver extends NameResolver {
       }
 
       @Override
-      public void onChanged(final ResourceUpdate update) {
+      public void onChanged(final RdsUpdate update) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
@@ -940,7 +937,7 @@ final class XdsNameResolver extends NameResolver {
               return;
             }
             logger.log(XdsLogLevel.INFO, "Received RDS resource update: {0}", update);
-            updateRoutes(((RdsUpdate)update).virtualHosts, httpMaxStreamDurationNano,
+            updateRoutes(update.virtualHosts, httpMaxStreamDurationNano,
                 filterConfigs);
           }
         });

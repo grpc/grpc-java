@@ -46,9 +46,9 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.InternalLogId;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.SynchronizationContext;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Filter.FilterConfig;
@@ -72,7 +72,7 @@ import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 
-abstract class XdsResourceType {
+abstract class XdsResourceType<T extends ResourceUpdate> {
   static final String TYPE_URL_RESOURCE_V2 = "type.googleapis.com/envoy.api.v2.Resource";
   static final String TYPE_URL_RESOURCE_V3 =
       "type.googleapis.com/envoy.service.discovery.v3.Resource";
@@ -128,7 +128,6 @@ abstract class XdsResourceType {
   // A version_info is used to update management server with client's most recent knowledge of
   // resources.
   protected String version = "";
-  protected final SynchronizationContext syncContext;
 
   @Nullable
   abstract String extractResourceName(Message unpackedResource);
@@ -146,17 +145,38 @@ abstract class XdsResourceType {
   @Nullable
   abstract ResourceType dependentResource();
 
-  public XdsResourceType(SynchronizationContext syncContext) {
+  public XdsResourceType() {
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogger.XdsLogLevel.INFO, "Created");
-    this.syncContext = syncContext;
   }
 
-  ValidatedResourceUpdate parse(
-      ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce) {
-    syncContext.throwIfNotInThisSynchronizationContext();
-    Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
+  static class Args {
+    ServerInfo serverInfo;
+    String versionInfo;
+    String nonce;
+    Bootstrapper.BootstrapInfo bootstrapInfo;
+    FilterRegistry filterRegistry;
+    LoadBalancerRegistry loadBalancerRegistry;
+    TlsContextManager tlsContextManager;
+
+    public Args(ServerInfo serverInfo, String versionInfo, String nonce,
+                Bootstrapper.BootstrapInfo bootstrapInfo,
+                FilterRegistry filterRegistry,
+                LoadBalancerRegistry loadBalancerRegistry,
+                TlsContextManager tlsContextManager) {
+      this.serverInfo = serverInfo;
+      this.versionInfo = versionInfo;
+      this.nonce = nonce;
+      this.bootstrapInfo = bootstrapInfo;
+      this.filterRegistry = filterRegistry;
+      this.loadBalancerRegistry = loadBalancerRegistry;
+      this.tlsContextManager = tlsContextManager;
+    }
+  }
+
+  ValidatedResourceUpdate<T> parse(Args args, List<Any> resources) {
+    Map<String, ParsedResource<T>> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
@@ -186,9 +206,10 @@ abstract class XdsResourceType {
       String cname = canonifyResourceName(name);
       unpackedResources.add(cname);
 
-      XdsClient.ResourceUpdate resourceUpdate;
+      T resourceUpdate;
       try {
-        resourceUpdate = doParse(serverInfo, unpackedMessage, retainedRdsResources, isResourceV3);
+        resourceUpdate = doParse(args, unpackedMessage, retainedRdsResources,
+            isResourceV3);
       } catch (ClientXdsClient.ResourceInvalidException e) {
         errors.add(String.format("%s response %s '%s' validation error: %s",
                 typeName(), unpackedClassName().getSimpleName(), cname, e.getMessage()));
@@ -197,19 +218,18 @@ abstract class XdsResourceType {
       }
 
       // LdsUpdate parsed successfully.
-      parsedResources.put(cname, new ParsedResource(resourceUpdate, resource));
+      parsedResources.put(cname, new ParsedResource<T>(resourceUpdate, resource));
     }
     logger.log(XdsLogger.XdsLogLevel.INFO,
         "Received {0} Response version {1} nonce {2}. Parsed resources: {3}",
-        typeName(), versionInfo, nonce, unpackedResources);
-    return new ValidatedResourceUpdate(parsedResources, unpackedResources, invalidResources,
+        typeName(), args.versionInfo, args.nonce, unpackedResources);
+    return new ValidatedResourceUpdate<T>(parsedResources, unpackedResources, invalidResources,
         errors, retainedRdsResources);
 
   }
 
-  abstract ResourceUpdate doParse(ServerInfo serverInfo, Message unpackedMessage,
-                                  Set<String> retainedResources,
-                                  boolean isResourceV3)
+  abstract T doParse(Args args, Message unpackedMessage, Set<String> retainedResources,
+                     boolean isResourceV3)
       throws ResourceInvalidException;
 
   /**
@@ -906,16 +926,16 @@ abstract class XdsResourceType {
     return null;
   }
 
-  static final class ParsedResource {
-    private final XdsClient.ResourceUpdate resourceUpdate;
+  static final class ParsedResource<T extends ResourceUpdate> {
+    private final T resourceUpdate;
     private final Any rawResource;
 
-    public ParsedResource(ResourceUpdate resourceUpdate, Any rawResource) {
+    public ParsedResource(T resourceUpdate, Any rawResource) {
       this.resourceUpdate = checkNotNull(resourceUpdate, "resourceUpdate");
       this.rawResource = checkNotNull(rawResource, "rawResource");
     }
 
-    ResourceUpdate getResourceUpdate() {
+    T getResourceUpdate() {
       return resourceUpdate;
     }
 
@@ -924,15 +944,15 @@ abstract class XdsResourceType {
     }
   }
 
-  static final class ValidatedResourceUpdate {
-    Map<String, ParsedResource> parsedResources;
+  static final class ValidatedResourceUpdate<T extends ResourceUpdate> {
+    Map<String, ParsedResource<T>> parsedResources;
     Set<String> unpackedResources;
     Set<String> invalidResources;
     List<String> errors;
     Set<String> retainedRdsResources;
 
     // validated resource update
-    public ValidatedResourceUpdate(Map<String, ParsedResource> parsedResources,
+    public ValidatedResourceUpdate(Map<String, ParsedResource<T>> parsedResources,
                                    Set<String> unpackedResources,
                                    Set<String> invalidResources,
                                    List<String> errors,

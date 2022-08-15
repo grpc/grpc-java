@@ -18,8 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
-import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.ResourceWatcher;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 
@@ -38,8 +36,8 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.XdsClient.CdsUpdate;
-import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayDeque;
@@ -223,7 +221,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
     }
 
-    private final class ClusterState implements ResourceWatcher {
+    private final class ClusterState implements ResourceWatcher<CdsUpdate> {
       private final String name;
       @Nullable
       private Map<String, ClusterState> childClusterStates;
@@ -239,12 +237,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       private void start() {
-        xdsClient.watchXdsResource(xdsClient.getXdsResourceTypeByType(CDS), name, this);
+        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this);
       }
 
       void shutdown() {
         shutdown = true;
-        xdsClient.cancelXdsResourceWatch(xdsClient.getXdsResourceTypeByType(CDS), name, this);
+        xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, this);
         if (childClusterStates != null) {  // recursively shut down all descendants
           for (ClusterState state : childClusterStates.values()) {
             state.shutdown();
@@ -295,7 +293,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       @Override
-      public void onChanged(final ResourceUpdate update) {
+      public void onChanged(final CdsUpdate update) {
         class ClusterDiscovered implements Runnable {
           @Override
           public void run() {
@@ -305,13 +303,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
             logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
             discovered = true;
-            result = (CdsUpdate) update;
+            result = update;
             if (result.clusterType() == ClusterType.AGGREGATE) {
               isLeaf = false;
               logger.log(XdsLogLevel.INFO, "Aggregate cluster {0}, underlying clusters: {1}",
-                  result.clusterName(), result.prioritizedClusterNames());
+                  update.clusterName(), update.prioritizedClusterNames());
               Map<String, ClusterState> newChildStates = new LinkedHashMap<>();
-              for (String cluster : result.prioritizedClusterNames()) {
+              for (String cluster : update.prioritizedClusterNames()) {
                 if (childClusterStates == null || !childClusterStates.containsKey(cluster)) {
                   ClusterState childState = new ClusterState(cluster);
                   childState.start();
@@ -326,13 +324,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                 }
               }
               childClusterStates = newChildStates;
-            } else if (result.clusterType() == ClusterType.EDS) {
+            } else if (update.clusterType() == ClusterType.EDS) {
               isLeaf = true;
               logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}",
-                  result.clusterName(), result.edsServiceName());
+                  update.clusterName(), update.edsServiceName());
             } else {  // logical DNS
               isLeaf = true;
-              logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", result.clusterName());
+              logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", update.clusterName());
             }
             handleClusterDiscovered();
           }
