@@ -680,7 +680,6 @@ public class ClusterResolverLoadBalancerTest {
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
     assertThat(resolver.refreshCount).isEqualTo(0);
-    verify(helper).ignoreRefreshNameResolutionCheck();
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     childBalancer.helper.refreshNameResolution();
     assertThat(resolver.refreshCount).isEqualTo(1);
@@ -746,7 +745,6 @@ public class ClusterResolverLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertAddressesEqual(Collections.singletonList(endpoint), childBalancer.addresses);
     assertThat(resolver.refreshCount).isEqualTo(0);
-    verify(helper).ignoreRefreshNameResolutionCheck();
 
     childBalancer.helper.refreshNameResolution();
     assertThat(resolver.refreshCount).isEqualTo(1);

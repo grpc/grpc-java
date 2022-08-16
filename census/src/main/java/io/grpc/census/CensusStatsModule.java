@@ -188,7 +188,7 @@ final class CensusStatsModule {
     @Nullable
     private static final AtomicLongFieldUpdater<ClientTracer> inboundUncompressedSizeUpdater;
 
-    /**
+    /*
      * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
      * JDK reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
      * (potentially racy) direct updates of the volatile variables.
@@ -268,7 +268,7 @@ final class CensusStatsModule {
     }
 
     @Override
-    @SuppressWarnings("NonAtomicVolatileUpdate")
+    @SuppressWarnings({"NonAtomicVolatileUpdate", "NonAtomicOperationOnVolatileField"})
     public void outboundWireSize(long bytes) {
       if (outboundWireSizeUpdater != null) {
         outboundWireSizeUpdater.getAndAdd(this, bytes);
@@ -562,7 +562,7 @@ final class CensusStatsModule {
     @Nullable
     private static final AtomicLongFieldUpdater<ServerTracer> inboundUncompressedSizeUpdater;
 
-    /**
+    /*
      * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
      * JDK reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
      * (potentially racy) direct updates of the volatile variables.

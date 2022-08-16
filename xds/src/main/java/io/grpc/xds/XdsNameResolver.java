@@ -822,7 +822,7 @@ final class XdsNameResolver extends NameResolver {
           existingClusters == null ? clusters : Sets.difference(clusters, existingClusters);
       Set<String> deletedClusters =
           existingClusters == null
-              ? Collections.<String>emptySet() : Sets.difference(existingClusters, clusters);
+              ? Collections.emptySet() : Sets.difference(existingClusters, clusters);
       existingClusters = clusters;
       for (String cluster : addedClusters) {
         if (clusterRefs.containsKey(cluster)) {
@@ -984,7 +984,7 @@ final class XdsNameResolver extends NameResolver {
     final Map<String, FilterConfig> virtualHostOverrideConfig;
 
     private static RoutingConfig empty = new RoutingConfig(
-        0L, Collections.<Route>emptyList(), null, Collections.<String, FilterConfig>emptyMap());
+        0, Collections.emptyList(), null, Collections.emptyMap());
 
     private RoutingConfig(
         long fallbackTimeoutNano, List<Route> routes, @Nullable List<NamedFilterConfig> filterChain,

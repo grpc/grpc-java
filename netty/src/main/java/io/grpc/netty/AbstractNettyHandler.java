@@ -238,7 +238,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
 
   /** Controls whether PINGs like those for BDP are permitted to be sent at the current time. */
   public interface PingLimiter {
-    public boolean isPingAllowed();
+    boolean isPingAllowed();
   }
 
   private static final class AllowPingLimiter implements PingLimiter {
