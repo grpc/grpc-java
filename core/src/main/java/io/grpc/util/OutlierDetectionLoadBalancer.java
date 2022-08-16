@@ -649,17 +649,6 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       }
     }
 
-    /** Returns only the trackers that have the minimum configured volume to be considered. */
-    List<AddressTracker> trackersWithVolume(OutlierDetectionLoadBalancerConfig config) {
-      List<AddressTracker> trackersWithVolume = new ArrayList<>();
-      for (AddressTracker tracker : trackerMap.values()) {
-        if (tracker.inactiveVolume() >= config.successRateEjection.requestVolume) {
-          trackersWithVolume.add(tracker);
-        }
-      }
-      return trackersWithVolume;
-    }
-
     /**
      * How many percent of the addresses would have their subchannels ejected if we proceeded
      * with the next ejection.
@@ -720,7 +709,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     public void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeNanos) {
 
       // Only consider addresses that have the minimum request volume specified in the config.
-      List<AddressTracker> trackersWithVolume = trackerMap.trackersWithVolume(config);
+      List<AddressTracker> trackersWithVolume = trackersWithVolume(trackerMap, config);
       // If we don't have enough addresses with significant volume then there's nothing to do.
       if (trackersWithVolume.size() < config.successRateEjection.minimumHosts
           || trackersWithVolume.size() == 0) {
@@ -753,7 +742,20 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       }
     }
 
+    /** Returns only the trackers that have the minimum configured volume to be considered. */
+    private List<AddressTracker> trackersWithVolume(AddressTrackerMap trackerMap,
+        OutlierDetectionLoadBalancerConfig config) {
+      List<AddressTracker> trackersWithVolume = new ArrayList<>();
+      for (AddressTracker tracker : trackerMap.values()) {
+        if (tracker.inactiveVolume() >= config.successRateEjection.requestVolume) {
+          trackersWithVolume.add(tracker);
+        }
+      }
+      return trackersWithVolume;
+    }
+
     /** Calculates the mean of the given values. */
+    @VisibleForTesting
     static double mean(Collection<Double> values) {
       double totalValue = 0;
       for (double value : values) {
@@ -764,6 +766,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** Calculates the standard deviation for the given values and their mean. */
+    @VisibleForTesting
     static double standardDeviation(Collection<Double> values, double mean) {
       double squaredDifferenceSum = 0;
       for (double value : values) {
