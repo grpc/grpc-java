@@ -266,8 +266,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         }
 
         // If the map has an entry for the new address, we associate this subchannel with it.
-        SocketAddress address = Iterables.getOnlyElement(
-            Iterables.getOnlyElement(addressGroups).getAddresses());
+        SocketAddress address = addressGroups.get(0).getAddresses().get(0);
         if (trackerMap.containsKey(address)) {
           trackerMap.get(address).addSubchannel(this);
         }
@@ -276,17 +275,15 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         // outlier detection. Remove it from all trackers and reset the call counters of all the
         // associated trackers.
         // Remove the current subchannel from the old address it is associated with in the map.
-        if (trackerMap.containsKey(Iterables.getOnlyElement(getAddresses().getAddresses()))) {
-          AddressTracker tracker = trackerMap.get(
-              Iterables.getOnlyElement(getAddresses().getAddresses()));
+        if (trackerMap.containsKey(getAddresses().getAddresses().get(0))) {
+          AddressTracker tracker = trackerMap.get(getAddresses().getAddresses().get(0));
           tracker.removeSubchannel(this);
           tracker.resetCallCounters();
         }
       } else if (!hasSingleAddress(getAllAddresses()) && hasSingleAddress(addressGroups)) {
         // We go from, previously uneligble, multiple address mode to a single address. If the map
         // has an entry for the new address, we associate this subchannel with it.
-        SocketAddress address = Iterables.getOnlyElement(
-            Iterables.getOnlyElement(addressGroups).getAddresses());
+        SocketAddress address = addressGroups.get(0).getAddresses().get(0);
         if (trackerMap.containsKey(address)) {
           AddressTracker tracker = trackerMap.get(address);
           tracker.addSubchannel(this);
