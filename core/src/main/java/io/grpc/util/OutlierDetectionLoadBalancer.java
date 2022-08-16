@@ -180,7 +180,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * This child helper wraps the provided helper so that is can hand out wrapped {@link
+   * This child helper wraps the provided helper so that it can hand out wrapped {@link
    * OutlierDetectionSubchannel}s and manage the address info map.
    */
   class ChildHelper extends ForwardingLoadBalancerHelper {
@@ -247,7 +247,8 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     @Override
     public Attributes getAttributes() {
       if (addressTracker != null) {
-        return delegate.getAttributes().toBuilder().set(ADDRESS_TRACKER_ATTR_KEY, addressTracker).build();
+        return delegate.getAttributes().toBuilder().set(ADDRESS_TRACKER_ATTR_KEY, addressTracker)
+            .build();
       } else {
         return delegate.getAttributes();
       }
@@ -553,10 +554,11 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     public boolean maxEjectionTimeElapsed(long currentTimeNanos) {
       // The instant in time beyond which the address should no longer be ejected. Also making sure
       // we honor any maximum ejection time setting.
+      long maxEjectionDurationSecs = Math.max(SECONDS.toNanos(config.baseEjectionTimeSecs),
+          SECONDS.toNanos(config.maxEjectionTimeSecs));
       long maxEjectionTimeNanos = ejectionTimeNanos + Math.min(
           SECONDS.toNanos(config.baseEjectionTimeSecs) * ejectionTimeMultiplier,
-          Math.max(SECONDS.toNanos(config.baseEjectionTimeSecs),
-              SECONDS.toNanos(config.maxEjectionTimeSecs)));
+          maxEjectionDurationSecs);
 
       return currentTimeNanos > maxEjectionTimeNanos;
     }
@@ -654,6 +656,9 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
      * with the next ejection.
      */
     double nextEjectionPercentage() {
+      if (trackerMap.isEmpty()) {
+        return 0;
+      }
       int totalAddresses = 0;
       int ejectedAddresses = 0;
       for (AddressTracker tracker : trackerMap.values()) {
@@ -672,12 +677,10 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
    */
   interface OutlierEjectionAlgorithm {
 
-    /**
-     * Is the given {@link EquivalentAddressGroup} an outlier based on the past call results stored
-     * in {@link AddressTracker}.
-     */
-    void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeMillis);
+    /** Eject any outlier addresses. */
+    void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeNanos);
 
+    /** Builds a list of algorithms that are enabled in the given config. */
     @Nullable
     static List<OutlierEjectionAlgorithm> forConfig(OutlierDetectionLoadBalancerConfig config) {
       ImmutableList.Builder<OutlierEjectionAlgorithm> algoListBuilder = ImmutableList.builder();
@@ -724,15 +727,16 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       double mean = mean(successRates);
       double stdev = standardDeviation(successRates, mean);
 
+      double requiredSuccessRate =
+          mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
+
       for (AddressTracker tracker : trackersWithVolume) {
-        // If an ejection now would take us past the max configured ejection percentagem stop here.
+        // If an ejection now would take us past the max configured ejection percentage, stop here.
         if (trackerMap.nextEjectionPercentage() > config.maxEjectionPercent) {
           return;
         }
 
         // If success rate is below the threshold, eject the address.
-        double requiredSuccessRate =
-            mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
         if (tracker.successRate() < requiredSuccessRate) {
           // Only eject some addresses based on the enforcement percentage.
           if (new Random().nextInt(100) < config.successRateEjection.enforcementPercentage) {
@@ -788,7 +792,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeMillis) {
+    public void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeNanos) {
 
       // If we don't have the minimum amount of addresses the config calls for, then return.
       if (trackerMap.size() < config.failurePercentageEjection.minimumHosts) {
@@ -811,7 +815,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         if (tracker.failureRate() > maxFailureRate) {
           // ...but only enforce this based on the enforcement percentage.
           if (new Random().nextInt(100) < config.failurePercentageEjection.enforcementPercentage) {
-            tracker.ejectSubchannels(ejectionTimeMillis);
+            tracker.ejectSubchannels(ejectionTimeNanos);
           }
         }
       }
@@ -896,7 +900,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         return this;
       }
 
-      /** Set to enable success rate eejction. */
+      /** Set to enable success rate ejection. */
       public Builder setSuccessRateEjection(
           SuccessRateEjection successRateEjection) {
         this.successRateEjection = successRateEjection;
@@ -962,6 +966,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         /** Only eject this percentage of outliers. */
         public Builder setEnforcementPercentage(Integer enforcementPercentage) {
           checkArgument(enforcementPercentage != null);
+          checkArgument(enforcementPercentage >= 0 && enforcementPercentage <= 100);
           this.enforcementPercentage = enforcementPercentage;
           return this;
         }
@@ -969,6 +974,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         /** The minimum amount of hosts needed for success rate ejection. */
         public Builder setMinimumHosts(Integer minimumHosts) {
           checkArgument(minimumHosts != null);
+          checkArgument(minimumHosts >= 0);
           this.minimumHosts = minimumHosts;
           return this;
         }
@@ -976,6 +982,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         /** The minimum address request volume to be considered for success rate ejection. */
         public Builder setRequestVolume(Integer requestVolume) {
           checkArgument(requestVolume != null);
+          checkArgument(requestVolume >= 0);
           this.requestVolume = requestVolume;
           return this;
         }
@@ -1013,6 +1020,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         /** The failure percentage that will result in an address being considered an outlier. */
         public Builder setThreshold(Integer threshold) {
           checkArgument(threshold != null);
+          checkArgument(threshold >= 0 && threshold <= 100);
           this.threshold = threshold;
           return this;
         }
@@ -1020,6 +1028,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         /** Only eject this percentage of outliers. */
         public Builder setEnforcementPercentage(Integer enforcementPercentage) {
           checkArgument(enforcementPercentage != null);
+          checkArgument(enforcementPercentage >= 0 && enforcementPercentage <= 100);
           this.enforcementPercentage = enforcementPercentage;
           return this;
         }
@@ -1027,6 +1036,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         /** The minimum amount of host for failure percentage ejection to be enabled. */
         public Builder setMinimumHosts(Integer minimumHosts) {
           checkArgument(minimumHosts != null);
+          checkArgument(minimumHosts >= 0);
           this.minimumHosts = minimumHosts;
           return this;
         }
@@ -1037,6 +1047,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
          */
         public Builder setRequestVolume(Integer requestVolume) {
           checkArgument(requestVolume != null);
+          checkArgument(requestVolume >= 0);
           this.requestVolume = requestVolume;
           return this;
         }
@@ -1049,11 +1060,8 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       }
     }
 
-    /**
-     * Determine if outlier detection is at all enabled in this config.
-     */
+    /** Determine if any outlier detection algorithms are enabled in the config. */
     boolean outlierDetectionEnabled() {
-      // One of the two supported algorithms needs to be configured.
       return successRateEjection != null || failurePercentageEjection != null;
     }
   }
