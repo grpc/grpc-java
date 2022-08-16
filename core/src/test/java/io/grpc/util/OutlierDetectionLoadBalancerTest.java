@@ -385,7 +385,7 @@ public class OutlierDetectionLoadBalancerTest {
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
     // The one subchannel that was returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(servers.get(0)));
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
   }
 
   /**
@@ -410,7 +410,7 @@ public class OutlierDetectionLoadBalancerTest {
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
     // The one subchannel that was returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(servers.get(0)));
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
 
     // Now we produce more load, but the subchannel start working and is no longer an outlier.
     generateLoad(ImmutableMap.of());
@@ -523,7 +523,8 @@ public class OutlierDetectionLoadBalancerTest {
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
     // The one subchannel that was returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(servers.get(0), servers.get(1)));
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0),
+        servers.get(1).getAddresses().get(0)));
   }
 
   /**
@@ -550,8 +551,10 @@ public class OutlierDetectionLoadBalancerTest {
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
     int totalEjected = 0;
-    for (EquivalentAddressGroup address: servers) {
-      totalEjected += loadBalancer.trackerMap.get(address).subchannelsEjected() ? 1 : 0;
+    for (EquivalentAddressGroup addressGroup: servers) {
+      totalEjected +=
+          loadBalancer.trackerMap.get(addressGroup.getAddresses().get(0)).subchannelsEjected() ? 1
+              : 0;
     }
 
     // Even if all subchannels were failing, we should have not ejected more than the configured
@@ -607,7 +610,7 @@ public class OutlierDetectionLoadBalancerTest {
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
     // The one subchannel that was returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(servers.get(0)));
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
   }
 
   /**
@@ -681,18 +684,20 @@ public class OutlierDetectionLoadBalancerTest {
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
-    EquivalentAddressGroup oldAddress = servers.get(0);
-    AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(oldAddress);
-    EquivalentAddressGroup newAddress = servers.get(1);
-    AddressTracker newAddressTracker = loadBalancer.trackerMap.get(newAddress);
+    EquivalentAddressGroup oldAddressGroup = servers.get(0);
+    AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(
+        oldAddressGroup.getAddresses().get(0));
+    EquivalentAddressGroup newAddressGroup = servers.get(1);
+    AddressTracker newAddressTracker = loadBalancer.trackerMap.get(
+        newAddressGroup.getAddresses().get(0));
 
     // The one subchannel that was returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(oldAddress));
+    assertEjectedSubchannels(ImmutableSet.of(oldAddressGroup.getAddresses().get(0)));
 
     // The ejected subchannel gets updated with another address in the map that is not ejected
     OutlierDetectionSubchannel subchannel = oldAddressTracker.getSubchannels()
         .iterator().next();
-    subchannel.updateAddresses(ImmutableList.of(newAddress));
+    subchannel.updateAddresses(ImmutableList.of(newAddressGroup));
 
     // The replaced address should no longer have the subchannel associated with it.
     assertThat(oldAddressTracker.getSubchannels()).doesNotContain(subchannel);
@@ -726,8 +731,9 @@ public class OutlierDetectionLoadBalancerTest {
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
-    EquivalentAddressGroup oldAddress = servers.get(0);
-    AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(oldAddress);
+    EquivalentAddressGroup oldAddressGroup = servers.get(0);
+    AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(
+        oldAddressGroup.getAddresses().get(0));
     EquivalentAddressGroup newAddress1 = servers.get(1);
     EquivalentAddressGroup newAddress2 = servers.get(2);
 
@@ -772,21 +778,23 @@ public class OutlierDetectionLoadBalancerTest {
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
-    EquivalentAddressGroup oldAddress = servers.get(0);
-    AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(oldAddress);
-    EquivalentAddressGroup newAddress1 = servers.get(1);
-    AddressTracker newAddressTracker1 = loadBalancer.trackerMap.get(newAddress1);
-    EquivalentAddressGroup newAddress2 = servers.get(2);
+    EquivalentAddressGroup oldAddressGroup = servers.get(0);
+    AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(
+        oldAddressGroup.getAddresses().get(0));
+    EquivalentAddressGroup newAddressGroup1 = servers.get(1);
+    AddressTracker newAddressTracker1 = loadBalancer.trackerMap.get(
+        newAddressGroup1.getAddresses().get(0));
+    EquivalentAddressGroup newAddressGroup2 = servers.get(2);
 
     // The old subchannel was returning errors and should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(oldAddress));
+    assertEjectedSubchannels(ImmutableSet.of(oldAddressGroup.getAddresses().get(0)));
 
     OutlierDetectionSubchannel subchannel = oldAddressTracker.getSubchannels()
         .iterator().next();
 
     // The subchannel gets updated with two new addresses
     ImmutableList<EquivalentAddressGroup> addressUpdate
-        = ImmutableList.of(newAddress1, newAddress2);
+        = ImmutableList.of(newAddressGroup1, newAddressGroup2);
     subchannel.updateAddresses(addressUpdate);
     when(subchannel1.getAllAddresses()).thenReturn(addressUpdate);
 
@@ -798,7 +806,7 @@ public class OutlierDetectionLoadBalancerTest {
     assertThat(oldAddressTracker.inactiveVolume()).isEqualTo(0);
 
     // Another update takes the subchannel back to a single address.
-    addressUpdate = ImmutableList.of(newAddress1);
+    addressUpdate = ImmutableList.of(newAddressGroup1);
     subchannel.updateAddresses(addressUpdate);
     when(subchannel1.getAllAddresses()).thenReturn(addressUpdate);
 
@@ -860,7 +868,7 @@ public class OutlierDetectionLoadBalancerTest {
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
     // The one subchannel that was returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(servers.get(0)));
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
   }
 
   /** Both algorithms configured, error percentage detects an outlier. */
@@ -887,7 +895,7 @@ public class OutlierDetectionLoadBalancerTest {
     fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
 
     // The one subchannel that was returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(servers.get(0)));
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
   }
 
   @Test
@@ -969,8 +977,8 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   // Asserts that the given addresses are ejected and the rest are not.
-  void assertEjectedSubchannels(Set<EquivalentAddressGroup> addresses) {
-    for (Entry<EquivalentAddressGroup, AddressTracker> entry : loadBalancer.trackerMap.entrySet()) {
+  void assertEjectedSubchannels(Set<SocketAddress> addresses) {
+    for (Entry<SocketAddress, AddressTracker> entry : loadBalancer.trackerMap.entrySet()) {
       assertThat(entry.getValue().subchannelsEjected()).isEqualTo(
           addresses.contains(entry.getKey()));
     }

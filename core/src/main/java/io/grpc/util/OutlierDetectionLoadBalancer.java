@@ -40,6 +40,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TimeProvider;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -73,8 +74,8 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
   private ScheduledHandle detectionTimerHandle;
   private Long detectionTimerStartNanos;
 
-  private static final Attributes.Key<AddressTracker> EAG_INFO_ATTR_KEY = Attributes.Key.create(
-      "eagInfoKey");
+  private static final Attributes.Key<AddressTracker> ADDRESS_TRACKER_ATTR_KEY
+      = Attributes.Key.create("addressTrackerKey");
 
   /**
    * Creates a new instance of {@link OutlierDetectionLoadBalancer}.
@@ -94,10 +95,14 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
         = (OutlierDetectionLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
 
     // The map should only retain entries for addresses in this latest update.
-    trackerMap.keySet().retainAll(resolvedAddresses.getAddresses());
+    ArrayList<SocketAddress> addresses = new ArrayList<>();
+    for (EquivalentAddressGroup addressGroup : resolvedAddresses.getAddresses()) {
+      addresses.addAll(addressGroup.getAddresses());
+    }
+    trackerMap.keySet().retainAll(addresses);
 
     // Add any new ones.
-    trackerMap.putNewTrackers(config, resolvedAddresses.getAddresses());
+    trackerMap.putNewTrackers(config, addresses);
 
     switchLb.switchTo(config.childPolicy.getProvider());
 
@@ -199,14 +204,14 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       // If the subchannel is associated with a single address that is also already in the map
       // the subchannel will be added to the map and be included in outlier detection.
-      List<EquivalentAddressGroup> allAddresses = subchannel.getAllAddresses();
-      if (allAddresses.size() == 1 && trackerMap.containsKey(allAddresses.get(0))) {
-        AddressTracker eagInfo = trackerMap.get(allAddresses.get(0));
-        subchannel.setEquivalentAddressGroupInfo(eagInfo);
-        eagInfo.addSubchannel(subchannel);
+      List<EquivalentAddressGroup> addressGroups = subchannel.getAllAddresses();
+      if (hasSingleAddress(addressGroups)
+          && trackerMap.containsKey(addressGroups.get(0).getAddresses().get(0))) {
+        AddressTracker tracker = trackerMap.get(addressGroups.get(0).getAddresses().get(0));
+        tracker.addSubchannel(subchannel);
 
         // If this address has already been ejected, we need to immediately eject this Subchannel.
-        if (eagInfo.ejectionTimeNanos != null) {
+        if (tracker.ejectionTimeNanos != null) {
           subchannel.eject();
         }
       }
@@ -223,7 +228,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
   class OutlierDetectionSubchannel extends ForwardingSubchannel {
 
     private final Subchannel delegate;
-    private AddressTracker eagInfo;
+    private AddressTracker addressTracker;
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
     private OutlierDetectionSubchannelStateListener subchannelStateListener;
@@ -240,60 +245,70 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     @Override
     public Attributes getAttributes() {
-      return delegate.getAttributes().toBuilder().set(EAG_INFO_ATTR_KEY, eagInfo).build();
+      if (addressTracker != null) {
+        return delegate.getAttributes().toBuilder().set(ADDRESS_TRACKER_ATTR_KEY, addressTracker).build();
+      } else {
+        return delegate.getAttributes();
+      }
     }
 
     @Override
-    public void updateAddresses(List<EquivalentAddressGroup> addresses) {
+    public void updateAddresses(List<EquivalentAddressGroup> addressGroups) {
       // Outlier detection only supports subchannels with a single address, but the list of
-      // addresses associated with a subchannel can change at any time, so we need to react to
+      // addressGroups associated with a subchannel can change at any time, so we need to react to
       // changes in the address list plurality.
 
       // No change in address plurality, we replace the single one with a new one.
-      if (getAllAddresses().size() == 1 && addresses.size() == 1) {
+      if (hasSingleAddress(getAllAddresses()) && hasSingleAddress(addressGroups)) {
         // Remove the current subchannel from the old address it is associated with in the map.
-        if (trackerMap.containsKey(getAddresses())) {
-          trackerMap.get(getAddresses()).removeSubchannel(this);
+        if (trackerMap.containsValue(addressTracker)) {
+          addressTracker.removeSubchannel(this);
         }
 
         // If the map has an entry for the new address, we associate this subchannel with it.
-        EquivalentAddressGroup newAddress = Iterables.getOnlyElement(addresses);
-        if (trackerMap.containsKey(newAddress)) {
-          AddressTracker tracker = trackerMap.get(newAddress);
-          tracker.addSubchannel(this);
+        SocketAddress address = Iterables.getOnlyElement(
+            Iterables.getOnlyElement(addressGroups).getAddresses());
+        if (trackerMap.containsKey(address)) {
+          trackerMap.get(address).addSubchannel(this);
         }
-      } else if (getAllAddresses().size() == 1 && addresses.size() > 1) {
+      } else if (hasSingleAddress(getAllAddresses()) && !hasSingleAddress(addressGroups)) {
         // We go from a single address to having multiple, making this subchannel uneligible for
         // outlier detection. Remove it from all trackers and reset the call counters of all the
         // associated trackers.
         // Remove the current subchannel from the old address it is associated with in the map.
-        if (trackerMap.containsKey(getAddresses())) {
-          AddressTracker tracker = trackerMap.get(getAddresses());
+        if (trackerMap.containsKey(Iterables.getOnlyElement(getAddresses().getAddresses()))) {
+          AddressTracker tracker = trackerMap.get(
+              Iterables.getOnlyElement(getAddresses().getAddresses()));
           tracker.removeSubchannel(this);
           tracker.resetCallCounters();
         }
-      } else if (getAllAddresses().size() > 1 && addresses.size() == 1) {
+      } else if (!hasSingleAddress(getAllAddresses()) && hasSingleAddress(addressGroups)) {
         // We go from, previously uneligble, multiple address mode to a single address. If the map
         // has an entry for the new address, we associate this subchannel with it.
-        EquivalentAddressGroup eag = Iterables.getOnlyElement(addresses);
-        if (trackerMap.containsKey(eag)) {
-          AddressTracker tracker = trackerMap.get(eag);
+        SocketAddress address = Iterables.getOnlyElement(
+            Iterables.getOnlyElement(addressGroups).getAddresses());
+        if (trackerMap.containsKey(address)) {
+          AddressTracker tracker = trackerMap.get(address);
           tracker.addSubchannel(this);
         }
       }
 
-      // We could also have multiple addresses and get an update for multiple new ones. This is
+      // We could also have multiple addressGroups and get an update for multiple new ones. This is
       // a no-op as we will just continue to ignore multiple address subchannels.
 
-      delegate.updateAddresses(addresses);
+      delegate.updateAddresses(addressGroups);
     }
 
     /**
      * If the {@link Subchannel} is considered for outlier detection the associated {@link
      * AddressTracker} should be set.
      */
-    void setEquivalentAddressGroupInfo(AddressTracker eagInfo) {
-      this.eagInfo = eagInfo;
+    void setAddressTracker(AddressTracker addressTracker) {
+      this.addressTracker = addressTracker;
+    }
+
+    void clearAddressTracker() {
+      this.addressTracker = null;
     }
 
     void eject() {
@@ -360,7 +375,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       if (subchannel != null) {
         return PickResult.withSubchannel(subchannel,
             new ResultCountingClientStreamTracerFactory(
-                subchannel.getAttributes().get(EAG_INFO_ATTR_KEY)));
+                subchannel.getAttributes().get(ADDRESS_TRACKER_ATTR_KEY)));
       }
 
       return pickResult;
@@ -432,10 +447,12 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       } else if (!subchannelsEjected() && subchannel.isEjected()) {
         subchannel.uneject();
       }
+      subchannel.setAddressTracker(this);
       return subchannels.add(subchannel);
     }
 
     boolean removeSubchannel(OutlierDetectionSubchannel subchannel) {
+      subchannel.clearAddressTracker();
       return subchannels.remove(subchannel);
     }
 
@@ -555,22 +572,22 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Maintains a mapping from addresses to their trackers.
    */
-  static class AddressTrackerMap extends ForwardingMap<EquivalentAddressGroup, AddressTracker> {
-    private final Map<EquivalentAddressGroup, AddressTracker> trackerMap;
+  static class AddressTrackerMap extends ForwardingMap<SocketAddress, AddressTracker> {
+    private final Map<SocketAddress, AddressTracker> trackerMap;
 
     AddressTrackerMap() {
       trackerMap = new HashMap<>();
     }
 
     @Override
-    protected Map<EquivalentAddressGroup, AddressTracker> delegate() {
+    protected Map<SocketAddress, AddressTracker> delegate() {
       return trackerMap;
     }
 
-    /** Adds a new tracker for the addresses that don't already have one. */
+    /** Adds a new tracker for every address in the given EAGs. */
     void putNewTrackers(OutlierDetectionLoadBalancerConfig config,
-        Collection<EquivalentAddressGroup> addresses) {
-      for (EquivalentAddressGroup address : addresses) {
+        Collection<SocketAddress> addresses) {
+      for (SocketAddress address : addresses) {
         if (!trackerMap.containsKey(address)) {
           trackerMap.put(address, new AddressTracker(config));
         }
@@ -788,6 +805,17 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
   }
 
+  /** Counts how many addresses are in a given address group. */
+  private static boolean hasSingleAddress(List<EquivalentAddressGroup> addressGroups) {
+    int addressCount = 0;
+    for (EquivalentAddressGroup addressGroup : addressGroups) {
+      addressCount += addressGroup.getAddresses().size();
+      if (addressCount > 1) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /**
    * The configuration for {@link OutlierDetectionLoadBalancer}.
