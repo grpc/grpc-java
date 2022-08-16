@@ -343,8 +343,8 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       @Override
       public void onSubchannelState(ConnectivityStateInfo newState) {
+        lastSubchannelState = newState;
         if (!ejected) {
-          lastSubchannelState = newState;
           delegate.onSubchannelState(newState);
         }
       }
