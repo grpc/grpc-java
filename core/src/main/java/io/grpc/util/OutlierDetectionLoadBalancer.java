@@ -26,7 +26,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
@@ -100,6 +99,8 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       addresses.addAll(addressGroup.getAddresses());
     }
     trackerMap.keySet().retainAll(addresses);
+
+    trackerMap.updateTrackerConfigs(config);
 
     // Add any new ones.
     trackerMap.putNewTrackers(config, addresses);
@@ -421,7 +422,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
    */
   static class AddressTracker {
 
-    private final OutlierDetectionLoadBalancerConfig config;
+    private OutlierDetectionLoadBalancerConfig config;
     // Marked as volatile to assure that when the inactive counter is swapped in as the new active
     // one, all threads see the change and don't hold on to a reference to the now inactive counter.
     private volatile CallCounter activeCallCounter = new CallCounter();
@@ -431,6 +432,10 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     private final Set<OutlierDetectionSubchannel> subchannels = new HashSet<>();
 
     AddressTracker(OutlierDetectionLoadBalancerConfig config) {
+      this.config = config;
+    }
+
+    void setConfig(OutlierDetectionLoadBalancerConfig config) {
       this.config = config;
     }
 
@@ -583,7 +588,13 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       return trackerMap;
     }
 
-    /** Adds a new tracker for every address in the given EAGs. */
+    void updateTrackerConfigs(OutlierDetectionLoadBalancerConfig config) {
+      for (AddressTracker tracker: trackerMap.values()) {
+        tracker.setConfig(config);
+      }
+    }
+
+    /** Adds a new tracker for every given address. */
     void putNewTrackers(OutlierDetectionLoadBalancerConfig config,
         Collection<SocketAddress> addresses) {
       for (SocketAddress address : addresses) {

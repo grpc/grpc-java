@@ -389,6 +389,51 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
+   * The success rate algorithm ejects the outlier, but then the config changes so that similar
+   * behavior no longer gets ejected.
+   */
+  @Test
+  public void successRateOneOutlier_configChange() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
+
+    // New config sets enforcement percentage to 0.
+    config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10)
+                .setEnforcementPercentage(0).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // Since we brought enforcement percentage to 0, no additional ejection should have happened.
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
+  }
+
+  /**
    * The success rate algorithm ejects the outlier but after some time it should get unejected
    * if it stops being an outlier..
    */
