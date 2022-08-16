@@ -425,7 +425,9 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
   static class AddressTracker {
 
     private final OutlierDetectionLoadBalancerConfig config;
-    private CallCounter activeCallCounter = new CallCounter();
+    // Marked as volatile to assure that when the inactive counter is swapped in as the new active
+    // one, all threads see the change and don't hold on to a reference to the now inactive counter.
+    private volatile CallCounter activeCallCounter = new CallCounter();
     private CallCounter inactiveCallCounter = new CallCounter();
     private Long ejectionTimeNanos;
     private int ejectionTimeMultiplier;
