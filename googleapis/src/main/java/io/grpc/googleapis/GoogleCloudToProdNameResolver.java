@@ -62,6 +62,8 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           || System.getProperty("io.grpc.xds.bootstrap") != null
           || System.getenv("GRPC_XDS_BOOTSTRAP_CONFIG") != null
           || System.getProperty("io.grpc.xds.bootstrapConfig") != null;
+  @VisibleForTesting
+  static boolean isOnJava11OrLater = isOnJava11OrLater();
 
   private static final String serverUriOverride =
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
@@ -75,8 +77,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private final Random rand;
   private final boolean usingExecutorResource;
   // It's not possible to use both PSM and DirectPath C2P in the same application.
-  // Delegate to DNS if user-provided bootstrap is found.
-  private final String schemeOverride = !isOnGcp || xdsBootstrapProvided ? "dns" : "xds";
+  // Delegate to DNS if user-provided bootstrap is found. Avoid xDS on Java 8 to avoid accidentally
+  // needing to support it on the old Java version until 2030.
+  private final String schemeOverride = !isOnGcp || xdsBootstrapProvided || !isOnJava11OrLater
+      ? "dns" : "xds";
   private Executor executor;
   private Listener2 listener;
   private boolean succeeded;
@@ -264,6 +268,26 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       throw new IllegalArgumentException("Invalid scheme: " + scheme, ex);
     }
     return res;
+  }
+
+  private static boolean isOnJava11OrLater() {
+    return isJava11OrLater(System.getProperty("java.specification.version", "1.0"));
+  }
+
+  @VisibleForTesting
+  static boolean isJava11OrLater(String fullVersion) {
+    // Java 9 changed to just the major version, i.e., "9". Java 8 would have "1.8".
+    // https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8149519
+    if (fullVersion.contains(".")) {
+      return false;
+    }
+    int featureVersion;
+    try {
+      featureVersion = Integer.parseInt(fullVersion);
+    } catch (NumberFormatException ex) {
+      return false;
+    }
+    return featureVersion >= 11;
   }
 
   private enum HttpConnectionFactory implements HttpConnectionProvider {

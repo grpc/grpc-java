@@ -106,6 +106,7 @@ public class GoogleCloudToProdNameResolverTest {
   private ArgumentCaptor<Status> errorCaptor;
   private boolean originalIsOnGcp;
   private boolean originalXdsBootstrapProvided;
+  private boolean originalIsOnJava11OrLater;
   private GoogleCloudToProdNameResolver resolver;
 
   @Before
@@ -114,14 +115,18 @@ public class GoogleCloudToProdNameResolverTest {
     nsRegistry.register(new FakeNsProvider("xds"));
     originalIsOnGcp = GoogleCloudToProdNameResolver.isOnGcp;
     originalXdsBootstrapProvided = GoogleCloudToProdNameResolver.xdsBootstrapProvided;
+    originalIsOnJava11OrLater = GoogleCloudToProdNameResolver.isOnJava11OrLater;
   }
 
   @After
   public void tearDown() {
     GoogleCloudToProdNameResolver.isOnGcp = originalIsOnGcp;
     GoogleCloudToProdNameResolver.xdsBootstrapProvided = originalXdsBootstrapProvided;
-    resolver.shutdown();
-    verify(Iterables.getOnlyElement(delegatedResolver.values())).shutdown();
+    GoogleCloudToProdNameResolver.isOnJava11OrLater = originalIsOnJava11OrLater;
+    if (resolver != null) {
+      resolver.shutdown();
+      verify(Iterables.getOnlyElement(delegatedResolver.values())).shutdown();
+    }
   }
 
   private void createResolver() {
@@ -149,6 +154,17 @@ public class GoogleCloudToProdNameResolverTest {
   @Test
   public void notOnGcpDelegateToDns() {
     GoogleCloudToProdNameResolver.isOnGcp = false;
+    GoogleCloudToProdNameResolver.isOnJava11OrLater = true;
+    createResolver();
+    resolver.start(mockListener);
+    assertThat(delegatedResolver.keySet()).containsExactly("dns");
+    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
+  }
+
+  @Test
+  public void notOnJava11DelegateToDns() {
+    GoogleCloudToProdNameResolver.isOnGcp = true;
+    GoogleCloudToProdNameResolver.isOnJava11OrLater = false;
     createResolver();
     resolver.start(mockListener);
     assertThat(delegatedResolver.keySet()).containsExactly("dns");
@@ -159,6 +175,7 @@ public class GoogleCloudToProdNameResolverTest {
   public void hasProvidedBootstrapDelegateToDns() {
     GoogleCloudToProdNameResolver.isOnGcp = true;
     GoogleCloudToProdNameResolver.xdsBootstrapProvided = true;
+    GoogleCloudToProdNameResolver.isOnJava11OrLater = true;
     createResolver();
     resolver.start(mockListener);
     assertThat(delegatedResolver.keySet()).containsExactly("dns");
@@ -170,6 +187,7 @@ public class GoogleCloudToProdNameResolverTest {
   public void onGcpAndNoProvidedBootstrapDelegateToXds() {
     GoogleCloudToProdNameResolver.isOnGcp = true;
     GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
+    GoogleCloudToProdNameResolver.isOnJava11OrLater = true;
     createResolver();
     resolver.start(mockListener);
     fakeExecutor.runDueTasks();
@@ -193,6 +211,7 @@ public class GoogleCloudToProdNameResolverTest {
   public void failToQueryMetadata() {
     GoogleCloudToProdNameResolver.isOnGcp = true;
     GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
+    GoogleCloudToProdNameResolver.isOnJava11OrLater = true;
     createResolver();
     HttpConnectionProvider httpConnections = new HttpConnectionProvider() {
       @Override
@@ -208,6 +227,24 @@ public class GoogleCloudToProdNameResolverTest {
     verify(mockListener).onError(errorCaptor.capture());
     assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.INTERNAL);
     assertThat(errorCaptor.getValue().getDescription()).isEqualTo("Unable to get metadata");
+  }
+
+  @Test
+  public void isJava11OrLater() {
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("1")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("1.0")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("1.11")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("1.8")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("10")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("11.1")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("11uhoh")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("a")).isFalse();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("a11")).isFalse();
+
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("11")).isTrue();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("17")).isTrue();
+    assertThat(GoogleCloudToProdNameResolver.isJava11OrLater("100")).isTrue();
   }
 
   private final class FakeNsProvider extends NameResolverProvider {
