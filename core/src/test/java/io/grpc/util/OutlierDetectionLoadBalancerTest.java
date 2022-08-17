@@ -17,6 +17,7 @@
 package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.ConnectivityState.READY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -708,6 +709,47 @@ public class OutlierDetectionLoadBalancerTest {
     assertEjectedSubchannels(ImmutableSet.of());
   }
 
+  /** Success rate detects two outliers and error percentage three. */
+  @Test
+  public void successRateAndFailurePercentageThreeOutliers() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(100)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10)
+                .setStdevFactor(1).build())
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setThreshold(0)
+                .setMinimumHosts(3)
+                .setRequestVolume(1)
+                .build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // Three subchannels with problems, but one only has a single call that failed.
+    // This is not enough for success rate to catch, but failure percentage is
+    // configured with a 0 tolerance threshold.
+    generateLoad(
+        ImmutableMap.of(
+            subchannel1, Status.DEADLINE_EXCEEDED,
+            subchannel2, Status.DEADLINE_EXCEEDED,
+            subchannel3, Status.DEADLINE_EXCEEDED),
+        ImmutableMap.of(subchannel3, 1));
+
+    // Move forward in time to a point where the detection timer has fired.
+    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+
+    // Should see thee ejected, success rate cathes the first two, error percentage the
+    // same two plus the subchannel with the single failure.
+    assertEjectedSubchannels(ImmutableSet.of(
+        servers.get(0).getAddresses().get(0),
+        servers.get(1).getAddresses().get(0),
+        servers.get(2).getAddresses().get(0)));
+  }
+
   /**
    * When the address a subchannel is associated with changes it should get tracked under the new
    * address and its ejection state should match what the address has.
@@ -1024,8 +1066,9 @@ public class OutlierDetectionLoadBalancerTest {
   // Asserts that the given addresses are ejected and the rest are not.
   void assertEjectedSubchannels(Set<SocketAddress> addresses) {
     for (Entry<SocketAddress, AddressTracker> entry : loadBalancer.trackerMap.entrySet()) {
-      assertThat(entry.getValue().subchannelsEjected()).isEqualTo(
-          addresses.contains(entry.getKey()));
+      assertWithMessage("not ejected: " + entry.getKey())
+          .that(entry.getValue().subchannelsEjected())
+          .isEqualTo(addresses.contains(entry.getKey()));
     }
   }
 }
