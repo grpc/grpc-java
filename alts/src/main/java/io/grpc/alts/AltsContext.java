@@ -20,7 +20,6 @@ import io.grpc.ExperimentalApi;
 import io.grpc.alts.internal.AltsInternalContext;
 import io.grpc.alts.internal.HandshakerResult;
 import io.grpc.alts.internal.Identity;
-import io.grpc.alts.internal.SecurityLevel;
 
 /** {@code AltsContext} contains security-related information on the ALTS channel. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7864")

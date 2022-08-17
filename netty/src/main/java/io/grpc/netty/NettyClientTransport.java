@@ -251,7 +251,7 @@ class NettyClientTransport implements ConnectionClientTransport {
 
     ChannelHandler bufferingHandler = new WriteBufferingAndExceptionHandler(negotiationHandler);
 
-    /**
+    /*
      * We don't use a ChannelInitializer in the client bootstrap because its "initChannel" method
      * is executed in the event loop and we need this handler to be in the pipeline immediately so
      * that it may begin buffering writes.
