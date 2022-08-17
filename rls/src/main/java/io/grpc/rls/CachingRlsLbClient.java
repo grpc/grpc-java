@@ -176,6 +176,19 @@ final class CachingRlsLbClient {
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
   }
 
+  /**
+   * Convert the status to UNAVAILBLE and enhance the error message.
+   * @param status status as provided by server
+   * @param serverName Used for error description
+   * @return Transformed status
+   */
+  static Status convertRlsServerStatus(Status status, String serverName) {
+    return Status.UNAVAILABLE.withCause(status.getCause()).withDescription(
+        String.format("Unable to retrieve RLS targets from RLS server %s.  "
+                + "RLS server returned: %s: %s",
+            serverName, status.getCode(), status.getDescription()));
+  }
+
   @CheckReturnValue
   private ListenableFuture<RouteLookupResponse> asyncRlsCall(RouteLookupRequest request) {
     final SettableFuture<RouteLookupResponse> response = SettableFuture.create();
@@ -931,12 +944,15 @@ final class CachingRlsLbClient {
         if (picker == null) {
           return PickResult.withNoResult();
         }
+        // Happy path
         return picker.pickSubchannel(args);
       } else if (response.hasError()) {
         if (hasFallback) {
           return useFallback(args);
         }
-        return PickResult.withError(response.getStatus());
+        return PickResult.withError(
+            convertRlsServerStatus(response.getStatus(),
+                lbPolicyConfig.getRouteLookupConfig().lookupService()));
       } else {
         return PickResult.withNoResult();
       }
@@ -980,4 +996,5 @@ final class CachingRlsLbClient {
           .toString();
     }
   }
+
 }

@@ -211,8 +211,8 @@ public final class Metadata {
     return size * 2;
   }
 
+  /** checks when {@link #namesAndValues} is null or has no elements. */
   private boolean isEmpty() {
-    /** checks when {@link #namesAndValues} is null or has no elements */
     return size == 0;
   }
 
