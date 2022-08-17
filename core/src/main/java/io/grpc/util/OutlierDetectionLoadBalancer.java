@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ForwardingMap;
@@ -49,7 +48,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
@@ -114,13 +112,12 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       if (detectionTimerStartNanos == null) {
         // On the first go we use the configured interval.
-        initialDelayNanos = TimeUnit.SECONDS.toNanos(config.intervalSecs);
+        initialDelayNanos = config.intervalNanos;
       } else {
         // If a timer has started earlier we cancel it and use the difference between the start
         // time and now as the interval.
         initialDelayNanos = Math.max(0L,
-            TimeUnit.SECONDS.toNanos(config.intervalSecs) - (timeProvider.currentTimeNanos()
-                - detectionTimerStartNanos));
+            config.intervalNanos - (timeProvider.currentTimeNanos() - detectionTimerStartNanos));
       }
 
       // If a timer has been previously created we need to cancel it and reset all the call counters
@@ -131,7 +128,7 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       }
 
       detectionTimerHandle = syncContext.scheduleWithFixedDelay(new DetectionTimer(config),
-          initialDelayNanos, SECONDS.toNanos(config.intervalSecs), NANOSECONDS, timeService);
+          initialDelayNanos, config.intervalNanos, NANOSECONDS, timeService);
     } else if (detectionTimerHandle != null) {
       // Outlier detection is not configured, but we have a lingering timer. Let's cancel it and
       // uneject any addresses we may have ejected.
@@ -554,11 +551,12 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     public boolean maxEjectionTimeElapsed(long currentTimeNanos) {
       // The instant in time beyond which the address should no longer be ejected. Also making sure
       // we honor any maximum ejection time setting.
-      long maxEjectionDurationSecs = Math.max(SECONDS.toNanos(config.baseEjectionTimeSecs),
-          SECONDS.toNanos(config.maxEjectionTimeSecs));
-      long maxEjectionTimeNanos = ejectionTimeNanos + Math.min(
-          SECONDS.toNanos(config.baseEjectionTimeSecs) * ejectionTimeMultiplier,
-          maxEjectionDurationSecs);
+      long maxEjectionDurationSecs
+          = Math.max(config.baseEjectionTimeNanos, config.maxEjectionTimeNanos);
+      long maxEjectionTimeNanos =
+          ejectionTimeNanos + Math.min(
+              config.baseEjectionTimeNanos * ejectionTimeMultiplier,
+              maxEjectionDurationSecs);
 
       return currentTimeNanos > maxEjectionTimeNanos;
     }
@@ -839,23 +837,24 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
    */
   public static final class OutlierDetectionLoadBalancerConfig {
 
-    final Long intervalSecs;
-    final Long baseEjectionTimeSecs;
-    final Long maxEjectionTimeSecs;
+    final Long intervalNanos;
+    final Long baseEjectionTimeNanos;
+    final Long maxEjectionTimeNanos;
     final Integer maxEjectionPercent;
     final SuccessRateEjection successRateEjection;
     final FailurePercentageEjection failurePercentageEjection;
     final PolicySelection childPolicy;
 
-    private OutlierDetectionLoadBalancerConfig(Long intervalSecs,
-        Long baseEjectionTimeSecs,
-        Long maxEjectionTimeSecs, Integer maxEjectionPercent,
+    private OutlierDetectionLoadBalancerConfig(Long intervalNanos,
+        Long baseEjectionTimeNanos,
+        Long maxEjectionTimeNanos,
+        Integer maxEjectionPercent,
         SuccessRateEjection successRateEjection,
         FailurePercentageEjection failurePercentageEjection,
         PolicySelection childPolicy) {
-      this.intervalSecs = intervalSecs;
-      this.baseEjectionTimeSecs = baseEjectionTimeSecs;
-      this.maxEjectionTimeSecs = maxEjectionTimeSecs;
+      this.intervalNanos = intervalNanos;
+      this.baseEjectionTimeNanos = baseEjectionTimeNanos;
+      this.maxEjectionTimeNanos = maxEjectionTimeNanos;
       this.maxEjectionPercent = maxEjectionPercent;
       this.successRateEjection = successRateEjection;
       this.failurePercentageEjection = failurePercentageEjection;
@@ -864,32 +863,32 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     /** Builds a new {@link OutlierDetectionLoadBalancerConfig}. */
     public static class Builder {
-      Long intervalSecs = 10L;
-      Long baseEjectionTimeSecs = 30L;
-      Long maxEjectionTimeSecs = 30L;
+      Long intervalNanos = 10_000_000_000L; // 10s
+      Long baseEjectionTimeNanos = 30_000_000_000L; // 30s
+      Long maxEjectionTimeNanos = 30_000_000_000L; // 30s
       Integer maxEjectionPercent = 10;
       SuccessRateEjection successRateEjection;
       FailurePercentageEjection failurePercentageEjection;
       PolicySelection childPolicy;
 
       /** The interval between outlier detection sweeps. */
-      public Builder setIntervalSecs(Long intervalSecs) {
-        checkArgument(intervalSecs != null);
-        this.intervalSecs = intervalSecs;
+      public Builder setIntervalNanos(Long intervalNanos) {
+        checkArgument(intervalNanos != null);
+        this.intervalNanos = intervalNanos;
         return this;
       }
 
       /** The base time an address is ejected for. */
-      public Builder setBaseEjectionTimeSecs(Long baseEjectionTimeSecs) {
-        checkArgument(baseEjectionTimeSecs != null);
-        this.baseEjectionTimeSecs = baseEjectionTimeSecs;
+      public Builder setBaseEjectionTimeNanos(Long baseEjectionTimeNanos) {
+        checkArgument(baseEjectionTimeNanos != null);
+        this.baseEjectionTimeNanos = baseEjectionTimeNanos;
         return this;
       }
 
       /** The longest time an address can be ejected. */
-      public Builder setMaxEjectionTimeSecs(Long maxEjectionTimeSecs) {
-        checkArgument(maxEjectionTimeSecs != null);
-        this.maxEjectionTimeSecs = maxEjectionTimeSecs;
+      public Builder setMaxEjectionTimeNanos(Long maxEjectionTimeNanos) {
+        checkArgument(maxEjectionTimeNanos != null);
+        this.maxEjectionTimeNanos = maxEjectionTimeNanos;
         return this;
       }
 
@@ -924,9 +923,9 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
       /** Builds a new instance of {@link OutlierDetectionLoadBalancerConfig}. */
       public OutlierDetectionLoadBalancerConfig build() {
         checkState(childPolicy != null);
-        return new OutlierDetectionLoadBalancerConfig(intervalSecs, baseEjectionTimeSecs,
-            maxEjectionTimeSecs, maxEjectionPercent, successRateEjection, failurePercentageEjection,
-            childPolicy);
+        return new OutlierDetectionLoadBalancerConfig(intervalNanos, baseEjectionTimeNanos,
+            maxEjectionTimeNanos, maxEjectionPercent, successRateEjection,
+            failurePercentageEjection, childPolicy);
       }
     }
 

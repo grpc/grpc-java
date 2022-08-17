@@ -240,7 +240,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     // The task is scheduled to run after a delay set in the config.
     ScheduledTask task = fakeClock.getPendingTasks().iterator().next();
-    assertThat(task.getDelay(TimeUnit.SECONDS)).isEqualTo(config.intervalSecs);
+    assertThat(task.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(config.intervalNanos);
   }
 
   /**
@@ -286,7 +286,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     // Config update has doubled the interval
     config = new OutlierDetectionLoadBalancerConfig.Builder()
-        .setIntervalSecs(config.intervalSecs * 2)
+        .setIntervalNanos(config.intervalNanos * 2)
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
         .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
 
@@ -296,16 +296,15 @@ public class OutlierDetectionLoadBalancerTest {
     // If the timer has not run yet the task is just rescheduled to run after the new delay.
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
     ScheduledTask task = fakeClock.getPendingTasks().iterator().next();
-    assertThat(task.getDelay(TimeUnit.SECONDS)).isEqualTo(config.intervalSecs);
-    assertThat(task.dueTimeNanos).isEqualTo(TimeUnit.SECONDS.toNanos(config.intervalSecs));
+    assertThat(task.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(config.intervalNanos);
+    assertThat(task.dueTimeNanos).isEqualTo(config.intervalNanos);
 
     // The new interval time has passed. The next task due time should have been pushed back another
     // interval.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
     task = fakeClock.getPendingTasks().iterator().next();
-    assertThat(task.dueTimeNanos).isEqualTo(
-        TimeUnit.SECONDS.toNanos(config.intervalSecs + config.intervalSecs + 1));
+    assertThat(task.dueTimeNanos).isEqualTo(config.intervalNanos + config.intervalNanos + 1);
 
     // Some time passes and a second update comes down, but now the timer has had a chance to run,
     // the new delay to timer start should consider when the timer last ran and if the interval is
@@ -314,8 +313,7 @@ public class OutlierDetectionLoadBalancerTest {
     task = fakeClock.getPendingTasks().iterator().next();
     loadBalancer.handleResolvedAddresses(
         buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
-    assertThat(task.dueTimeNanos).isEqualTo(
-        TimeUnit.SECONDS.toNanos(config.intervalSecs + config.intervalSecs + 1));
+    assertThat(task.dueTimeNanos).isEqualTo(config.intervalNanos + config.intervalNanos + 1);
   }
 
   /**
@@ -359,7 +357,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of());
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // No outliers, no ejections.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -383,7 +381,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
@@ -408,7 +406,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
@@ -428,7 +426,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // Since we brought enforcement percentage to 0, no additional ejection should have happened.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
@@ -453,7 +451,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    fakeClock.forwardTime(config.intervalNanos + 1, TimeUnit.NANOSECONDS);
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
@@ -462,7 +460,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of());
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.maxEjectionTimeSecs + 1, TimeUnit.SECONDS);
+    fakeClock.forwardTime(config.maxEjectionTimeNanos + 1, TimeUnit.NANOSECONDS);
 
     // No subchannels should remain ejected.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -489,7 +487,7 @@ public class OutlierDetectionLoadBalancerTest {
         ImmutableMap.of(subchannel1, 19));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // The address should not have been ejected.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -513,7 +511,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // No subchannels should have been ejected.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -539,7 +537,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // There is one outlier, but because enforcementPercentage is 0, nothing should be ejected.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -566,7 +564,7 @@ public class OutlierDetectionLoadBalancerTest {
         subchannel2, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0),
@@ -594,7 +592,7 @@ public class OutlierDetectionLoadBalancerTest {
         subchannel2, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     int totalEjected = 0;
     for (EquivalentAddressGroup addressGroup: servers) {
@@ -629,7 +627,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of());
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // No outliers, no ejections.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -653,7 +651,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
@@ -677,7 +675,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // We should see no ejections.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -703,7 +701,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // There is one outlier, but because enforcementPercentage is 0, nothing should be ejected.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -740,7 +738,7 @@ public class OutlierDetectionLoadBalancerTest {
         ImmutableMap.of(subchannel3, 1));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // Should see thee ejected, success rate cathes the first two, error percentage the
     // same two plus the subchannel with the single failure.
@@ -769,7 +767,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     EquivalentAddressGroup oldAddressGroup = servers.get(0);
     AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(
@@ -816,7 +814,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of());
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     EquivalentAddressGroup oldAddressGroup = servers.get(0);
     AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(
@@ -863,7 +861,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     EquivalentAddressGroup oldAddressGroup = servers.get(0);
     AddressTracker oldAddressTracker = loadBalancer.trackerMap.get(
@@ -925,7 +923,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of());
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // No outliers, no ejections.
     assertEjectedSubchannels(ImmutableSet.of());
@@ -952,7 +950,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
@@ -979,7 +977,7 @@ public class OutlierDetectionLoadBalancerTest {
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
 
     // Move forward in time to a point where the detection timer has fired.
-    fakeClock.forwardTime(config.intervalSecs + 1, TimeUnit.SECONDS);
+    forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
@@ -1061,6 +1059,11 @@ public class OutlierDetectionLoadBalancerTest {
             statusMap.containsKey(subchannel) ? statusMap.get(subchannel) : Status.OK);
       }
     }
+  }
+
+  // Forwards time past the moment when the timer will fire.
+  private void forwardTime(OutlierDetectionLoadBalancerConfig config) {
+    fakeClock.forwardTime(config.intervalNanos + 1, TimeUnit.NANOSECONDS);
   }
 
   // Asserts that the given addresses are ejected and the rest are not.
