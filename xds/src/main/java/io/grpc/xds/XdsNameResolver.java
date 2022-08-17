@@ -84,6 +84,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
@@ -123,6 +124,7 @@ final class XdsNameResolver extends NameResolver {
   // put()/remove() must be called in SyncContext, and get() can be called in any thread.
   private final ConcurrentMap<String, ClusterRefState> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
+  private final long randomChannelId = ThreadLocalRandom.current().nextLong();
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
   private Listener2 listener;
@@ -586,7 +588,7 @@ final class XdsNameResolver extends NameResolver {
             newHash = hashFunc.hashAsciiString(value);
           }
         } else if (policy.type() == HashPolicy.Type.CHANNEL_ID) {
-          newHash = hashFunc.hashLong(logId.getId());
+          newHash = hashFunc.hashLong(randomChannelId);
         }
         if (newHash != null ) {
           // Rotating the old value prevents duplicate hash rules from cancelling each other out
