@@ -53,3 +53,9 @@ SKIP_TESTS=true ARCH=aarch_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
 # for ppc64le platform
 sudo apt-get install -y g++-powerpc64le-linux-gnu
 SKIP_TESTS=true ARCH=ppcle_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
+
+# for s390x platform
+sudo apt-get install -y g++-s390x-linux-gnu
+SKIP_TESTS=true ARCH=s390x "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
+
+

@@ -58,7 +58,10 @@ model {
                 cppCompiler.executable = 'aarch64-linux-gnu-g++'
                 linker.executable = 'aarch64-linux-gnu-g++'
             }
-            target("s390_64")
+            target("s390x") {
+                cppCompiler.executable = 's390x-linux-gnu-g++'
+                linker.executable = 's390x-linux-gnu-g++'
+            }
             target("loongarch_64")
         }
         clang(Clang) {
@@ -70,7 +73,7 @@ model {
         x86_64 { architecture "x86_64" }
         ppcle_64 { architecture "ppcle_64" }
         aarch_64 { architecture "aarch_64" }
-        s390_64 { architecture "s390_64" }
+        s390x { architecture "s390x" }
         loongarch_64 { architecture "loongarch_64" }
     }
 
@@ -81,7 +84,7 @@ model {
                 'x86_64',
                 'ppcle_64',
                 'aarch_64',
-                's390_64',
+                's390x',
                 'loongarch_64'
             ]) {
                 // If arch is not within the defined platforms, we do not specify the

@@ -65,6 +65,10 @@ checkArch ()
         format="$(powerpc64le-linux-gnu-objdump -f "$1" | grep -o "file format .*$" | grep -o "[^ ]*$")"
         echo Format=$format
         assertEq "$format" "elf64-powerpcle" $LINENO
+      elif [[ "$ARCH" == s390x ]]; then
+        format="$(s390x-linux-gnu-objdump -f "$1" | grep -o "file format .*$" | grep -o "[^ ]*$")"
+        echo Format=$format
+        assertEq "$format" "elf64-s390x" $LINENO
       else
         fail "Unsupported arch: $ARCH"
       fi
@@ -114,6 +118,9 @@ checkDependencies ()
       white_list="linux-vdso\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld-linux-aarch64\.so\.1"
     elif [[ "$ARCH" == ppcle_64 ]]; then
       dump_cmd='powerpc64le-linux-gnu-objdump -x '"$1"' |grep "NEEDED"'
+      white_list="linux-vdso64\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld64\.so\.2"
+    elif [[ "$ARCH" == s390x ]]; then
+      dump_cmd='s390x-linux-gnu-objdump -x '"$1"' |grep "NEEDED"'
       white_list="linux-vdso64\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld64\.so\.2"
     fi
   elif [[ "$OS" == osx ]]; then
