@@ -380,13 +380,13 @@ public class ClusterResolverLoadBalancerTest {
     OutlierDetectionLoadBalancerConfig.SuccessRateEjection successRateEjection
         = outlierDetectionConfig.successRateEjection;
     assertThat(successRateEjection.stdevFactor).isEqualTo(
-        outlierDetectionConfig.successRateEjection.stdevFactor);
+        outlierDetection.successRateEjection().stdevFactor());
     assertThat(successRateEjection.enforcementPercentage).isEqualTo(
-        outlierDetectionConfig.successRateEjection.enforcementPercentage);
+        outlierDetection.successRateEjection().enforcementPercentage());
     assertThat(successRateEjection.minimumHosts).isEqualTo(
-        outlierDetectionConfig.successRateEjection.minimumHosts);
+        outlierDetection.successRateEjection().minimumHosts());
     assertThat(successRateEjection.requestVolume).isEqualTo(
-        outlierDetectionConfig.successRateEjection.requestVolume);
+        outlierDetection.successRateEjection().requestVolume());
 
     OutlierDetectionLoadBalancerConfig.FailurePercentageEjection failurePercentageEjection
         = outlierDetectionConfig.failurePercentageEjection;
