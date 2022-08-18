@@ -31,6 +31,7 @@ import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -58,7 +59,8 @@ import javax.annotation.Nullable;
  * <p>This implements the outlier detection gRFC:
  * https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
  */
-public class OutlierDetectionLoadBalancer extends LoadBalancer {
+@Internal
+public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   final AddressTrackerMap trackerMap;
@@ -837,13 +839,13 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
    */
   public static final class OutlierDetectionLoadBalancerConfig {
 
-    final Long intervalNanos;
-    final Long baseEjectionTimeNanos;
-    final Long maxEjectionTimeNanos;
-    final Integer maxEjectionPercent;
-    final SuccessRateEjection successRateEjection;
-    final FailurePercentageEjection failurePercentageEjection;
-    final PolicySelection childPolicy;
+    public final Long intervalNanos;
+    public final Long baseEjectionTimeNanos;
+    public final Long maxEjectionTimeNanos;
+    public final Integer maxEjectionPercent;
+    public final SuccessRateEjection successRateEjection;
+    public final FailurePercentageEjection failurePercentageEjection;
+    public final PolicySelection childPolicy;
 
     private OutlierDetectionLoadBalancerConfig(Long intervalNanos,
         Long baseEjectionTimeNanos,
@@ -932,10 +934,10 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
     /** The configuration for success rate ejection. */
     public static class SuccessRateEjection {
 
-      final Integer stdevFactor;
-      final Integer enforcementPercentage;
-      final Integer minimumHosts;
-      final Integer requestVolume;
+      public final Integer stdevFactor;
+      public final Integer enforcementPercentage;
+      public final Integer minimumHosts;
+      public final Integer requestVolume;
 
       SuccessRateEjection(Integer stdevFactor, Integer enforcementPercentage, Integer minimumHosts,
           Integer requestVolume) {
@@ -996,10 +998,10 @@ public class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     /** The configuration for failure percentage ejection. */
     public static class FailurePercentageEjection {
-      final Integer threshold;
-      final Integer enforcementPercentage;
-      final Integer minimumHosts;
-      final Integer requestVolume;
+      public final Integer threshold;
+      public final Integer enforcementPercentage;
+      public final Integer minimumHosts;
+      public final Integer requestVolume;
 
       FailurePercentageEjection(Integer threshold, Integer enforcementPercentage,
           Integer minimumHosts, Integer requestVolume) {

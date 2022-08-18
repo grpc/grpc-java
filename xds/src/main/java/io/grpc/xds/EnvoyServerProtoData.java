@@ -19,6 +19,7 @@ package io.grpc.xds;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
@@ -252,6 +253,150 @@ public final class EnvoyServerProtoData {
         @Nullable FilterChain defaultFilterChain) {
       return new AutoValue_EnvoyServerProtoData_Listener(name, address, filterChains,
           defaultFilterChain);
+    }
+  }
+
+  /**
+   * Corresponds to Envoy proto message {@link
+   * io.envoyproxy.envoy.config.cluster.v3.OutlierDetection}. Only the fields supported by gRPC are
+   * included.
+   *
+   * <p>Protobuf Duration fields are represented in their string format (e.g. "10s").
+   */
+  @AutoValue
+  abstract static class OutlierDetection {
+
+    @Nullable
+    abstract Long intervalNanos();
+
+    @Nullable
+    abstract Long baseEjectionTimeNanos();
+
+    @Nullable
+    abstract Long maxEjectionTimeNanos();
+
+    @Nullable
+    abstract Integer maxEjectionPercent();
+
+    @Nullable
+    abstract SuccessRateEjection successRateEjection();
+
+    @Nullable
+    abstract FailurePercentageEjection failurePercentageEjection();
+
+    static OutlierDetection create(
+        @Nullable Long intervalNanos,
+        @Nullable Long baseEjectionTimeNanos,
+        @Nullable Long maxEjectionTimeNanos,
+        @Nullable Integer maxEjectionPercentage,
+        @Nullable SuccessRateEjection successRateEjection,
+        @Nullable FailurePercentageEjection failurePercentageEjection) {
+      return new AutoValue_EnvoyServerProtoData_OutlierDetection(intervalNanos,
+          baseEjectionTimeNanos, maxEjectionTimeNanos, maxEjectionPercentage, successRateEjection,
+          failurePercentageEjection);
+    }
+
+    static OutlierDetection fromEnvoyOutlierDetection(
+        io.envoyproxy.envoy.config.cluster.v3.OutlierDetection envoyOutlierDetection) {
+
+      Long intervalNanos = envoyOutlierDetection.hasInterval()
+          ? Durations.toNanos(envoyOutlierDetection.getInterval()) : null;
+      Long baseEjectionTimeNanos = envoyOutlierDetection.hasBaseEjectionTime()
+          ? Durations.toNanos(envoyOutlierDetection.getBaseEjectionTime()) : null;
+      Long maxEjectionTimeNanos = envoyOutlierDetection.hasMaxEjectionTime()
+          ? Durations.toNanos(envoyOutlierDetection.getMaxEjectionTime()) : null;
+      Integer maxEjectionPercentage = envoyOutlierDetection.hasMaxEjectionPercent()
+          ? envoyOutlierDetection.getMaxEjectionPercent().getValue() : null;
+
+      SuccessRateEjection successRateEjection;
+      // If success rate enforcement has been turned completely off, don't configure this ejection.
+      if (envoyOutlierDetection.hasEnforcingSuccessRate()
+          && envoyOutlierDetection.getEnforcingSuccessRate().getValue() == 0) {
+        successRateEjection = null;
+      } else {
+        Integer stdevFactor = envoyOutlierDetection.hasSuccessRateStdevFactor()
+            ? envoyOutlierDetection.getSuccessRateStdevFactor().getValue() : null;
+        Integer enforcementPercentage = envoyOutlierDetection.hasEnforcingSuccessRate()
+            ? envoyOutlierDetection.getEnforcingSuccessRate().getValue() : null;
+        Integer minimumHosts = envoyOutlierDetection.hasSuccessRateMinimumHosts()
+            ? envoyOutlierDetection.getSuccessRateMinimumHosts().getValue() : null;
+        Integer requestVolume = envoyOutlierDetection.hasSuccessRateRequestVolume()
+            ? envoyOutlierDetection.getSuccessRateMinimumHosts().getValue() : null;
+
+        successRateEjection = SuccessRateEjection.create(stdevFactor, enforcementPercentage,
+            minimumHosts, requestVolume);
+      }
+
+      FailurePercentageEjection failurePercentageEjection;
+      if (envoyOutlierDetection.hasEnforcingFailurePercentage()
+          && envoyOutlierDetection.getEnforcingFailurePercentage().getValue() == 0) {
+        failurePercentageEjection = null;
+      } else {
+        Integer threshold = envoyOutlierDetection.hasFailurePercentageThreshold()
+            ? envoyOutlierDetection.getFailurePercentageThreshold().getValue() : null;
+        Integer enforcementPercentage = envoyOutlierDetection.hasEnforcingFailurePercentage()
+            ? envoyOutlierDetection.getEnforcingFailurePercentage().getValue() : null;
+        Integer minimumHosts = envoyOutlierDetection.hasFailurePercentageMinimumHosts()
+            ? envoyOutlierDetection.getFailurePercentageMinimumHosts().getValue() : null;
+        Integer requestVolume = envoyOutlierDetection.hasFailurePercentageRequestVolume()
+            ? envoyOutlierDetection.getFailurePercentageRequestVolume().getValue() : null;
+
+        failurePercentageEjection = FailurePercentageEjection.create(threshold,
+            enforcementPercentage, minimumHosts, requestVolume);
+      }
+
+      return create(intervalNanos, baseEjectionTimeNanos, maxEjectionTimeNanos,
+          maxEjectionPercentage, successRateEjection, failurePercentageEjection);
+    }
+  }
+
+  @AutoValue
+  abstract static class SuccessRateEjection {
+
+    @Nullable
+    abstract Integer stdevFactor();
+
+    @Nullable
+    abstract Integer enforcementPercentage();
+
+    @Nullable
+    abstract Integer minimumHosts();
+
+    @Nullable
+    abstract Integer requestVolume();
+
+    static SuccessRateEjection create(
+        @Nullable Integer stdevFactor,
+        @Nullable Integer enforcementPercentage,
+        @Nullable Integer minimumHosts,
+        @Nullable Integer requestVolume) {
+      return new AutoValue_EnvoyServerProtoData_SuccessRateEjection(stdevFactor,
+          enforcementPercentage, minimumHosts, requestVolume);
+    }
+  }
+
+  @AutoValue
+  abstract static class FailurePercentageEjection {
+
+    @Nullable
+    abstract Integer threshold();
+
+    @Nullable
+    abstract Integer enforcementPercentage();
+
+    @Nullable
+    abstract Integer minimumHosts();
+
+    @Nullable
+    abstract Integer requestVolume();
+
+    static FailurePercentageEjection create(
+        @Nullable Integer threshold,
+        @Nullable Integer enforcementPercentage,
+        @Nullable Integer minimumHosts,
+        @Nullable Integer requestVolume) {
+      return new AutoValue_EnvoyServerProtoData_FailurePercentageEjection(threshold,
+          enforcementPercentage, minimumHosts, requestVolume);
     }
   }
 }
