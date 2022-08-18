@@ -16,6 +16,7 @@
 
 package io.grpc.util;
 
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -33,6 +34,7 @@ import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerCon
 import java.util.List;
 import java.util.Map;
 
+@Internal
 public final class OutlierDetectionLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
