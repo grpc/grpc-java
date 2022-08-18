@@ -41,7 +41,7 @@ else
     ./configure --disable-shared --host=aarch64-linux-gnu --prefix="$INSTALL_DIR"
   elif [[ "$ARCH" == ppc* ]]; then
     ./configure --disable-shared --host=powerpc64le-linux-gnu --prefix="$INSTALL_DIR"
-  elif [[ "$ARCH" == s390x ]]; then
+  elif [[ "$ARCH" == s390* ]]; then
     ./configure --disable-shared --host=s390x-linux-gnu --prefix="$INSTALL_DIR"
   fi
   # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
