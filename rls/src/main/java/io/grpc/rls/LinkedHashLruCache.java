@@ -247,7 +247,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
    * Returns TRUE if any unexpired entries were removed
    */
   protected final boolean fitToLimit() {
-    long now = ticker.read();
     boolean removedAnyUnexpired = false;
     synchronized (lock) {
       if (estimatedSizeBytes.get() <= estimatedMaxSizeBytes) {
@@ -255,7 +254,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
         return false;
       }
       // cleanup expired entries
-      cleanupExpiredEntries(now);
+      cleanupExpiredEntries(now());
 
       // cleanup eldest entry until new size limit
       Iterator<Map.Entry<K, SizedValue>> lruIter = delegate.entrySet().iterator();

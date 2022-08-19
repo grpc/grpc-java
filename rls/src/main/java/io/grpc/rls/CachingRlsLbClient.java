@@ -81,6 +81,11 @@ final class CachingRlsLbClient {
       REQUEST_CONVERTER = new RlsProtoConverters.RouteLookupRequestConverter().reverse();
   private static final Converter<RouteLookupResponse, io.grpc.lookup.v1.RouteLookupResponse>
       RESPONSE_CONVERTER = new RouteLookupResponseConverter().reverse();
+  public static final long MIN_EVICTION_TIME_DELTA_NANOS = TimeUnit.SECONDS.toNanos(5);
+  public static final int BYTES_PER_CHAR = 2;
+  public static final int STRING_OVERHEAD_BYTES = 38;
+  /** Minimum bytes for a Java Object. */
+  public static final int OBJ_OVERHEAD_B = 16;
 
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
@@ -544,7 +549,7 @@ final class CachingRlsLbClient {
           refCountedChildPolicyWrapperFactory
               .createOrGet(response.targets());
       long now = ticker.read();
-      minEvictionTime = now + TimeUnit.SECONDS.toNanos(5);
+      minEvictionTime = now + MIN_EVICTION_TIME_DELTA_NANOS;
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
     }
@@ -613,9 +618,9 @@ final class CachingRlsLbClient {
       return response.getHeaderData();
     }
 
-    // Assume UTF-16 and overhead of object is 38 bytes
+    // Assume UTF-16 (2 bytes) and overhead of a String object is 38 bytes
     int calcStringSize(String target) {
-      return target.length() * 2 + 38;
+      return target.length() * BYTES_PER_CHAR + STRING_OVERHEAD_BYTES;
     }
 
     @Override
@@ -624,8 +629,8 @@ final class CachingRlsLbClient {
       for (String target : response.targets()) {
         targetSize += calcStringSize(target);
       }
-      return targetSize + calcStringSize(response.getHeaderData()) + 16 // response size
-          + Long.SIZE * 2 + 16; // Other fields
+      return targetSize + calcStringSize(response.getHeaderData()) + OBJ_OVERHEAD_B // response size
+          + Long.SIZE * 2 + OBJ_OVERHEAD_B; // Other fields
     }
 
     @Override
@@ -733,7 +738,7 @@ final class CachingRlsLbClient {
 
     @Override
     int getSizeBytes() {
-      return 16 * 3 + Long.SIZE + 8; // 3 java objects, 1 long and a boolean
+      return OBJ_OVERHEAD_B * 3 + Long.SIZE + 8; // 3 java objects, 1 long and a boolean
     }
 
     @Override
@@ -891,7 +896,7 @@ final class CachingRlsLbClient {
     @Override
     protected boolean shouldInvalidateEldestEntry(
         RouteLookupRequest eldestKey, CacheEntry eldestValue) {
-      if (eldestValue.getMinEvictionTime() > super.now()) {
+      if (eldestValue.getMinEvictionTime() > now()) {
         return false;
       }
 
@@ -900,13 +905,13 @@ final class CachingRlsLbClient {
     }
 
     public CacheEntry cacheAndClean(RouteLookupRequest key, CacheEntry value) {
-      CacheEntry retVal = cache(key, value);
+      CacheEntry newEntry = cache(key, value);
 
       // force cleanup if new entry pushed cache over max size (in bytes)
       if (fitToLimit()) {
         value.triggerPendingRpcProcessing();
       }
-      return retVal;
+      return newEntry;
     }
   }
 
