@@ -59,8 +59,8 @@ model {
                 linker.executable = 'aarch64-linux-gnu-g++'
             }
             target("s390_64") {
-                cppCompiler.executable = 's390x-8-linux-gnu-g++'
-                linker.executable = 's390x-8-linux-gnu-g++'
+                cppCompiler.executable = 's390x-linux-gnu-g++-8'
+                linker.executable = 's390x-linux-gnu-g++-8'
             }
             target("loongarch_64")
         }
