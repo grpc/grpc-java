@@ -744,6 +744,7 @@ public class XdsNameResolverTest {
     // A different resolver/Channel.
     resolver.shutdown();
     reset(mockListener);
+    when(mockRandom.nextLong()).thenReturn(123L);
     resolver = new XdsNameResolver(null, AUTHORITY, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);

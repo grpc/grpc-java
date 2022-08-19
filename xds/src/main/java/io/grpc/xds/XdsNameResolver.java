@@ -122,6 +122,7 @@ final class XdsNameResolver extends NameResolver {
   // put()/remove() must be called in SyncContext, and get() can be called in any thread.
   private final ConcurrentMap<String, ClusterRefState> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
+  private final long randomChannelId;
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
   private Listener2 listener;
@@ -158,6 +159,7 @@ final class XdsNameResolver extends NameResolver {
     this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
+    randomChannelId = random.nextLong();
     logId = InternalLogId.allocate("xds-resolver", name);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
@@ -582,7 +584,7 @@ final class XdsNameResolver extends NameResolver {
             newHash = hashFunc.hashAsciiString(value);
           }
         } else if (policy.type() == HashPolicy.Type.CHANNEL_ID) {
-          newHash = hashFunc.hashLong(logId.getId());
+          newHash = hashFunc.hashLong(randomChannelId);
         }
         if (newHash != null ) {
           // Rotating the old value prevents duplicate hash rules from cancelling each other out
