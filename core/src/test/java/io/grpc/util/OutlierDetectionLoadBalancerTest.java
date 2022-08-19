@@ -233,7 +233,9 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(resolvedAddresses);
 
     // Handling of resolved addresses is delegated
-    verify(mockChildLb).handleResolvedAddresses(resolvedAddresses);
+    verify(mockChildLb).handleResolvedAddresses(
+        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
+            .build());
 
     // There is a single pending task to run the outlier detection algorithm
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
