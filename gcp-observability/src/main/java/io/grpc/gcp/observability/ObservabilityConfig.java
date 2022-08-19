@@ -31,7 +31,7 @@ public interface ObservabilityConfig {
   boolean isEnableCloudMonitoring();
 
   /** Is Cloud Tracing enabled. */
-  boolean isEnableCloudTracing();
+  boolean isEnableCloudTrace();
 
   /** Get destination project ID - where logs will go. */
   String getDestinationProjectId();

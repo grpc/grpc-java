@@ -130,7 +130,7 @@ public final class GcpObservability implements AutoCloseable {
       tracerFactories.add(
           InternalCensusStatsAccessor.getServerStreamTracerFactory(true, true, true));
     }
-    if (config.isEnableCloudTracing()) {
+    if (config.isEnableCloudTrace()) {
       clientInterceptors.add(
           getConditionalInterceptor(InternalCensusTracingAccessor.getClientInterceptor()));
       tracerFactories.add(InternalCensusTracingAccessor.getServerStreamTracerFactory());
@@ -165,7 +165,7 @@ public final class GcpObservability implements AutoCloseable {
       StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
     }
 
-    if (config.isEnableCloudTracing()) {
+    if (config.isEnableCloudTrace()) {
       TraceConfig traceConfig = Tracing.getTraceConfig();
       traceConfig.updateActiveTraceParams(
           traceConfig.getActiveTraceParams().toBuilder().setSampler(config.getSampler()).build());
