@@ -52,6 +52,7 @@ import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.cluster.CircuitBreakers;
 import io.envoyproxy.envoy.api.v2.cluster.CircuitBreakers.Thresholds;
+import io.envoyproxy.envoy.api.v2.cluster.OutlierDetection;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
@@ -420,10 +421,10 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         String lbPolicy, @Nullable Message ringHashLbConfig, @Nullable Message leastRequestLbConfig,
         boolean enableLrs,
         @Nullable Message upstreamTlsContext, String transportSocketName,
-        @Nullable Message circuitBreakers) {
+        @Nullable Message circuitBreakers, @Nullable Message outlierDetection) {
       Cluster.Builder builder = initClusterBuilder(
           clusterName, lbPolicy, ringHashLbConfig, leastRequestLbConfig,
-          enableLrs, upstreamTlsContext, circuitBreakers);
+          enableLrs, upstreamTlsContext, circuitBreakers, outlierDetection);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -442,7 +443,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(
           clusterName, lbPolicy, ringHashLbConfig, leastRequestLbConfig,
-          enableLrs, upstreamTlsContext, circuitBreakers);
+          enableLrs, upstreamTlsContext, circuitBreakers, null);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       builder.setLoadAssignment(
           ClusterLoadAssignment.newBuilder().addEndpoints(
@@ -483,7 +484,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
         @Nullable Message ringHashLbConfig, @Nullable Message leastRequestLbConfig,
         boolean enableLrs, @Nullable Message upstreamTlsContext,
-        @Nullable Message circuitBreakers) {
+        @Nullable Message circuitBreakers, @Nullable Message outlierDetection) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
       if (lbPolicy.equals("round_robin")) {
@@ -510,6 +511,9 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       }
       if (circuitBreakers != null) {
         builder.setCircuitBreakers((CircuitBreakers) circuitBreakers);
+      }
+      if (outlierDetection != null) {
+        builder.setOutlierDetection((OutlierDetection) outlierDetection);
       }
       return builder;
     }

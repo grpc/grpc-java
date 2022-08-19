@@ -39,6 +39,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
+import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
@@ -46,6 +47,9 @@ import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.Dis
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
+import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
+import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
@@ -176,7 +180,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         ClusterState state;
         if (instance.type == DiscoveryMechanism.Type.EDS) {
           state = new EdsClusterState(instance.cluster, instance.edsServiceName,
-              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext);
+              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
+              instance.outlierDetection);
         } else {  // logical DNS
           state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
               instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext);
@@ -316,6 +321,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       protected final Long maxConcurrentRequests;
       @Nullable
       protected final UpstreamTlsContext tlsContext;
+      @Nullable
+      protected final OutlierDetection outlierDetection;
       // Resolution status, may contain most recent error encountered.
       protected Status status = Status.OK;
       // True if has received resolution result.
@@ -327,11 +334,13 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       protected boolean shutdown;
 
       private ClusterState(String name, @Nullable ServerInfo lrsServerInfo,
-          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
+          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
+          @Nullable OutlierDetection outlierDetection) {
         this.name = name;
         this.lrsServerInfo = lrsServerInfo;
         this.maxConcurrentRequests = maxConcurrentRequests;
         this.tlsContext = tlsContext;
+        this.outlierDetection = outlierDetection;
       }
 
       abstract void start();
@@ -349,8 +358,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext) {
-        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext);
+          @Nullable UpstreamTlsContext tlsContext, @Nullable OutlierDetection outlierDetection) {
+        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, outlierDetection);
         this.edsServiceName = edsServiceName;
       }
 
@@ -434,7 +443,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             Map<String, PriorityChildConfig> priorityChildConfigs =
                 generateEdsBasedPriorityChildConfigs(
                     name, edsServiceName, lrsServerInfo, maxConcurrentRequests, tlsContext,
-                    endpointLbPolicy, lbRegistry, prioritizedLocalityWeights, dropOverloads);
+                    outlierDetection, endpointLbPolicy, lbRegistry, prioritizedLocalityWeights,
+                    dropOverloads);
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityChildConfigs,
@@ -530,7 +540,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       private LogicalDnsClusterState(String name, String dnsHostName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable UpstreamTlsContext tlsContext) {
-        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext);
+        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, null);
         this.dnsHostName = checkNotNull(dnsHostName, "dnsHostName");
         nameResolverFactory =
             checkNotNull(helper.getNameResolverRegistry().asFactory(), "nameResolverFactory");
@@ -730,9 +740,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   private static Map<String, PriorityChildConfig> generateEdsBasedPriorityChildConfigs(
       String cluster, @Nullable String edsServiceName, @Nullable ServerInfo lrsServerInfo,
       @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
-      PolicySelection endpointLbPolicy, LoadBalancerRegistry lbRegistry,
-      Map<String, Map<Locality, Integer>> prioritizedLocalityWeights,
-      List<DropOverload> dropOverloads) {
+      @Nullable OutlierDetection outlierDetection, PolicySelection endpointLbPolicy,
+      LoadBalancerRegistry lbRegistry, Map<String,
+      Map<Locality, Integer>> prioritizedLocalityWeights, List<DropOverload> dropOverloads) {
     Map<String, PriorityChildConfig> configs = new HashMap<>();
     for (String priority : prioritizedLocalityWeights.keySet()) {
       ClusterImplConfig clusterImplConfig =
@@ -740,13 +750,96 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               dropOverloads, endpointLbPolicy, tlsContext);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
-      PolicySelection clusterImplPolicy =
+      PolicySelection priorityChildPolicy =
           new PolicySelection(clusterImplLbProvider, clusterImplConfig);
+
+      // If outlier detection has been configured we wrap the child policy in the outlier detection
+      // load balancer.
+      if (outlierDetection != null) {
+        LoadBalancerProvider outlierDetectionProvider = lbRegistry.getProvider(
+            "outlier_detection_experimental");
+        priorityChildPolicy = new PolicySelection(outlierDetectionProvider,
+            buildOutlierDetectionLbConfig(outlierDetection, priorityChildPolicy));
+      }
+
       PriorityChildConfig priorityChildConfig =
-          new PriorityChildConfig(clusterImplPolicy, true /* ignoreReresolution */);
+          new PriorityChildConfig(priorityChildPolicy, true /* ignoreReresolution */);
       configs.put(priority, priorityChildConfig);
     }
     return configs;
+  }
+
+  /**
+   * Converts {@link OutlierDetection} that represents the xDS configuration to {@link
+   * OutlierDetectionLoadBalancerConfig} that the {@link io.grpc.util.OutlierDetectionLoadBalancer}
+   * understands.
+   */
+  private static OutlierDetectionLoadBalancerConfig buildOutlierDetectionLbConfig(
+      OutlierDetection outlierDetection, PolicySelection childPolicy) {
+    OutlierDetectionLoadBalancerConfig.Builder configBuilder
+        = new OutlierDetectionLoadBalancerConfig.Builder();
+
+    configBuilder.setChildPolicy(childPolicy);
+
+    if (outlierDetection.intervalNanos() != null) {
+      configBuilder.setIntervalNanos(outlierDetection.intervalNanos());
+    }
+    if (outlierDetection.baseEjectionTimeNanos() != null) {
+      configBuilder.setBaseEjectionTimeNanos(outlierDetection.baseEjectionTimeNanos());
+    }
+    if (outlierDetection.maxEjectionTimeNanos() != null) {
+      configBuilder.setMaxEjectionTimeNanos(outlierDetection.maxEjectionTimeNanos());
+    }
+    if (outlierDetection.maxEjectionPercent() != null) {
+      configBuilder.setMaxEjectionPercent(outlierDetection.maxEjectionPercent());
+    }
+
+    SuccessRateEjection successRate = outlierDetection.successRateEjection();
+    if (successRate != null) {
+      OutlierDetectionLoadBalancerConfig.SuccessRateEjection.Builder
+          successRateConfigBuilder = new OutlierDetectionLoadBalancerConfig
+          .SuccessRateEjection.Builder();
+
+      if (successRate.stdevFactor() != null) {
+        successRateConfigBuilder.setStdevFactor(successRate.stdevFactor());
+      }
+      if (successRate.enforcementPercentage() != null) {
+        successRateConfigBuilder.setEnforcementPercentage(successRate.enforcementPercentage());
+      }
+      if (successRate.minimumHosts() != null) {
+        successRateConfigBuilder.setMinimumHosts(successRate.minimumHosts());
+      }
+      if (successRate.requestVolume() != null) {
+        successRateConfigBuilder.setRequestVolume(successRate.requestVolume());
+      }
+
+      configBuilder.setSuccessRateEjection(successRateConfigBuilder.build());
+    }
+
+    FailurePercentageEjection failurePercentage = outlierDetection.failurePercentageEjection();
+    if (failurePercentage != null) {
+      OutlierDetectionLoadBalancerConfig.FailurePercentageEjection.Builder
+          failurePercentageConfigBuilder = new OutlierDetectionLoadBalancerConfig
+          .FailurePercentageEjection.Builder();
+
+      if (failurePercentage.threshold() != null) {
+        failurePercentageConfigBuilder.setThreshold(failurePercentage.threshold());
+      }
+      if (failurePercentage.enforcementPercentage() != null) {
+        failurePercentageConfigBuilder.setEnforcementPercentage(
+            failurePercentage.enforcementPercentage());
+      }
+      if (failurePercentage.minimumHosts() != null) {
+        failurePercentageConfigBuilder.setMinimumHosts(failurePercentage.minimumHosts());
+      }
+      if (failurePercentage.requestVolume() != null) {
+        failurePercentageConfigBuilder.setRequestVolume(failurePercentage.requestVolume());
+      }
+
+      configBuilder.setFailurePercentageEjection(failurePercentageConfigBuilder.build());
+    }
+
+    return configBuilder.build();
   }
 
   /**

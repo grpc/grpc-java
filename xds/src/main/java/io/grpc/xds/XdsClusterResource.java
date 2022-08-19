@@ -27,8 +27,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
@@ -41,6 +43,7 @@ import io.grpc.NameResolver;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
+import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
@@ -187,6 +190,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     Bootstrapper.ServerInfo lrsServerInfo = null;
     Long maxConcurrentRequests = null;
     EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext = null;
+    OutlierDetection outlierDetection = null;
     if (cluster.hasLrsServer()) {
       if (!cluster.getLrsServer().hasSelf()) {
         return StructOrError.fromError(
@@ -227,6 +231,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       }
     }
 
+    if (cluster.hasOutlierDetection() && enableOutlierDetection) {
+      try {
+        outlierDetection = OutlierDetection.fromEnvoyOutlierDetection(
+            validateOutlierDetection(cluster.getOutlierDetection()));
+      } catch (ResourceInvalidException e) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": malformed outlier_detection: " + e);
+      }
+    }
+
     Cluster.DiscoveryType type = cluster.getType();
     if (type == Cluster.DiscoveryType.EDS) {
       String edsServiceName = null;
@@ -246,7 +260,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         edsResources.add(clusterName);
       }
       return StructOrError.fromStruct(CdsUpdate.forEds(
-          clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext,
+          outlierDetection));
     } else if (type.equals(Cluster.DiscoveryType.LOGICAL_DNS)) {
       if (!cluster.hasLoadAssignment()) {
         return StructOrError.fromError(
@@ -285,6 +300,65 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
+  }
+
+  static io.envoyproxy.envoy.config.cluster.v3.OutlierDetection validateOutlierDetection(
+      io.envoyproxy.envoy.config.cluster.v3.OutlierDetection outlierDetection)
+      throws ResourceInvalidException {
+    if (outlierDetection.hasInterval()) {
+      if (!Durations.isValid(outlierDetection.getInterval())) {
+        throw new ResourceInvalidException("outlier_detection interval is not a valid Duration");
+      }
+      if (hasNegativeValues(outlierDetection.getInterval())) {
+        throw new ResourceInvalidException("outlier_detection interval has a negative value");
+      }
+    }
+    if (outlierDetection.hasBaseEjectionTime()) {
+      if (!Durations.isValid(outlierDetection.getBaseEjectionTime())) {
+        throw new ResourceInvalidException(
+            "outlier_detection base_ejection_time is not a valid Duration");
+      }
+      if (hasNegativeValues(outlierDetection.getBaseEjectionTime())) {
+        throw new ResourceInvalidException(
+            "outlier_detection base_ejection_time has a negative value");
+      }
+    }
+    if (outlierDetection.hasMaxEjectionTime()) {
+      if (!Durations.isValid(outlierDetection.getMaxEjectionTime())) {
+        throw new ResourceInvalidException(
+            "outlier_detection max_ejection_time is not a valid Duration");
+      }
+      if (hasNegativeValues(outlierDetection.getMaxEjectionTime())) {
+        throw new ResourceInvalidException(
+            "outlier_detection max_ejection_time has a negative value");
+      }
+    }
+    if (outlierDetection.hasMaxEjectionPercent()
+        && outlierDetection.getMaxEjectionPercent().getValue() > 100) {
+      throw new ResourceInvalidException(
+          "outlier_detection max_ejection_percent is > 100");
+    }
+    if (outlierDetection.hasEnforcingSuccessRate()
+        && outlierDetection.getEnforcingSuccessRate().getValue() > 100) {
+      throw new ResourceInvalidException(
+          "outlier_detection enforcing_success_rate is > 100");
+    }
+    if (outlierDetection.hasFailurePercentageThreshold()
+        && outlierDetection.getFailurePercentageThreshold().getValue() > 100) {
+      throw new ResourceInvalidException(
+          "outlier_detection failure_percentage_threshold is > 100");
+    }
+    if (outlierDetection.hasEnforcingFailurePercentage()
+        && outlierDetection.getEnforcingFailurePercentage().getValue() > 100) {
+      throw new ResourceInvalidException(
+          "outlier_detection enforcing_failure_percentage is > 100");
+    }
+
+    return outlierDetection;
+  }
+
+  static boolean hasNegativeValues(Duration duration) {
+    return duration.getSeconds() < 0 || duration.getNanos() < 0;
   }
 
   @VisibleForTesting
@@ -479,6 +553,10 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     @Nullable
     abstract ImmutableList<String> prioritizedClusterNames();
 
+    // Outlier detection configuration.
+    @Nullable
+    abstract OutlierDetection outlierDetection();
+
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
       checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
@@ -492,7 +570,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     static Builder forEds(String clusterName, @Nullable String edsServiceName,
                           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-                          @Nullable UpstreamTlsContext upstreamTlsContext) {
+                          @Nullable UpstreamTlsContext upstreamTlsContext,
+                          @Nullable OutlierDetection outlierDetection) {
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.EDS)
@@ -502,7 +581,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .edsServiceName(edsServiceName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
-          .upstreamTlsContext(upstreamTlsContext);
+          .upstreamTlsContext(upstreamTlsContext)
+          .outlierDetection(outlierDetection);
     }
 
     static Builder forLogicalDns(String clusterName, String dnsHostName,
@@ -543,7 +623,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .add("dnsHostName", dnsHostName())
           .add("lrsServerInfo", lrsServerInfo())
           .add("maxConcurrentRequests", maxConcurrentRequests())
-          // Exclude upstreamTlsContext as its string representation is cumbersome.
+          // Exclude upstreamTlsContext and outlierDetection as their string representations are
+          // cumbersome.
           .add("prioritizedClusterNames", prioritizedClusterNames())
           .toString();
     }
@@ -599,6 +680,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
       // Private, use CdsUpdate.forAggregate() instead.
       protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
+
+      protected abstract Builder outlierDetection(OutlierDetection outlierDetection);
 
       abstract CdsUpdate build();
     }
