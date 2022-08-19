@@ -43,7 +43,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
 
   private boolean enableCloudLogging = false;
   private boolean enableCloudMonitoring = false;
-  private boolean enableCloudTrace = false;
+  private boolean enableCloudTracing = false;
   private String destinationProjectId = null;
   private Long flushMessageCount = null;
   private List<LogFilter> logFilters;
@@ -84,7 +84,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
       }
       value = JsonUtil.getBoolean(config, "enable_cloud_trace");
       if (value != null) {
-        enableCloudTrace = value;
+        enableCloudTracing = value;
       }
       destinationProjectId = JsonUtil.getString(config, "destination_project_id");
       flushMessageCount = JsonUtil.getNumberAsLong(config, "flush_message_count");
@@ -176,8 +176,8 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   @Override
-  public boolean isEnableCloudTrace() {
-    return enableCloudTrace;
+  public boolean isEnableCloudTracing() {
+    return enableCloudTracing;
   }
 
   @Override

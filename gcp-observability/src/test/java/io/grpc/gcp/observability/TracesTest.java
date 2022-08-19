@@ -98,7 +98,7 @@ public class TracesTest {
       InternalLoggingServerInterceptor.Factory mockServerInterceptorFactory =
           mock(InternalLoggingServerInterceptor.Factory.class);
 
-      when(mockConfig.isEnableCloudTrace()).thenReturn(true);
+      when(mockConfig.isEnableCloudTracing()).thenReturn(true);
       when(mockConfig.getSampler()).thenReturn(Samplers.alwaysSample());
       when(mockConfig.getDestinationProjectId()).thenReturn(PROJECT_ID);
 

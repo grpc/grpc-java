@@ -179,7 +179,7 @@ public class GcpObservabilityTest {
       ObservabilityConfig config = mock(ObservabilityConfig.class);
       when(config.isEnableCloudLogging()).thenReturn(true);
       when(config.isEnableCloudMonitoring()).thenReturn(true);
-      when(config.isEnableCloudTrace()).thenReturn(true);
+      when(config.isEnableCloudTracing()).thenReturn(true);
       when(config.getSampler()).thenReturn(Samplers.neverSample());
 
       ClientInterceptor clientInterceptor =
@@ -217,7 +217,7 @@ public class GcpObservabilityTest {
       ObservabilityConfig config = mock(ObservabilityConfig.class);
       when(config.isEnableCloudLogging()).thenReturn(false);
       when(config.isEnableCloudMonitoring()).thenReturn(false);
-      when(config.isEnableCloudTrace()).thenReturn(false);
+      when(config.isEnableCloudTracing()).thenReturn(false);
       when(config.getSampler()).thenReturn(Samplers.neverSample());
 
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =

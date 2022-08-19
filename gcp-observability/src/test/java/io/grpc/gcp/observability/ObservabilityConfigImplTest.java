@@ -144,7 +144,7 @@ public class ObservabilityConfigImplTest {
     observabilityConfig.parse("{}");
     assertFalse(observabilityConfig.isEnableCloudLogging());
     assertFalse(observabilityConfig.isEnableCloudMonitoring());
-    assertFalse(observabilityConfig.isEnableCloudTrace());
+    assertFalse(observabilityConfig.isEnableCloudTracing());
     assertNull(observabilityConfig.getDestinationProjectId());
     assertNull(observabilityConfig.getFlushMessageCount());
     assertNull(observabilityConfig.getLogFilters());
@@ -156,7 +156,7 @@ public class ObservabilityConfigImplTest {
     observabilityConfig.parse(DISABLE_CLOUD_LOGGING);
     assertFalse(observabilityConfig.isEnableCloudLogging());
     assertFalse(observabilityConfig.isEnableCloudMonitoring());
-    assertFalse(observabilityConfig.isEnableCloudTrace());
+    assertFalse(observabilityConfig.isEnableCloudTracing());
     assertNull(observabilityConfig.getDestinationProjectId());
     assertNull(observabilityConfig.getFlushMessageCount());
     assertNull(observabilityConfig.getLogFilters());
@@ -208,13 +208,13 @@ public class ObservabilityConfigImplTest {
     observabilityConfig.parse(ENABLE_CLOUD_MONITORING_AND_TRACING);
     assertFalse(observabilityConfig.isEnableCloudLogging());
     assertTrue(observabilityConfig.isEnableCloudMonitoring());
-    assertTrue(observabilityConfig.isEnableCloudTrace());
+    assertTrue(observabilityConfig.isEnableCloudTracing());
   }
 
   @Test
   public void alwaysSampler() throws IOException {
     observabilityConfig.parse(GLOBAL_TRACING_ALWAYS_SAMPLER);
-    assertTrue(observabilityConfig.isEnableCloudTrace());
+    assertTrue(observabilityConfig.isEnableCloudTracing());
     Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
     assertThat(sampler).isEqualTo(Samplers.alwaysSample());
@@ -223,7 +223,7 @@ public class ObservabilityConfigImplTest {
   @Test
   public void neverSampler() throws IOException {
     observabilityConfig.parse(GLOBAL_TRACING_NEVER_SAMPLER);
-    assertTrue(observabilityConfig.isEnableCloudTrace());
+    assertTrue(observabilityConfig.isEnableCloudTracing());
     Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
     assertThat(sampler).isEqualTo(Samplers.probabilitySampler(0.0));
@@ -232,7 +232,7 @@ public class ObservabilityConfigImplTest {
   @Test
   public void probabilisticSampler() throws IOException {
     observabilityConfig.parse(GLOBAL_TRACING_PROBABILISTIC_SAMPLER);
-    assertTrue(observabilityConfig.isEnableCloudTrace());
+    assertTrue(observabilityConfig.isEnableCloudTracing());
     Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
     assertThat(sampler).isEqualTo(Samplers.probabilitySampler(0.75));
@@ -241,7 +241,7 @@ public class ObservabilityConfigImplTest {
   @Test
   public void defaultSampler() throws IOException {
     observabilityConfig.parse(GLOBAL_TRACING_DEFAULT_SAMPLER);
-    assertTrue(observabilityConfig.isEnableCloudTrace());
+    assertTrue(observabilityConfig.isEnableCloudTracing());
     Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
     assertThat(sampler).isEqualTo(Samplers.probabilitySampler(0.00));
