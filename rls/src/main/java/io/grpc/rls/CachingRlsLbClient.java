@@ -81,12 +81,17 @@ final class CachingRlsLbClient {
       REQUEST_CONVERTER = new RlsProtoConverters.RouteLookupRequestConverter().reverse();
   private static final Converter<RouteLookupResponse, io.grpc.lookup.v1.RouteLookupResponse>
       RESPONSE_CONVERTER = new RouteLookupResponseConverter().reverse();
+  public static final long MIN_EVICTION_TIME_DELTA_NANOS = TimeUnit.SECONDS.toNanos(5);
+  public static final int BYTES_PER_CHAR = 2;
+  public static final int STRING_OVERHEAD_BYTES = 38;
+  /** Minimum bytes for a Java Object. */
+  public static final int OBJ_OVERHEAD_B = 16;
 
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
   // LRU cache based on access order (BACKOFF and actual data will be here)
   @GuardedBy("lock")
-  private final LinkedHashLruCache<RouteLookupRequest, CacheEntry> linkedHashLruCache;
+  private final RlsAsyncLruCache linkedHashLruCache;
   // any RPC on the fly will cached in this map
   @GuardedBy("lock")
   private final Map<RouteLookupRequest, PendingCacheEntry> pendingCallCache = new HashMap<>();
@@ -287,12 +292,12 @@ final class CachingRlsLbClient {
         try {
           RouteLookupResponse response = asyncCall.get();
           DataCacheEntry dataEntry = new DataCacheEntry(request, response);
-          linkedHashLruCache.cache(request, dataEntry);
+          linkedHashLruCache.cacheAndClean(request, dataEntry);
           return CachedRouteLookupResponse.dataEntry(dataEntry);
         } catch (Exception e) {
           BackoffCacheEntry backoffEntry =
               new BackoffCacheEntry(request, Status.fromThrowable(e), backoffProvider.get());
-          linkedHashLruCache.cache(request, backoffEntry);
+          linkedHashLruCache.cacheAndClean(request, backoffEntry);
           return CachedRouteLookupResponse.backoffEntry(backoffEntry);
         }
       }
@@ -335,6 +340,10 @@ final class CachingRlsLbClient {
           }
         }
       });
+    }
+
+    void triggerPendingRpcProcessing() {
+      super.updateBalancingState(state, picker);
     }
   }
 
@@ -488,14 +497,15 @@ final class CachingRlsLbClient {
             ChannelLogLevel.DEBUG,
             "Transition to data cache: routeLookupResponse={0}",
             routeLookupResponse);
-        linkedHashLruCache.cache(request, new DataCacheEntry(request, routeLookupResponse));
+        linkedHashLruCache.cacheAndClean(request, new DataCacheEntry(request, routeLookupResponse));
       }
     }
 
     private void transitionToBackOff(Status status) {
       synchronized (lock) {
         logger.log(ChannelLogLevel.DEBUG, "Transition to back off: status={0}", status);
-        linkedHashLruCache.cache(request, new BackoffCacheEntry(request, status, backoffPolicy));
+        linkedHashLruCache.cacheAndClean(request,
+            new BackoffCacheEntry(request, status, backoffPolicy));
       }
     }
 
@@ -525,11 +535,20 @@ final class CachingRlsLbClient {
     abstract boolean isExpired(long now);
 
     abstract void cleanup();
+
+    protected long getMinEvictionTime() {
+      return 0L;
+    }
+
+    protected void triggerPendingRpcProcessing() {
+      helper.triggerPendingRpcProcessing();
+    }
   }
 
   /** Implementation of {@link CacheEntry} contains valid data. */
   final class DataCacheEntry extends CacheEntry {
     private final RouteLookupResponse response;
+    private final long minEvictionTime;
     private final long expireTime;
     private final long staleTime;
     private final List<ChildPolicyWrapper> childPolicyWrappers;
@@ -543,6 +562,7 @@ final class CachingRlsLbClient {
           refCountedChildPolicyWrapperFactory
               .createOrGet(response.targets());
       long now = ticker.read();
+      minEvictionTime = now + MIN_EVICTION_TIME_DELTA_NANOS;
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
     }
@@ -574,13 +594,13 @@ final class CachingRlsLbClient {
           // async call returned finished future is most likely throttled
           try {
             RouteLookupResponse response = asyncCall.get();
-            linkedHashLruCache.cache(request, new DataCacheEntry(request, response));
+            linkedHashLruCache.cacheAndClean(request, new DataCacheEntry(request, response));
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
           } catch (Exception e) {
             BackoffCacheEntry backoffEntry =
                 new BackoffCacheEntry(request, Status.fromThrowable(e), backoffProvider.get());
-            linkedHashLruCache.cache(request, backoffEntry);
+            linkedHashLruCache.cacheAndClean(request, backoffEntry);
           }
         }
       }
@@ -611,11 +631,19 @@ final class CachingRlsLbClient {
       return response.getHeaderData();
     }
 
+    // Assume UTF-16 (2 bytes) and overhead of a String object is 38 bytes
+    int calcStringSize(String target) {
+      return target.length() * BYTES_PER_CHAR + STRING_OVERHEAD_BYTES;
+    }
+
     @Override
     int getSizeBytes() {
-      // size of strings and java object overhead, actual memory usage is more than this.
-      return
-          (response.targets().get(0).length() + response.getHeaderData().length()) * 2 + 38 * 2;
+      int targetSize = 0;
+      for (String target : response.targets()) {
+        targetSize += calcStringSize(target);
+      }
+      return targetSize + calcStringSize(response.getHeaderData()) + OBJ_OVERHEAD_B // response size
+          + Long.SIZE * 2 + OBJ_OVERHEAD_B; // Other fields
     }
 
     @Override
@@ -625,6 +653,11 @@ final class CachingRlsLbClient {
 
     boolean isStaled(long now) {
       return staleTime - now <= 0;
+    }
+
+    @Override
+    protected long getMinEvictionTime() {
+      return minEvictionTime;
     }
 
     @Override
@@ -700,11 +733,11 @@ final class CachingRlsLbClient {
         } else {
           try {
             RouteLookupResponse response = call.get();
-            linkedHashLruCache.cache(request, new DataCacheEntry(request, response));
+            linkedHashLruCache.cacheAndClean(request, new DataCacheEntry(request, response));
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
           } catch (Exception e) {
-            linkedHashLruCache.cache(
+            linkedHashLruCache.cacheAndClean(
                 request,
                 new BackoffCacheEntry(request, Status.fromThrowable(e), backoffPolicy));
           }
@@ -718,7 +751,7 @@ final class CachingRlsLbClient {
 
     @Override
     int getSizeBytes() {
-      return 0;
+      return OBJ_OVERHEAD_B * 3 + Long.SIZE + 8; // 3 java objects, 1 long and a boolean
     }
 
     @Override
@@ -876,8 +909,22 @@ final class CachingRlsLbClient {
     @Override
     protected boolean shouldInvalidateEldestEntry(
         RouteLookupRequest eldestKey, CacheEntry eldestValue) {
+      if (eldestValue.getMinEvictionTime() > now()) {
+        return false;
+      }
+
       // eldest entry should be evicted if size limit exceeded
-      return true;
+      return this.estimatedSizeBytes() > this.estimatedMaxSizeBytes();
+    }
+
+    public CacheEntry cacheAndClean(RouteLookupRequest key, CacheEntry value) {
+      CacheEntry newEntry = cache(key, value);
+
+      // force cleanup if new entry pushed cache over max size (in bytes)
+      if (fitToLimit()) {
+        value.triggerPendingRpcProcessing();
+      }
+      return newEntry;
     }
   }
 
