@@ -55,5 +55,5 @@ sudo apt-get install -y g++-powerpc64le-linux-gnu
 SKIP_TESTS=true ARCH=ppcle_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
 
 # for s390x platform
-sudo apt-get install -y g++-s390x-linux-gnu
+sudo apt-get install -y g++-8-s390x-linux-gnu
 SKIP_TESTS=true ARCH=s390_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
