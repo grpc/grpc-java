@@ -204,7 +204,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       // If the subchannel is associated with a single address that is also already in the map
       // the subchannel will be added to the map and be included in outlier detection.
-      List<EquivalentAddressGroup> addressGroups = subchannel.getAllAddresses();
+      List<EquivalentAddressGroup> addressGroups = args.getAddresses();
       if (hasSingleAddress(addressGroups)
           && trackerMap.containsKey(addressGroups.get(0).getAddresses().get(0))) {
         AddressTracker tracker = trackerMap.get(addressGroups.get(0).getAddresses().get(0));
