@@ -34,6 +34,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
+import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
@@ -221,6 +222,10 @@ abstract class XdsClient {
     @Nullable
     abstract ImmutableList<String> prioritizedClusterNames();
 
+    // Outlier detection configuration.
+    @Nullable
+    abstract OutlierDetection outlierDetection();
+
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
       checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
       return new AutoValue_XdsClient_CdsUpdate.Builder()
@@ -234,7 +239,8 @@ abstract class XdsClient {
 
     static Builder forEds(String clusterName, @Nullable String edsServiceName,
         @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-        @Nullable UpstreamTlsContext upstreamTlsContext) {
+        @Nullable UpstreamTlsContext upstreamTlsContext,
+        @Nullable OutlierDetection outlierDetection) {
       return new AutoValue_XdsClient_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.EDS)
@@ -244,7 +250,8 @@ abstract class XdsClient {
           .edsServiceName(edsServiceName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
-          .upstreamTlsContext(upstreamTlsContext);
+          .upstreamTlsContext(upstreamTlsContext)
+          .outlierDetection(outlierDetection);
     }
 
     static Builder forLogicalDns(String clusterName, String dnsHostName,
@@ -284,8 +291,9 @@ abstract class XdsClient {
           .add("dnsHostName", dnsHostName())
           .add("lrsServerInfo", lrsServerInfo())
           .add("maxConcurrentRequests", maxConcurrentRequests())
-          // Exclude upstreamTlsContext as its string representation is cumbersome.
           .add("prioritizedClusterNames", prioritizedClusterNames())
+          // Exclude upstreamTlsContext and outlierDetection as their string representations are
+          // cumbersome.
           .toString();
     }
 
@@ -340,6 +348,8 @@ abstract class XdsClient {
 
       // Private, use CdsUpdate.forAggregate() instead.
       protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
+
+      protected abstract Builder outlierDetection(OutlierDetection outlierDetection);
 
       abstract CdsUpdate build();
     }
