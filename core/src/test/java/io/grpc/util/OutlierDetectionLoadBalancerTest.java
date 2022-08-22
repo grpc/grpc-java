@@ -356,7 +356,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of());
+    generateLoad(ImmutableMap.of(), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -380,7 +380,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -405,7 +405,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -425,7 +425,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), 8);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -450,7 +450,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.intervalNanos + 1, TimeUnit.NANOSECONDS);
@@ -459,7 +459,7 @@ public class OutlierDetectionLoadBalancerTest {
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
 
     // Now we produce more load, but the subchannel start working and is no longer an outlier.
-    generateLoad(ImmutableMap.of());
+    generateLoad(ImmutableMap.of(), 8);
 
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.maxEjectionTimeNanos + 1, TimeUnit.NANOSECONDS);
@@ -486,7 +486,7 @@ public class OutlierDetectionLoadBalancerTest {
     // We produce an outlier, but don't give it enough calls to reach the minimum volume.
     generateLoad(
         ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
-        ImmutableMap.of(subchannel1, 19));
+        ImmutableMap.of(subchannel1, 19), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -510,7 +510,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -536,7 +536,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -563,7 +563,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     generateLoad(ImmutableMap.of(
         subchannel1, Status.DEADLINE_EXCEEDED,
-        subchannel2, Status.DEADLINE_EXCEEDED));
+        subchannel2, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -591,7 +591,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     generateLoad(ImmutableMap.of(
         subchannel1, Status.DEADLINE_EXCEEDED,
-        subchannel2, Status.DEADLINE_EXCEEDED));
+        subchannel2, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -626,7 +626,7 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
     // By default all calls will return OK.
-    generateLoad(ImmutableMap.of());
+    generateLoad(ImmutableMap.of(), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -650,7 +650,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -674,7 +674,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -700,7 +700,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -737,7 +737,7 @@ public class OutlierDetectionLoadBalancerTest {
             subchannel1, Status.DEADLINE_EXCEEDED,
             subchannel2, Status.DEADLINE_EXCEEDED,
             subchannel3, Status.DEADLINE_EXCEEDED),
-        ImmutableMap.of(subchannel3, 1));
+        ImmutableMap.of(subchannel3, 1), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -766,7 +766,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -813,7 +813,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of());
+    generateLoad(ImmutableMap.of(), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -860,7 +860,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -922,7 +922,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of());
+    generateLoad(ImmutableMap.of(), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -949,7 +949,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -976,7 +976,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED));
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1025,22 +1025,23 @@ public class OutlierDetectionLoadBalancerTest {
     subchannelStateListeners.get(subchannel).onSubchannelState(newState);
   }
 
-  private void generateLoad(Map<Subchannel, Status> statusMap) {
-    generateLoad(statusMap, null);
+  private void generateLoad(Map<Subchannel, Status> statusMap, int expectedStateChanges) {
+    generateLoad(statusMap, null, expectedStateChanges);
   }
 
   // Generates 100 calls, 20 each across the subchannels. Default status is OK.
   private void generateLoad(Map<Subchannel, Status> statusMap,
-      Map<Subchannel, Integer> maxCallsMap) {
+      Map<Subchannel, Integer> maxCallsMap, int expectedStateChanges) {
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
     deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
     deliverSubchannelState(subchannel5, ConnectivityStateInfo.forNonError(READY));
 
-    verify(mockHelper, times(7)).updateBalancingState(stateCaptor.capture(),
+    verify(mockHelper, times(expectedStateChanges)).updateBalancingState(stateCaptor.capture(),
         pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getAllValues().get(6);
+    SubchannelPicker picker = pickerCaptor.getAllValues()
+        .get(pickerCaptor.getAllValues().size() - 1);
 
     HashMap<Subchannel, Integer> callCountMap = new HashMap<>();
     for (int i = 0; i < 100; i++) {

@@ -233,7 +233,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private AddressTracker addressTracker;
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
-    private OutlierDetectionSubchannelStateListener subchannelStateListener;
+    private SubchannelStateListener subchannelStateListener;
 
     OutlierDetectionSubchannel(Subchannel delegate) {
       this.delegate = delegate;
@@ -241,8 +241,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     @Override
     public void start(SubchannelStateListener listener) {
-      subchannelStateListener = new OutlierDetectionSubchannelStateListener(listener);
-      super.start(subchannelStateListener);
+      subchannelStateListener = listener;
+      super.start(new OutlierDetectionSubchannelStateListener(listener));
     }
 
     @Override
