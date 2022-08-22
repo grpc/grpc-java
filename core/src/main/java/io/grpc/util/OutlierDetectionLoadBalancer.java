@@ -184,7 +184,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    */
   class ChildHelper extends ForwardingLoadBalancerHelper {
 
-    private Helper delegate;
+    private final Helper delegate;
 
     ChildHelper(Helper delegate) {
       this.delegate = delegate;
@@ -310,15 +310,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     void eject() {
+      subchannelStateListener.toEjectedState();
       ejected = true;
-      subchannelStateListener.onSubchannelState(
-          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
     }
 
     void uneject() {
       ejected = false;
       if (lastSubchannelState != null) {
-        subchannelStateListener.onSubchannelState(lastSubchannelState);
+        subchannelStateListener.toUnejectedState();
       }
     }
 
@@ -342,10 +341,36 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         this.delegate = delegate;
       }
 
+      public void toEjectedState() {
+        delegate.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+      }
+
+      public void toUnejectedState() {
+        checkState(lastSubchannelState != null);
+        delegate.onSubchannelState(lastSubchannelState);
+      }
+
       @Override
       public void onSubchannelState(ConnectivityStateInfo newState) {
-        lastSubchannelState = newState;
+        if (newState.getState().equals(ConnectivityState.READY)) {
+          // If the subchannel is associated with a single address that is also already in the map
+          // the subchannel will be added to the map and be included in outlier detection.
+          List<EquivalentAddressGroup> addressGroups = getAllAddresses();
+          if (hasSingleAddress(addressGroups)
+              && trackerMap.containsKey(addressGroups.get(0).getAddresses().get(0))) {
+            AddressTracker tracker = trackerMap.get(addressGroups.get(0).getAddresses().get(0));
+            tracker.addSubchannel(OutlierDetectionSubchannel.this);
+
+            // If this address has already been ejected, we need to immediately eject this
+            // Subchannel.
+            if (tracker.ejectionTimeNanos != null) {
+              toEjectedState();
+            }
+          }
+        }
+
         if (!ejected) {
+          lastSubchannelState = newState;
           delegate.onSubchannelState(newState);
         }
       }
