@@ -139,7 +139,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       trackerMap.cancelTracking();
     }
 
-    switchLb.handleResolvedAddresses(resolvedAddresses);
+    switchLb.handleResolvedAddresses(
+        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
+            .build());
   }
 
   @Override
