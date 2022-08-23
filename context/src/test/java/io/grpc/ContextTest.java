@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import static com.google.common.truth.TruthJUnit.assume;
 import static io.grpc.Context.cancellableAncestor;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
@@ -872,6 +873,20 @@ public class ContextTest {
 
   @Test
   public void storageReturnsNullTest() throws Exception {
+    // TODO(sergiitk): JDK-8210522 changes the behaviour of Java reflection to filter out
+    //   security-sensitive fields in the java.lang.reflect.Field. This prohibits
+    //   Field.class.getDeclaredFields("modifiers") call we rely on in this test.
+    //   Until we have a good solution for setting a custom storage for testing purposes,
+    //   we'll have to skip this test for JDK >= 11. Ref https://bugs.openjdk.org/browse/JDK-8210522
+    double javaVersion;
+    // Graceful version check. Run the test if the version undetermined.
+    try {
+      javaVersion = Double.parseDouble(System.getProperty("java.specification.version", "0"));
+    } catch (NumberFormatException e) {
+      javaVersion = 0;
+    }
+    assume().that(javaVersion).isLessThan(11);
+
     Class<?> lazyStorageClass = Class.forName("io.grpc.Context$LazyStorage");
     Field storage = lazyStorageClass.getDeclaredField("storage");
     assertTrue(Modifier.isFinal(storage.getModifiers()));
