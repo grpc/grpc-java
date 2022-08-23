@@ -124,6 +124,7 @@ public final class BinderChannelBuilder
   private SecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private BindServiceFlags bindServiceFlags;
+  private boolean strictLifecycleManagement;
 
   private BinderChannelBuilder(
       @Nullable AndroidComponentAddress directAddress,
@@ -134,6 +135,7 @@ public final class BinderChannelBuilder
     securityPolicy = SecurityPolicies.internalOnly();
     inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     bindServiceFlags = BindServiceFlags.DEFAULTS;
+    idleTimeout(60, TimeUnit.SECONDS);
 
     final class BinderChannelTransportFactoryBuilder
         implements ClientTransportFactoryBuilder {
@@ -222,6 +224,22 @@ public final class BinderChannelBuilder
       InboundParcelablePolicy inboundParcelablePolicy) {
     this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
     return this;
+  }
+
+  /** 
+    * Enables strict lifecycle management. This should be called when the client process has privileged procrank, in which 
+    * case binding management using simple idle timers is inappropriate, and you should explicitly call {@code enterIdle}
+    * or {@shutdown} instead.
+    */
+  public BinderChannelBuilder strictLifecycleManagement() {
+    strictLifecycleManagement = true;
+    super.idleTimeout(1000, DAYS); // >30 days disables timeouts entirely.
+  }
+
+  @Override
+  public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
+    checkState(!strictLifecycleManagement, "Idle timeouts are not supported when strict lifecycle management is enabled");
+    super.idleTimeout(value, unit);
   }
 
   /** Creates new binder transports. */
