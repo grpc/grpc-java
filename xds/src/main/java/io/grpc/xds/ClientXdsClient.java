@@ -169,7 +169,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"));
   @VisibleForTesting
   static boolean enableOutlierDetection =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"))
+      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"))
           || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"));
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
