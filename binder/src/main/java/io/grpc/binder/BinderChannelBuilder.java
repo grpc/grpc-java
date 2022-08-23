@@ -227,9 +227,8 @@ public final class BinderChannelBuilder
   }
 
   /** 
-    * Enables strict lifecycle management. This should be called when the client process has privileged procrank, in which 
-    * case binding management using simple idle timers is inappropriate, and you should explicitly call {@code enterIdle}
-    * or {@shutdown} instead.
+    * Enables strict lifecycle management. This should be called by processes with elevated procrank, where
+    * reliance on idle timers is inappropriate for lifecycle management.
     */
   public BinderChannelBuilder strictLifecycleManagement() {
     strictLifecycleManagement = true;
