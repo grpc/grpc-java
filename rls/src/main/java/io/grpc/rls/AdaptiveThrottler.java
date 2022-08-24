@@ -44,7 +44,7 @@ final class AdaptiveThrottler implements Throttler {
 
   private static final int DEFAULT_HISTORY_SECONDS = 30;
   private static final int DEFAULT_REQUEST_PADDING = 8;
-  private static final float DEFAULT_RATIO_FOR_ACCEPT = 1.2f;
+  private static final float DEFAULT_RATIO_FOR_ACCEPT = 2.0f;
 
   /**
    * The duration of history of calls used by Adaptive Throttler.

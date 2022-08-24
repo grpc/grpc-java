@@ -90,6 +90,7 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
+import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
@@ -166,6 +167,10 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static boolean enableCustomLbConfig =
       Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"))
           || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"));
+  @VisibleForTesting
+  static boolean enableOutlierDetection =
+      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"))
+          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"));
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -630,6 +635,65 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         }
       }
     }
+  }
+
+  static io.envoyproxy.envoy.config.cluster.v3.OutlierDetection validateOutlierDetection(
+      io.envoyproxy.envoy.config.cluster.v3.OutlierDetection outlierDetection)
+      throws ResourceInvalidException {
+    if (outlierDetection.hasInterval()) {
+      if (!Durations.isValid(outlierDetection.getInterval())) {
+        throw new ResourceInvalidException("outlier_detection interval is not a valid Duration");
+      }
+      if (hasNegativeValues(outlierDetection.getInterval())) {
+        throw new ResourceInvalidException("outlier_detection interval has a negative value");
+      }
+    }
+    if (outlierDetection.hasBaseEjectionTime()) {
+      if (!Durations.isValid(outlierDetection.getBaseEjectionTime())) {
+        throw new ResourceInvalidException(
+            "outlier_detection base_ejection_time is not a valid Duration");
+      }
+      if (hasNegativeValues(outlierDetection.getBaseEjectionTime())) {
+        throw new ResourceInvalidException(
+            "outlier_detection base_ejection_time has a negative value");
+      }
+    }
+    if (outlierDetection.hasMaxEjectionTime()) {
+      if (!Durations.isValid(outlierDetection.getMaxEjectionTime())) {
+        throw new ResourceInvalidException(
+            "outlier_detection max_ejection_time is not a valid Duration");
+      }
+      if (hasNegativeValues(outlierDetection.getMaxEjectionTime())) {
+        throw new ResourceInvalidException(
+            "outlier_detection max_ejection_time has a negative value");
+      }
+    }
+    if (outlierDetection.hasMaxEjectionPercent()
+        && outlierDetection.getMaxEjectionPercent().getValue() > 100) {
+      throw new ResourceInvalidException(
+          "outlier_detection max_ejection_percent is > 100");
+    }
+    if (outlierDetection.hasEnforcingSuccessRate()
+        && outlierDetection.getEnforcingSuccessRate().getValue() > 100) {
+      throw new ResourceInvalidException(
+          "outlier_detection enforcing_success_rate is > 100");
+    }
+    if (outlierDetection.hasFailurePercentageThreshold()
+        && outlierDetection.getFailurePercentageThreshold().getValue() > 100) {
+      throw new ResourceInvalidException(
+          "outlier_detection failure_percentage_threshold is > 100");
+    }
+    if (outlierDetection.hasEnforcingFailurePercentage()
+        && outlierDetection.getEnforcingFailurePercentage().getValue() > 100) {
+      throw new ResourceInvalidException(
+          "outlier_detection enforcing_failure_percentage is > 100");
+    }
+
+    return outlierDetection;
+  }
+
+  static boolean hasNegativeValues(Duration duration) {
+    return duration.getSeconds() < 0 || duration.getNanos() < 0;
   }
 
   private static String getIdentityCertInstanceName(CommonTlsContext commonTlsContext) {
@@ -1704,6 +1768,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     ServerInfo lrsServerInfo = null;
     Long maxConcurrentRequests = null;
     UpstreamTlsContext upstreamTlsContext = null;
+    OutlierDetection outlierDetection = null;
     if (cluster.hasLrsServer()) {
       if (!cluster.getLrsServer().hasSelf()) {
         return StructOrError.fromError(
@@ -1743,6 +1808,16 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
             "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
       }
     }
+    if (cluster.hasOutlierDetection() && enableOutlierDetection) {
+      try {
+        outlierDetection = OutlierDetection.fromEnvoyOutlierDetection(
+            validateOutlierDetection(cluster.getOutlierDetection()));
+      } catch (ResourceInvalidException e) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": malformed outlier_detection: " + e);
+      }
+    }
+
 
     DiscoveryType type = cluster.getType();
     if (type == DiscoveryType.EDS) {
@@ -1763,7 +1838,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         edsResources.add(clusterName);
       }
       return StructOrError.fromStruct(CdsUpdate.forEds(
-          clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext,
+          outlierDetection));
     } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
       if (!cluster.hasLoadAssignment()) {
         return StructOrError.fromError(

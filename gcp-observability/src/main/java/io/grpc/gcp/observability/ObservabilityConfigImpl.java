@@ -82,7 +82,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
       if (value != null) {
         enableCloudMonitoring = value;
       }
-      value = JsonUtil.getBoolean(config, "enable_cloud_tracing");
+      value = JsonUtil.getBoolean(config, "enable_cloud_trace");
       if (value != null) {
         enableCloudTracing = value;
       }

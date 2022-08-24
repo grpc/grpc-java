@@ -72,8 +72,27 @@ public class GoogleCloudToProdNameResolverProviderTest {
   }
 
   @Test
+  public void experimentalProvided() {
+    for (NameResolverProvider current
+        : InternalServiceProviders.getCandidatesViaServiceLoader(
+        NameResolverProvider.class, getClass().getClassLoader())) {
+      if (current instanceof GoogleCloudToProdExperimentalNameResolverProvider) {
+        return;
+      }
+    }
+    fail("GoogleCloudToProdExperimentalNameResolverProvider not registered");
+  }
+
+  @Test
   public void newNameResolver() {
     assertThat(provider
+        .newNameResolver(URI.create("google-c2p:///foo.googleapis.com"), args))
+        .isInstanceOf(GoogleCloudToProdNameResolver.class);
+  }
+
+  @Test
+  public void experimentalNewNameResolver() {
+    assertThat(new GoogleCloudToProdExperimentalNameResolverProvider()
         .newNameResolver(URI.create("google-c2p-experimental:///foo.googleapis.com"), args))
         .isInstanceOf(GoogleCloudToProdNameResolver.class);
   }
