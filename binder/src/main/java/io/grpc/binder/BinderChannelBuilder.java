@@ -233,7 +233,7 @@ public final class BinderChannelBuilder
     */
   public BinderChannelBuilder strictLifecycleManagement() {
     strictLifecycleManagement = true;
-    super.idleTimeout(1000, DAYS); // >30 days disables timeouts entirely.
+    super.idleTimeout(1000, TimeUnit.DAYS); // >30 days disables timeouts entirely.
   }
 
   @Override
