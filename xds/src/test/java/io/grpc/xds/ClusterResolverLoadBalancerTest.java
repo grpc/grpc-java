@@ -58,6 +58,8 @@ import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
+import io.grpc.util.OutlierDetectionLoadBalancerProvider;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
@@ -65,6 +67,9 @@ import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.Dis
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
+import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
+import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
@@ -116,10 +121,18 @@ public class ClusterResolverLoadBalancerTest {
       Locality.create("test-region-3", "test-zone-3", "test-subzone-3");
   private final UpstreamTlsContext tlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
+  private final OutlierDetection outlierDetection = OutlierDetection.create(
+      100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
+      FailurePercentageEjection.create(100, 100, 100, 100));
   private final DiscoveryMechanism edsDiscoveryMechanism1 =
-      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext);
+      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
+          null);
   private final DiscoveryMechanism edsDiscoveryMechanism2 =
-      DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext);
+      DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext,
+          null);
+  private final DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
+      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
+          outlierDetection);
   private final DiscoveryMechanism logicalDnsDiscoveryMechanism =
       DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null);
 
@@ -182,6 +195,7 @@ public class ClusterResolverLoadBalancerTest {
     lbRegistry.register(new FakeLoadBalancerProvider(WEIGHTED_TARGET_POLICY_NAME));
     lbRegistry.register(
         new FakeLoadBalancerProvider("pick_first")); // needed by logical_dns
+    lbRegistry.register(new OutlierDetectionLoadBalancerProvider());
     NameResolver.Args args = NameResolver.Args.newBuilder()
         .setDefaultPort(8080)
         .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
@@ -316,6 +330,90 @@ public class ClusterResolverLoadBalancerTest {
         childBalancer.attributes.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).containsEntry(
         locality1, 100);
   }
+
+  @Test
+  public void edsClustersWithOutlierDetection() {
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest);
+    deliverLbConfig(config);
+    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
+    assertThat(childBalancers).isEmpty();
+
+    // Simple case with one priority and one locality
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
+    LocalityLbEndpoints localityLbEndpoints =
+        LocalityLbEndpoints.create(
+            Arrays.asList(
+                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true)),
+            100 /* localityWeight */, 1 /* priority */);
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME1,
+        ImmutableMap.of(locality1, localityLbEndpoints));
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.addresses).hasSize(1);
+    EquivalentAddressGroup addr = childBalancer.addresses.get(0);
+    assertThat(addr.getAddresses()).isEqualTo(endpoint.getAddresses());
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+    PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
+    assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER1 + "[child1]");
+    PriorityChildConfig priorityChildConfig =
+        Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
+
+    // The child config for priority should be outlier detection.
+    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+        .isEqualTo("outlier_detection_experimental");
+    OutlierDetectionLoadBalancerConfig outlierDetectionConfig =
+        (OutlierDetectionLoadBalancerConfig) priorityChildConfig.policySelection.getConfig();
+
+    // The outlier detection config should faithfully represent what came down from xDS.
+    assertThat(outlierDetectionConfig.intervalNanos).isEqualTo(outlierDetection.intervalNanos());
+    assertThat(outlierDetectionConfig.baseEjectionTimeNanos).isEqualTo(
+        outlierDetection.baseEjectionTimeNanos());
+    assertThat(outlierDetectionConfig.baseEjectionTimeNanos).isEqualTo(
+        outlierDetection.baseEjectionTimeNanos());
+    assertThat(outlierDetectionConfig.maxEjectionTimeNanos).isEqualTo(
+        outlierDetection.maxEjectionTimeNanos());
+    assertThat(outlierDetectionConfig.maxEjectionPercent).isEqualTo(
+        outlierDetection.maxEjectionPercent());
+
+    OutlierDetectionLoadBalancerConfig.SuccessRateEjection successRateEjection
+        = outlierDetectionConfig.successRateEjection;
+    assertThat(successRateEjection.stdevFactor).isEqualTo(
+        outlierDetection.successRateEjection().stdevFactor());
+    assertThat(successRateEjection.enforcementPercentage).isEqualTo(
+        outlierDetection.successRateEjection().enforcementPercentage());
+    assertThat(successRateEjection.minimumHosts).isEqualTo(
+        outlierDetection.successRateEjection().minimumHosts());
+    assertThat(successRateEjection.requestVolume).isEqualTo(
+        outlierDetection.successRateEjection().requestVolume());
+
+    OutlierDetectionLoadBalancerConfig.FailurePercentageEjection failurePercentageEjection
+        = outlierDetectionConfig.failurePercentageEjection;
+    assertThat(failurePercentageEjection.threshold).isEqualTo(
+        outlierDetection.failurePercentageEjection().threshold());
+    assertThat(failurePercentageEjection.enforcementPercentage).isEqualTo(
+        outlierDetection.failurePercentageEjection().enforcementPercentage());
+    assertThat(failurePercentageEjection.minimumHosts).isEqualTo(
+        outlierDetection.failurePercentageEjection().minimumHosts());
+    assertThat(failurePercentageEjection.requestVolume).isEqualTo(
+        outlierDetection.failurePercentageEjection().requestVolume());
+
+    // The wrapped configuration should not have been tampered with.
+    ClusterImplConfig clusterImplConfig =
+        (ClusterImplConfig) outlierDetectionConfig.childPolicy.getConfig();
+    assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
+        tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
+    WrrLocalityConfig wrrLocalityConfig =
+        (WrrLocalityConfig) clusterImplConfig.childPolicy.getConfig();
+    assertThat(wrrLocalityConfig.childPolicy.getProvider().getPolicyName()).isEqualTo(
+        "least_request_experimental");
+
+    assertThat(
+        childBalancer.attributes.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).containsEntry(
+        locality1, 100);
+  }
+
 
   @Test
   public void onlyEdsClusters_receivedEndpoints() {

@@ -38,7 +38,7 @@ import javax.annotation.Nonnull;
  * looks for an "rpc_behavior" field in its configuration and includes the value in the
  * "rpc-behavior" metadata entry that is sent to the server. This will cause the test server to
  * behave in a predefined way. Endpoint picking logic is delegated to the
- * {@link RoundRobinLoadBalancer}.
+ * io.grpc.util.RoundRobinLoadBalancer.
  *
  * <p>Initial use case is to prove that a custom load balancer can be configured by the control
  * plane via xDS. An interop test will configure this LB and then verify it has been correctly
