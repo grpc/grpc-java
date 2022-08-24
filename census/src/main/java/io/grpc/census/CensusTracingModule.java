@@ -92,9 +92,12 @@ final class CensusTracingModule {
   final Metadata.Key<SpanContext> tracingHeader;
   private final TracingClientInterceptor clientInterceptor = new TracingClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
+  private final boolean addMessageEvents;
 
   CensusTracingModule(
-      Tracer censusTracer, final BinaryFormat censusPropagationBinaryFormat) {
+      Tracer censusTracer,
+      final BinaryFormat censusPropagationBinaryFormat,
+      boolean addMessageEvents) {
     this.censusTracer = checkNotNull(censusTracer, "censusTracer");
     checkNotNull(censusPropagationBinaryFormat, "censusPropagationBinaryFormat");
     this.tracingHeader =
@@ -114,6 +117,7 @@ final class CensusTracingModule {
               }
             }
           });
+    this.addMessageEvents = addMessageEvents;
   }
 
   /**
@@ -211,17 +215,19 @@ final class CensusTracingModule {
         .build();
   }
 
-  private static void recordMessageEvent(
+  private void recordMessageEvent(
       Span span, MessageEvent.Type type,
       int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-    MessageEvent.Builder eventBuilder = MessageEvent.builder(type, seqNo);
-    if (optionalUncompressedSize != -1) {
-      eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
+    if (addMessageEvents) {
+      MessageEvent.Builder eventBuilder = MessageEvent.builder(type, seqNo);
+      if (optionalUncompressedSize != -1) {
+        eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
+      }
+      if (optionalWireSize != -1) {
+        eventBuilder.setCompressedMessageSize(optionalWireSize);
+      }
+      span.addMessageEvent(eventBuilder.build());
     }
-    if (optionalWireSize != -1) {
-      eventBuilder.setCompressedMessageSize(optionalWireSize);
-    }
-    span.addMessageEvent(eventBuilder.build());
   }
 
   @VisibleForTesting
@@ -282,7 +288,7 @@ final class CensusTracingModule {
     }
   }
 
-  private static final class ClientTracer extends ClientStreamTracer {
+  private final class ClientTracer extends ClientStreamTracer {
     private final Span span;
     final Metadata.Key<SpanContext> tracingHeader;
     final boolean isSampledToLocalTracing;
