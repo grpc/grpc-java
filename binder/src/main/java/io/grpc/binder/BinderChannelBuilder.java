@@ -17,6 +17,7 @@
 package io.grpc.binder;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import android.app.Application;
 import android.content.ComponentName;
