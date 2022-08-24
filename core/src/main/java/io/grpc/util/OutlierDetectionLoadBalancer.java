@@ -654,10 +654,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /**
-     * How many percent of the addresses would have their subchannels ejected if we proceeded
-     * with the next ejection.
+     * How many percent of the addresses have been ejected.
      */
-    double nextEjectionPercentage() {
+    double ejectionPercentage() {
       if (trackerMap.isEmpty()) {
         return 0;
       }
@@ -669,7 +668,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           ejectedAddresses++;
         }
       }
-      return ((double)(ejectedAddresses + 1) / totalAddresses) * 100;
+      return ((double)ejectedAddresses / totalAddresses) * 100;
     }
   }
 
@@ -733,8 +732,10 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
 
       for (AddressTracker tracker : trackersWithVolume) {
-        // If an ejection now would take us past the max configured ejection percentage, stop here.
-        if (trackerMap.nextEjectionPercentage() > config.maxEjectionPercent) {
+        // If we are above the max ejection percentage, don't eject any more. This will allow the
+        // total ejections to go one above the max, but at the same time it assures at least one
+        // ejection, which the spec calls for. This behavior matches what Envoy proxy does.
+        if (trackerMap.ejectionPercentage() > config.maxEjectionPercent) {
           return;
         }
 
@@ -803,8 +804,10 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       // If this address does not have enough volume to be considered, skip to the next one.
       for (AddressTracker tracker : trackerMap.values()) {
-        // If an ejection now would take us past the max configured ejection percentage stop here.
-        if (trackerMap.nextEjectionPercentage() > config.maxEjectionPercent) {
+        // If we are above the max ejection percentage, don't eject any more. This will allow the
+        // total ejections to go one above the max, but at the same time it assures at least one
+        // ejection, which the spec calls for. This behavior matches what Envoy proxy does.
+        if (trackerMap.ejectionPercentage() > config.maxEjectionPercent) {
           return;
         }
 
