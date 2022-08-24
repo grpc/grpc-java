@@ -574,10 +574,11 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
-   * Two outliers. but only one gets ejected because we have reached the max ejection percentage.
+   * Three outliers, second one ejected even if ejecting it goes above the max ejection percentage,
+   * as this matches Envoy behavior. The third one should not get ejected.
    */
   @Test
-  public void successRateTwoOutliers_maxEjectionPercentage() {
+  public void successRateThreeOutliers_maxEjectionPercentage() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setMaxEjectionPercent(20)
         .setSuccessRateEjection(
@@ -591,7 +592,8 @@ public class OutlierDetectionLoadBalancerTest {
 
     generateLoad(ImmutableMap.of(
         subchannel1, Status.DEADLINE_EXCEEDED,
-        subchannel2, Status.DEADLINE_EXCEEDED), 7);
+        subchannel2, Status.DEADLINE_EXCEEDED,
+        subchannel3, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -603,10 +605,7 @@ public class OutlierDetectionLoadBalancerTest {
               : 0;
     }
 
-    // Even if all subchannels were failing, we should have not ejected more than the configured
-    // maximum percentage.
-    assertThat((double) totalEjected / servers.size()).isAtMost(
-        (double) config.maxEjectionPercent / 100);
+    assertThat(totalEjected).isEqualTo(2);
   }
 
 
