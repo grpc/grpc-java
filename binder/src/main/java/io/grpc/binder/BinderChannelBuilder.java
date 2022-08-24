@@ -234,12 +234,14 @@ public final class BinderChannelBuilder
   public BinderChannelBuilder strictLifecycleManagement() {
     strictLifecycleManagement = true;
     super.idleTimeout(1000, TimeUnit.DAYS); // >30 days disables timeouts entirely.
+    return this;
   }
 
   @Override
   public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
     checkState(!strictLifecycleManagement, "Idle timeouts are not supported when strict lifecycle management is enabled");
     super.idleTimeout(value, unit);
+    return this;
   }
 
   /** Creates new binder transports. */
