@@ -733,10 +733,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
 
       for (AddressTracker tracker : trackersWithVolume) {
-        // If we are above the max ejection percentage, don't eject any more. This will allow the
-        // total ejections to go one above the max, but at the same time it assures at least one
-        // ejection, which the spec calls for. This behavior matches what Envoy proxy does.
-        if (trackerMap.ejectionPercentage() > config.maxEjectionPercent) {
+        // If we are above or equal to the max ejection percentage, don't eject any more. This will
+        // allow the total ejections to go one above the max, but at the same time it assures at
+        // least one ejection, which the spec calls for. This behavior matches what Envoy proxy
+        // does.
+        if (trackerMap.ejectionPercentage() >= config.maxEjectionPercent) {
           return;
         }
 
@@ -797,10 +798,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       // If this address does not have enough volume to be considered, skip to the next one.
       for (AddressTracker tracker : trackersWithVolume) {
-        // If we are above the max ejection percentage, don't eject any more. This will allow the
-        // total ejections to go one above the max, but at the same time it assures at least one
-        // ejection, which the spec calls for. This behavior matches what Envoy proxy does.
-        if (trackerMap.ejectionPercentage() > config.maxEjectionPercent) {
+        // If we are above or equal to the max ejection percentage, don't eject any more. This will
+        // allow the total ejections to go one above the max, but at the same time it assures at
+        // least one ejection, which the spec calls for. This behavior matches what Envoy proxy
+        // does.
+        if (trackerMap.ejectionPercentage() >= config.maxEjectionPercent) {
           return;
         }
 
