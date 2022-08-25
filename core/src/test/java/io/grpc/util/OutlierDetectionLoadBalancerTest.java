@@ -585,7 +585,7 @@ public class OutlierDetectionLoadBalancerTest {
   @Test
   public void successRateThreeOutliers_maxEjectionPercentage() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
-        .setMaxEjectionPercent(20)
+        .setMaxEjectionPercent(30)
         .setSuccessRateEjection(
             new SuccessRateEjection.Builder()
                 .setMinimumHosts(3)
