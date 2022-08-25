@@ -20,13 +20,12 @@ import com.google.common.annotations.VisibleForTesting;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-
 import javax.annotation.CheckForNull;
 
 /**
  * Monitors connection idle time; shutdowns the connection if the max connection idle is reached.
  */
-public class MaxConnectionIdleManager {
+public final class MaxConnectionIdleManager {
   private static final Ticker systemTicker = new Ticker() {
     @Override
     public long nanoTime() {
@@ -61,7 +60,6 @@ public class MaxConnectionIdleManager {
    * @param closeJob Closes the connection by sending GO_AWAY with status code NO_ERROR and ASCII
    *     debug data max_idle and then doing the graceful connection termination.
    */
-  @VisibleForTesting
   public void start(final Runnable closeJob, final ScheduledExecutorService scheduler) {
     this.scheduler = scheduler;
     nextIdleMonitorTime = ticker.nanoTime() + maxConnectionIdleInNanos;
