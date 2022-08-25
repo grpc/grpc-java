@@ -16,24 +16,17 @@
 
 package io.grpc.binder;
 
-import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
-import android.app.Service;
-import android.content.ComponentName;
-import android.content.Intent;
-import android.os.IBinder;
-import androidx.annotation.Nullable;
-import io.grpc.Server;
-import java.io.IOException;
+import android.content.Context;
+import androidx.test.core.app.ApplicationProvider;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.android.controller.ServiceController;
 
 @RunWith(RobolectricTestRunner.class)
 public final class BinderChannelBuilderTest {
-
   private final Context appContext = ApplicationProvider.getApplicationContext();
   private final AndroidComponentAddress addr = AndroidComponentAddress.forContext(appContext);
 
