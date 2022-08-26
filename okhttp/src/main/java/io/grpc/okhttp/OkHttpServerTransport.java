@@ -506,9 +506,6 @@ final class OkHttpServerTransport implements ServerTransport,
           if (keepAliveManager != null) {
             keepAliveManager.onDataReceived();
           }
-          if (maxConnectionIdleManager != null) {
-            maxConnectionIdleManager.onTransportActive();
-          }
         }
         // frameReader.nextFrame() returns false when the underlying read encounters an IOException,
         // it may be triggered by the socket closing, in such case, the startGoAway() will do
@@ -717,6 +714,9 @@ final class OkHttpServerTransport implements ServerTransport,
             authority == null ? null : asciiString(authority),
             statsTraceCtx,
             tracer);
+        if (maxConnectionIdleManager != null && streams.isEmpty()) {
+          maxConnectionIdleManager.onTransportActive();
+        }
         streams.put(streamId, stream);
         listener.streamCreated(streamForApp, method, metadata);
         stream.onStreamAllocated();
