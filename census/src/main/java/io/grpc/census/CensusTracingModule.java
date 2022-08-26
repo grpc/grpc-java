@@ -218,16 +218,17 @@ final class CensusTracingModule {
   private void recordMessageEvent(
       Span span, MessageEvent.Type type,
       int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-    if (addMessageEvents) {
-      MessageEvent.Builder eventBuilder = MessageEvent.builder(type, seqNo);
-      if (optionalUncompressedSize != -1) {
-        eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
-      }
-      if (optionalWireSize != -1) {
-        eventBuilder.setCompressedMessageSize(optionalWireSize);
-      }
-      span.addMessageEvent(eventBuilder.build());
+    if (!addMessageEvents) {
+      return;
     }
+    MessageEvent.Builder eventBuilder = MessageEvent.builder(type, seqNo);
+    if (optionalUncompressedSize != -1) {
+      eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
+    }
+    if (optionalWireSize != -1) {
+      eventBuilder.setCompressedMessageSize(optionalWireSize);
+    }
+    span.addMessageEvent(eventBuilder.build());
   }
 
   @VisibleForTesting
