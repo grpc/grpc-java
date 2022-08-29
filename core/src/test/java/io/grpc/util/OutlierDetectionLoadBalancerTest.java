@@ -58,6 +58,7 @@ import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerCon
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionSubchannel;
 import io.grpc.util.OutlierDetectionLoadBalancer.SuccessRateOutlierEjectionAlgorithm;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -67,7 +68,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -110,6 +110,13 @@ public class OutlierDetectionLoadBalancerTest {
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
       return mockChildLb;
+    }
+  };
+  private final LoadBalancerProvider fakeLbProvider = new StandardLoadBalancerProvider(
+      "fake_policy") {
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      return new FakeLoadBalancer(helper);
     }
   };
   private final LoadBalancerProvider roundRobinLbProvider = new StandardLoadBalancerProvider(
@@ -877,11 +884,8 @@ public class OutlierDetectionLoadBalancerTest {
   /**
    * A subchannel with multiple addresses will again become eligible for outlier detection if it
    * receives an update with a single address.
-   *
-   * <p>TODO: Figure out how to test this scenario, round_robin does not support multiple addresses
-   * and fails the transition from multiple addresses to single.
    */
-  @Ignore
+  @Test
   public void subchannelUpdateAddress_multipleReplacedWithSingle() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setMaxEjectionPercent(50)
@@ -889,11 +893,11 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1108,6 +1112,51 @@ public class OutlierDetectionLoadBalancerTest {
       assertWithMessage("not ejected: " + entry.getKey())
           .that(entry.getValue().subchannelsEjected())
           .isEqualTo(addresses.contains(entry.getKey()));
+    }
+  }
+
+  /** Round robin like fake load balancer. */
+  private static final class FakeLoadBalancer extends LoadBalancer {
+    private final Helper helper;
+
+    List<Subchannel> subchannelList;
+    int lastPickIndex = -1;
+
+    FakeLoadBalancer(Helper helper) {
+      this.helper = helper;
+    }
+
+    @Override
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      subchannelList = new ArrayList<>();
+      for (EquivalentAddressGroup eag: resolvedAddresses.getAddresses()) {
+        Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+            .setAddresses(eag).build());
+        subchannelList.add(subchannel);
+        subchannel.start(mock(SubchannelStateListener.class));
+        deliverSubchannelState(READY);
+      }
+    }
+
+    @Override
+    public void handleNameResolutionError(Status error) {
+    }
+
+    @Override
+    public void shutdown() {
+    }
+
+    void deliverSubchannelState(ConnectivityState state) {
+      SubchannelPicker picker = new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          if (lastPickIndex < 0 || lastPickIndex > subchannelList.size() - 1) {
+            lastPickIndex = 0;
+          }
+          return PickResult.withSubchannel(subchannelList.get(lastPickIndex++));
+        }
+      };
+      helper.updateBalancingState(state, picker);
     }
   }
 }
