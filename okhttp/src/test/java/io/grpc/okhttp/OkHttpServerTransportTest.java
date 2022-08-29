@@ -180,7 +180,7 @@ public class OkHttpServerTransportTest {
 
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
-    maybeShutdownAndVerifyGraceful(1, false);
+    verifyGracefulShutdown(1);
   }
 
   @Test
@@ -203,7 +203,7 @@ public class OkHttpServerTransportTest {
 
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
-    maybeShutdownAndVerifyGraceful(1, false);
+    verifyGracefulShutdown(1);
   }
 
   @Test
@@ -376,7 +376,8 @@ public class OkHttpServerTransportTest {
     clientFrameWriter.data(true, 1, requestMessageFrame, (int) requestMessageFrame.size());
     pingPong();
 
-    maybeShutdownAndVerifyGraceful(1, true);
+    serverTransport.shutdown();
+    verifyGracefulShutdown(1);
     verify(transportListener, never()).transportTerminated();
 
     MockStreamListener streamListener = mockTransportListener.newStreams.pop();
@@ -1098,11 +1099,8 @@ public class OkHttpServerTransportTest {
     return metadata;
   }
 
-  private void maybeShutdownAndVerifyGraceful(int lastStreamId, boolean shutdown)
+  private void verifyGracefulShutdown(int lastStreamId)
       throws IOException {
-    if (shutdown) {
-      serverTransport.shutdown();
-    }
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).goAway(2147483647, ErrorCode.NO_ERROR, ByteString.EMPTY);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
@@ -1115,7 +1113,8 @@ public class OkHttpServerTransportTest {
 
   private void shutdownAndTerminate(int lastStreamId) throws IOException {
     assertThat(serverTransport.getActiveStreams().length).isEqualTo(0);
-    maybeShutdownAndVerifyGraceful(lastStreamId, true);
+    serverTransport.shutdown();
+    verifyGracefulShutdown(lastStreamId);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isFalse();
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }

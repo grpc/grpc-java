@@ -974,7 +974,6 @@ final class OkHttpServerTransport implements ServerTransport,
         Http2ErrorStreamState stream =
             new Http2ErrorStreamState(streamId, lock, outboundFlow, config.flowControlWindow);
         if (maxConnectionIdleManager != null && streams.isEmpty()) {
-          log.log(Level.INFO, "active");
           maxConnectionIdleManager.onTransportActive();
         }
         streams.put(streamId, stream);
