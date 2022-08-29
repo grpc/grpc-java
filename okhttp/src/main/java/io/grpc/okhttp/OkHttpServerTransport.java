@@ -973,6 +973,10 @@ final class OkHttpServerTransport implements ServerTransport,
       synchronized (lock) {
         Http2ErrorStreamState stream =
             new Http2ErrorStreamState(streamId, lock, outboundFlow, config.flowControlWindow);
+        if (maxConnectionIdleManager != null && streams.isEmpty()) {
+          log.log(Level.INFO, "active");
+          maxConnectionIdleManager.onTransportActive();
+        }
         streams.put(streamId, stream);
         if (inFinished) {
           stream.inboundDataReceived(new Buffer(), 0, true);

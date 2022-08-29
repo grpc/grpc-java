@@ -184,6 +184,29 @@ public class OkHttpServerTransportTest {
   }
 
   @Test
+  public void maxConnectionIdleTimer_respondWithError() throws Exception {
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("host", "example.com:80"),
+        new Header("host", "example.com:80")));
+    clientFrameWriter.flush();
+
+    verifyHttpError(
+        1, 400, Status.Code.INTERNAL, "Multiple host headers disallowed. RFC7230 section 5.4");
+
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    maybeShutdownAndVerifyGraceful(1, false);
+  }
+
+  @Test
   public void startThenShutdownTwice() throws Exception {
     initTransport();
     handshake();
