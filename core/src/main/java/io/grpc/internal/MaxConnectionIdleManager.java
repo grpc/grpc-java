@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.netty;
+package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.internal.LogExceptionRunnable;
-import io.netty.channel.ChannelHandlerContext;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -27,7 +25,7 @@ import javax.annotation.CheckForNull;
 /**
  * Monitors connection idle time; shutdowns the connection if the max connection idle is reached.
  */
-abstract class MaxConnectionIdleManager {
+public final class MaxConnectionIdleManager {
   private static final Ticker systemTicker = new Ticker() {
     @Override
     public long nanoTime() {
@@ -46,23 +44,23 @@ abstract class MaxConnectionIdleManager {
   private boolean shutdownDelayed;
   private boolean isActive;
 
-  MaxConnectionIdleManager(long maxConnectionIdleInNanos) {
+  public MaxConnectionIdleManager(long maxConnectionIdleInNanos) {
     this(maxConnectionIdleInNanos, systemTicker);
   }
 
   @VisibleForTesting
-  MaxConnectionIdleManager(long maxConnectionIdleInNanos, Ticker ticker) {
+  public MaxConnectionIdleManager(long maxConnectionIdleInNanos, Ticker ticker) {
     this.maxConnectionIdleInNanos = maxConnectionIdleInNanos;
     this.ticker = ticker;
   }
 
-  /** A {@link NettyServerHandler} was added to the transport. */
-  void start(ChannelHandlerContext ctx) {
-    start(ctx, ctx.executor());
-  }
-
-  @VisibleForTesting
-  void start(final ChannelHandlerContext ctx, final ScheduledExecutorService scheduler) {
+  /**
+   * Start the initial scheduled shutdown given the transport status reaches max connection idle.
+   *
+   * @param closeJob Closes the connection by sending GO_AWAY with status code NO_ERROR and ASCII
+   *     debug data max_idle and then doing the graceful connection termination.
+   */
+  public void start(final Runnable closeJob, final ScheduledExecutorService scheduler) {
     this.scheduler = scheduler;
     nextIdleMonitorTime = ticker.nanoTime() + maxConnectionIdleInNanos;
 
@@ -78,7 +76,7 @@ abstract class MaxConnectionIdleManager {
           }
           // if isActive, exit. Will schedule a new shutdownFuture once onTransportIdle
         } else {
-          close(ctx);
+          closeJob.run();
           shutdownFuture = null;
         }
       }
@@ -88,20 +86,15 @@ abstract class MaxConnectionIdleManager {
         scheduler.schedule(shutdownTask, maxConnectionIdleInNanos, TimeUnit.NANOSECONDS);
   }
 
-  /**
-   * Closes the connection by sending GO_AWAY with status code NO_ERROR and ASCII debug data
-   * max_idle and then doing the graceful connection termination.
-   */
-  abstract void close(ChannelHandlerContext ctx);
 
   /** There are outstanding RPCs on the transport. */
-  void onTransportActive() {
+  public void onTransportActive() {
     isActive = true;
     shutdownDelayed = true;
   }
 
   /** There are no outstanding RPCs on the transport. */
-  void onTransportIdle() {
+  public void onTransportIdle() {
     isActive = false;
     if (shutdownFuture == null) {
       return;
@@ -116,7 +109,7 @@ abstract class MaxConnectionIdleManager {
   }
 
   /** Transport is being terminated. */
-  void onTransportTermination() {
+  public void onTransportTermination() {
     if (shutdownFuture != null) {
       shutdownFuture.cancel(false);
       shutdownFuture = null;
@@ -124,7 +117,7 @@ abstract class MaxConnectionIdleManager {
   }
 
   @VisibleForTesting
-  interface Ticker {
+  public interface Ticker {
     long nanoTime();
   }
 }

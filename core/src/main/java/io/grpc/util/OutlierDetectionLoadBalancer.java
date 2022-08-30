@@ -654,10 +654,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /**
-     * How many percent of the addresses would have their subchannels ejected if we proceeded
-     * with the next ejection.
+     * How many percent of the addresses have been ejected.
      */
-    double nextEjectionPercentage() {
+    double ejectionPercentage() {
       if (trackerMap.isEmpty()) {
         return 0;
       }
@@ -669,7 +668,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           ejectedAddresses++;
         }
       }
-      return ((double)(ejectedAddresses + 1) / totalAddresses) * 100;
+      return ((double)ejectedAddresses / totalAddresses) * 100;
     }
   }
 
@@ -714,7 +713,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeNanos) {
 
       // Only consider addresses that have the minimum request volume specified in the config.
-      List<AddressTracker> trackersWithVolume = trackersWithVolume(trackerMap, config);
+      List<AddressTracker> trackersWithVolume = trackersWithVolume(trackerMap,
+          config.successRateEjection.requestVolume);
       // If we don't have enough addresses with significant volume then there's nothing to do.
       if (trackersWithVolume.size() < config.successRateEjection.minimumHosts
           || trackersWithVolume.size() == 0) {
@@ -733,8 +733,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
 
       for (AddressTracker tracker : trackersWithVolume) {
-        // If an ejection now would take us past the max configured ejection percentage, stop here.
-        if (trackerMap.nextEjectionPercentage() > config.maxEjectionPercent) {
+        // If we are above or equal to the max ejection percentage, don't eject any more. This will
+        // allow the total ejections to go one above the max, but at the same time it assures at
+        // least one ejection, which the spec calls for. This behavior matches what Envoy proxy
+        // does.
+        if (trackerMap.ejectionPercentage() >= config.maxEjectionPercent) {
           return;
         }
 
@@ -746,18 +749,6 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           }
         }
       }
-    }
-
-    /** Returns only the trackers that have the minimum configured volume to be considered. */
-    private List<AddressTracker> trackersWithVolume(AddressTrackerMap trackerMap,
-        OutlierDetectionLoadBalancerConfig config) {
-      List<AddressTracker> trackersWithVolume = new ArrayList<>();
-      for (AddressTracker tracker : trackerMap.values()) {
-        if (tracker.inactiveVolume() >= config.successRateEjection.requestVolume) {
-          trackersWithVolume.add(tracker);
-        }
-      }
-      return trackersWithVolume;
     }
 
     /** Calculates the mean of the given values. */
@@ -796,15 +787,22 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     @Override
     public void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeNanos) {
 
-      // If we don't have the minimum amount of addresses the config calls for, then return.
-      if (trackerMap.size() < config.failurePercentageEjection.minimumHosts) {
+      // Only consider addresses that have the minimum request volume specified in the config.
+      List<AddressTracker> trackersWithVolume = trackersWithVolume(trackerMap,
+          config.failurePercentageEjection.requestVolume);
+      // If we don't have enough addresses with significant volume then there's nothing to do.
+      if (trackersWithVolume.size() < config.failurePercentageEjection.minimumHosts
+          || trackersWithVolume.size() == 0) {
         return;
       }
 
       // If this address does not have enough volume to be considered, skip to the next one.
-      for (AddressTracker tracker : trackerMap.values()) {
-        // If an ejection now would take us past the max configured ejection percentage stop here.
-        if (trackerMap.nextEjectionPercentage() > config.maxEjectionPercent) {
+      for (AddressTracker tracker : trackersWithVolume) {
+        // If we are above or equal to the max ejection percentage, don't eject any more. This will
+        // allow the total ejections to go one above the max, but at the same time it assures at
+        // least one ejection, which the spec calls for. This behavior matches what Envoy proxy
+        // does.
+        if (trackerMap.ejectionPercentage() >= config.maxEjectionPercent) {
           return;
         }
 
@@ -822,6 +820,18 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         }
       }
     }
+  }
+
+  /** Returns only the trackers that have the minimum configured volume to be considered. */
+  private static List<AddressTracker> trackersWithVolume(AddressTrackerMap trackerMap,
+      int volume) {
+    List<AddressTracker> trackersWithVolume = new ArrayList<>();
+    for (AddressTracker tracker : trackerMap.values()) {
+      if (tracker.inactiveVolume() >= volume) {
+        trackersWithVolume.add(tracker);
+      }
+    }
+    return trackersWithVolume;
   }
 
   /** Counts how many addresses are in a given address group. */

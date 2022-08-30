@@ -58,6 +58,7 @@ import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerCon
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionSubchannel;
 import io.grpc.util.OutlierDetectionLoadBalancer.SuccessRateOutlierEjectionAlgorithm;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -67,7 +68,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -110,6 +110,13 @@ public class OutlierDetectionLoadBalancerTest {
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
       return mockChildLb;
+    }
+  };
+  private final LoadBalancerProvider fakeLbProvider = new StandardLoadBalancerProvider(
+      "fake_policy") {
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      return new FakeLoadBalancer(helper);
     }
   };
   private final LoadBalancerProvider roundRobinLbProvider = new StandardLoadBalancerProvider(
@@ -496,7 +503,8 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
-   * The success rate algorithm does not apply if enough addresses have the required volume.
+   * The success rate algorithm does not apply if we don't have enough addresses that have the
+   * required volume.
    */
   @Test
   public void successRateOneOutlier_notEnoughAddressesWithVolume() {
@@ -504,13 +512,17 @@ public class OutlierDetectionLoadBalancerTest {
         .setMaxEjectionPercent(50)
         .setSuccessRateEjection(
             new SuccessRateEjection.Builder()
-                .setMinimumHosts(6) // We don't have this many hosts...
-                .setRequestVolume(10).build())
+                .setMinimumHosts(5)
+                .setRequestVolume(20).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(
+        ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
+        // subchannel2 has only 19 calls which results in success rate not triggering.
+        ImmutableMap.of(subchannel2, 19),
+        7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -574,12 +586,13 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
-   * Two outliers. but only one gets ejected because we have reached the max ejection percentage.
+   * Three outliers, second one ejected even if ejecting it goes above the max ejection percentage,
+   * as this matches Envoy behavior. The third one should not get ejected.
    */
   @Test
-  public void successRateTwoOutliers_maxEjectionPercentage() {
+  public void successRateThreeOutliers_maxEjectionPercentage() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
-        .setMaxEjectionPercent(20)
+        .setMaxEjectionPercent(30)
         .setSuccessRateEjection(
             new SuccessRateEjection.Builder()
                 .setMinimumHosts(3)
@@ -591,7 +604,8 @@ public class OutlierDetectionLoadBalancerTest {
 
     generateLoad(ImmutableMap.of(
         subchannel1, Status.DEADLINE_EXCEEDED,
-        subchannel2, Status.DEADLINE_EXCEEDED), 7);
+        subchannel2, Status.DEADLINE_EXCEEDED,
+        subchannel3, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -603,10 +617,7 @@ public class OutlierDetectionLoadBalancerTest {
               : 0;
     }
 
-    // Even if all subchannels were failing, we should have not ejected more than the configured
-    // maximum percentage.
-    assertThat((double) totalEjected / servers.size()).isAtMost(
-        (double) config.maxEjectionPercent / 100);
+    assertThat(totalEjected).isEqualTo(2);
   }
 
 
@@ -680,6 +691,35 @@ public class OutlierDetectionLoadBalancerTest {
     forwardTime(config);
 
     // We should see no ejections.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
+   * The failure percentage algorithm does not apply if we don't have enough addresses that have the
+   * required volume.
+   */
+  @Test
+  public void failurePercentageOneOutlier_notEnoughAddressesWithVolume() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(5)
+                .setRequestVolume(20).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(
+        ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
+        // subchannel2 has only 19 calls which results in failure percentage not triggering.
+        ImmutableMap.of(subchannel2, 19),
+        7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // No subchannels should have been ejected.
     assertEjectedSubchannels(ImmutableSet.of());
   }
 
@@ -844,11 +884,8 @@ public class OutlierDetectionLoadBalancerTest {
   /**
    * A subchannel with multiple addresses will again become eligible for outlier detection if it
    * receives an update with a single address.
-   *
-   * <p>TODO: Figure out how to test this scenario, round_robin does not support multiple addresses
-   * and fails the transition from multiple addresses to single.
    */
-  @Ignore
+  @Test
   public void subchannelUpdateAddress_multipleReplacedWithSingle() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setMaxEjectionPercent(50)
@@ -856,11 +893,11 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -1075,6 +1112,51 @@ public class OutlierDetectionLoadBalancerTest {
       assertWithMessage("not ejected: " + entry.getKey())
           .that(entry.getValue().subchannelsEjected())
           .isEqualTo(addresses.contains(entry.getKey()));
+    }
+  }
+
+  /** Round robin like fake load balancer. */
+  private static final class FakeLoadBalancer extends LoadBalancer {
+    private final Helper helper;
+
+    List<Subchannel> subchannelList;
+    int lastPickIndex = -1;
+
+    FakeLoadBalancer(Helper helper) {
+      this.helper = helper;
+    }
+
+    @Override
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      subchannelList = new ArrayList<>();
+      for (EquivalentAddressGroup eag: resolvedAddresses.getAddresses()) {
+        Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+            .setAddresses(eag).build());
+        subchannelList.add(subchannel);
+        subchannel.start(mock(SubchannelStateListener.class));
+        deliverSubchannelState(READY);
+      }
+    }
+
+    @Override
+    public void handleNameResolutionError(Status error) {
+    }
+
+    @Override
+    public void shutdown() {
+    }
+
+    void deliverSubchannelState(ConnectivityState state) {
+      SubchannelPicker picker = new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          if (lastPickIndex < 0 || lastPickIndex > subchannelList.size() - 1) {
+            lastPickIndex = 0;
+          }
+          return PickResult.withSubchannel(subchannelList.get(lastPickIndex++));
+        }
+      };
+      helper.updateBalancingState(state, picker);
     }
   }
 }
