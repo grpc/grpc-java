@@ -14,7 +14,6 @@ android {
     }
     compileSdkVersion 29
     defaultConfig {
-        consumerProguardFiles "proguard-rules.txt"
         minSdkVersion 19
         targetSdkVersion 29
         versionCode 1
