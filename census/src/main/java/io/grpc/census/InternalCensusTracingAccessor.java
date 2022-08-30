@@ -36,10 +36,21 @@ public final class InternalCensusTracingAccessor {
    * Returns a {@link ClientInterceptor} with default tracing implementation.
    */
   public static ClientInterceptor getClientInterceptor() {
+    return getClientInterceptor(true);
+  }
+
+  /**
+   * @param addMessageEvents add message events to Spans
+   *
+   * @return a {@link ClientInterceptor} with default tracing implementation.
+   */
+  public static ClientInterceptor getClientInterceptor(
+      boolean addMessageEvents) {
     CensusTracingModule censusTracing =
         new CensusTracingModule(
             Tracing.getTracer(),
-            Tracing.getPropagationComponent().getBinaryFormat());
+            Tracing.getPropagationComponent().getBinaryFormat(),
+            addMessageEvents);
     return censusTracing.getClientInterceptor();
   }
 
@@ -47,10 +58,19 @@ public final class InternalCensusTracingAccessor {
    * Returns a {@link ServerStreamTracer.Factory} with default stats implementation.
    */
   public static ServerStreamTracer.Factory getServerStreamTracerFactory() {
+    return getServerStreamTracerFactory(true);
+  }
+
+  /**
+   * Returns a {@link ServerStreamTracer.Factory} with default stats implementation.
+   */
+  public static ServerStreamTracer.Factory getServerStreamTracerFactory(
+      boolean addMessageEvents) {
     CensusTracingModule censusTracing =
         new CensusTracingModule(
             Tracing.getTracer(),
-            Tracing.getPropagationComponent().getBinaryFormat());
+            Tracing.getPropagationComponent().getBinaryFormat(),
+            addMessageEvents);
     return censusTracing.getServerTracerFactory();
   }
 }

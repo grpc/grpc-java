@@ -14,17 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.netty;
+package io.grpc.internal;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
-import io.grpc.internal.FakeClock;
-import io.grpc.netty.MaxConnectionIdleManager.Ticker;
-import io.netty.channel.ChannelHandlerContext;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -36,7 +30,7 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class MaxConnectionIdleManagerTest {
   private final FakeClock fakeClock = new FakeClock();
-  private final Ticker ticker = new Ticker() {
+  private final MaxConnectionIdleManager.Ticker ticker = new MaxConnectionIdleManager.Ticker() {
     @Override
     public long nanoTime() {
       return fakeClock.getTicker().read();
@@ -44,7 +38,7 @@ public class MaxConnectionIdleManagerTest {
   };
 
   @Mock
-  private ChannelHandlerContext ctx;
+  private Runnable closure;
 
   @Before
   public void setUp() {
@@ -54,21 +48,21 @@ public class MaxConnectionIdleManagerTest {
   @Test
   public void maxIdleReached() {
     MaxConnectionIdleManager maxConnectionIdleManager =
-        spy(new TestMaxConnectionIdleManager(123L, ticker));
+        new MaxConnectionIdleManager(123L, ticker);
 
-    maxConnectionIdleManager.start(ctx, fakeClock.getScheduledExecutorService());
+    maxConnectionIdleManager.start(closure, fakeClock.getScheduledExecutorService());
     maxConnectionIdleManager.onTransportIdle();
     fakeClock.forwardNanos(123L);
 
-    verify(maxConnectionIdleManager).close(eq(ctx));
+    verify(closure).run();
   }
 
   @Test
   public void maxIdleNotReachedAndReached() {
     MaxConnectionIdleManager maxConnectionIdleManager =
-        spy(new TestMaxConnectionIdleManager(123L, ticker));
+        new MaxConnectionIdleManager(123L, ticker);
 
-    maxConnectionIdleManager.start(ctx, fakeClock.getScheduledExecutorService());
+    maxConnectionIdleManager.start(closure, fakeClock.getScheduledExecutorService());
     maxConnectionIdleManager.onTransportIdle();
     fakeClock.forwardNanos(100L);
     // max idle not reached
@@ -79,35 +73,25 @@ public class MaxConnectionIdleManagerTest {
     maxConnectionIdleManager.onTransportActive();
     fakeClock.forwardNanos(100L);
 
-    verify(maxConnectionIdleManager, never()).close(any(ChannelHandlerContext.class));
+    verify(closure, never()).run();
 
     // max idle reached
     maxConnectionIdleManager.onTransportIdle();
     fakeClock.forwardNanos(123L);
 
-    verify(maxConnectionIdleManager).close(eq(ctx));
+    verify(closure).run();
   }
 
   @Test
   public void shutdownThenMaxIdleReached() {
     MaxConnectionIdleManager maxConnectionIdleManager =
-        spy(new TestMaxConnectionIdleManager(123L, ticker));
+        new MaxConnectionIdleManager(123L, ticker);
 
-    maxConnectionIdleManager.start(ctx, fakeClock.getScheduledExecutorService());
+    maxConnectionIdleManager.start(closure, fakeClock.getScheduledExecutorService());
     maxConnectionIdleManager.onTransportIdle();
     maxConnectionIdleManager.onTransportTermination();
     fakeClock.forwardNanos(123L);
 
-    verify(maxConnectionIdleManager, never()).close(any(ChannelHandlerContext.class));
-  }
-
-  private static class TestMaxConnectionIdleManager extends MaxConnectionIdleManager {
-    TestMaxConnectionIdleManager(long maxConnectionIdleInNanos, Ticker ticker) {
-      super(maxConnectionIdleInNanos, ticker);
-    }
-
-    @Override
-    void close(ChannelHandlerContext ctx) {
-    }
+    verify(closure, never()).run();
   }
 }
