@@ -29,6 +29,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.CompositeCallCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.InternalMayRequireSpecificExecutor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.internal.MetadataApplierImpl.MetadataApplierListener;
@@ -144,7 +145,20 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
             }
           };
         try {
-          creds.applyRequestMetadata(requestInfo, appExecutor, applier);
+          // Hack to allow appengine to work when using AppEngineCredentials (b/244209681)
+          // since processing must happen on a specific thread
+          // Ideally would always use appExecutor and we could eliminate the interface
+          // InternalMayRequireSpecificExecutor
+          Executor executor;
+          if (creds instanceof InternalMayRequireSpecificExecutor &&
+              ((InternalMayRequireSpecificExecutor)creds).isSpecificExecutorRequired() &&
+              callOptions.getExecutor() != null) {
+            executor = callOptions.getExecutor();
+          } else {
+            executor = appExecutor;
+          }
+
+          creds.applyRequestMetadata(requestInfo, executor, applier);
         } catch (Throwable t) {
           applier.fail(Status.UNAUTHENTICATED
               .withDescription("Credentials should use fail() instead of throwing exceptions")
