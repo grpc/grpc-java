@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The gRPC Authors
+ * Copyright 2016,2022 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
+import io.grpc.InternalMayRequireSpecificExecutor;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.InternalMayRequireSpecificExecutor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StatusException;
