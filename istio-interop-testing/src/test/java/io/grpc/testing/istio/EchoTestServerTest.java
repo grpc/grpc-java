@@ -206,7 +206,7 @@ public class EchoTestServerTest {
         ForwardEchoRequest.newBuilder()
             .setCount(COUNT_OF_REQUESTS_TO_FORWARD)
             .setQps(100)
-            .setTimeoutMicros(2000_000L) // 2000 millis
+            .setTimeoutMicros(5000_000L) // 5000 millis
             .setUrl("grpc://localhost:" + port2)
             .addHeaders(
                 Header.newBuilder().setKey("test-key1").setValue("test-value1").build())

@@ -35,6 +35,7 @@ import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
+import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -368,19 +369,22 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     private void closedInternal(Status status) {
+      Throwable cancelCause = null;
       try {
         if (status.isOk()) {
           listener.onComplete();
         } else {
           call.cancelled = true;
           listener.onCancel();
+          // The status will not have a cause in all failure scenarios but we want to make sure
+          // we always cancel the context with one to keep the context cancelled state consistent.
+          cancelCause = InternalStatus.asRuntimeException(
+              Status.CANCELLED.withDescription("RPC cancelled"), null, false);
         }
       } finally {
         // Cancel context after delivering RPC closure notification to allow the application to
         // clean up and update any state based on whether onComplete or onCancel was called.
-        // Note that in failure situations JumpToApplicationThreadServerStreamListener has already
-        // closed the context. In these situations this cancel() call will be a no-op.
-        context.cancel(null);
+        context.cancel(cancelCause);
       }
     }
 

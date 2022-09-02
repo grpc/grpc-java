@@ -1852,16 +1852,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, healthCheckingConfig)
                   .build();
             }
+            Attributes attributes = attrBuilder.build();
 
-            Status handleResult = helper.lb.tryHandleResolvedAddresses(
+            boolean addressesAccepted = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
-                    .setAttributes(attrBuilder.build())
+                    .setAttributes(attributes)
                     .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
 
-            if (!handleResult.isOk()) {
-              handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
+            if (!addressesAccepted) {
+              scheduleExponentialBackOffInSyncContext();
             }
           }
         }

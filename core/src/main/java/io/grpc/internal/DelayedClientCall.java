@@ -152,9 +152,9 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
       setRealCall(checkNotNull(call, "call"));
     }
-    return new Runnable() {
+    return new ContextRunnable(context) {
       @Override
-      public void run() {
+      public void runInContext() {
         drainPendingCalls();
       }
     };

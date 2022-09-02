@@ -80,26 +80,26 @@ public class ObservabilityConfigImplTest {
 
   private static final String ENABLE_CLOUD_MONITORING_AND_TRACING = "{\n"
       + "    \"enable_cloud_monitoring\": true,\n"
-      + "    \"enable_cloud_tracing\": true\n"
+      + "    \"enable_cloud_trace\": true\n"
       + "}";
 
   private static final String GLOBAL_TRACING_ALWAYS_SAMPLER = "{\n"
-      + "    \"enable_cloud_tracing\": true,\n"
+      + "    \"enable_cloud_trace\": true,\n"
       + "    \"global_trace_sampling_rate\": 1.00\n"
       + "}";
 
   private static final String GLOBAL_TRACING_NEVER_SAMPLER = "{\n"
-      + "    \"enable_cloud_tracing\": true,\n"
+      + "    \"enable_cloud_trace\": true,\n"
       + "    \"global_trace_sampling_rate\": 0.00\n"
       + "}";
 
   private static final String GLOBAL_TRACING_PROBABILISTIC_SAMPLER = "{\n"
-      + "    \"enable_cloud_tracing\": true,\n"
+      + "    \"enable_cloud_trace\": true,\n"
       + "    \"global_trace_sampling_rate\": 0.75\n"
       + "}";
 
   private static final String GLOBAL_TRACING_DEFAULT_SAMPLER = "{\n"
-      + "    \"enable_cloud_tracing\": true\n"
+      + "    \"enable_cloud_trace\": true\n"
       + "}";
 
   private static final String GLOBAL_TRACING_BADPROBABILISTIC_SAMPLER = "{\n"

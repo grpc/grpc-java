@@ -46,6 +46,7 @@ import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.internal.MaxConnectionIdleManager;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
@@ -284,16 +285,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {
       maxConnectionIdleManager = null;
     } else {
-      maxConnectionIdleManager = new MaxConnectionIdleManager(maxConnectionIdleInNanos) {
-        @Override
-        void close(ChannelHandlerContext ctx) {
-          if (gracefulShutdown == null) {
-            gracefulShutdown = new GracefulShutdown("max_idle", null);
-            gracefulShutdown.start(ctx);
-            ctx.flush();
-          }
-        }
-      };
+      maxConnectionIdleManager = new MaxConnectionIdleManager(maxConnectionIdleInNanos);
     }
 
     connection.addListener(new Http2ConnectionAdapter() {
@@ -364,7 +356,16 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
 
     if (maxConnectionIdleManager != null) {
-      maxConnectionIdleManager.start(ctx);
+      maxConnectionIdleManager.start(new Runnable() {
+        @Override
+        public void run() {
+          if (gracefulShutdown == null) {
+            gracefulShutdown = new GracefulShutdown("max_idle", null);
+            gracefulShutdown.start(ctx);
+            ctx.flush();
+          }
+        }
+      }, ctx.executor());
     }
 
     if (keepAliveTimeInNanos != SERVER_KEEPALIVE_TIME_NANOS_DISABLED) {

@@ -17,14 +17,10 @@
 package io.grpc.util;
 
 import com.google.common.base.MoreObjects;
-import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
-import io.grpc.NameResolver;
 import io.grpc.Status;
-import java.util.List;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public abstract class ForwardingLoadBalancer extends LoadBalancer {
@@ -34,16 +30,13 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   protected abstract LoadBalancer delegate();
 
   @Override
-  @Deprecated
-  public void handleResolvedAddressGroups(
-        List<EquivalentAddressGroup> servers,
-        @NameResolver.ResolutionResultAttr Attributes attributes) {
-    delegate().handleResolvedAddressGroups(servers, attributes);
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    delegate().handleResolvedAddresses(resolvedAddresses);
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    delegate().handleResolvedAddresses(resolvedAddresses);
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    return delegate().acceptResolvedAddresses(resolvedAddresses);
   }
 
   @Override

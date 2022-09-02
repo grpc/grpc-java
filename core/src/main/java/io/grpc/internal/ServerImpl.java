@@ -45,6 +45,7 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
+import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallExecutorSupplier;
@@ -894,9 +895,18 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       // For cancellations, promptly inform any users of the context that their work should be
       // aborted. Otherwise, we can wait until pending work is done.
       if (!status.isOk()) {
+        // Since status was not OK we know that the call did not complete and got cancelled. To
+        // reflect this on the context we need to close it with a cause exception. Since not every
+        // failed status has an exception we will create one here if needed.
+        Throwable cancelCause = status.getCause();
+        if (cancelCause == null) {
+          cancelCause = InternalStatus.asRuntimeException(
+              Status.CANCELLED.withDescription("RPC cancelled"), null, false);
+        }
+
         // The callExecutor might be busy doing user work. To avoid waiting, use an executor that
         // is not serializing.
-        cancelExecutor.execute(new ContextCloser(context, status.getCause()));
+        cancelExecutor.execute(new ContextCloser(context, cancelCause));
       }
       final Link link = PerfMark.linkOut();
 

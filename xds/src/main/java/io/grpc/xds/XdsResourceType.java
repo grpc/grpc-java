@@ -76,8 +76,8 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
           || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"));
   @VisibleForTesting
   static boolean enableOutlierDetection =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_OUTLIER_DETECTION"))
-          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_OUTLIER_DETECTION"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"))
+          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"));
   static final String TYPE_URL_CLUSTER_CONFIG_V2 =
       "type.googleapis.com/envoy.config.cluster.aggregate.v2alpha.ClusterConfig";
   static final String TYPE_URL_CLUSTER_CONFIG =

@@ -16,6 +16,8 @@
 
 package io.grpc.okhttp;
 
+import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
+
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -28,6 +30,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.MaxConnectionIdleManager;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.ServerTransport;
@@ -91,6 +94,7 @@ final class OkHttpServerTransport implements ServerTransport,
   private ScheduledExecutorService scheduledExecutorService;
   private Attributes attributes;
   private KeepAliveManager keepAliveManager;
+  private MaxConnectionIdleManager maxConnectionIdleManager;
 
   private final Object lock = new Object();
   @GuardedBy("lock")
@@ -187,6 +191,11 @@ final class OkHttpServerTransport implements ServerTransport,
             new KeepAlivePinger(), scheduledExecutorService, config.keepAliveTimeNanos,
             config.keepAliveTimeoutNanos, true);
         keepAliveManager.onTransportStarted();
+      }
+
+      if (config.maxConnectionIdleNanos != MAX_CONNECTION_IDLE_NANOS_DISABLED) {
+        maxConnectionIdleManager = new MaxConnectionIdleManager(config.maxConnectionIdleNanos);
+        maxConnectionIdleManager.start(this::shutdown, scheduledExecutorService);
       }
 
       transportExecutor.execute(
@@ -311,6 +320,9 @@ final class OkHttpServerTransport implements ServerTransport,
     if (keepAliveManager != null) {
       keepAliveManager.onTransportTermination();
     }
+    if (maxConnectionIdleManager != null) {
+      maxConnectionIdleManager.onTransportTermination();
+    }
     transportExecutor = config.transportExecutorPool.returnObject(transportExecutor);
     scheduledExecutorService =
         config.scheduledExecutorServicePool.returnObject(scheduledExecutorService);
@@ -369,6 +381,9 @@ final class OkHttpServerTransport implements ServerTransport,
   void streamClosed(int streamId, boolean flush) {
     synchronized (lock) {
       streams.remove(streamId);
+      if (maxConnectionIdleManager != null && streams.isEmpty()) {
+        maxConnectionIdleManager.onTransportIdle();
+      }
       if (gracefulShutdown && streams.isEmpty()) {
         frameWriter.close();
       } else {
@@ -433,6 +448,7 @@ final class OkHttpServerTransport implements ServerTransport,
     final int flowControlWindow;
     final int maxInboundMessageSize;
     final int maxInboundMetadataSize;
+    final long maxConnectionIdleNanos;
 
     public Config(
         OkHttpServerBuilder builder,
@@ -452,6 +468,7 @@ final class OkHttpServerTransport implements ServerTransport,
       flowControlWindow = builder.flowControlWindow;
       maxInboundMessageSize = builder.maxInboundMessageSize;
       maxInboundMetadataSize = builder.maxInboundMetadataSize;
+      maxConnectionIdleNanos = builder.maxConnectionIdleInNanos;
     }
   }
 
@@ -697,6 +714,9 @@ final class OkHttpServerTransport implements ServerTransport,
             authority == null ? null : asciiString(authority),
             statsTraceCtx,
             tracer);
+        if (maxConnectionIdleManager != null && streams.isEmpty()) {
+          maxConnectionIdleManager.onTransportActive();
+        }
         streams.put(streamId, stream);
         listener.streamCreated(streamForApp, method, metadata);
         stream.onStreamAllocated();
@@ -953,6 +973,9 @@ final class OkHttpServerTransport implements ServerTransport,
       synchronized (lock) {
         Http2ErrorStreamState stream =
             new Http2ErrorStreamState(streamId, lock, outboundFlow, config.flowControlWindow);
+        if (maxConnectionIdleManager != null && streams.isEmpty()) {
+          maxConnectionIdleManager.onTransportActive();
+        }
         streams.put(streamId, stream);
         if (inFinished) {
           stream.inboundDataReceived(new Buffer(), 0, true);
