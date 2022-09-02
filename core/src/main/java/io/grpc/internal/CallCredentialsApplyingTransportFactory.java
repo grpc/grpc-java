@@ -146,7 +146,8 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
           };
         try {
           // Hack to allow appengine to work when using AppEngineCredentials (b/244209681)
-          // since processing must happen on a specific thread
+          // since processing must happen on a specific thread.
+          //
           // Ideally would always use appExecutor and we could eliminate the interface
           // InternalMayRequireSpecificExecutor
           Executor executor;

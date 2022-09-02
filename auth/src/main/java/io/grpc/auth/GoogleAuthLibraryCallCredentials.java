@@ -1,5 +1,5 @@
 /*
- * Copyright 2016,2022 The gRPC Authors
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,6 +53,8 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
       = createJwtHelperOrNull(GoogleAuthLibraryCallCredentials.class.getClassLoader());
   private static final Class<? extends Credentials> googleCredentialsClass
       = loadGoogleCredentialsClass();
+  private static final Class<?> appEngineCredentialsClass
+      = loadAppEngineCredentials();
 
   private final boolean requirePrivacy;
   @VisibleForTesting
@@ -246,6 +248,16 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
     return rawGoogleCredentialsClass.asSubclass(Credentials.class);
   }
 
+  @Nullable
+  private static Class<?> loadAppEngineCredentials() {
+    try {
+      return Class.forName("com.google.auth.appengine.AppEngineCredentials");
+    } catch (ClassNotFoundException ex) {
+      log.log(Level.FINE, "AppEngineCredentials not available in classloader", ex);
+      return null;
+    }
+  }
+
   private static class MethodPair {
     private final Method getter;
     private final Method builderSetter;
@@ -367,16 +379,10 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
   public boolean isSpecificExecutorRequired() {
     // Cache the value so we only need to try to load the class once
     if (requiresSpecificExecutor == null) {
-      if (googleCredentialsClass == null) {
+      if (creds == null || appEngineCredentialsClass == null) {
         requiresSpecificExecutor = Boolean.FALSE;
       } else {
-        try {
-          requiresSpecificExecutor =
-              Class.forName("com.google.auth.oauth2.AppEngineCredentials")
-                  .isAssignableFrom(googleCredentialsClass);
-        } catch (ClassNotFoundException e) {
-          requiresSpecificExecutor = Boolean.FALSE;
-        }
+        requiresSpecificExecutor = appEngineCredentialsClass.isInstance(creds);
       }
     }
 
