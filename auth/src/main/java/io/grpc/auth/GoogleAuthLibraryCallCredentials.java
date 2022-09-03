@@ -379,7 +379,7 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
   public boolean isSpecificExecutorRequired() {
     // Cache the value so we only need to try to load the class once
     if (requiresSpecificExecutor == null) {
-      if (creds == null || appEngineCredentialsClass == null) {
+      if (appEngineCredentialsClass == null) {
         requiresSpecificExecutor = Boolean.FALSE;
       } else {
         requiresSpecificExecutor = appEngineCredentialsClass.isInstance(creds);
