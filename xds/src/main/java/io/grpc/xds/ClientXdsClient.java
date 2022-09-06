@@ -238,12 +238,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   private Map<String, ResourceSubscriber<? extends ResourceUpdate>> getSubscribedResourcesMap(
       ResourceType type) {
-    XdsResourceType<? extends ResourceUpdate> xdsResourceType = xdsResourceTypeMap.get(type);
-    if (resourceSubscribers.containsKey(xdsResourceType)) {
-      return resourceSubscribers.get(xdsResourceType);
-    } else {
-      return Collections.emptyMap();
-    }
+    return resourceSubscribers.getOrDefault(xdsResourceTypeMap.get(type), Collections.emptyMap());
   }
 
   @Nullable
@@ -282,10 +277,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         for (XdsResourceType<? extends ResourceUpdate> resourceType: xdsResourceTypeMap.values()) {
           ImmutableMap.Builder<String, ResourceMetadata> metadataMap = ImmutableMap.builder();
           Map<String, ResourceSubscriber<? extends ResourceUpdate>> resourceSubscriberMap =
-              Collections.emptyMap();
-          if (resourceSubscribers.containsKey(resourceType)) {
-            resourceSubscriberMap = resourceSubscribers.get(resourceType);
-          }
+              resourceSubscribers.getOrDefault(resourceType, Collections.emptyMap());
           for (Map.Entry<String, ResourceSubscriber<? extends ResourceUpdate>> resourceEntry
               : resourceSubscriberMap.entrySet()) {
             metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
@@ -411,9 +403,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
                                                                List<Any> resources,
                                                                XdsResourceType<T> xdsResourceType) {
     ValidatedResourceUpdate<T> result = xdsResourceType.parse(args, resources);
+    logger.log(XdsLogger.XdsLogLevel.INFO,
+        "Received {0} Response version {1} nonce {2}. Parsed resources: {3}",
+         xdsResourceType.typeName(), args.versionInfo, args.nonce, result.unpackedResources);
     Map<String, ParsedResource<T>> parsedResources = result.parsedResources;
     Set<String> invalidResources = result.invalidResources;
-    Set<String> retainedResources = result.retainedRdsResources;
+    Set<String> retainedResources = result.retainedResources;
     List<String> errors = result.errors;
     String errorDetail = null;
     if (errors.isEmpty()) {

@@ -193,7 +193,7 @@ final class AbstractXdsClient {
   <T extends ResourceUpdate> void nackResponse(XdsResourceType<T> xdsResourceType, String nonce,
                                                String errorDetail) {
     ResourceType type = xdsResourceType.typeName();
-    String versionInfo = versions.containsKey(type) ? versions.get(type) : "";
+    String versionInfo = versions.getOrDefault(type, "");
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",
         type, nonce, versionInfo);
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
@@ -346,8 +346,8 @@ final class AbstractXdsClient {
                                     Collection<String> resources) {
       ResourceType type = xdsResourceType.typeName();
       logger.log(XdsLogLevel.INFO, "Sending {0} request for resources: {1}", type, resources);
-      sendDiscoveryRequest(type, versions.containsKey(type) ? versions.get(type) : "", resources,
-          respNonces.containsKey(type) ? respNonces.get(type) : "", null);
+      sendDiscoveryRequest(type, versions.getOrDefault(type, ""), resources,
+          respNonces.getOrDefault(type, ""), null);
     }
 
     final void handleRpcResponse(

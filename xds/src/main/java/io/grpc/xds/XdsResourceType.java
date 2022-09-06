@@ -30,7 +30,6 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
-import io.grpc.InternalLogId;
 import io.grpc.LoadBalancerRegistry;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -50,34 +49,23 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   @VisibleForTesting
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
   @VisibleForTesting
-  static boolean enableFaultInjection =
-      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"))
-          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
+  static boolean enableFaultInjection = getFlag("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION", true);
   @VisibleForTesting
-  static boolean enableRetry =
-      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"))
-          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"));
+  static boolean enableRetry = getFlag("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY", true);
   @VisibleForTesting
-  static boolean enableRbac =
-      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"))
-          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"));
+  static boolean enableRbac = getFlag("GRPC_XDS_EXPERIMENTAL_RBAC", true);
   @VisibleForTesting
-  static boolean enableRouteLookup =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"))
-          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"));
+  static boolean enableRouteLookup = getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", false);
   @VisibleForTesting
   static boolean enableLeastRequest =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
   @VisibleForTesting
-  static boolean enableCustomLbConfig =
-      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"))
-          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG"));
+  static boolean enableCustomLbConfig = getFlag("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG", true);
   @VisibleForTesting
-  static boolean enableOutlierDetection =
-      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"))
-          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"));
+  static boolean enableOutlierDetection = getFlag("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION",
+      true);
   static final String TYPE_URL_CLUSTER_CONFIG_V2 =
       "type.googleapis.com/envoy.config.cluster.aggregate.v2alpha.ClusterConfig";
   static final String TYPE_URL_CLUSTER_CONFIG =
@@ -87,13 +75,9 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   static final String TYPE_URL_TYPED_STRUCT =
       "type.googleapis.com/xds.type.v3.TypedStruct";
 
-  private final InternalLogId logId;
-  private final XdsLogger logger;
-
   @Nullable
   abstract String extractResourceName(Message unpackedResource);
 
-  @SuppressWarnings("unchecked")
   abstract Class<? extends com.google.protobuf.Message> unpackedClassName();
 
   abstract ResourceType typeName();
@@ -105,12 +89,6 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   // Non-null for  State of the World resources.
   @Nullable
   abstract ResourceType dependentResource();
-
-  public XdsResourceType() {
-    logId = InternalLogId.allocate("xds-client", null);
-    logger = XdsLogger.withLogId(logId);
-    logger.log(XdsLogger.XdsLogLevel.INFO, "Created");
-  }
 
   static class Args {
     ServerInfo serverInfo;
@@ -148,7 +126,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
-    Set<String> retainedRdsResources = new HashSet<>();
+    Set<String> retainedResources = new HashSet<>();
 
     for (int i = 0; i < resources.size(); i++) {
       Any resource = resources.get(i);
@@ -179,8 +157,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
       T resourceUpdate;
       try {
-        resourceUpdate = doParse(args, unpackedMessage, retainedRdsResources,
-            isResourceV3);
+        resourceUpdate = doParse(args, unpackedMessage, retainedResources, isResourceV3);
       } catch (ClientXdsClient.ResourceInvalidException e) {
         errors.add(String.format("%s response %s '%s' validation error: %s",
                 typeName(), unpackedClassName().getSimpleName(), cname, e.getMessage()));
@@ -188,14 +165,11 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
         continue;
       }
 
-      // LdsUpdate parsed successfully.
+      // Resource parsed successfully.
       parsedResources.put(cname, new ParsedResource<T>(resourceUpdate, resource));
     }
-    logger.log(XdsLogger.XdsLogLevel.INFO,
-        "Received {0} Response version {1} nonce {2}. Parsed resources: {3}",
-        typeName(), args.versionInfo, args.nonce, unpackedResources);
     return new ValidatedResourceUpdate<T>(parsedResources, unpackedResources, invalidResources,
-        errors, retainedRdsResources);
+        errors, retainedResources);
 
   }
 
@@ -258,19 +232,28 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
     Set<String> unpackedResources;
     Set<String> invalidResources;
     List<String> errors;
-    Set<String> retainedRdsResources;
+    Set<String> retainedResources;
 
     // validated resource update
     public ValidatedResourceUpdate(Map<String, ParsedResource<T>> parsedResources,
                                    Set<String> unpackedResources,
                                    Set<String> invalidResources,
                                    List<String> errors,
-                                   Set<String> retainedRdsResources) {
+                                   Set<String> retainedResources) {
       this.parsedResources = parsedResources;
       this.unpackedResources = unpackedResources;
       this.invalidResources = invalidResources;
       this.errors = errors;
-      this.retainedRdsResources = retainedRdsResources;
+      this.retainedResources = retainedResources;
+    }
+  }
+
+  private static boolean getFlag(String envVarName, boolean enableByDefault) {
+    String envVar = System.getenv(envVarName);
+    if (enableByDefault) {
+      return Strings.isNullOrEmpty(envVar) || Boolean.parseBoolean(envVar);
+    } else {
+      return !Strings.isNullOrEmpty(envVar) && Boolean.parseBoolean(envVar);
     }
   }
 
