@@ -23,6 +23,7 @@ import static org.mockito.Mockito.when;
 import io.grpc.ForwardingTestUtil;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.Collections;
