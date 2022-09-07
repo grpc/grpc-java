@@ -308,15 +308,15 @@ final class PriorityLoadBalancer extends LoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
-        if (resolvingAddresses) {
-          return;
-        }
-
         if (!children.containsKey(priority)) {
           return;
         }
         connectivityState = newState;
         picker = newPicker;
+
+        if (resolvingAddresses) {
+          return;
+        }
         if (deletionTimer != null && deletionTimer.isPending()) {
           return;
         }
