@@ -17,11 +17,14 @@
 package io.grpc.binder;
 
 import android.annotation.SuppressLint;
+import android.app.admin.DevicePolicyManager;
+import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.Signature;
 import android.os.Build;
+import android.os.Build.VERSION;
 import android.os.Process;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
@@ -171,6 +174,50 @@ public final class SecurityPolicies {
             packageManager, uid, packageName, requiredSignaturesHashesImmutable);
       }
     };
+  }
+
+  /**
+   * Creates {@link SecurityPolicy} which checks if the app is a device owner app. See
+   * {@link DevicePolicyManager}.
+   */
+  public static SecurityPolicy isDeviceOwner(Context applicationContext) {
+    DevicePolicyManager devicePolicyManager =
+        (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
+    return anyPackageWithUidSatisfies(
+        applicationContext,
+        pkg -> VERSION.SDK_INT >= 18 && devicePolicyManager.isDeviceOwnerApp(pkg),
+        "Rejected by device owner policy. No packages found for UID.",
+        "Rejected by device owner policy");
+  }
+
+  /**
+   * Creates {@link SecurityPolicy} which checks if the app is a profile owner app. See
+   * {@link DevicePolicyManager}.
+   */
+  public static SecurityPolicy isProfileOwner(Context applicationContext) {
+    DevicePolicyManager devicePolicyManager =
+        (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
+    return anyPackageWithUidSatisfies(
+        applicationContext,
+        pkg -> VERSION.SDK_INT >= 21 && devicePolicyManager.isProfileOwnerApp(pkg),
+        "Rejected by profile owner policy. No packages found for UID.",
+        "Rejected by profile owner policy");
+  }
+
+  /**
+   * Creates {@link SecurityPolicy} which checks if the app is a profile owner app on an
+   * organization-owned device. See {@link DevicePolicyManager}.
+   */
+  public static SecurityPolicy isProfileOwnerOnOrganizationOwnedDevice(Context applicationContext) {
+    DevicePolicyManager devicePolicyManager =
+        (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
+    return anyPackageWithUidSatisfies(
+        applicationContext,
+        pkg -> VERSION.SDK_INT >= 30
+            && devicePolicyManager.isProfileOwnerApp(pkg)
+            && devicePolicyManager.isOrganizationOwnedDeviceWithManagedProfile(),
+        "Rejected by profile owner on organization-owned device policy. No packages found for UID.",
+        "Rejected by profile owner on organization-owned device policy");
   }
 
   private static Status checkUidSignature(
@@ -404,6 +451,29 @@ public final class SecurityPolicies {
     }
 
     return Status.OK;
+  }
+
+  private static SecurityPolicy anyPackageWithUidSatisfies(
+      Context applicationContext,
+      Predicate<String> condition,
+      String errorMessageForNoPackages,
+      String errorMessageForDenied) {
+    return new SecurityPolicy() {
+      @Override
+      public Status checkAuthorization(int uid) {
+        String[] packages = applicationContext.getPackageManager().getPackagesForUid(uid);
+        if (packages == null || packages.length == 0) {
+          return Status.UNAUTHENTICATED.withDescription(errorMessageForNoPackages);
+        }
+
+        for (String pkg : packages) {
+          if (condition.apply(pkg)) {
+            return Status.OK;
+          }
+        }
+        return Status.PERMISSION_DENIED.withDescription(errorMessageForDenied);
+      }
+    };
   }
 
   /**
