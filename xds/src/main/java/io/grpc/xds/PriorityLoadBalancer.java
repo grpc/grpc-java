@@ -99,9 +99,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         children.get(priority).updateResolvedAddresses();
       }
     }
-    // Not to report connecting in case a pending priority bumps up on top of the current READY
-    // priority.
-    tryNextPriority(false);
+    tryNextPriority();
   }
 
   @Override
@@ -128,7 +126,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     children.clear();
   }
 
-  private void tryNextPriority(boolean reportConnecting) {
+  private void tryNextPriority() {
     for (int i = 0; i < priorityNames.size(); i++) {
       String priority = priorityNames.get(i);
       if (!children.containsKey(priority)) {
@@ -153,9 +151,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         return;
       }
       if (child.failOverTimer != null && child.failOverTimer.isPending()) {
-        if (reportConnecting) {
-          updateOverallState(priority, CONNECTING, BUFFER_PICKER);
-        }
+        updateOverallState(priority, child.connectivityState, child.picker);
         return; // Give priority i time to connect.
       }
       if (priority.equals(currentPriority) && child.connectivityState != TRANSIENT_FAILURE) {
@@ -216,7 +212,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
             Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority));
         logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
         currentPriority = null; // reset currentPriority to guarantee failover happen
-        tryNextPriority(true);
+        tryNextPriority();
       }
     }
 
@@ -324,7 +320,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
               seenReadyOrIdleSinceTransientFailure = false;
               failOverTimer.cancel();
             }
-            tryNextPriority(true);
+            tryNextPriority();
           }
         });
       }
