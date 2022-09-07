@@ -17,11 +17,11 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.grpc.ForwardingTestUtil;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
@@ -101,7 +101,7 @@ public class ForwardingReadableBufferTest {
 
   @Test
   public void readBytes_overload2() throws IOException {
-    OutputStream dest = new ByteArrayOutputStream();
+    OutputStream dest = mock(OutputStream.class);
     buffer.readBytes(dest, 1);
 
     verify(delegate).readBytes(dest, 1);
