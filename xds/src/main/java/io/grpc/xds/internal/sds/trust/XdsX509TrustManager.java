@@ -41,7 +41,7 @@ import javax.net.ssl.X509TrustManager;
  * Extension of {@link X509ExtendedTrustManager} that implements verification of
  * SANs (subject-alternate-names) against the list in CertificateValidationContext.
  */
-final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509TrustManager {
+final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509TrustManager {
 
   // ref: io.grpc.okhttp.internal.OkHostnameVerifier and
   // sun.security.x509.GeneralNameInterface
@@ -52,8 +52,8 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private final X509ExtendedTrustManager delegate;
   private final CertificateValidationContext certContext;
 
-  SdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-      X509ExtendedTrustManager delegate) {
+  XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
+                      X509ExtendedTrustManager delegate) {
     checkNotNull(delegate, "delegate");
     this.certContext = certContext;
     this.delegate = delegate;

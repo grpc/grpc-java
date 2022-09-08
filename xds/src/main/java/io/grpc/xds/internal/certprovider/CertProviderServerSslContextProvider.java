@@ -26,7 +26,7 @@ import io.grpc.Internal;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
-import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
+import io.grpc.xds.internal.sds.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
 
 import java.io.IOException;
@@ -66,7 +66,7 @@ public final class CertProviderServerSslContextProvider extends CertProviderSslC
     setClientAuthValues(
         sslContextBuilder,
         isMtls()
-            ? new SdsTrustManagerFactory(
+            ? new XdsTrustManagerFactory(
                 savedTrustedRoots.toArray(new X509Certificate[0]),
                 certificateValidationContextdationContext)
             : null);

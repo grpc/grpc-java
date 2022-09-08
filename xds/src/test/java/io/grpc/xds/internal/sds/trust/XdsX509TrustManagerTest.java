@@ -54,10 +54,10 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /**
- * Unit tests for {@link SdsX509TrustManager}.
+ * Unit tests for {@link XdsX509TrustManager}.
  */
 @RunWith(JUnit4.class)
-public class SdsX509TrustManagerTest {
+public class XdsX509TrustManagerTest {
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
@@ -68,11 +68,11 @@ public class SdsX509TrustManagerTest {
   @Mock
   private SSLSession mockSession;
 
-  private SdsX509TrustManager trustManager;
+  private XdsX509TrustManager trustManager;
 
   @Test
   public void nullCertContextTest() throws CertificateException, IOException {
-    trustManager = new SdsX509TrustManager(null, mockDelegate);
+    trustManager = new XdsX509TrustManager(null, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -81,7 +81,7 @@ public class SdsX509TrustManagerTest {
   @Test
   public void emptySanListContextTest() throws CertificateException, IOException {
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -93,7 +93,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     try {
       trustManager.verifySubjectAltNameInChain(null);
       fail("no exception thrown");
@@ -108,7 +108,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     try {
       trustManager.verifySubjectAltNameInChain(new X509Certificate[0]);
       fail("no exception thrown");
@@ -123,7 +123,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(CLIENT_PEM_FILE));
     try {
@@ -144,7 +144,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -161,7 +161,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     try {
@@ -179,7 +179,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -195,7 +195,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -209,7 +209,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     try {
@@ -230,7 +230,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -243,7 +243,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -257,7 +257,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     try {
@@ -275,7 +275,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -288,7 +288,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -302,7 +302,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     try {
@@ -320,7 +320,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -336,7 +336,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -352,7 +352,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -368,7 +368,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -384,7 +384,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     try {
@@ -407,7 +407,7 @@ public class SdsX509TrustManagerTest {
             .addMatchSubjectAltNames(stringMatcher)
             .addMatchSubjectAltNames(stringMatcher1)
             .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -420,7 +420,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     try {
@@ -443,7 +443,7 @@ public class SdsX509TrustManagerTest {
             .addMatchSubjectAltNames(stringMatcher)
             .addMatchSubjectAltNames(stringMatcher1) // should match suffix test.youTube.Com
             .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -461,7 +461,7 @@ public class SdsX509TrustManagerTest {
             .addMatchSubjectAltNames(stringMatcher)
             .addMatchSubjectAltNames(stringMatcher1) // should contain est.Google.f
             .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -478,7 +478,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     try {
@@ -499,7 +499,7 @@ public class SdsX509TrustManagerTest {
             .addMatchSubjectAltNames(stringMatcher)
             .addMatchSubjectAltNames(stringMatcher1)
             .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
@@ -515,7 +515,7 @@ public class SdsX509TrustManagerTest {
             .addMatchSubjectAltNames(stringMatcher)
             .addMatchSubjectAltNames(stringMatcher1)
             .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     try {
@@ -590,7 +590,7 @@ public class SdsX509TrustManagerTest {
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate mockCert = mock(X509Certificate.class);
 
     when(mockCert.getSubjectAlternativeNames())
@@ -629,7 +629,7 @@ public class SdsX509TrustManagerTest {
       throws CertificateException, IOException, CertStoreException {
     X509Certificate[] caCerts =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(CA_PEM_FILE));
-    trustManager = SdsTrustManagerFactory.createSdsX509TrustManager(caCerts,
+    trustManager = XdsTrustManagerFactory.createSdsX509TrustManager(caCerts,
         null);
     when(mockSession.getProtocol()).thenReturn("TLSv1.2");
     when(mockSession.getPeerHost()).thenReturn("peer-host-from-mock");

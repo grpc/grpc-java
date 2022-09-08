@@ -24,7 +24,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.internal.sds.trust.SdsTrustManagerFactory;
+import io.grpc.xds.internal.sds.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -70,11 +70,11 @@ public abstract class SslContextProvider implements Closeable {
   }
 
   protected void setClientAuthValues(
-      SslContextBuilder sslContextBuilder, SdsTrustManagerFactory sdsTrustManagerFactory)
+      SslContextBuilder sslContextBuilder, XdsTrustManagerFactory xdsTrustManagerFactory)
       throws CertificateException, IOException, CertStoreException {
     DownstreamTlsContext downstreamTlsContext = getDownstreamTlsContext();
-    if (sdsTrustManagerFactory != null) {
-      sslContextBuilder.trustManager(sdsTrustManagerFactory);
+    if (xdsTrustManagerFactory != null) {
+      sslContextBuilder.trustManager(xdsTrustManagerFactory);
       sslContextBuilder.clientAuth(
           downstreamTlsContext.isRequireClientCertificate()
               ? ClientAuth.REQUIRE
