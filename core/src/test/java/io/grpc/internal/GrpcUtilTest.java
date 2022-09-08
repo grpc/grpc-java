@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.Lists;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.LoadBalancer.PickResult;
@@ -35,6 +36,7 @@ import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil.Http2Error;
 import io.grpc.testing.TestMethodDescriptors;
+import java.util.ArrayList;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -256,6 +258,64 @@ public class GrpcUtilTest {
     stream.start(listener);
 
     verify(listener).closed(eq(status), eq(RpcProgress.PROCESSED), any(Metadata.class));
+  }
+
+  /* Status codes that a control plane should not be returned get replaced by INTERNAL. */
+  @Test
+  public void getTransportFromPickResult_errorPickResult_noInappropriateControlPlaneStatus() {
+
+    // These are NOT appropriate for a control plane to return.
+    ArrayList<Status> inappropriateStatus = Lists.newArrayList(
+        Status.INVALID_ARGUMENT,
+        Status.NOT_FOUND,
+        Status.ALREADY_EXISTS,
+        Status.FAILED_PRECONDITION,
+        Status.ABORTED,
+        Status.OUT_OF_RANGE,
+        Status.DATA_LOSS);
+
+    for (Status status : inappropriateStatus) {
+      PickResult pickResult = PickResult.withError(status);
+      ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult, false);
+
+      ClientStream stream = transport.newStream(
+          TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+          tracers);
+      ClientStreamListener listener = mock(ClientStreamListener.class);
+      stream.start(listener);
+
+      verify(listener).closed(eq(Status.INTERNAL), eq(RpcProgress.PROCESSED), any(Metadata.class));
+    }
+  }
+
+  /* Status codes a control plane can return are not replaced. */
+  @Test
+  public void getTransportFromPickResult_errorPickResult_appropriateControlPlaneStatus() {
+
+    // These ARE appropriate for a control plane to return.
+    ArrayList<Status> inappropriateStatus = Lists.newArrayList(
+        Status.CANCELLED,
+        Status.UNKNOWN,
+        Status.DEADLINE_EXCEEDED,
+        Status.PERMISSION_DENIED,
+        Status.RESOURCE_EXHAUSTED,
+        Status.UNIMPLEMENTED,
+        Status.INTERNAL,
+        Status.UNAVAILABLE,
+        Status.UNAUTHENTICATED);
+
+    for (Status status : inappropriateStatus) {
+      PickResult pickResult = PickResult.withError(status);
+      ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult, false);
+
+      ClientStream stream = transport.newStream(
+          TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+          tracers);
+      ClientStreamListener listener = mock(ClientStreamListener.class);
+      stream.start(listener);
+
+      verify(listener).closed(eq(status), eq(RpcProgress.PROCESSED), any(Metadata.class));
+    }
   }
 
   @Test

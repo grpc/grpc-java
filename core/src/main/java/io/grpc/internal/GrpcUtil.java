@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
@@ -57,6 +58,7 @@ import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -74,6 +76,10 @@ import javax.annotation.concurrent.Immutable;
 public final class GrpcUtil {
 
   private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
+
+  private static final Set<Status> INAPPROPRIATE_CONTROL_PLANE_STATUS = Sets.newHashSet(Status.OK,
+      Status.INVALID_ARGUMENT, Status.NOT_FOUND, Status.ALREADY_EXISTS, Status.FAILED_PRECONDITION,
+      Status.ABORTED, Status.OUT_OF_RANGE, Status.DATA_LOSS);
 
   public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
@@ -747,10 +753,12 @@ public final class GrpcUtil {
     }
     if (!result.getStatus().isOk()) {
       if (result.isDrop()) {
-        return new FailingClientTransport(result.getStatus(), RpcProgress.DROPPED);
+        return new FailingClientTransport(
+            replaceInappropriateControlPlaneStatus(result.getStatus()), RpcProgress.DROPPED);
       }
       if (!isWaitForReady) {
-        return new FailingClientTransport(result.getStatus(), RpcProgress.PROCESSED);
+        return new FailingClientTransport(
+            replaceInappropriateControlPlaneStatus(result.getStatus()), RpcProgress.PROCESSED);
       }
     }
     return null;
@@ -803,6 +811,16 @@ public final class GrpcUtil {
   public static void exhaust(InputStream in) throws IOException {
     byte[] buf = new byte[256];
     while (in.read(buf) != -1) {}
+  }
+
+  /**
+   * Some status codes from the control plane are not appropritate to use in the data plane. If one
+   * is given it will be replaced with INTERNAL, indicating a bug in the control plane
+   * implementation.
+   */
+  public static Status replaceInappropriateControlPlaneStatus(Status status) {
+    checkArgument(status != null);
+    return INAPPROPRIATE_CONTROL_PLANE_STATUS.contains(status) ? Status.INTERNAL : status;
   }
 
   /**
