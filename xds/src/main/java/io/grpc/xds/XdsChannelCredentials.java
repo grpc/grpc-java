@@ -22,7 +22,7 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ExperimentalApi;
 import io.grpc.netty.InternalNettyChannelCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
-import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
+import io.grpc.xds.internal.sds.SecurityProtocolNegotiators;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public class XdsChannelCredentials {
@@ -40,6 +40,6 @@ public class XdsChannelCredentials {
     InternalProtocolNegotiator.ClientFactory fallbackNegotiator =
         InternalNettyChannelCredentials.toNegotiator(checkNotNull(fallback, "fallback"));
     return InternalNettyChannelCredentials.create(
-        SdsProtocolNegotiators.clientProtocolNegotiatorFactory(fallbackNegotiator));
+        SecurityProtocolNegotiators.clientProtocolNegotiatorFactory(fallbackNegotiator));
   }
 }
