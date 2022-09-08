@@ -58,7 +58,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
 
   // Includes all active and deactivated children. Mutable. New entries are only added from priority
-  // 0 up to the selected priority. An entry is only deleted 15 minutes after the its deactivation.
+  // 0 up to the selected priority. An entry is only deleted 15 minutes after its deactivation.
   private final Map<String, ChildLbState> children = new HashMap<>();
 
   // Following fields are only null initially.
@@ -71,7 +71,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private ConnectivityState currentConnectivityState;
   private SubchannelPicker currentPicker;
   // Set to true if currently in the process of handling resolved addresses.
-  private boolean resolvingAddresses;
+  private boolean handlingResolvedAddresses;
 
   PriorityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -85,10 +85,10 @@ final class PriorityLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
-      resolvingAddresses = true;
+      handlingResolvedAddresses = true;
       handleResolvedAddressesInternal(resolvedAddresses);
     } finally {
-      resolvingAddresses = false;
+      handlingResolvedAddresses = false;
     }
   }
 
@@ -314,9 +314,6 @@ final class PriorityLoadBalancer extends LoadBalancer {
         connectivityState = newState;
         picker = newPicker;
 
-        if (resolvingAddresses) {
-          return;
-        }
         if (deletionTimer != null && deletionTimer.isPending()) {
           return;
         }
@@ -331,6 +328,12 @@ final class PriorityLoadBalancer extends LoadBalancer {
         } else if (newState.equals(TRANSIENT_FAILURE)) {
           seenReadyOrIdleSinceTransientFailure = false;
           failOverTimer.cancel();
+        }
+
+        // If we are currently handling newly resolved addresses, let's not try to reconfigure as
+        // the address handling process will take care of that to provide an atomic config update.
+        if (handlingResolvedAddresses) {
+          return;
         }
         tryNextPriority();
       }
