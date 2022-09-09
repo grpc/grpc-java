@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds.trust;
+package io.grpc.xds.internal.security.trust;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;

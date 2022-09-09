@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds.internal.security;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
@@ -24,7 +24,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
+import io.grpc.xds.internal.security.ReferenceCountingMap.ValueFactory;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;

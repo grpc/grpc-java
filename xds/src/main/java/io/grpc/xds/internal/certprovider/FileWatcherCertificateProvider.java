@@ -21,7 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
-import io.grpc.xds.internal.sds.trust.CertificateUtils;
+import io.grpc.xds.internal.security.trust.CertificateUtils;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;

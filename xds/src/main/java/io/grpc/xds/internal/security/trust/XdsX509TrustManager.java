@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds.trust;
+package io.grpc.xds.internal.security.trust;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 

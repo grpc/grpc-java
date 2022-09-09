@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds.trust;
+package io.grpc.xds.internal.security.trust;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import io.envoyproxy.envoy.config.core.v3.DataSource.SpecifierCase;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
-import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.io.File;
 import java.io.IOException;
@@ -42,8 +41,7 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
- * Factory class used by providers of {@link TlsContextManagerImpl} to provide a
- * {@link XdsX509TrustManager} for trust and SAN checks.
+ * Factory class used to provide a {@link XdsX509TrustManager} for trust and SAN checks.
  */
 public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
 

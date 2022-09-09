@@ -20,7 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
-import io.grpc.xds.internal.sds.Closeable;
+import io.grpc.xds.internal.security.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.Collections;
