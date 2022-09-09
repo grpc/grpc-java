@@ -369,13 +369,11 @@ final class CensusStatsModule {
           // TODO(songya): remove the deprecated measure constants once they are completed removed.
           .put(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT, 1)
           // The latency is double value
-          .put(
-              DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY,
-              roundtripNanos / NANOS_PER_MILLI)
-          .put(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT, outboundMessageCount)
-          .put(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_COUNT, inboundMessageCount)
-          .put(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_BYTES, outboundWireSize)
-          .put(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_BYTES, inboundWireSize)
+          .put(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
+          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC, outboundMessageCount)
+          .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
+          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC, outboundWireSize)
+          .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC, inboundWireSize)
           .put(
               DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
               outboundUncompressedSize)
@@ -443,7 +441,7 @@ final class CensusStatsModule {
       if (module.recordStartedRpcs) {
         // Record here in case newClientStreamTracer() would never be called.
         module.statsRecorder.newMeasureMap()
-            .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
+            .put(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS, 1)
             .record(startCtx);
       }
     }
@@ -462,7 +460,7 @@ final class CensusStatsModule {
       }
       if (module.recordStartedRpcs && attemptsPerCall.get() > 0) {
         module.statsRecorder.newMeasureMap()
-            .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
+            .put(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS, 1)
             .record(startCtx);
       }
       if (info.isTransparentRetry()) {
@@ -628,7 +626,7 @@ final class CensusStatsModule {
       this.stopwatch = module.stopwatchSupplier.get().start();
       if (module.recordStartedRpcs) {
         module.statsRecorder.newMeasureMap()
-            .put(DeprecatedCensusConstants.RPC_SERVER_STARTED_COUNT, 1)
+            .put(RpcMeasureConstants.GRPC_SERVER_STARTED_RPCS, 1)
             .record(parentCtx);
       }
     }
@@ -728,13 +726,11 @@ final class CensusStatsModule {
           // TODO(songya): remove the deprecated measure constants once they are completed removed.
           .put(DeprecatedCensusConstants.RPC_SERVER_FINISHED_COUNT, 1)
           // The latency is double value
-          .put(
-              DeprecatedCensusConstants.RPC_SERVER_SERVER_LATENCY,
-              elapsedTimeNanos / NANOS_PER_MILLI)
-          .put(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount)
-          .put(DeprecatedCensusConstants.RPC_SERVER_REQUEST_COUNT, inboundMessageCount)
-          .put(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize)
-          .put(DeprecatedCensusConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize)
+          .put(RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
+          .put(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC, outboundMessageCount)
+          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
+          .put(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC, outboundWireSize)
+          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC, inboundWireSize)
           .put(
               DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES,
               outboundUncompressedSize)
