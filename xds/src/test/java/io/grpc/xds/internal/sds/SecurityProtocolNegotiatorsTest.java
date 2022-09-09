@@ -22,7 +22,7 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
-import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
+import static io.grpc.xds.internal.sds.SecurityProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -52,8 +52,8 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.internal.certprovider.CommonCertProviderTestUtils;
-import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
-import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsProtocolNegotiator;
+import io.grpc.xds.internal.sds.SecurityProtocolNegotiators.ClientSdsHandler;
+import io.grpc.xds.internal.sds.SecurityProtocolNegotiators.ClientSdsProtocolNegotiator;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -83,9 +83,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link SdsProtocolNegotiators}. */
+/** Unit tests for {@link SecurityProtocolNegotiators}. */
 @RunWith(JUnit4.class)
-public class SdsProtocolNegotiatorsTest {
+public class SecurityProtocolNegotiatorsTest {
 
   private final GrpcHttp2ConnectionHandler grpcHandler =
       FakeGrpcHttp2ConnectionHandler.newHandler();
@@ -156,8 +156,8 @@ public class SdsProtocolNegotiatorsTest {
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
             new TlsContextManagerImpl(bootstrapInfoForClient));
-    SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
+    SecurityProtocolNegotiators.ClientSdsHandler clientSdsHandler =
+        new SecurityProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
     pipeline.addLast(clientSdsHandler);
     channelHandlerCtx = pipeline.context(clientSdsHandler);
     assertNotNull(channelHandlerCtx); // clientSdsHandler ctx is non-null since we just added it
@@ -221,8 +221,8 @@ public class SdsProtocolNegotiatorsTest {
             "google_cloud_private_spiffe-server", true, true);
 
     TlsContextManagerImpl tlsContextManager = new TlsContextManagerImpl(bootstrapInfoForServer);
-    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler,
+    SecurityProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SecurityProtocolNegotiators.HandlerPickerHandler(grpcHandler,
                 InternalProtocolNegotiators.serverPlaintext());
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
@@ -236,7 +236,7 @@ public class SdsProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.withAttributes(event, attr));
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNull();
-    channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
+    channelHandlerCtx = pipeline.context(SecurityProtocolNegotiators.ServerSdsHandler.class);
     assertThat(channelHandlerCtx).isNotNull();
 
     SslContextProviderSupplier sslContextProviderSupplier =
@@ -259,7 +259,7 @@ public class SdsProtocolNegotiatorsTest {
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
     assertThat(fromFuture).isInstanceOf(SslContext.class);
     channel.runPendingTasks();
-    channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
+    channelHandlerCtx = pipeline.context(SecurityProtocolNegotiators.ServerSdsHandler.class);
     assertThat(channelHandlerCtx).isNull();
 
     // pipeline should only have SslHandler and ServerTlsHandler
@@ -287,8 +287,8 @@ public class SdsProtocolNegotiatorsTest {
         };
     pipeline = channel.pipeline();
 
-    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-        new SdsProtocolNegotiators.HandlerPickerHandler(
+    SecurityProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SecurityProtocolNegotiators.HandlerPickerHandler(
             grpcHandler, mockProtocolNegotiator);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
@@ -313,8 +313,8 @@ public class SdsProtocolNegotiatorsTest {
     ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
     ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
     when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
-    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-        new SdsProtocolNegotiators.HandlerPickerHandler(
+    SecurityProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SecurityProtocolNegotiators.HandlerPickerHandler(
             grpcHandler, mockProtocolNegotiator);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
@@ -333,8 +333,8 @@ public class SdsProtocolNegotiatorsTest {
 
   @Test
   public void nullTlsContext_nullFallbackProtocolNegotiator_expectException() {
-    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
-        new SdsProtocolNegotiators.HandlerPickerHandler(
+    SecurityProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SecurityProtocolNegotiators.HandlerPickerHandler(
             grpcHandler, null);
     pipeline.addLast(handlerPickerHandler);
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
@@ -368,8 +368,8 @@ public class SdsProtocolNegotiatorsTest {
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
             new TlsContextManagerImpl(bootstrapInfoForClient));
-    SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
+    SecurityProtocolNegotiators.ClientSdsHandler clientSdsHandler =
+        new SecurityProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
 
     pipeline.addLast(clientSdsHandler);
     channelHandlerCtx = pipeline.context(clientSdsHandler);

@@ -16,8 +16,6 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.DoNotCall;
@@ -64,10 +62,6 @@ import javax.net.ssl.TrustManager;
 public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpServerBuilder> {
   private static final Logger log = Logger.getLogger(OkHttpServerBuilder.class.getName());
   private static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
-
-  static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
-  private static final long MIN_MAX_CONNECTION_IDLE_NANO = TimeUnit.SECONDS.toNanos(1L);
-
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
   private static final ObjectPool<Executor> DEFAULT_TRANSPORT_EXECUTOR_POOL =
       OkHttpChannelBuilder.DEFAULT_TRANSPORT_EXECUTOR_POOL;
@@ -116,7 +110,6 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   int maxInboundMetadataSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
-  long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
 
   @VisibleForTesting
   OkHttpServerBuilder(
@@ -181,27 +174,6 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     if (keepAliveTimeNanos >= AS_LARGE_AS_INFINITE) {
       // Bump keepalive time to infinite. This disables keepalive.
       keepAliveTimeNanos = GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
-    }
-    return this;
-  }
-
-  /**
-   * Sets a custom max connection idle time, connection being idle for longer than which will be
-   * gracefully terminated. Idleness duration is defined since the most recent time the number of
-   * outstanding RPCs became zero or the connection establishment. An unreasonably small value might
-   * be increased. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
-   * max connection idle.
-   */
-  @Override
-  public OkHttpServerBuilder maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
-    checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive: %s",
-        maxConnectionIdle);
-    maxConnectionIdleInNanos = timeUnit.toNanos(maxConnectionIdle);
-    if (maxConnectionIdleInNanos >= AS_LARGE_AS_INFINITE) {
-      maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
-    }
-    if (maxConnectionIdleInNanos < MIN_MAX_CONNECTION_IDLE_NANO) {
-      maxConnectionIdleInNanos = MIN_MAX_CONNECTION_IDLE_NANO;
     }
     return this;
   }
