@@ -25,7 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
@@ -57,6 +56,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -77,9 +78,16 @@ public final class GrpcUtil {
 
   private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
 
-  private static final Set<Status> INAPPROPRIATE_CONTROL_PLANE_STATUS = Sets.newHashSet(Status.OK,
-      Status.INVALID_ARGUMENT, Status.NOT_FOUND, Status.ALREADY_EXISTS, Status.FAILED_PRECONDITION,
-      Status.ABORTED, Status.OUT_OF_RANGE, Status.DATA_LOSS);
+  private static final Set<Status.Code> INAPPROPRIATE_CONTROL_PLANE_STATUS
+      = Collections.unmodifiableSet(EnumSet.of(
+          Status.Code.OK,
+          Status.Code.INVALID_ARGUMENT,
+          Status.Code.NOT_FOUND,
+          Status.Code.ALREADY_EXISTS,
+          Status.Code.FAILED_PRECONDITION,
+          Status.Code.ABORTED,
+          Status.Code.OUT_OF_RANGE,
+          Status.Code.DATA_LOSS));
 
   public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
@@ -820,7 +828,10 @@ public final class GrpcUtil {
    */
   public static Status replaceInappropriateControlPlaneStatus(Status status) {
     checkArgument(status != null);
-    return INAPPROPRIATE_CONTROL_PLANE_STATUS.contains(status) ? Status.INTERNAL : status;
+    return INAPPROPRIATE_CONTROL_PLANE_STATUS.contains(status.getCode())
+        ? Status.INTERNAL.withDescription(
+        "Inappropriate status code from control plane: " + status.getCode() + " "
+            + status.getDescription()).withCause(status.getCause()) : status;
   }
 
   /**
