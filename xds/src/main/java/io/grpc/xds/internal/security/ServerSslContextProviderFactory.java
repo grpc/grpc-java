@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds.internal.security;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
-import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
+import io.grpc.xds.internal.security.ReferenceCountingMap.ValueFactory;
 
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory

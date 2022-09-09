@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds.internal.security;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.internal.sds.ClientSslContextProviderFactoryTest.createAndRegisterProviderProvider;
-import static io.grpc.xds.internal.sds.ClientSslContextProviderFactoryTest.verifyWatcher;
+import static io.grpc.xds.internal.security.ClientSslContextProviderFactoryTest.createAndRegisterProviderProvider;
+import static io.grpc.xds.internal.security.ClientSslContextProviderFactoryTest.verifyWatcher;
 
 import com.google.common.collect.ImmutableSet;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;

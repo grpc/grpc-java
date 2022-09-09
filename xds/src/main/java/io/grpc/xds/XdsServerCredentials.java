@@ -22,7 +22,7 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ServerCredentials;
 import io.grpc.netty.InternalNettyServerCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
-import io.grpc.xds.internal.sds.SecurityProtocolNegotiators;
+import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public class XdsServerCredentials {

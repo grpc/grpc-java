@@ -35,7 +35,7 @@ import io.grpc.StatusException;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
