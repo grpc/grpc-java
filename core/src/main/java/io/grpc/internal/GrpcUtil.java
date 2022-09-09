@@ -56,7 +56,10 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -74,6 +77,17 @@ import javax.annotation.concurrent.Immutable;
 public final class GrpcUtil {
 
   private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
+
+  private static final Set<Status.Code> INAPPROPRIATE_CONTROL_PLANE_STATUS
+      = Collections.unmodifiableSet(EnumSet.of(
+          Status.Code.OK,
+          Status.Code.INVALID_ARGUMENT,
+          Status.Code.NOT_FOUND,
+          Status.Code.ALREADY_EXISTS,
+          Status.Code.FAILED_PRECONDITION,
+          Status.Code.ABORTED,
+          Status.Code.OUT_OF_RANGE,
+          Status.Code.DATA_LOSS));
 
   public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
@@ -747,10 +761,12 @@ public final class GrpcUtil {
     }
     if (!result.getStatus().isOk()) {
       if (result.isDrop()) {
-        return new FailingClientTransport(result.getStatus(), RpcProgress.DROPPED);
+        return new FailingClientTransport(
+            replaceInappropriateControlPlaneStatus(result.getStatus()), RpcProgress.DROPPED);
       }
       if (!isWaitForReady) {
-        return new FailingClientTransport(result.getStatus(), RpcProgress.PROCESSED);
+        return new FailingClientTransport(
+            replaceInappropriateControlPlaneStatus(result.getStatus()), RpcProgress.PROCESSED);
       }
     }
     return null;
@@ -803,6 +819,19 @@ public final class GrpcUtil {
   public static void exhaust(InputStream in) throws IOException {
     byte[] buf = new byte[256];
     while (in.read(buf) != -1) {}
+  }
+
+  /**
+   * Some status codes from the control plane are not appropritate to use in the data plane. If one
+   * is given it will be replaced with INTERNAL, indicating a bug in the control plane
+   * implementation.
+   */
+  public static Status replaceInappropriateControlPlaneStatus(Status status) {
+    checkArgument(status != null);
+    return INAPPROPRIATE_CONTROL_PLANE_STATUS.contains(status.getCode())
+        ? Status.INTERNAL.withDescription(
+        "Inappropriate status code from control plane: " + status.getCode() + " "
+            + status.getDescription()).withCause(status.getCause()) : status;
   }
 
   /**
