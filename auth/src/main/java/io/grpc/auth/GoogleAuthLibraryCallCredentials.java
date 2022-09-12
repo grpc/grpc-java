@@ -22,6 +22,7 @@ import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
+import io.grpc.InternalMayRequireSpecificExecutor;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -44,13 +45,16 @@ import javax.annotation.Nullable;
 /**
  * Wraps {@link Credentials} as a {@link io.grpc.CallCredentials}.
  */
-final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
+final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
+    implements InternalMayRequireSpecificExecutor {
   private static final Logger log
       = Logger.getLogger(GoogleAuthLibraryCallCredentials.class.getName());
   private static final JwtHelper jwtHelper
       = createJwtHelperOrNull(GoogleAuthLibraryCallCredentials.class.getClassLoader());
   private static final Class<? extends Credentials> googleCredentialsClass
       = loadGoogleCredentialsClass();
+  private static final Class<?> appEngineCredentialsClass
+      = loadAppEngineCredentials();
 
   private final boolean requirePrivacy;
   @VisibleForTesting
@@ -58,6 +62,8 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
 
   private Metadata lastHeaders;
   private Map<String, List<String>> lastMetadata;
+
+  private Boolean requiresSpecificExecutor;
 
   public GoogleAuthLibraryCallCredentials(Credentials creds) {
     this(creds, jwtHelper);
@@ -242,6 +248,16 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
     return rawGoogleCredentialsClass.asSubclass(Credentials.class);
   }
 
+  @Nullable
+  private static Class<?> loadAppEngineCredentials() {
+    try {
+      return Class.forName("com.google.auth.appengine.AppEngineCredentials");
+    } catch (ClassNotFoundException ex) {
+      log.log(Level.FINE, "AppEngineCredentials not available in classloader", ex);
+      return null;
+    }
+  }
+
   private static class MethodPair {
     private final Method getter;
     private final Method builderSetter;
@@ -353,4 +369,24 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
       return creds;
     }
   }
+
+  /**
+   * This method is to support the hack for AppEngineCredentials which need to run on a
+   * specific thread.
+   * @return Whether a specific executor is needed or if any executor can be used
+   */
+  @Override
+  public boolean isSpecificExecutorRequired() {
+    // Cache the value so we only need to try to load the class once
+    if (requiresSpecificExecutor == null) {
+      if (appEngineCredentialsClass == null) {
+        requiresSpecificExecutor = Boolean.FALSE;
+      } else {
+        requiresSpecificExecutor = appEngineCredentialsClass.isInstance(creds);
+      }
+    }
+
+    return requiresSpecificExecutor;
+  }
+
 }
