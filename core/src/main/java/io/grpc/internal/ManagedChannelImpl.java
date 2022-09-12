@@ -1199,7 +1199,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       InternalConfigSelector.Result result = configSelector.selectConfig(args);
       Status status = result.getStatus();
       if (!status.isOk()) {
-        executeCloseObserverInContext(observer, status);
+        executeCloseObserverInContext(observer,
+            GrpcUtil.replaceInappropriateControlPlaneStatus(status));
         delegate = (ClientCall<ReqT, RespT>) NOOP_CALL;
         return;
       }
