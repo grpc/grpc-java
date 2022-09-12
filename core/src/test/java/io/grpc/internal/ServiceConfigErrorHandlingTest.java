@@ -405,7 +405,10 @@ public class ServiceConfigErrorHandlingTest {
     ArgumentCaptor<Status> statusCaptor =
         ArgumentCaptor.forClass(Status.class);
     verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue()).isEqualTo(error);
+    Status actualStatus = statusCaptor.getValue();
+    assertThat(actualStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(actualStatus.getDescription()).contains("Inappropriate status code");
+    assertThat(actualStatus.getCause()).isNull();
 
     assertThat(channel.getState(true)).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
   }

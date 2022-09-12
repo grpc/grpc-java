@@ -1106,6 +1106,27 @@ public class ManagedChannelImplTest {
     assertEquals(0, timer.numPendingTasks());
   }
 
+  // Certain control plane errors during name resolution should not be propagated.
+  @Test
+  public void nameResolutionFailed_inappropriateError() {
+    Throwable fakeException = new Throwable("fake name resolution error");
+    Status error = Status.NOT_FOUND.withCause(fakeException);
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setError(error)
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    // Name resolution is started as soon as channel is created.
+    createChannel();
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
+    Status actualStatus = statusCaptor.getValue();
+    assertThat(actualStatus.getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(actualStatus.getDescription()).contains("Inappropriate status code");
+    assertThat(actualStatus.getCause()).isEqualTo(fakeException);
+  }
+
   @Test
   public void nameResolutionFailed_delayedTransportShutdownCancelsBackoff() {
     Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));

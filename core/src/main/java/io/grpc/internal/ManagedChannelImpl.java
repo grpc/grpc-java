@@ -1898,7 +1898,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return;
       }
 
-      helper.lb.handleNameResolutionError(error);
+      // There is a chance that name resolution failed due to an "inappropriate" error that the
+      // control plane server should have not return to the client. Those should not bleed down to
+      // the LB and end up being used as pick result errors. These error codes are replaced with
+      // INTERNAL to make it clear that an inappropriate error code has been returned.
+      helper.lb.handleNameResolutionError(GrpcUtil.replaceInappropriateControlPlaneStatus(error));
 
       scheduleExponentialBackOffInSyncContext();
     }
