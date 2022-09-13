@@ -1811,6 +1811,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 channelLogger.log(
                     ChannelLogLevel.INFO,
                     "Fallback to error due to invalid first service config without default config");
+                // This error could be an "inappropriate" control plane error that should not bleed
+                // through to client code using gRPC. We let them flow through here to the LB as
+                // we later check for these error codes when investigating pick results in
+                // GrpcUtil.getTransportFromPickResult().
                 onError(configOrError.getError());
                 return;
               } else {
