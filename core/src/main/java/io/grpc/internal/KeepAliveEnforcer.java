@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.netty;
+package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -22,11 +22,11 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
 
 /** Monitors the client's PING usage to make sure the rate is permitted. */
-class KeepAliveEnforcer {
+public final class KeepAliveEnforcer {
   @VisibleForTesting
-  static final int MAX_PING_STRIKES = 2;
+  public static final int MAX_PING_STRIKES = 2;
   @VisibleForTesting
-  static final long IMPLICIT_PERMIT_TIME_NANOS = TimeUnit.HOURS.toNanos(2);
+  public static final long IMPLICIT_PERMIT_TIME_NANOS = TimeUnit.HOURS.toNanos(2);
 
   private final boolean permitWithoutCalls;
   private final long minTimeNanos;
