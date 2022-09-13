@@ -148,6 +148,7 @@ public class CallCredentialsApplyingTest {
     RequestInfo info = infoCaptor.getValue();
     assertSame(transportAttrs, info.getTransportAttrs());
     assertSame(method, info.getMethodDescriptor());
+    assertSame(callOptions, info.getCallOptions());
     assertSame(AUTHORITY, info.getAuthority());
     assertSame(SecurityLevel.NONE, info.getSecurityLevel());
   }

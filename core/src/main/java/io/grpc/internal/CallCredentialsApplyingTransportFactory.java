@@ -128,6 +128,11 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
             }
 
             @Override
+            public CallOptions getCallOptions() {
+              return callOptions;
+            }
+
+            @Override
             public SecurityLevel getSecurityLevel() {
               return firstNonNull(
                   delegate.getAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL),
