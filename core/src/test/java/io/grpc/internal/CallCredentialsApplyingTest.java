@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -41,6 +42,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
@@ -265,7 +267,7 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void fail_inline() {
-    final Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
+    final Status error = Status.UNAVAILABLE.withDescription("channel not secure for creds");
     when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
     doAnswer(new Answer<Void>() {
         @Override
@@ -285,6 +287,38 @@ public class CallCredentialsApplyingTest {
         any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class),
         ArgumentMatchers.<ClientStreamTracer[]>any());
     assertSame(error, stream.getError());
+    transport.shutdownNow(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions, tracers)
+        instanceof FailingClientStream);
+    verify(mockTransport).shutdownNow(Status.UNAVAILABLE);
+  }
+
+  // If the creds return an error that is inappropriate to directly propagate from the control plane
+  // to the call, it should be converted to an INTERNAL error.
+  @Test
+  public void fail_inline_inappropriate_error() {
+    final Status error = Status.NOT_FOUND.withDescription("channel not secure for creds");
+    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        CallCredentials.MetadataApplier applier =
+            (CallCredentials.MetadataApplier) invocation.getArguments()[2];
+        applier.fail(error);
+        return null;
+      }
+    }).when(mockCreds).applyRequestMetadata(any(RequestInfo.class),
+        same(mockExecutor), any(CallCredentials.MetadataApplier.class));
+
+    FailingClientStream stream = (FailingClientStream) transport.newStream(
+        method, origHeaders, callOptions, tracers);
+
+    verify(mockTransport, never()).newStream(
+        any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class),
+        ArgumentMatchers.<ClientStreamTracer[]>any());
+    assertThat(stream.getError().getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(stream.getError().getDescription()).contains("Inappropriate");
+    assertThat(stream.getError().getCause()).isNull();
     transport.shutdownNow(Status.UNAVAILABLE);
     assertTrue(transport.newStream(method, origHeaders, callOptions, tracers)
         instanceof FailingClientStream);
@@ -406,7 +440,7 @@ public class CallCredentialsApplyingTest {
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
 
-    Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
+    Status error = Status.UNAVAILABLE.withDescription("channel not secure for creds");
     applierCaptor.getValue().fail(error);
 
     verify(mockTransport, never()).newStream(
