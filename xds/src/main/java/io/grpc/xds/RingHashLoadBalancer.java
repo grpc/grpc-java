@@ -248,7 +248,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       overallState = READY;
     } else if (numTransientFailure >= 2) {
       overallState = TRANSIENT_FAILURE;
-      startConnectionAttempt = true;
+      startConnectionAttempt = (numConnecting == 0);
     } else if (numConnecting > 0) {
       overallState = CONNECTING;
     } else if (numTransientFailure == 1 && subchannels.size() > 1) {
