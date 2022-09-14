@@ -18,11 +18,15 @@ package io.grpc.netty;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
+import java.util.logging.Logger;
 
 class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDecoder.Cumulator {
+  private static final Logger logger = Logger.getLogger(NettyAdaptiveCumulator.class.getName());
   private final int composeMinSize;
 
   NettyAdaptiveCumulator(int composeMinSize) {
@@ -60,6 +64,9 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
   public final ByteBuf cumulate(ByteBufAllocator alloc, ByteBuf cumulation, ByteBuf in) {
     if (!cumulation.isReadable()) {
       cumulation.release();
+      logger.info("-------------------------- Return As Is --------------------------");
+      printBufDebug("INPUT AS IS", in);
+      logger.info("------------------------------------------------------------------");
       return in;
     }
     CompositeByteBuf composite = null;
@@ -69,11 +76,29 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
         // Writer index must equal capacity if we are going to "write"
         // new components to the end
         if (composite.writerIndex() != composite.capacity()) {
+          logger.info("-------------------------- Adjust capacity --------------------------");
+          // printBufDebug("COMPOSITE ADJUST: INPUT", in);
+          printBufDebug("COMPOSITE ADJUST: PRE", composite);
           composite.capacity(composite.writerIndex());
+          printBufDebug("COMPOSITE ADJUST: RESULT", composite);
+          logger.info("----------------------------------------------------------------------");
         }
       } else {
+        logger.info("-------------------------- Allocate new composite --------------------------");
+        // printBufDebug("ALLOC NEW: INPUT", in);
+        logger.warning("************ instanceof: " + (cumulation instanceof CompositeByteBuf) + "************");
+        logger.warning("************ refCnt: " + (cumulation.refCnt()) + "************");
+        logger.warning("************ instanceof && refCnt: "
+            + (cumulation instanceof CompositeByteBuf && cumulation.refCnt() == 1) + " ************");
+        logger.warning("************ (instanceof) && refCnt: "
+            + ((cumulation instanceof CompositeByteBuf) && cumulation.refCnt() == 1) + " ************");
+        logger.warning("************ (instanceof) && (refCnt): "
+            + ((cumulation instanceof CompositeByteBuf) && (cumulation.refCnt() == 1)) + " ************");
+        printBufDebug("ALLOC NEW COMPOSITE: CUMULATION", cumulation);
         composite = alloc.compositeBuffer(Integer.MAX_VALUE)
             .addFlattenedComponents(true, cumulation);
+        printBufDebug("ALLOC NEW COMPOSITE: RESULT", composite);
+        logger.info("----------------------------------------------------------------------------");
       }
       addInput(alloc, composite, in);
       in = null;
@@ -93,7 +118,11 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
   @VisibleForTesting
   void addInput(ByteBufAllocator alloc, CompositeByteBuf composite, ByteBuf in) {
     if (shouldCompose(composite, in, composeMinSize)) {
+      logger.info("+++++++++++++++++++++ Composing new component +++++++++++++++++++++");
+      printBufDebug("COMPOSITE ADD COMPONENT: INPUT", in);
       composite.addFlattenedComponents(true, in);
+      printBufDebug("COMPOSITE ADD COMPONENT: RESULT", composite);
+      logger.info("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
     } else {
       // The total size of the new data and the last component are below the threshold. Merge them.
       mergeWithCompositeTail(alloc, composite, in);
@@ -133,7 +162,7 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
     int newBytes = in.readableBytes();
     int tailIndex = composite.numComponents() - 1;
     int tailStart = composite.toByteIndex(tailIndex);
-    int tailBytes = composite.capacity() - tailStart;
+    int tailBytes = composite.writerIndex() - tailStart;
     int totalBytes = newBytes + tailBytes;
 
     ByteBuf tail = composite.component(tailIndex);
@@ -141,9 +170,19 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
 
     try {
       if (tail.refCnt() == 1 && !tail.isReadOnly() && totalBytes <= tail.maxCapacity()) {
+        logger.info("========================= Extending Tail =========================");
+        printBufDebug("INPUT", in);
+        printBufDebug("COMPOSITE", composite);
+        printBufDebug("component()", composite.component(tailIndex));
+
+        ByteBuf ic = composite.internalComponent(tailIndex);
+        printBufDebug("internalComponent()", "IC", ic);
+        printBufDebug("IC.duplicate()", "IC_DUP", ic.duplicate());
+
         // Ideal case: the tail isn't shared, and can be expanded to the required capacity.
         // Take ownership of the tail.
         merged = tail.retain();
+
         /*
          * The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
          *
@@ -157,24 +196,52 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
          *   as pronounced because the capacity is doubled with each reallocation.
          */
         merged.writeBytes(in);
+        printBufDebug("MERGED", merged);
+
+        // Store readerIndex to avoid out of bounds writerIndex during component replacement.
+        int prevReader = composite.readerIndex();
+        // Remove the tail, reset writer index, add merged component.
+        composite.removeComponent(tailIndex);
+        composite.setIndex(0, tailStart);
+        composite.addFlattenedComponents(true, merged);
+        merged = null;
+        in.release();
+        in = null;
+        // Restore the reader.
+        composite.readerIndex(prevReader);
+
+        printBufDebug("COMPOSITE MERGE RESULT", composite);
+        logger.info("==================================================================\n\n");
       } else {
+        logger.info("^^^^^^^^^^^^^^^^^^^^^^^^^^ Reallocating new tail ^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+        printBufDebug("INPUT", in);
+        printBufDebug("COMPOSITE", composite);
+
         // The tail is shared, or not expandable. Replace it with a new buffer of desired capacity.
         merged = alloc.buffer(alloc.calculateNewCapacity(totalBytes, Integer.MAX_VALUE));
         merged.setBytes(0, composite, tailStart, tailBytes)
             .setBytes(tailBytes, in, in.readerIndex(), newBytes)
             .writerIndex(totalBytes);
+        printBufDebug("NEW MERGED", merged);
+
         in.readerIndex(in.writerIndex());
+
+        // Store readerIndex to avoid out of bounds writerIndex during component replacement.
+        int prevReader = composite.readerIndex();
+        // Remove the tail, reset writer index, add merged component.
+        composite.removeComponent(tailIndex);
+        composite.setIndex(0, tailStart);
+        composite.addFlattenedComponents(true, merged);
+        merged = null;
+        in.release();
+        in = null;
+        // Restore the reader.
+        composite.readerIndex(prevReader);
+
+        printBufDebug("COMPOSITE REALOC RESULT", composite);
+        logger.info("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
       }
-      // Store readerIndex to avoid out of bounds writerIndex during component replacement.
-      int prevReader = composite.readerIndex();
-      // Remove the tail, reset writer index, add merged component.
-      composite.removeComponent(tailIndex).setIndex(0, tailStart)
-          .addFlattenedComponents(true, merged);
-      merged = null;
-      in.release();
-      in = null;
-      // Restore the reader.
-      composite.readerIndex(prevReader);
+
     } finally {
       // Input buffer was merged with the tail.
       if (in != null) {
@@ -185,5 +252,31 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
         merged.release();
       }
     }
+  }
+
+  private static void printBufDebug(String title, ByteBuf buf) {
+    printBufDebug(title, title, buf);
+  }
+
+  private static void printBufDebug(String title, String prefix, ByteBuf buf) {
+    String msg = "$$$$$$$$$$$$$$$$$$$$ " + title + " $$$$$$$$$$$$$$$$$$$$";
+    int len = msg.length();
+    msg += "\n";
+    msg += ByteBufUtil.prettyHexDump(buf, 0, buf.readerIndex() + buf.readableBytes())  + "\n";
+    msg += prefix + " " + buf + " refCnt=" + buf.refCnt() + "\n";
+    // msg += prefix + " " + buf.getClass().getName() + "\n";
+    if (buf instanceof CompositeByteBuf) {
+      CompositeByteBuf composite = (CompositeByteBuf) buf;
+      msg += composite.allComponentTypes(prefix);
+    } else {
+      // msg +=  CompositeByteBuf.getBufTypes(prefix, buf);
+    }
+    msg += Strings.repeat("$", len) + "\n";
+    logger.info(msg);
+  }
+
+  private static String getIndexes(ByteBuf buf) {
+    return "rix=0x" + Integer.toHexString(buf.readerIndex())
+        + " wix=0x" + Integer.toHexString(buf.writerIndex());
   }
 }

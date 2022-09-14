@@ -30,7 +30,9 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Throwables;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -669,7 +671,17 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           } catch (Throwable t) {
             GrpcUtil.closeQuietly(producer);
             exceptionThrown(
-                Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
+                Status.CANCELLED
+                    .withCause(t)
+                    .withDescription(
+                        "Failed to read message: "
+                            + t
+                            + ".\n\n***** Exception Trace: *****\n"
+                            + Throwables.getStackTraceAsString(t)
+                            + "***** END Exception Trace *****\n\n"
+                            + "***** Thread Trace: *****\n"
+                            + Joiner.on("\n").join(Thread.currentThread().getStackTrace())
+                            + "\n***** END Thread Trace: *****\n\n"));
           }
         }
       }

@@ -264,6 +264,9 @@ class NettyClientHandler extends AbstractNettyHandler {
     this.authority = authority;
     this.attributes = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttributes).build();
+    setCumulator(ADAPTIVE_CUMULATOR);
+    // setCumulator(COMPOSITE_CUMULATOR);
+    // setCumulator(MERGE_CUMULATOR);
 
     // Set the frame listener on the decoder.
     decoder().frameListener(new FrameListener());
@@ -497,6 +500,12 @@ class NettyClientHandler extends AbstractNettyHandler {
   protected void onConnectionError(ChannelHandlerContext ctx,  boolean outbound, Throwable cause,
       Http2Exception http2Ex) {
     logger.log(Level.FINE, "Caught a connection error", cause);
+    if (http2Ex != null) {
+      logger.log(Level.WARNING, "#### http2 ex: " + http2Ex + " err:" + http2Ex.error() + " shut:"
+          + http2Ex.shutdownHint(), cause);
+    } else {
+      logger.log(Level.WARNING, "#### http2 ex: null", cause);
+    }
     lifecycleManager.notifyShutdown(Utils.statusFromThrowable(cause));
     // Parent class will shut down the Channel
     super.onConnectionError(ctx, outbound, cause, http2Ex);
@@ -875,7 +884,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     if (statusCode == null) {
       statusCode = status.getCode();
     }
-    String debugString = "";
+    String debugString = "statusFromH2Error() debugString: ";
     if (debugData != null && debugData.length > 0) {
       // If a debug message was provided, use it.
       debugString = ", debug data: " + new String(debugData, UTF_8);

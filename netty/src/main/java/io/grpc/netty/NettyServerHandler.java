@@ -280,6 +280,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       Attributes eagAttributes) {
     super(channelUnused, decoder, encoder, settings, new ServerChannelLogger(),
         autoFlowControl, null);
+    // setCumulator(ADAPTIVE_CUMULATOR);
 
     final MaxConnectionIdleManager maxConnectionIdleManager;
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {

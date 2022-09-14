@@ -51,7 +51,6 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
     super(decoder, encoder, initialSettings);
     this.channelUnused = channelUnused;
     this.negotiationLogger = negotiationLogger;
-    setCumulator(ADAPTIVE_CUMULATOR);
   }
 
   /**

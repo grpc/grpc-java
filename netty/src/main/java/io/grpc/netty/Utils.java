@@ -25,7 +25,9 @@ import static io.netty.channel.ChannelOption.SO_TIMEOUT;
 import static io.netty.util.CharsetUtil.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
@@ -286,7 +288,17 @@ class Utils {
       return Status.UNAVAILABLE.withDescription("unresolved address").withCause(t);
     }
     if (t instanceof Http2Exception) {
-      return Status.INTERNAL.withDescription("http2 exception").withCause(t);
+      return Status.INTERNAL
+          .withDescription(
+              "http2 exception: "
+                  + t
+                  + ".\n\n***** Exception Trace: *****\n"
+                  + Throwables.getStackTraceAsString(t)
+                  + "***** END Exception Trace *****\n\n"
+                  + "***** Thread Trace: *****\n"
+                  + Joiner.on("\n").join(Thread.currentThread().getStackTrace())
+                  + "\n***** END Thread Trace: *****\n\n")
+          .withCause(t);
     }
     return s;
   }
