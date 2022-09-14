@@ -51,9 +51,9 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
       = Logger.getLogger(GoogleAuthLibraryCallCredentials.class.getName());
   private static final JwtHelper jwtHelper
       = createJwtHelperOrNull(GoogleAuthLibraryCallCredentials.class.getClassLoader());
-  private static final Class<? extends Credentials> googleCredentialsClass
+  private static final Class<? extends Credentials> GOOGLE_CREDENTIALS_CLASS
       = loadGoogleCredentialsClass();
-  private static final Class<?> appEngineCredentialsClass
+  private static final Class<?> APP_ENGINE_CREDENTIALS_CLASS
       = loadAppEngineCredentials();
 
   private final boolean requirePrivacy;
@@ -73,12 +73,12 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
   GoogleAuthLibraryCallCredentials(Credentials creds, JwtHelper jwtHelper) {
     checkNotNull(creds, "creds");
     boolean requirePrivacy = false;
-    if (googleCredentialsClass != null) {
+    if (GOOGLE_CREDENTIALS_CLASS != null) {
       // All GoogleCredentials instances are bearer tokens and should only be used on private
       // channels. This catches all return values from GoogleCredentials.getApplicationDefault().
       // This should be checked before upgrading the Service Account to JWT, as JWT is also a bearer
       // token.
-      requirePrivacy = googleCredentialsClass.isInstance(creds);
+      requirePrivacy = GOOGLE_CREDENTIALS_CLASS.isInstance(creds);
     }
     if (jwtHelper != null) {
       creds = jwtHelper.tryServiceAccountToJwt(creds);
@@ -379,10 +379,10 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
   public boolean isSpecificExecutorRequired() {
     // Cache the value so we only need to try to load the class once
     if (requiresSpecificExecutor == null) {
-      if (appEngineCredentialsClass == null) {
+      if (APP_ENGINE_CREDENTIALS_CLASS == null) {
         requiresSpecificExecutor = Boolean.FALSE;
       } else {
-        requiresSpecificExecutor = appEngineCredentialsClass.isInstance(creds);
+        requiresSpecificExecutor = APP_ENGINE_CREDENTIALS_CLASS.isInstance(creds);
       }
     }
 

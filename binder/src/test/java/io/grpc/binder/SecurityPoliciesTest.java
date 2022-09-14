@@ -460,7 +460,7 @@ public final class SecurityPoliciesTest {
 
     policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
 
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
   }
 
   @Test

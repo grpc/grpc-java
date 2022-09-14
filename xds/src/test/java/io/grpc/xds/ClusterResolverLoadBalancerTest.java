@@ -78,7 +78,7 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildCo
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;

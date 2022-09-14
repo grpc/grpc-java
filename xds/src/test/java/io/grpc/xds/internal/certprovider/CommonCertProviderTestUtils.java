@@ -23,7 +23,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.TimeProvider;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.xds.internal.certprovider.FileWatcherCertificateProviderProvider.ScheduledExecutorServiceFactory;
-import io.grpc.xds.internal.sds.trust.CertificateUtils;
+import io.grpc.xds.internal.security.trust.CertificateUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;

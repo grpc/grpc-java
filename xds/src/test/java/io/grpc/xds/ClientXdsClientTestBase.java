@@ -91,7 +91,7 @@ import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;

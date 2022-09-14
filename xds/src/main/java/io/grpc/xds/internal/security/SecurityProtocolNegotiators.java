@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds.internal.security;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -48,13 +48,14 @@ import javax.annotation.Nullable;
  * context.
  */
 @VisibleForTesting
-public final class SdsProtocolNegotiators {
+public final class SecurityProtocolNegotiators {
 
   // Prevent instantiation.
-  private SdsProtocolNegotiators() {
+  private SecurityProtocolNegotiators() {
   }
 
-  private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
+  private static final Logger logger
+      = Logger.getLogger(SecurityProtocolNegotiators.class.getName());
 
   private static final AsciiString SCHEME = AsciiString.of("http");
 

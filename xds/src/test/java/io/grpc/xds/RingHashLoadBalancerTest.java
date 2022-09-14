@@ -310,7 +310,7 @@ public class RingHashLoadBalancerTest {
         ConnectivityStateInfo.forNonError(CONNECTING));
     inOrder.verify(helper)
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-    verifyConnection(1);
+    verifyConnection(0);
 
     // three in TRANSIENT_FAILURE, one in CONNECTING
     deliverSubchannelState(
@@ -320,7 +320,7 @@ public class RingHashLoadBalancerTest {
     inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper)
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-    verifyConnection(1);
+    verifyConnection(0);
 
     // three in TRANSIENT_FAILURE, one in READY
     deliverSubchannelState(
@@ -884,7 +884,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forNonError(CONNECTING));
     verify(helper, times(2)).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(3);
+    verifyConnection(2);
 
     // Picking subchannel triggers connection.
     PickSubchannelArgs args = new PickSubchannelArgsImpl(

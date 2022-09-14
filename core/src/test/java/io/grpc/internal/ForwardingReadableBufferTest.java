@@ -36,13 +36,10 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-/**
- * Tests for {@link ForwardingReadableBuffer}.
- */
+/** Tests for {@link ForwardingReadableBuffer}. */
 @RunWith(JUnit4.class)
 public class ForwardingReadableBufferTest {
-  @Rule
-  public final MockitoRule mocks = MockitoJUnit.rule();
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private ReadableBuffer delegate;
   private ForwardingReadableBuffer buffer;
@@ -55,10 +52,7 @@ public class ForwardingReadableBufferTest {
   @Test
   public void allMethodsForwarded() throws Exception {
     ForwardingTestUtil.testMethodsForwarded(
-        ReadableBuffer.class,
-        delegate,
-        buffer,
-        Collections.<Method>emptyList());
+        ReadableBuffer.class, delegate, buffer, Collections.<Method>emptyList());
   }
 
   @Test
@@ -99,7 +93,7 @@ public class ForwardingReadableBufferTest {
 
   @Test
   public void readBytes_overload1() {
-    ByteBuffer dest = mock(ByteBuffer.class);
+    ByteBuffer dest = ByteBuffer.allocate(0);
     buffer.readBytes(dest);
 
     verify(delegate).readBytes(dest);

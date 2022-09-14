@@ -2398,10 +2398,10 @@ public abstract class AbstractInteropTest {
     if (isServer) {
       assertEquals(
           requests.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_SERVER_REQUEST_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC));
       assertEquals(
           responses.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC));
       assertEquals(
           uncompressedRequestsSize,
           record.getMetricAsLongOrFail(
@@ -2410,18 +2410,18 @@ public abstract class AbstractInteropTest {
           uncompressedResponsesSize,
           record.getMetricAsLongOrFail(
               DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_SERVER_LATENCY));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY));
       // It's impossible to get the expected wire sizes because it may be compressed, so we just
       // check if they are recorded.
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_REQUEST_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC));
     } else {
       assertEquals(
           requests.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC));
       assertEquals(
           responses.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC));
       assertEquals(
           uncompressedRequestsSize,
           record.getMetricAsLongOrFail(
@@ -2430,11 +2430,11 @@ public abstract class AbstractInteropTest {
           uncompressedResponsesSize,
           record.getMetricAsLongOrFail(
               DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY));
       // It's impossible to get the expected wire sizes because it may be compressed, so we just
       // check if they are recorded.
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC));
     }
   }
 

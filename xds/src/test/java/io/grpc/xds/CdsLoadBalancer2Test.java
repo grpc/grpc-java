@@ -57,7 +57,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;

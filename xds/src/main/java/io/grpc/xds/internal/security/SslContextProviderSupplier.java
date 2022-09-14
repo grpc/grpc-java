@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds.internal.security;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -29,7 +29,7 @@ import java.util.Objects;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
- * and communicate it to the consumer i.e. {@link SdsProtocolNegotiators}
+ * and communicate it to the consumer i.e. {@link SecurityProtocolNegotiators}
  * to lazily evaluate the {@link SslContextProvider}. The supplier prevents credentials leakage in
  * cases where the user is not using xDS credentials but the client/server contains a non-default
  * {@link BaseTlsContext}.

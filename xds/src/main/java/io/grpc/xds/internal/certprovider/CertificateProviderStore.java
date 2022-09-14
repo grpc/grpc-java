@@ -18,7 +18,7 @@ package io.grpc.xds.internal.certprovider;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.xds.internal.certprovider.CertificateProvider.Watcher;
-import io.grpc.xds.internal.sds.ReferenceCountingMap;
+import io.grpc.xds.internal.security.ReferenceCountingMap;
 
 import java.io.Closeable;
 import java.util.Objects;

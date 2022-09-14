@@ -201,6 +201,7 @@ public class OkHttpServerTransportTest {
     verifyHttpError(
         1, 400, Status.Code.INTERNAL, "Multiple host headers disallowed. RFC7230 section 5.4");
 
+    pingPong();
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
     verifyGracefulShutdown(1);

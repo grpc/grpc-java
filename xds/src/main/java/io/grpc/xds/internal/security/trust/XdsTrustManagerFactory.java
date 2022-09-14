@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds.trust;
+package io.grpc.xds.internal.security.trust;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import io.envoyproxy.envoy.config.core.v3.DataSource.SpecifierCase;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
-import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.io.File;
 import java.io.IOException;
@@ -42,16 +41,15 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
- * Factory class used by providers of {@link TlsContextManagerImpl} to provide a
- * {@link SdsX509TrustManager} for trust and SAN checks.
+ * Factory class used to provide a {@link XdsX509TrustManager} for trust and SAN checks.
  */
-public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
+public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
-  private static final Logger logger = Logger.getLogger(SdsTrustManagerFactory.class.getName());
-  private SdsX509TrustManager sdsX509TrustManager;
+  private static final Logger logger = Logger.getLogger(XdsTrustManagerFactory.class.getName());
+  private XdsX509TrustManager xdsX509TrustManager;
 
   /** Constructor constructs from a {@link CertificateValidationContext}. */
-  public SdsTrustManagerFactory(CertificateValidationContext certificateValidationContext)
+  public XdsTrustManagerFactory(CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException {
     this(
         getTrustedCaFromCertContext(certificateValidationContext),
@@ -59,13 +57,13 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
         false);
   }
 
-  public SdsTrustManagerFactory(
+  public XdsTrustManagerFactory(
           X509Certificate[] certs, CertificateValidationContext staticCertificateValidationContext)
           throws CertStoreException {
     this(certs, staticCertificateValidationContext, true);
   }
 
-  private SdsTrustManagerFactory(
+  private XdsTrustManagerFactory(
       X509Certificate[] certs,
       CertificateValidationContext certificateValidationContext,
       boolean validationContextIsStatic)
@@ -75,7 +73,7 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
           certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
           "only static certificateValidationContext expected");
     }
-    sdsX509TrustManager = createSdsX509TrustManager(certs, certificateValidationContext);
+    xdsX509TrustManager = createSdsX509TrustManager(certs, certificateValidationContext);
   }
 
   private static X509Certificate[] getTrustedCaFromCertContext(
@@ -100,7 +98,7 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   }
 
   @VisibleForTesting
-  static SdsX509TrustManager createSdsX509TrustManager(
+  static XdsX509TrustManager createSdsX509TrustManager(
       X509Certificate[] certs, CertificateValidationContext certContext) throws CertStoreException {
     TrustManagerFactory tmf = null;
     try {
@@ -133,7 +131,7 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
     if (myDelegate == null) {
       throw new CertStoreException("Native X509 TrustManager not found.");
     }
-    return new SdsX509TrustManager(certContext, myDelegate);
+    return new XdsX509TrustManager(certContext, myDelegate);
   }
 
   @Override
@@ -148,6 +146,6 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
   @Override
   protected TrustManager[] engineGetTrustManagers() {
-    return new TrustManager[] {sdsX509TrustManager};
+    return new TrustManager[] {xdsX509TrustManager};
   }
 }
