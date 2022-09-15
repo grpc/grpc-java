@@ -96,7 +96,7 @@ final class OkHttpServerTransport implements ServerTransport,
   private Attributes attributes;
   private KeepAliveManager keepAliveManager;
   private MaxConnectionIdleManager maxConnectionIdleManager;
-  private KeepAliveEnforcer keepAliveEnforcer;
+  private final KeepAliveEnforcer keepAliveEnforcer;
 
   private final Object lock = new Object();
   @GuardedBy("lock")
