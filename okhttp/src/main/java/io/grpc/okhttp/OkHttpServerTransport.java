@@ -139,6 +139,8 @@ final class OkHttpServerTransport implements ServerTransport,
     logId = InternalLogId.allocate(getClass(), bareSocket.getRemoteSocketAddress().toString());
     transportExecutor = config.transportExecutorPool.getObject();
     scheduledExecutorService = config.scheduledExecutorServicePool.getObject();
+    keepAliveEnforcer = new KeepAliveEnforcer(config.permitKeepAliveWithoutCalls,
+        config.permitKeepAliveTimeInNanos, TimeUnit.NANOSECONDS);
   }
 
   public void start(ServerTransportListener listener) {
@@ -159,12 +161,16 @@ final class OkHttpServerTransport implements ServerTransport,
       int maxQueuedControlFrames = 10000;
       AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this, maxQueuedControlFrames);
       asyncSink.becomeConnected(Okio.sink(socket), socket);
-      this.keepAliveEnforcer = new KeepAliveEnforcer(
-          config.permitKeepAliveWithoutCalls, config.permitKeepAliveTimeInNanos,
-          TimeUnit.NANOSECONDS);
       FrameWriter rawFrameWriter = asyncSink.limitControlFramesWriter(
           variant.newWriter(Okio.buffer(asyncSink), false));
       FrameWriter writeMonitoringFrameWriter = new ForwardingFrameWriter(rawFrameWriter) {
+        @Override
+        public void synReply(boolean outFinished, int streamId, List<Header> headerBlock)
+            throws IOException {
+          keepAliveEnforcer.resetCounters();
+          super.synReply(outFinished, streamId, headerBlock);
+        }
+
         @Override
         public void headers(int streamId, List<Header> headerBlock) throws IOException {
           keepAliveEnforcer.resetCounters();
@@ -401,11 +407,9 @@ final class OkHttpServerTransport implements ServerTransport,
     synchronized (lock) {
       streams.remove(streamId);
       if (streams.isEmpty()) {
+        keepAliveEnforcer.onTransportIdle();
         if (maxConnectionIdleManager != null) {
           maxConnectionIdleManager.onTransportIdle();
-        }
-        if (keepAliveEnforcer != null) {
-          keepAliveEnforcer.onTransportIdle();
         }
       }
       if (gracefulShutdown && streams.isEmpty()) {
@@ -743,11 +747,9 @@ final class OkHttpServerTransport implements ServerTransport,
             statsTraceCtx,
             tracer);
         if (streams.isEmpty()) {
+          keepAliveEnforcer.onTransportActive();
           if (maxConnectionIdleManager != null) {
             maxConnectionIdleManager.onTransportActive();
-          }
-          if (keepAliveEnforcer != null) {
-            keepAliveEnforcer.onTransportActive();
           }
         }
         streams.put(streamId, stream);
@@ -1012,11 +1014,9 @@ final class OkHttpServerTransport implements ServerTransport,
         Http2ErrorStreamState stream =
             new Http2ErrorStreamState(streamId, lock, outboundFlow, config.flowControlWindow);
         if (streams.isEmpty()) {
+          keepAliveEnforcer.onTransportActive();
           if (maxConnectionIdleManager != null) {
             maxConnectionIdleManager.onTransportActive();
-          }
-          if (keepAliveEnforcer != null) {
-            keepAliveEnforcer.onTransportActive();
           }
         }
         streams.put(streamId, stream);
