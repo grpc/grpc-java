@@ -496,7 +496,8 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
-   * The success rate algorithm does not apply if enough addresses have the required volume.
+   * The success rate algorithm does not apply if we don't have enough addresses that have the
+   * required volume.
    */
   @Test
   public void successRateOneOutlier_notEnoughAddressesWithVolume() {
@@ -504,13 +505,17 @@ public class OutlierDetectionLoadBalancerTest {
         .setMaxEjectionPercent(50)
         .setSuccessRateEjection(
             new SuccessRateEjection.Builder()
-                .setMinimumHosts(6) // We don't have this many hosts...
-                .setRequestVolume(10).build())
+                .setMinimumHosts(5)
+                .setRequestVolume(20).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
     loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+    generateLoad(
+        ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
+        // subchannel2 has only 19 calls which results in success rate not triggering.
+        ImmutableMap.of(subchannel2, 19),
+        7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -679,6 +684,35 @@ public class OutlierDetectionLoadBalancerTest {
     forwardTime(config);
 
     // We should see no ejections.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
+   * The failure percentage algorithm does not apply if we don't have enough addresses that have the
+   * required volume.
+   */
+  @Test
+  public void failurePercentageOneOutlier_notEnoughAddressesWithVolume() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(5)
+                .setRequestVolume(20).build())
+        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+
+    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(
+        ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
+        // subchannel2 has only 19 calls which results in failure percentage not triggering.
+        ImmutableMap.of(subchannel2, 19),
+        7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // No subchannels should have been ejected.
     assertEjectedSubchannels(ImmutableSet.of());
   }
 
