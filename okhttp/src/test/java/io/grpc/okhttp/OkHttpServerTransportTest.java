@@ -41,6 +41,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
@@ -122,7 +123,9 @@ public class OkHttpServerTransportTest {
         }
       })
       .flowControlWindow(INITIAL_WINDOW_SIZE)
-      .maxConnectionIdle(MAX_CONNECTION_IDLE, TimeUnit.NANOSECONDS);
+      .maxConnectionIdle(MAX_CONNECTION_IDLE, TimeUnit.NANOSECONDS)
+      .permitKeepAliveWithoutCalls(true)
+      .permitKeepAliveTime(0, TimeUnit.SECONDS);
 
   @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
@@ -1052,6 +1055,101 @@ public class OkHttpServerTransportTest {
     assertThat(stats.data.localFlowControlWindow).isEqualTo(66535);
     assertThat(stats.local).isEqualTo(new InetSocketAddress("127.0.0.1", 4000));
     assertThat(stats.remote).isEqualTo(new InetSocketAddress("127.0.0.2", 5000));
+  }
+
+  @Test
+  public void keepAliveEnforcer_enforcesPings() throws Exception {
+    serverBuilder.permitKeepAliveTime(1, TimeUnit.HOURS)
+            .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES; i++) {
+      pingPong();
+    }
+    pingPongId++;
+    clientFrameWriter.ping(false, pingPongId, 0);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).goAway(0, ErrorCode.ENHANCE_YOUR_CALM,
+        ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII));
+  }
+
+  @Test
+  public void keepAliveEnforcer_sendingDataResetsCounters() throws Exception {
+    serverBuilder.permitKeepAliveTime(1, TimeUnit.HOURS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything")));
+    Buffer requestMessageFrame = createMessageFrame("Hello server");
+    clientFrameWriter.data(false, 1, requestMessageFrame, (int) requestMessageFrame.size());
+    pingPong();
+    MockStreamListener streamListener = mockTransportListener.newStreams.pop();
+
+    streamListener.stream.request(1);
+    pingPong();
+    assertThat(streamListener.messages.pop()).isEqualTo("Hello server");
+
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"));
+    streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+    streamListener.stream.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+
+    for (int i = 0; i < 10; i++) {
+      assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+      pingPong();
+      streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+      streamListener.stream.flush();
+    }
+  }
+
+  @Test
+  public void keepAliveEnforcer_initialIdle() throws Exception {
+    serverBuilder.permitKeepAliveTime(0, TimeUnit.SECONDS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES; i++) {
+      pingPong();
+    }
+    pingPongId++;
+    clientFrameWriter.ping(false, pingPongId, 0);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).goAway(0, ErrorCode.ENHANCE_YOUR_CALM,
+        ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII));
+  }
+
+  @Test
+  public void keepAliveEnforcer_noticesActive() throws Exception {
+    serverBuilder.permitKeepAliveTime(0, TimeUnit.SECONDS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything")));
+    for (int i = 0; i < 10; i++) {
+      pingPong();
+    }
+    verify(clientFramesRead, never()).goAway(anyInt(), eq(ErrorCode.ENHANCE_YOUR_CALM),
+        eq(ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII)));
   }
 
   private void initTransport() throws Exception {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.netty;
+package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 

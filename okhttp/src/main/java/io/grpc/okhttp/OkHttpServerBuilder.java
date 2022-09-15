@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChoiceServerCredentials;
 import io.grpc.ExperimentalApi;
@@ -117,6 +118,8 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   int maxInboundMetadataSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
   long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
+  boolean permitKeepAliveWithoutCalls;
+  long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
 
   @VisibleForTesting
   OkHttpServerBuilder(
@@ -220,6 +223,41 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     Preconditions.checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
     keepAliveTimeoutNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutNanos = KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutNanos);
+    return this;
+  }
+
+  /**
+   * Specify the most aggressive keep-alive time clients are permitted to configure. The server will
+   * try to detect clients exceeding this rate and when detected will forcefully close the
+   * connection. The default is 5 minutes.
+   *
+   * <p>Even though a default is defined that allows some keep-alives, clients must not use
+   * keep-alive without approval from the service owner. Otherwise, they may experience failures in
+   * the future if the service becomes more restrictive. When unthrottled, keep-alives can cause a
+   * significant amount of traffic and CPU usage, so clients and servers should be conservative in
+   * what they use and accept.
+   *
+   * @see #permitKeepAliveWithoutCalls(boolean)
+   */
+  @CanIgnoreReturnValue
+  @Override
+  public OkHttpServerBuilder permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative: %s",
+        keepAliveTime);
+    permitKeepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
+    return this;
+  }
+
+  /**
+   * Sets whether to allow clients to send keep-alive HTTP/2 PINGs even if there are no outstanding
+   * RPCs on the connection. Defaults to {@code false}.
+   *
+   * @see #permitKeepAliveTime(long, TimeUnit)
+   */
+  @CanIgnoreReturnValue
+  @Override
+  public OkHttpServerBuilder permitKeepAliveWithoutCalls(boolean permit) {
+    permitKeepAliveWithoutCalls = permit;
     return this;
   }
 
