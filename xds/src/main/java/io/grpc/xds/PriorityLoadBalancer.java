@@ -58,7 +58,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
 
   // Includes all active and deactivated children. Mutable. New entries are only added from priority
-  // 0 up to the selected priority. An entry is only deleted 15 minutes after its deactivation.
+  // 0 up to the selected priority. An entry is only deleted 15 minutes after the its deactivation.
   private final Map<String, ChildLbState> children = new HashMap<>();
 
   // Following fields are only null initially.
@@ -70,8 +70,6 @@ final class PriorityLoadBalancer extends LoadBalancer {
   @Nullable private String currentPriority;
   private ConnectivityState currentConnectivityState;
   private SubchannelPicker currentPicker;
-  // Set to true if currently in the process of handling resolved addresses.
-  private boolean handlingResolvedAddresses;
 
   PriorityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -84,15 +82,6 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    try {
-      handlingResolvedAddresses = true;
-      handleResolvedAddressesInternal(resolvedAddresses);
-    } finally {
-      handlingResolvedAddresses = false;
-    }
-  }
-
-  public void handleResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
     PriorityLbConfig config = (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -308,34 +297,32 @@ final class PriorityLoadBalancer extends LoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
-        if (!children.containsKey(priority)) {
-          return;
-        }
-        connectivityState = newState;
-        picker = newPicker;
-
-        if (deletionTimer != null && deletionTimer.isPending()) {
-          return;
-        }
-        if (newState.equals(CONNECTING)) {
-          if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
-            failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
-                executor);
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (!children.containsKey(priority)) {
+              return;
+            }
+            connectivityState = newState;
+            picker = newPicker;
+            if (deletionTimer != null && deletionTimer.isPending()) {
+              return;
+            }
+            if (newState.equals(CONNECTING) ) {
+              if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
+                failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
+                    executor);
+              }
+            } else if (newState.equals(READY) || newState.equals(IDLE)) {
+              seenReadyOrIdleSinceTransientFailure = true;
+              failOverTimer.cancel();
+            } else if (newState.equals(TRANSIENT_FAILURE)) {
+              seenReadyOrIdleSinceTransientFailure = false;
+              failOverTimer.cancel();
+            }
+            tryNextPriority();
           }
-        } else if (newState.equals(READY) || newState.equals(IDLE)) {
-          seenReadyOrIdleSinceTransientFailure = true;
-          failOverTimer.cancel();
-        } else if (newState.equals(TRANSIENT_FAILURE)) {
-          seenReadyOrIdleSinceTransientFailure = false;
-          failOverTimer.cancel();
-        }
-
-        // If we are currently handling newly resolved addresses, let's not try to reconfigure as
-        // the address handling process will take care of that to provide an atomic config update.
-        if (handlingResolvedAddresses) {
-          return;
-        }
-        tryNextPriority();
+        });
       }
 
       @Override
