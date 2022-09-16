@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsClient.ResourceWatcher;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -36,6 +35,7 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
+import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsLogger.XdsLogLevel;

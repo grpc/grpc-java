@@ -65,12 +65,9 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
   private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
-  private static XdsListenerResource instance;
+  private static final XdsListenerResource instance = new XdsListenerResource();
 
   public static XdsListenerResource getInstance() {
-    if (instance == null) {
-      instance = new XdsListenerResource();
-    }
     return instance;
   }
 

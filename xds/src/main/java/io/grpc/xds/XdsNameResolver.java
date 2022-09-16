@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
-import static io.grpc.xds.XdsClient.ResourceWatcher;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -64,6 +63,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;

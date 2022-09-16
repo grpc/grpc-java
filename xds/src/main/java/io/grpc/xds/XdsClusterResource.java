@@ -61,12 +61,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
       "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
 
-  private static XdsClusterResource instance;
+  private static final XdsClusterResource instance = new XdsClusterResource();
 
   public static XdsClusterResource getInstance() {
-    if (instance == null) {
-      instance = new XdsClusterResource();
-    }
     return instance;
   }
 

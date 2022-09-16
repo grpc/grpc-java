@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsClient.ResourceWatcher;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -53,6 +52,7 @@ import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
+import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;

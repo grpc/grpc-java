@@ -153,7 +153,7 @@ final class AbstractXdsClient {
    * Updates the resource subscription for the given resource type.
    */
   // Must be synchronized.
-  void adjustResourceSubscription(XdsResourceType<? extends ResourceUpdate> resourceType) {
+  void adjustResourceSubscription(XdsResourceType<?> resourceType) {
     if (isInBackoff()) {
       return;
     }
@@ -172,8 +172,7 @@ final class AbstractXdsClient {
    * and sends an ACK request to the management server.
    */
   // Must be synchronized.
-  <T extends ResourceUpdate> void ackResponse(XdsResourceType<T> xdsResourceType,
-                                              String versionInfo, String nonce) {
+  void ackResponse(XdsResourceType<?> xdsResourceType, String versionInfo, String nonce) {
     ResourceType type = xdsResourceType.typeName();
     versions.put(type, versionInfo);
     logger.log(XdsLogLevel.INFO, "Sending ACK for {0} update, nonce: {1}, current version: {2}",
@@ -190,8 +189,7 @@ final class AbstractXdsClient {
    * accepted version) to the management server.
    */
   // Must be synchronized.
-  <T extends ResourceUpdate> void nackResponse(XdsResourceType<T> xdsResourceType, String nonce,
-                                               String errorDetail) {
+  void nackResponse(XdsResourceType<?> xdsResourceType, String nonce, String errorDetail) {
     ResourceType type = xdsResourceType.typeName();
     String versionInfo = versions.getOrDefault(type, "");
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",

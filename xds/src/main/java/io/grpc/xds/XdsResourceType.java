@@ -91,18 +91,18 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   abstract ResourceType dependentResource();
 
   static class Args {
-    ServerInfo serverInfo;
-    String versionInfo;
-    String nonce;
-    Bootstrapper.BootstrapInfo bootstrapInfo;
-    FilterRegistry filterRegistry;
-    LoadBalancerRegistry loadBalancerRegistry;
-    TlsContextManager tlsContextManager;
+    final ServerInfo serverInfo;
+    final String versionInfo;
+    final String nonce;
+    final Bootstrapper.BootstrapInfo bootstrapInfo;
+    final FilterRegistry filterRegistry;
+    final LoadBalancerRegistry loadBalancerRegistry;
+    final TlsContextManager tlsContextManager;
     // Management server is required to always send newly requested resources, even if they
     // may have been sent previously (proactively). Thus, client does not need to cache
     // unrequested resources.
     // Only resources in the set needs to be parsed. Null means parse everything.
-    @Nullable Set<String> subscribedResources;
+    final @Nullable Set<String> subscribedResources;
 
     public Args(ServerInfo serverInfo, String versionInfo, String nonce,
                 Bootstrapper.BootstrapInfo bootstrapInfo,

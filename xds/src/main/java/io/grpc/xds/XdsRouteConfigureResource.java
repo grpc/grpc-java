@@ -64,7 +64,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-
 import javax.annotation.Nullable;
 
 class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
@@ -80,12 +79,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           Status.Code.CANCELLED, Status.Code.DEADLINE_EXCEEDED, Status.Code.INTERNAL,
           Status.Code.RESOURCE_EXHAUSTED, Status.Code.UNAVAILABLE));
 
-  private static XdsRouteConfigureResource instance;
+  private static final XdsRouteConfigureResource instance = new XdsRouteConfigureResource();
 
   public static XdsRouteConfigureResource getInstance() {
-    if (instance == null) {
-      instance = new XdsRouteConfigureResource();
-    }
     return instance;
   }
 

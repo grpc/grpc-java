@@ -50,12 +50,9 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
-  private static XdsEndpointResource instance;
+  private static final XdsEndpointResource instance = new XdsEndpointResource();
 
   public static XdsEndpointResource getInstance() {
-    if (instance == null) {
-      instance = new XdsEndpointResource();
-    }
     return instance;
   }
 
