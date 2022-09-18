@@ -20,23 +20,23 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProvider;
 import io.grpc.xds.internal.security.ReferenceCountingMap.ValueFactory;
+import io.grpc.xds.internal.security.certprovider.CertProviderClientSslContextProviderFactory;
 
 /** Factory to create client-side SslContextProvider from UpstreamTlsContext. */
 final class ClientSslContextProviderFactory
     implements ValueFactory<UpstreamTlsContext, SslContextProvider> {
 
   private BootstrapInfo bootstrapInfo;
-  private final CertProviderClientSslContextProvider.Factory
+  private final CertProviderClientSslContextProviderFactory
       certProviderClientSslContextProviderFactory;
 
   ClientSslContextProviderFactory(BootstrapInfo bootstrapInfo) {
-    this(bootstrapInfo, CertProviderClientSslContextProvider.Factory.getInstance());
+    this(bootstrapInfo, CertProviderClientSslContextProviderFactory.getInstance());
   }
 
   ClientSslContextProviderFactory(
-      BootstrapInfo bootstrapInfo, CertProviderClientSslContextProvider.Factory factory) {
+      BootstrapInfo bootstrapInfo, CertProviderClientSslContextProviderFactory factory) {
     this.bootstrapInfo = bootstrapInfo;
     this.certProviderClientSslContextProviderFactory = factory;
   }

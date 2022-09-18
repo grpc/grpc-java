@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.Internal;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
@@ -34,6 +35,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 /** Base class for dynamic {@link SslContextProvider}s. */
+@Internal
 public abstract class DynamicSslContextProvider extends SslContextProvider {
 
   protected final List<Callback> pendingCallbacks = new ArrayList<>();

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -22,7 +22,7 @@ import com.google.common.io.CharStreams;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.TimeProvider;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.xds.internal.certprovider.FileWatcherCertificateProviderProvider.ScheduledExecutorServiceFactory;
+import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider.ScheduledExecutorServiceFactory;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;

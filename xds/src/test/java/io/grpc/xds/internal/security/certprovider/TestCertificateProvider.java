@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
 public class TestCertificateProvider extends CertificateProvider {
   Object config;

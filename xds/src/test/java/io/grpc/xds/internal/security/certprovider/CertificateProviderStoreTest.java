@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;

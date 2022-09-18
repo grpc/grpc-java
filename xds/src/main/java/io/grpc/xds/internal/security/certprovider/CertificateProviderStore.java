@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.xds.internal.certprovider.CertificateProvider.Watcher;
 import io.grpc.xds.internal.security.ReferenceCountingMap;
-
+import io.grpc.xds.internal.security.certprovider.CertificateProvider.Watcher;
 import java.io.Closeable;
 import java.util.Objects;
 import java.util.logging.Level;

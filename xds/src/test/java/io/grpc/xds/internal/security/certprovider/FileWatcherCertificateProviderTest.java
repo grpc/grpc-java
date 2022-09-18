@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
@@ -34,8 +34,8 @@ import static org.mockito.Mockito.verify;
 
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
-import io.grpc.xds.internal.certprovider.CertificateProvider.DistributorWatcher;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.certprovider.CertificateProvider.DistributorWatcher;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
