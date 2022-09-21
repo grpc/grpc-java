@@ -154,6 +154,12 @@ class NettyAdaptiveCumulator implements Cumulator {
         // Ideal case: the tail isn't shared, and can be expanded to the required capacity.
         // Take ownership of the tail.
         newTail = tail.retain();
+
+        // TODO(sergiitk): remove when netty issue resolved.
+        // Correct the indexes.
+        ByteBuf sliceDuplicate = composite.internalComponent(tailComponentIndex).duplicate();
+        newTail.setIndex(sliceDuplicate.readerIndex(), sliceDuplicate.writerIndex());
+
         /*
          * The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
          *

@@ -585,4 +585,57 @@ public class NettyAdaptiveCumulatorTest {
       }
     }
   }
+
+  /**
+   * Miscellaneous tests for {@link NettyAdaptiveCumulator#mergeWithCompositeTail} that don't
+   * fit into {@link MergeWithCompositeTailTests}, and require custom-crafted scenarios.
+   */
+  @RunWith(JUnit4.class)
+  public static class MergeWithCompositeTailMiscTests {
+    private final ByteBufAllocator alloc = new PooledByteBufAllocator();
+
+    /**
+     * Test the issue with {@link CompositeByteBuf#component(int)} returning a ByteBuf with
+     * the indexes out-of-sync with {@code CompositeByteBuf.Component} offsets.
+     */
+    @Test
+    public void mergeWithCompositeTail_outOfSyncComposite() {
+      NettyAdaptiveCumulator cumulator = new NettyAdaptiveCumulator(1024);
+
+      // Create underlying buffer spacious enough for the test data.
+      ByteBuf buf = alloc.buffer(32).writeBytes("---01234".getBytes(US_ASCII));
+
+      // Start with a regular cumulation and add the buf as the only component.
+      CompositeByteBuf composite1 = alloc.compositeBuffer(8).addFlattenedComponents(true, buf);
+      // Read composite1 buf to the beginning of the numbers.
+      assertThat(composite1.readCharSequence(3, US_ASCII).toString()).isEqualTo("---");
+
+      // Wrap composite1 into another cumulation. This is similar to
+      // what NettyAdaptiveCumulator.cumulate() does in the case the cumulation has refCnt != 1.
+      CompositeByteBuf composite2 =
+          alloc.compositeBuffer(8).addFlattenedComponents(true, composite1);
+      assertThat(composite2.toString(US_ASCII)).isEqualTo("01234");
+
+      // The previous operation does not adjust the read indexes of the underlying buffers,
+      // only the internal Component offsets. When the cumulator attempts to append the input to
+      // the tail buffer, it extracts it from the cumulation, writes to it, and then adds it back.
+      // Because the readerIndex on the tail buffer is not adjusted during the read operation
+      // on the CompositeByteBuf, adding the tail back results in the discarded bytes of the tail
+      // to be added back to the cumulator as if they were never read.
+      //
+      // If the reader index of the tail is not manually corrected, the resulting
+      // cumulation will contain the discarded part of the tail: "---".
+      // If it's corrected, it will only contain the numbers.
+      CompositeByteBuf cumulation = (CompositeByteBuf) cumulator.cumulate(alloc, composite2,
+          ByteBufUtil.writeAscii(alloc, "56789"));
+      assertThat(cumulation.toString(US_ASCII)).isEqualTo("0123456789");
+
+      // Correctness check: we still have a single component, and this component is still the
+      // original underlying buffer.
+      assertThat(cumulation.numComponents()).isEqualTo(1);
+      // Replace '2' with '*', and '8' with '$'.
+      buf.setByte(5, '*').setByte(11, '$');
+      assertThat(cumulation.toString(US_ASCII)).isEqualTo("01*34567$9");
+    }
+  }
 }
