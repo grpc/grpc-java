@@ -21,10 +21,21 @@ import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
+import io.netty.handler.codec.ByteToMessageDecoder.Cumulator;
 
-class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDecoder.Cumulator {
+class NettyAdaptiveCumulator implements Cumulator {
   private final int composeMinSize;
 
+  /**
+   * "Adaptive" cumulator: cumulate {@link ByteBuf}s by dynamically switching between merge and
+   * compose strategies.
+   *
+   * @param composeMinSize Determines the minimal size of the buffer that should be composed (added
+   *                       as a new component of the {@link CompositeByteBuf}). If the total size
+   *                       of the last component (tail) and the incoming buffer is below this value,
+   *                       the incoming buffer is appended to the tail, and the new component is not
+   *                       added.
+   */
   NettyAdaptiveCumulator(int composeMinSize) {
     Preconditions.checkArgument(composeMinSize >= 0, "composeMinSize must be non-negative");
     this.composeMinSize = composeMinSize;
@@ -106,8 +117,10 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
     if (composite.numComponents() == 0) {
       return true;
     }
-    int tailSize = composite.capacity() - composite.toByteIndex(componentCount - 1);
-    return tailSize + in.readableBytes() >= composeMinSize;
+    int inputSize = in.readableBytes();
+    int tailStart = composite.toByteIndex(componentCount - 1);
+    int tailSize = composite.writerIndex() - tailStart;
+    return tailSize + inputSize >= composeMinSize;
   }
 
   /**
@@ -127,23 +140,20 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
    * is verified in unit tests for this method.
    */
   @VisibleForTesting
-  static void mergeWithCompositeTail(ByteBufAllocator alloc, CompositeByteBuf composite,
-      ByteBuf in) {
-
-    int newBytes = in.readableBytes();
-    int tailIndex = composite.numComponents() - 1;
-    int tailStart = composite.toByteIndex(tailIndex);
-    int tailBytes = composite.capacity() - tailStart;
-    int totalBytes = newBytes + tailBytes;
-
-    ByteBuf tail = composite.component(tailIndex);
-    ByteBuf merged = null;
-
+  static void mergeWithCompositeTail(
+      ByteBufAllocator alloc, CompositeByteBuf composite, ByteBuf in) {
+    int inputSize = in.readableBytes();
+    int tailComponentIndex = composite.numComponents() - 1;
+    int tailStart = composite.toByteIndex(tailComponentIndex);
+    int tailSize = composite.writerIndex() - tailStart;
+    int newTailSize = inputSize + tailSize;
+    ByteBuf tail = composite.component(tailComponentIndex);
+    ByteBuf newTail = null;
     try {
-      if (tail.refCnt() == 1 && !tail.isReadOnly() && totalBytes <= tail.maxCapacity()) {
+      if (tail.refCnt() == 1 && !tail.isReadOnly() && newTailSize <= tail.maxCapacity()) {
         // Ideal case: the tail isn't shared, and can be expanded to the required capacity.
         // Take ownership of the tail.
-        merged = tail.retain();
+        newTail = tail.retain();
         /*
          * The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
          *
@@ -156,33 +166,37 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
          *   Unwrapping buffers is unsafe, and potential benefit of fast writes may not be
          *   as pronounced because the capacity is doubled with each reallocation.
          */
-        merged.writeBytes(in);
+        newTail.writeBytes(in);
       } else {
         // The tail is shared, or not expandable. Replace it with a new buffer of desired capacity.
-        merged = alloc.buffer(alloc.calculateNewCapacity(totalBytes, Integer.MAX_VALUE));
-        merged.setBytes(0, composite, tailStart, tailBytes)
-            .setBytes(tailBytes, in, in.readerIndex(), newBytes)
-            .writerIndex(totalBytes);
+        newTail = alloc.buffer(alloc.calculateNewCapacity(newTailSize, Integer.MAX_VALUE));
+        newTail.setBytes(0, composite, tailStart, tailSize)
+            .setBytes(tailSize, in, in.readerIndex(), inputSize)
+            .writerIndex(newTailSize);
         in.readerIndex(in.writerIndex());
       }
       // Store readerIndex to avoid out of bounds writerIndex during component replacement.
       int prevReader = composite.readerIndex();
-      // Remove the tail, reset writer index, add merged component.
-      composite.removeComponent(tailIndex).setIndex(0, tailStart)
-          .addFlattenedComponents(true, merged);
-      merged = null;
+      // Remove the old tail, reset writer index.
+      composite.removeComponent(tailComponentIndex).setIndex(0, tailStart);
+      // Add back the new tail.
+      composite.addFlattenedComponents(true, newTail);
+      // New tail's ownership transferred to the composite buf.
+      newTail = null;
       in.release();
       in = null;
-      // Restore the reader.
+      // Restore the reader. In case it fails we restore the reader after releasing/forgetting
+      // the input and the new tail so that finally block can handles them properly.
       composite.readerIndex(prevReader);
     } finally {
       // Input buffer was merged with the tail.
       if (in != null) {
         in.release();
       }
-      // If merge's ownership isn't transferred to the composite buf, release it to prevent a leak.
-      if (merged != null) {
-        merged.release();
+      // If new tail's ownership isn't transferred to the composite buf.
+      // Release it to prevent a leak.
+      if (newTail != null) {
+        newTail.release();
       }
     }
   }

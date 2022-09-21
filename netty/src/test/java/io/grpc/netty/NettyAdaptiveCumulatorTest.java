@@ -370,7 +370,7 @@ public class NettyAdaptiveCumulatorTest {
     public void mergeWithCompositeTail_tailExpandable_reallocateInMemory() {
       int tailFastCapacity = tail.writerIndex() + tail.maxFastWritableBytes();
       String inSuffixOverFastBytes = Strings.repeat("a", tailFastCapacity + 1);
-      int totalBytes =  tail.readableBytes() + inSuffixOverFastBytes.length();
+      int newTailSize =  tail.readableBytes() + inSuffixOverFastBytes.length();
       composite.addFlattenedComponents(true, tail);
 
       // Make input larger than tailFastCapacity
@@ -380,7 +380,7 @@ public class NettyAdaptiveCumulatorTest {
       assertThat(in.readableBytes()).isAtMost(tail.maxWritableBytes());
 
       // Confirm the assumption that new capacity is produced by alloc.calculateNewCapacity().
-      int expectedTailCapacity = alloc.calculateNewCapacity(totalBytes, Integer.MAX_VALUE);
+      int expectedTailCapacity = alloc.calculateNewCapacity(newTailSize, Integer.MAX_VALUE);
       assertTailExpanded(EXPECTED_TAIL_DATA.concat(inSuffixOverFastBytes), expectedTailCapacity);
     }
 
@@ -562,10 +562,10 @@ public class NettyAdaptiveCumulatorTest {
       };
 
       // Return our instance of the new buffer to ensure it's released.
-      int totalBytes = tail.readableBytes() + in.readableBytes();
-      ByteBuf merged = alloc.buffer(alloc.calculateNewCapacity(totalBytes, Integer.MAX_VALUE));
+      int newTailSize = tail.readableBytes() + in.readableBytes();
+      ByteBuf newTail = alloc.buffer(alloc.calculateNewCapacity(newTailSize, Integer.MAX_VALUE));
       ByteBufAllocator mockAlloc = mock(ByteBufAllocator.class);
-      when(mockAlloc.buffer(anyInt())).thenReturn(merged);
+      when(mockAlloc.buffer(anyInt())).thenReturn(newTail);
 
       try {
         NettyAdaptiveCumulator.mergeWithCompositeTail(mockAlloc, compositeRo, in);
@@ -575,7 +575,7 @@ public class NettyAdaptiveCumulatorTest {
         // Input must be released unless its ownership has been to the composite cumulation.
         assertEquals(0, in.refCnt());
         // New buffer released
-        assertEquals(0, merged.refCnt());
+        assertEquals(0, newTail.refCnt());
         // Composite cumulation is retained
         assertEquals(1, compositeRo.refCnt());
         // Composite cumulation loses the tail
