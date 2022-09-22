@@ -30,8 +30,7 @@ import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.VirtualHost.Route;
-import io.grpc.xds.XdsListenerResource.LdsUpdate;
-import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.XdsClient.LdsUpdate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -164,9 +163,9 @@ public class XdsServerTestHelper {
   static final class FakeXdsClient extends XdsClient {
     boolean shutdown;
     SettableFuture<String> ldsResource = SettableFuture.create();
-    ResourceWatcher<LdsUpdate> ldsWatcher;
+    LdsResourceWatcher ldsWatcher;
     CountDownLatch rdsCount = new CountDownLatch(1);
-    final Map<String, ResourceWatcher<RdsUpdate>> rdsWatchers = new HashMap<>();
+    final Map<String, RdsResourceWatcher> rdsWatchers = new HashMap<>();
 
     @Override
     public TlsContextManager getTlsContextManager() {
@@ -179,40 +178,28 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                     String resourceName,
-                                                     ResourceWatcher<T> watcher) {
-      switch (resourceType.typeName()) {
-        case LDS:
-          assertThat(ldsWatcher).isNull();
-          ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
-          ldsResource.set(resourceName);
-          break;
-        case RDS:
-          //re-register is not allowed.
-          assertThat(rdsWatchers.put(resourceName, (ResourceWatcher<RdsUpdate>)watcher)).isNull();
-          rdsCount.countDown();
-          break;
-        default:
-      }
+    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+      assertThat(ldsWatcher).isNull();
+      ldsWatcher = watcher;
+      ldsResource.set(resourceName);
     }
 
     @Override
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                           String resourceName,
-                                ResourceWatcher<T> watcher) {
-      switch (type.typeName()) {
-        case LDS:
-          assertThat(ldsWatcher).isNotNull();
-          ldsResource = null;
-          ldsWatcher = null;
-          break;
-        case RDS:
-          rdsWatchers.remove(resourceName);
-          break;
-        default:
-      }
+    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+      assertThat(ldsWatcher).isNotNull();
+      ldsResource = null;
+      ldsWatcher = null;
+    }
+
+    @Override
+    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+      assertThat(rdsWatchers.put(resourceName, watcher)).isNull(); //re-register is not allowed.
+      rdsCount.countDown();
+    }
+
+    @Override
+    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+      rdsWatchers.remove(resourceName);
     }
 
     @Override
@@ -226,7 +213,7 @@ public class XdsServerTestHelper {
     }
 
     void deliverLdsUpdate(List<FilterChain> filterChains,
-                          FilterChain defaultFilterChain) {
+                                       FilterChain defaultFilterChain) {
       ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
               "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
     }

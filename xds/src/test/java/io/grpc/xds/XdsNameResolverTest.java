@@ -86,9 +86,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -2074,8 +2072,8 @@ public class XdsNameResolverTest {
     // Should never be subscribing to more than one LDS and RDS resource at any point of time.
     private String ldsResource;  // should always be AUTHORITY
     private String rdsResource;
-    private ResourceWatcher<LdsUpdate> ldsWatcher;
-    private ResourceWatcher<RdsUpdate> rdsWatcher;
+    private LdsResourceWatcher ldsWatcher;
+    private RdsResourceWatcher rdsWatcher;
 
     @Override
     BootstrapInfo getBootstrapInfo() {
@@ -2083,49 +2081,37 @@ public class XdsNameResolverTest {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                    String resourceName,
-                                                    ResourceWatcher<T> watcher) {
-
-      switch (resourceType.typeName()) {
-        case LDS:
-          assertThat(ldsResource).isNull();
-          assertThat(ldsWatcher).isNull();
-          assertThat(resourceName).isEqualTo(expectedLdsResourceName);
-          ldsResource = resourceName;
-          ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
-          break;
-        case RDS:
-          assertThat(rdsResource).isNull();
-          assertThat(rdsWatcher).isNull();
-          rdsResource = resourceName;
-          rdsWatcher = (ResourceWatcher<RdsUpdate>) watcher;
-          break;
-        default:
-      }
+    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+      assertThat(ldsResource).isNull();
+      assertThat(ldsWatcher).isNull();
+      assertThat(resourceName).isEqualTo(expectedLdsResourceName);
+      ldsResource = resourceName;
+      ldsWatcher = watcher;
     }
 
     @Override
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                           String resourceName,
-                                                           ResourceWatcher<T> watcher) {
-      switch (type.typeName()) {
-        case LDS:
-          assertThat(ldsResource).isNotNull();
-          assertThat(ldsWatcher).isNotNull();
-          assertThat(resourceName).isEqualTo(expectedLdsResourceName);
-          ldsResource = null;
-          ldsWatcher = null;
-          break;
-        case RDS:
-          assertThat(rdsResource).isNotNull();
-          assertThat(rdsWatcher).isNotNull();
-          rdsResource = null;
-          rdsWatcher = null;
-          break;
-        default:
-      }
+    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+      assertThat(ldsResource).isNotNull();
+      assertThat(ldsWatcher).isNotNull();
+      assertThat(resourceName).isEqualTo(expectedLdsResourceName);
+      ldsResource = null;
+      ldsWatcher = null;
+    }
+
+    @Override
+    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+      assertThat(rdsResource).isNull();
+      assertThat(rdsWatcher).isNull();
+      rdsResource = resourceName;
+      rdsWatcher = watcher;
+    }
+
+    @Override
+    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+      assertThat(rdsResource).isNotNull();
+      assertThat(rdsWatcher).isNotNull();
+      rdsResource = null;
+      rdsWatcher = null;
     }
 
     void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {

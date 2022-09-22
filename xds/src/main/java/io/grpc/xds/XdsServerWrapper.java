@@ -50,10 +50,11 @@ import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
-import io.grpc.xds.XdsClient.ResourceWatcher;
-import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.XdsClient.LdsResourceWatcher;
+import io.grpc.xds.XdsClient.LdsUpdate;
+import io.grpc.xds.XdsClient.RdsResourceWatcher;
+import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
@@ -343,7 +344,7 @@ final class XdsServerWrapper extends Server {
     }
   }
 
-  private final class DiscoveryState implements ResourceWatcher<LdsUpdate> {
+  private final class DiscoveryState implements LdsResourceWatcher {
     private final String resourceName;
     // RDS resource name is the key.
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
@@ -367,7 +368,7 @@ final class XdsServerWrapper extends Server {
 
     private DiscoveryState(String resourceName) {
       this.resourceName = checkNotNull(resourceName, "resourceName");
-      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), resourceName, this);
+      xdsClient.watchLdsResource(resourceName, this);
     }
 
     @Override
@@ -401,8 +402,7 @@ final class XdsServerWrapper extends Server {
               if (rdsState == null) {
                 rdsState = new RouteDiscoveryState(hcm.rdsName());
                 routeDiscoveryStates.put(hcm.rdsName(), rdsState);
-                xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
-                    hcm.rdsName(), rdsState);
+                xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
               }
               if (rdsState.isPending) {
                 pendingRds.add(hcm.rdsName());
@@ -412,8 +412,7 @@ final class XdsServerWrapper extends Server {
           }
           for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
             if (!allRds.contains(entry.getKey())) {
-              xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(),
-                  entry.getKey(), entry.getValue());
+              xdsClient.cancelRdsResourceWatch(entry.getKey(), entry.getValue());
             }
           }
           routeDiscoveryStates.keySet().retainAll(allRds);
@@ -459,7 +458,7 @@ final class XdsServerWrapper extends Server {
       stopped = true;
       cleanUpRouteDiscoveryStates();
       logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);
-      xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), resourceName, this);
+      xdsClient.cancelLdsResourceWatch(resourceName, this);
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorManager.updateSelector(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
@@ -589,8 +588,7 @@ final class XdsServerWrapper extends Server {
       for (RouteDiscoveryState rdsState : routeDiscoveryStates.values()) {
         String rdsName = rdsState.resourceName;
         logger.log(Level.FINE, "Stop watching RDS resource {0}", rdsName);
-        xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(), rdsName,
-            rdsState);
+        xdsClient.cancelRdsResourceWatch(rdsName, rdsState);
       }
       routeDiscoveryStates.clear();
       savedRdsRoutingConfigRef.clear();
@@ -628,7 +626,7 @@ final class XdsServerWrapper extends Server {
       }
     }
 
-    private final class RouteDiscoveryState implements ResourceWatcher<RdsUpdate> {
+    private final class RouteDiscoveryState implements RdsResourceWatcher {
       private final String resourceName;
       private ImmutableList<VirtualHost> savedVirtualHosts;
       private boolean isPending = true;

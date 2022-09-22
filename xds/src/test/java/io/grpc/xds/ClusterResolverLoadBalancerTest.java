@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
@@ -77,7 +76,6 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
-import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -186,6 +184,7 @@ public class ClusterResolverLoadBalancerTest {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private int xdsClientRefs;
   private ClusterResolverLoadBalancer loadBalancer;
+
 
   @Before
   public void setUp() throws URISyntaxException {
@@ -1169,24 +1168,16 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private static final class FakeXdsClient extends XdsClient {
-    private final Map<String, ResourceWatcher<EdsUpdate>> watchers = new HashMap<>();
-
+    private final Map<String, EdsResourceWatcher> watchers = new HashMap<>();
 
     @Override
-    @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                          ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo(EDS);
+    void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
       assertThat(watchers).doesNotContainKey(resourceName);
-      watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);
+      watchers.put(resourceName, watcher);
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                           String resourceName,
-                                                           ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo(EDS);
+    void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }
@@ -1201,7 +1192,7 @@ public class ClusterResolverLoadBalancerTest {
         Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap) {
       if (watchers.containsKey(resource)) {
         watchers.get(resource).onChanged(
-            new XdsEndpointResource.EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
+            new EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
       }
     }
 
@@ -1212,7 +1203,7 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     void deliverError(Status error) {
-      for (ResourceWatcher<EdsUpdate> watcher : watchers.values()) {
+      for (EdsResourceWatcher watcher : watchers.values()) {
         watcher.onError(error);
       }
     }

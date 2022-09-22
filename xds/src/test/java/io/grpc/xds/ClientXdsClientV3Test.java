@@ -519,7 +519,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
-              .setName(XdsResourceType.AGGREGATE_CLUSTER_TYPE_NAME)
+              .setName(ClientXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
               .setTypedConfig(Any.pack(clusterConfig))
               .build();
       Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);
