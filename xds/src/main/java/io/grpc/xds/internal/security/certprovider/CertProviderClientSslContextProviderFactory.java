@@ -25,6 +25,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.internal.security.SslContextProvider;
 import java.util.Map;
 import javax.annotation.Nullable;
 
@@ -51,7 +52,7 @@ public final class CertProviderClientSslContextProviderFactory {
   /**
    * Creates a {@link CertProviderClientSslContextProvider}.
    */
-  public CertProviderClientSslContextProvider getProvider(
+  public SslContextProvider getProvider(
       UpstreamTlsContext upstreamTlsContext,
       Node node,
       @Nullable Map<String, CertificateProviderInfo> certProviders) {

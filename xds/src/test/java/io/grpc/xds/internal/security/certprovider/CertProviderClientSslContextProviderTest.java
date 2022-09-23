@@ -81,10 +81,11 @@ public class CertProviderClientSslContextProviderTest {
             "root-default",
             alpnProtocols,
             staticCertValidationContext);
-    return certProviderClientSslContextProviderFactory.getProvider(
-        upstreamTlsContext,
-        bootstrapInfo.node().toEnvoyProtoNode(),
-        bootstrapInfo.certProviders());
+    return (CertProviderClientSslContextProvider)
+        certProviderClientSslContextProviderFactory.getProvider(
+            upstreamTlsContext,
+            bootstrapInfo.node().toEnvoyProtoNode(),
+            bootstrapInfo.certProviders());
   }
 
   /** Helper method to build CertProviderClientSslContextProvider. */
@@ -102,7 +103,8 @@ public class CertProviderClientSslContextProviderTest {
                     "root-default",
                     alpnProtocols,
                     staticCertValidationContext);
-    return certProviderClientSslContextProviderFactory.getProvider(
+    return (CertProviderClientSslContextProvider)
+        certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,
             bootstrapInfo.node().toEnvoyProtoNode(),
             bootstrapInfo.certProviders());
