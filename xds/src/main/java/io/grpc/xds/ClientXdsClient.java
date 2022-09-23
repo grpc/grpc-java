@@ -175,8 +175,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       logger.log(XdsLogLevel.WARNING, "Ignore an unknown type of DiscoveryResponse");
       return;
     }
-    Set<String> toParseResourceNames = (resourceType == LDS || resourceType == RDS ) ? null :
-        resourceSubscribers.get(xdsResourceType).keySet();
+    Set<String> toParseResourceNames = null;
+    if (!(resourceType == LDS || resourceType == RDS)
+        && resourceSubscribers.containsKey(xdsResourceType)) {
+      toParseResourceNames = resourceSubscribers.get(xdsResourceType).keySet();
+    }
     XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
         bootstrapInfo, filterRegistry, loadBalancerRegistry, tlsContextManager,
         toParseResourceNames);
