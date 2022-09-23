@@ -37,13 +37,15 @@ import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
 import io.grpc.internal.TimeProvider;
 import io.opencensus.common.Duration;
-import io.opencensus.contrib.grpc.metrics.RpcViews;
+import io.opencensus.contrib.grpc.metrics.RpcViewConstants;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsConfiguration;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsExporter;
 import io.opencensus.exporter.trace.stackdriver.StackdriverTraceConfiguration;
 import io.opencensus.exporter.trace.stackdriver.StackdriverTraceExporter;
 import io.opencensus.metrics.LabelKey;
 import io.opencensus.metrics.LabelValue;
+import io.opencensus.stats.Stats;
+import io.opencensus.stats.ViewManager;
 import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.Tracing;
 import io.opencensus.trace.config.TraceConfig;
@@ -145,11 +147,23 @@ public final class GcpObservability implements AutoCloseable {
         (m, c) -> !SERVICES_TO_EXCLUDE.contains(m.getServiceName()));
   }
 
+  private static void registerObservabilityViews() {
+    ViewManager viewManager = Stats.getViewManager();
+
+    // client views
+    viewManager.registerView(RpcViewConstants.GRPC_CLIENT_COMPLETED_RPC_VIEW);
+    viewManager.registerView(RpcViewConstants.GRPC_CLIENT_STARTED_RPC_VIEW);
+
+    // server views
+    viewManager.registerView(RpcViewConstants.GRPC_SERVER_COMPLETED_RPC_VIEW);
+    viewManager.registerView(RpcViewConstants.GRPC_SERVER_STARTED_RPC_VIEW);
+  }
+
   @VisibleForTesting
   void registerStackDriverExporter(String projectId, Map<String, String> customTags)
       throws IOException {
     if (config.isEnableCloudMonitoring()) {
-      RpcViews.registerAllGrpcViews();
+      registerObservabilityViews();
       StackdriverStatsConfiguration.Builder statsConfigurationBuilder =
           StackdriverStatsConfiguration.builder();
       if (projectId != null) {
