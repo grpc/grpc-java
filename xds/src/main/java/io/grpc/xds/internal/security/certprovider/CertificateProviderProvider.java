@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
 import io.grpc.Internal;
-import io.grpc.xds.internal.certprovider.CertificateProvider.Watcher;
+import io.grpc.xds.internal.security.certprovider.CertificateProvider.Watcher;
 
 /**
  * Provider of {@link CertificateProvider}s. Implemented by the implementer of the plugin. We may

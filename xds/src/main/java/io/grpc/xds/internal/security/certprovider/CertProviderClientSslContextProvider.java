@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.grpc.Internal;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
@@ -34,10 +32,9 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
-@Internal
-public final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
+final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
 
-  private CertProviderClientSslContextProvider(
+  CertProviderClientSslContextProvider(
       Node node,
       @Nullable Map<String, CertificateProviderInfo> certProviders,
       CommonTlsContext.CertificateProviderInstance certInstance,
@@ -71,42 +68,4 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
     return sslContextBuilder;
   }
 
-  /** Creates CertProviderClientSslContextProvider. */
-  @Internal
-  public static final class Factory {
-    private static final Factory DEFAULT_INSTANCE =
-        new Factory(CertificateProviderStore.getInstance());
-    private final CertificateProviderStore certificateProviderStore;
-
-    @VisibleForTesting public Factory(CertificateProviderStore certificateProviderStore) {
-      this.certificateProviderStore = certificateProviderStore;
-    }
-
-    public static Factory getInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    /** Creates a {@link CertProviderClientSslContextProvider}. */
-    public CertProviderClientSslContextProvider getProvider(
-        UpstreamTlsContext upstreamTlsContext,
-        Node node,
-        @Nullable Map<String, CertificateProviderInfo> certProviders) {
-      checkNotNull(upstreamTlsContext, "upstreamTlsContext");
-      CommonTlsContext commonTlsContext = upstreamTlsContext.getCommonTlsContext();
-      CertificateValidationContext staticCertValidationContext = getStaticValidationContext(
-          commonTlsContext);
-      CommonTlsContext.CertificateProviderInstance rootCertInstance = getRootCertProviderInstance(
-          commonTlsContext);
-      CommonTlsContext.CertificateProviderInstance certInstance = getCertProviderInstance(
-          commonTlsContext);
-      return new CertProviderClientSslContextProvider(
-          node,
-          certProviders,
-          certInstance,
-          rootCertInstance,
-          staticCertValidationContext,
-          upstreamTlsContext,
-          certificateProviderStore);
-    }
-  }
 }

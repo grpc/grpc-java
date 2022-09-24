@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.Internal;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
@@ -39,6 +40,7 @@ import java.util.concurrent.Executor;
  * stream that is receiving the requested secret(s) or it could represent file-system based
  * secret(s) that are dynamic.
  */
+@Internal
 public abstract class SslContextProvider implements Closeable {
 
   protected final BaseTlsContext tlsContext;

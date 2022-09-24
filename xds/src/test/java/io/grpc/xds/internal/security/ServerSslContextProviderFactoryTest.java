@@ -29,10 +29,10 @@ import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.XdsInitializationException;
-import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
-import io.grpc.xds.internal.certprovider.CertificateProvider;
-import io.grpc.xds.internal.certprovider.CertificateProviderRegistry;
-import io.grpc.xds.internal.certprovider.CertificateProviderStore;
+import io.grpc.xds.internal.security.certprovider.CertProviderServerSslContextProviderFactory;
+import io.grpc.xds.internal.security.certprovider.CertificateProvider;
+import io.grpc.xds.internal.security.certprovider.CertificateProviderRegistry;
+import io.grpc.xds.internal.security.certprovider.CertificateProviderStore;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,7 +44,7 @@ public class ServerSslContextProviderFactoryTest {
 
   CertificateProviderRegistry certificateProviderRegistry;
   CertificateProviderStore certificateProviderStore;
-  CertProviderServerSslContextProvider.Factory certProviderServerSslContextProviderFactory;
+  CertProviderServerSslContextProviderFactory certProviderServerSslContextProviderFactory;
   ServerSslContextProviderFactory serverSslContextProviderFactory;
 
   @Before
@@ -52,7 +52,7 @@ public class ServerSslContextProviderFactoryTest {
     certificateProviderRegistry = new CertificateProviderRegistry();
     certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
     certProviderServerSslContextProviderFactory =
-        new CertProviderServerSslContextProvider.Factory(certificateProviderStore);
+        new CertProviderServerSslContextProviderFactory(certificateProviderStore);
   }
 
   @Test
@@ -76,12 +76,14 @@ public class ServerSslContextProviderFactoryTest {
                     bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
-    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
+        "CertProviderServerSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
     // verify that bootstrapInfo is cached...
     sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
-    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
+        "CertProviderServerSslContextProvider");
   }
 
   @Test
@@ -113,7 +115,8 @@ public class ServerSslContextProviderFactoryTest {
                     bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
-    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
+        "CertProviderServerSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
   }
 
@@ -139,7 +142,8 @@ public class ServerSslContextProviderFactoryTest {
                     bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
             serverSslContextProviderFactory.create(downstreamTlsContext);
-    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
+        "CertProviderServerSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
   }
 
@@ -173,7 +177,8 @@ public class ServerSslContextProviderFactoryTest {
                     bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
             serverSslContextProviderFactory.create(downstreamTlsContext);
-    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
+        "CertProviderServerSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
   }
 
@@ -203,7 +208,8 @@ public class ServerSslContextProviderFactoryTest {
                     bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
-    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
+        "CertProviderServerSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
     verifyWatcher(sslContextProvider, watcherCaptor[1]);
   }
@@ -241,7 +247,8 @@ public class ServerSslContextProviderFactoryTest {
             bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
-    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
+        "CertProviderServerSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
     verifyWatcher(sslContextProvider, watcherCaptor[1]);
   }

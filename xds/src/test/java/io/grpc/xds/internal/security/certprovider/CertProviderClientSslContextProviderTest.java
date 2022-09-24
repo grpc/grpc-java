@@ -14,113 +14,115 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.certprovider;
+package io.grpc.xds.internal.security.certprovider;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.internal.certprovider.CommonCertProviderTestUtils.getCertFromResourceName;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
-import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_0_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.doChecksOnSslContext;
+import static io.grpc.xds.internal.security.certprovider.CommonCertProviderTestUtils.getCertFromResourceName;
 import static org.junit.Assert.fail;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
-import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData;
-import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProviderTest.QueuedExecutor;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil.TestCallback;
-import java.util.Arrays;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link CertProviderServerSslContextProvider}. */
+/** Unit tests for {@link CertProviderClientSslContextProvider}. */
 @RunWith(JUnit4.class)
-public class CertProviderServerSslContextProviderTest {
+public class CertProviderClientSslContextProviderTest {
+  private static final Logger logger =
+      Logger.getLogger(CertProviderClientSslContextProviderTest.class.getName());
 
   CertificateProviderRegistry certificateProviderRegistry;
   CertificateProviderStore certificateProviderStore;
-  private CertProviderServerSslContextProvider.Factory certProviderServerSslContextProviderFactory;
+  private CertProviderClientSslContextProviderFactory certProviderClientSslContextProviderFactory;
 
   @Before
   public void setUp() throws Exception {
     certificateProviderRegistry = new CertificateProviderRegistry();
     certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
-    certProviderServerSslContextProviderFactory =
-        new CertProviderServerSslContextProvider.Factory(certificateProviderStore);
+    certProviderClientSslContextProviderFactory =
+        new CertProviderClientSslContextProviderFactory(certificateProviderStore);
   }
 
-  /** Helper method to build CertProviderServerSslContextProvider. */
-  private CertProviderServerSslContextProvider getSslContextProvider(
+  /** Helper method to build CertProviderClientSslContextProvider. */
+  private CertProviderClientSslContextProvider getSslContextProvider(
       String certInstanceName,
       String rootInstanceName,
       Bootstrapper.BootstrapInfo bootstrapInfo,
       Iterable<String> alpnProtocols,
-      CertificateValidationContext staticCertValidationContext,
-      boolean requireClientCert) {
-    EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContextForCertProviderInstance(
+      CertificateValidationContext staticCertValidationContext) {
+    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
             certInstanceName,
             "cert-default",
             rootInstanceName,
             "root-default",
             alpnProtocols,
-            staticCertValidationContext,
-            requireClientCert);
-    return certProviderServerSslContextProviderFactory.getProvider(
-        downstreamTlsContext,
-        bootstrapInfo.node().toEnvoyProtoNode(),
-        bootstrapInfo.certProviders());
+            staticCertValidationContext);
+    return (CertProviderClientSslContextProvider)
+        certProviderClientSslContextProviderFactory.getProvider(
+            upstreamTlsContext,
+            bootstrapInfo.node().toEnvoyProtoNode(),
+            bootstrapInfo.certProviders());
   }
 
-  /** Helper method to build CertProviderServerSslContextProvider. */
-  private CertProviderServerSslContextProvider getNewSslContextProvider(
+  /** Helper method to build CertProviderClientSslContextProvider. */
+  private CertProviderClientSslContextProvider getNewSslContextProvider(
           String certInstanceName,
           String rootInstanceName,
           Bootstrapper.BootstrapInfo bootstrapInfo,
           Iterable<String> alpnProtocols,
-          CertificateValidationContext staticCertValidationContext,
-          boolean requireClientCert) {
-    EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext =
-            CommonTlsContextTestsUtil.buildNewDownstreamTlsContextForCertProviderInstance(
+          CertificateValidationContext staticCertValidationContext) {
+    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
+            CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
                     certInstanceName,
                     "cert-default",
                     rootInstanceName,
                     "root-default",
                     alpnProtocols,
-                    staticCertValidationContext,
-                    requireClientCert);
-    return certProviderServerSslContextProviderFactory.getProvider(
-            downstreamTlsContext,
+                    staticCertValidationContext);
+    return (CertProviderClientSslContextProvider)
+        certProviderClientSslContextProviderFactory.getProvider(
+            upstreamTlsContext,
             bootstrapInfo.node().toEnvoyProtoNode(),
             bootstrapInfo.certProviders());
   }
 
-
   @Test
-  public void testProviderForServer_mtls() throws Exception {
+  public void testProviderForClient_mtls() throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
         certificateProviderRegistry, watcherCaptor, "testca", 0);
-    CertProviderServerSslContextProvider provider =
+    CertProviderClientSslContextProvider provider =
         getSslContextProvider(
             "gcp_id",
             "gcp_id",
             CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null,
-            /* requireClientCert= */ true);
+            /* staticCertValidationContext= */ null);
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
@@ -129,8 +131,8 @@ public class CertProviderServerSslContextProviderTest {
 
     // now generate cert update
     watcherCaptor[0].updateCertificate(
-        CommonCertProviderTestUtils.getPrivateKey(SERVER_0_KEY_FILE),
-        ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
+        CommonCertProviderTestUtils.getPrivateKey(CLIENT_KEY_FILE),
+        ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
     assertThat(provider.savedKey).isNotNull();
     assertThat(provider.savedCertChain).isNotNull();
     assertThat(provider.getSslContext()).isNull();
@@ -145,14 +147,14 @@ public class CertProviderServerSslContextProviderTest {
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
 
-    doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
     TestCallback testCallback1 =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isSameInstanceAs(testCallback.updatedSslContext);
 
     // just do root cert update: sslContext should still be the same
     watcherCaptor[0].updateTrustedRoots(
-        ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
+        ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNotNull();
@@ -172,24 +174,18 @@ public class CertProviderServerSslContextProviderTest {
   }
 
   @Test
-  public void testProviderForServer_mtls_newXds() throws Exception {
+  public void testProviderForClient_mtls_newXds() throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
             new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
             certificateProviderRegistry, watcherCaptor, "testca", 0);
-    @SuppressWarnings("deprecation")
-    CertificateValidationContext staticCertValidationContext =
-        CertificateValidationContext.newBuilder().addAllMatchSubjectAltNames(Arrays
-            .asList(StringMatcher.newBuilder().setExact("foo.com").build(),
-                StringMatcher.newBuilder().setExact("bar.com").build())).build();
-    CertProviderServerSslContextProvider provider =
+    CertProviderClientSslContextProvider provider =
             getNewSslContextProvider(
                     "gcp_id",
                     "gcp_id",
                     CommonBootstrapperTestUtils.getTestBootstrapInfo(),
                     /* alpnProtocols= */ null,
-                    staticCertValidationContext,
-                    /* requireClientCert= */ true);
+                    /* staticCertValidationContext= */ null);
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
@@ -198,8 +194,8 @@ public class CertProviderServerSslContextProviderTest {
 
     // now generate cert update
     watcherCaptor[0].updateCertificate(
-            CommonCertProviderTestUtils.getPrivateKey(SERVER_0_KEY_FILE),
-            ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
+            CommonCertProviderTestUtils.getPrivateKey(CLIENT_KEY_FILE),
+            ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
     assertThat(provider.savedKey).isNotNull();
     assertThat(provider.savedCertChain).isNotNull();
     assertThat(provider.getSslContext()).isNull();
@@ -214,14 +210,14 @@ public class CertProviderServerSslContextProviderTest {
     TestCallback testCallback =
             CommonTlsContextTestsUtil.getValueThruCallback(provider);
 
-    doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
     TestCallback testCallback1 =
             CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isSameInstanceAs(testCallback.updatedSslContext);
 
     // just do root cert update: sslContext should still be the same
     watcherCaptor[0].updateTrustedRoots(
-            ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
+            ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNotNull();
@@ -241,19 +237,18 @@ public class CertProviderServerSslContextProviderTest {
   }
 
   @Test
-  public void testProviderForServer_queueExecutor() throws Exception {
+  public void testProviderForClient_queueExecutor() throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
         certificateProviderRegistry, watcherCaptor, "testca", 0);
-    CertProviderServerSslContextProvider provider =
+    CertProviderClientSslContextProvider provider =
         getSslContextProvider(
             "gcp_id",
             "gcp_id",
             CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null,
-            /* requireClientCert= */ true);
+            /* staticCertValidationContext= */ null);
     QueuedExecutor queuedExecutor = new QueuedExecutor();
 
     TestCallback testCallback =
@@ -262,8 +257,8 @@ public class CertProviderServerSslContextProviderTest {
 
     // now generate cert update
     watcherCaptor[0].updateCertificate(
-        CommonCertProviderTestUtils.getPrivateKey(SERVER_0_KEY_FILE),
-        ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
+        CommonCertProviderTestUtils.getPrivateKey(CLIENT_KEY_FILE),
+        ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
     assertThat(queuedExecutor.runQueue).isEmpty(); // still empty
 
     // now generate root cert update
@@ -271,34 +266,30 @@ public class CertProviderServerSslContextProviderTest {
     assertThat(queuedExecutor.runQueue).hasSize(1);
     queuedExecutor.drain();
 
-    doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
   @Test
-  public void testProviderForServer_tls() throws Exception {
+  public void testProviderForClient_tls() throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
         certificateProviderRegistry, watcherCaptor, "testca", 0);
-    CertProviderServerSslContextProvider provider =
+    CertProviderClientSslContextProvider provider =
         getSslContextProvider(
+            /* certInstanceName= */ null,
             "gcp_id",
-            /* rootInstanceName= */ null,
             CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null,
-            /* requireClientCert= */ false);
+            /* staticCertValidationContext= */ null);
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
     assertThat(provider.getSslContext()).isNull();
 
-    // now generate cert update
-    watcherCaptor[0].updateCertificate(
-            CommonCertProviderTestUtils.getPrivateKey(SERVER_0_KEY_FILE),
-            ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
-
+    // now generate root cert update
+    watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
     assertThat(provider.getSslContext()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
@@ -307,11 +298,11 @@ public class CertProviderServerSslContextProviderTest {
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
 
-    doChecksOnSslContext(true, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
   }
 
   @Test
-  public void testProviderForServer_sslContextException_onError() throws Exception {
+  public void testProviderForClient_sslContextException_onError() throws Exception {
     CertificateValidationContext staticCertValidationContext =
             CertificateValidationContext.newBuilder()
                     .setTrustedCa(DataSource.newBuilder().setInlineString("foo"))
@@ -321,19 +312,13 @@ public class CertProviderServerSslContextProviderTest {
             new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
             certificateProviderRegistry, watcherCaptor, "testca", 0);
-    CertProviderServerSslContextProvider provider =
+    CertProviderClientSslContextProvider provider =
             getSslContextProvider(
-                    /* certInstanceName= */ "gcp_id",
-                    /* rootInstanceName= */ "gcp_id",
+                    /* certInstanceName= */ null,
+                    "gcp_id",
                     CommonBootstrapperTestUtils.getTestBootstrapInfo(),
                     /* alpnProtocols= */null,
-                    staticCertValidationContext,
-                    /* requireClientCert= */ true);
-
-    // now generate cert update
-    watcherCaptor[0].updateCertificate(
-            CommonCertProviderTestUtils.getPrivateKey(SERVER_0_KEY_FILE),
-            ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
+                    staticCertValidationContext);
 
     TestCallback testCallback = new TestCallback(MoreExecutors.directExecutor());
     provider.addCallback(testCallback);
@@ -353,7 +338,7 @@ public class CertProviderServerSslContextProviderTest {
   }
 
   @Test
-  public void testProviderForServer_certInstanceNull_expectError() throws Exception {
+  public void testProviderForClient_rootInstanceNull_expectError() throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
@@ -364,11 +349,33 @@ public class CertProviderServerSslContextProviderTest {
           /* rootInstanceName= */ null,
           CommonBootstrapperTestUtils.getTestBootstrapInfo(),
           /* alpnProtocols= */ null,
-          /* staticCertValidationContext= */ null,
-          /* requireClientCert= */ false);
+          /* staticCertValidationContext= */ null);
       fail("exception expected");
     } catch (NullPointerException expected) {
-      assertThat(expected).hasMessageThat().contains("Server SSL requires certInstance");
+      assertThat(expected).hasMessageThat().contains("Client SSL requires rootCertInstance");
     }
   }
+
+  static class QueuedExecutor implements Executor {
+    /** A list of Runnables to be run in order. */
+    @VisibleForTesting final Queue<Runnable> runQueue = new ConcurrentLinkedQueue<>();
+
+    @Override
+    public synchronized void execute(Runnable r) {
+      runQueue.add(checkNotNull(r, "'r' must not be null."));
+    }
+
+    public synchronized void drain() {
+      Runnable r;
+      while ((r = runQueue.poll()) != null) {
+        try {
+          r.run();
+        } catch (RuntimeException e) {
+          // Log it and keep going.
+          logger.log(Level.SEVERE, "Exception while executing runnable " + r, e);
+        }
+      }
+    }
+  }
+
 }
