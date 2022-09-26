@@ -235,13 +235,14 @@ public class LoadBalancerTest {
 
   @Deprecated
   @Test
-  public void handleResolvedAddressGroups_delegatesToHandleResolvedAddresses() {
+  public void handleResolvedAddresses_delegatesToAcceptResolvedAddresses() {
     final AtomicReference<ResolvedAddresses> resultCapture = new AtomicReference<>();
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           resultCapture.set(resolvedAddresses);
+          return true;
         }
 
         @Override
@@ -260,23 +261,22 @@ public class LoadBalancerTest {
     List<EquivalentAddressGroup> servers = Arrays.asList(
         new EquivalentAddressGroup(new SocketAddress(){}),
         new EquivalentAddressGroup(new SocketAddress(){}));
-    balancer.handleResolvedAddressGroups(servers, attrs);
+    ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
+        .setAttributes(attrs).build();
+    balancer.handleResolvedAddresses(addresses);
     assertThat(resultCapture.get()).isEqualTo(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
   }
 
   @Deprecated
   @Test
-  public void handleResolvedAddresses_delegatesToHandleResolvedAddressGroups() {
-    final AtomicReference<List<EquivalentAddressGroup>> serversCapture = new AtomicReference<>();
-    final AtomicReference<Attributes> attrsCapture = new AtomicReference<>();
+  public void acceptResolvedAddresses_delegatesToHandleResolvedAddressGroups() {
+    final AtomicReference<ResolvedAddresses> addressesCapture = new AtomicReference<>();
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public void handleResolvedAddressGroups(
-            List<EquivalentAddressGroup> servers, Attributes attrs) {
-          serversCapture.set(servers);
-          attrsCapture.set(attrs);
+        public void handleResolvedAddresses(ResolvedAddresses addresses) {
+          addressesCapture.set(addresses);
         }
 
         @Override
@@ -295,25 +295,23 @@ public class LoadBalancerTest {
     List<EquivalentAddressGroup> servers = Arrays.asList(
         new EquivalentAddressGroup(new SocketAddress(){}),
         new EquivalentAddressGroup(new SocketAddress(){}));
-    balancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
-    assertThat(serversCapture.get()).isEqualTo(servers);
-    assertThat(attrsCapture.get()).isEqualTo(attrs);
+    ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
+        .setAttributes(attrs).build();
+    balancer.handleResolvedAddresses(addresses);
+    assertThat(addressesCapture.get().getAddresses()).isEqualTo(servers);
+    assertThat(addressesCapture.get().getAttributes()).isEqualTo(attrs);
   }
 
   @Deprecated
   @Test
-  public void handleResolvedAddresses_noInfiniteLoop() {
-    final List<List<EquivalentAddressGroup>> serversCapture = new ArrayList<>();
-    final List<Attributes> attrsCapture = new ArrayList<>();
+  public void acceptResolvedAddresses_noInfiniteLoop() {
+    final List<ResolvedAddresses> addressesCapture = new ArrayList<>();
 
     LoadBalancer balancer = new LoadBalancer() {
       @Override
-      public void handleResolvedAddressGroups(
-          List<EquivalentAddressGroup> servers, Attributes attrs) {
-        serversCapture.add(servers);
-        attrsCapture.add(attrs);
-        super.handleResolvedAddressGroups(servers, attrs);
+      public void handleResolvedAddresses(ResolvedAddresses addresses) {
+        addressesCapture.add(addresses);
+        super.handleResolvedAddresses(addresses);
       }
 
       @Override
@@ -328,12 +326,12 @@ public class LoadBalancerTest {
     List<EquivalentAddressGroup> servers = Arrays.asList(
         new EquivalentAddressGroup(new SocketAddress(){}),
         new EquivalentAddressGroup(new SocketAddress(){}));
-    balancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
-    assertThat(serversCapture).hasSize(1);
-    assertThat(attrsCapture).hasSize(1);
-    assertThat(serversCapture.get(0)).isEqualTo(servers);
-    assertThat(attrsCapture.get(0)).isEqualTo(attrs);
+    ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
+        .setAttributes(attrs).build();
+    balancer.handleResolvedAddresses(addresses);
+    assertThat(addressesCapture).hasSize(1);
+    assertThat(addressesCapture.get(0).getAddresses()).isEqualTo(servers);
+    assertThat(addressesCapture.get(0).getAttributes()).isEqualTo(attrs);
   }
 
   private static class NoopHelper extends LoadBalancer.Helper {

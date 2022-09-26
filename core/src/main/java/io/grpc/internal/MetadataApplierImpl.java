@@ -82,7 +82,8 @@ final class MetadataApplierImpl extends MetadataApplier {
   public void fail(Status status) {
     checkArgument(!status.isOk(), "Cannot fail with OK status");
     checkState(!finalized, "apply() or fail() already called");
-    finalizeWith(new FailingClientStream(status, tracers));
+    finalizeWith(
+        new FailingClientStream(GrpcUtil.replaceInappropriateControlPlaneStatus(status), tracers));
   }
 
   private void finalizeWith(ClientStream stream) {

@@ -45,8 +45,15 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
+    if (servers.isEmpty()) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+              + ", attrs=" + resolvedAddresses.getAttributes()));
+      return false;
+    }
+
     if (subchannel == null) {
       final Subchannel subchannel = helper.createSubchannel(
           CreateSubchannelArgs.newBuilder()
@@ -67,6 +74,8 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     } else {
       subchannel.updateAddresses(servers);
     }
+
+    return true;
   }
 
   @Override

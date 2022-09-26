@@ -1199,7 +1199,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       InternalConfigSelector.Result result = configSelector.selectConfig(args);
       Status status = result.getStatus();
       if (!status.isOk()) {
-        executeCloseObserverInContext(observer, status);
+        executeCloseObserverInContext(observer,
+            GrpcUtil.replaceInappropriateControlPlaneStatus(status));
         delegate = (ClientCall<ReqT, RespT>) NOOP_CALL;
         return;
       }
@@ -1810,6 +1811,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 channelLogger.log(
                     ChannelLogLevel.INFO,
                     "Fallback to error due to invalid first service config without default config");
+                // This error could be an "inappropriate" control plane error that should not bleed
+                // through to client code using gRPC. We let them flow through here to the LB as
+                // we later check for these error codes when investigating pick results in
+                // GrpcUtil.getTransportFromPickResult().
                 onError(configOrError.getError());
                 return;
               } else {
@@ -1852,16 +1857,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, healthCheckingConfig)
                   .build();
             }
+            Attributes attributes = attrBuilder.build();
 
-            Status handleResult = helper.lb.tryHandleResolvedAddresses(
+            boolean addressesAccepted = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
-                    .setAttributes(attrBuilder.build())
+                    .setAttributes(attributes)
                     .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
 
-            if (!handleResult.isOk()) {
-              handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
+            if (!addressesAccepted) {
+              scheduleExponentialBackOffInSyncContext();
             }
           }
         }

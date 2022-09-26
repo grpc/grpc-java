@@ -121,6 +121,31 @@ public class ConfigSelectingClientCallTest {
     InternalConfigSelector configSelector = new InternalConfigSelector() {
       @Override
       public Result selectConfig(PickSubchannelArgs args) {
+        return Result.forError(Status.DEADLINE_EXCEEDED);
+      }
+    };
+
+    ClientCall<Void, Void> configSelectingClientCall = new ConfigSelectingClientCall<>(
+        configSelector,
+        channel,
+        MoreExecutors.directExecutor(),
+        method,
+        CallOptions.DEFAULT);
+    configSelectingClientCall.start(callListener, new Metadata());
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.DEADLINE_EXCEEDED);
+
+    // The call should not delegate to null and fail methods with NPE.
+    configSelectingClientCall.request(1);
+  }
+
+  @Test
+  public void selectionErrorPropagatedToListener_inappropriateStatus() {
+    InternalConfigSelector configSelector = new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(PickSubchannelArgs args) {
+        // This status code is considered inappropriate to propagate from the control plane...
         return Result.forError(Status.FAILED_PRECONDITION);
       }
     };
@@ -134,7 +159,8 @@ public class ConfigSelectingClientCallTest {
     configSelectingClientCall.start(callListener, new Metadata());
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+    // ... so it should be represented as an internal error to highlight the control plane bug.
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.INTERNAL);
 
     // The call should not delegate to null and fail methods with NPE.
     configSelectingClientCall.request(1);
