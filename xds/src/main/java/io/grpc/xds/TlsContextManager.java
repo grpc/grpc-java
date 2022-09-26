@@ -19,7 +19,7 @@ package io.grpc.xds;
 import io.grpc.Internal;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.internal.sds.SslContextProvider;
+import io.grpc.xds.internal.security.SslContextProvider;
 
 @Internal
 public interface TlsContextManager {

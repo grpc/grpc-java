@@ -35,9 +35,9 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.XdsClient.CdsResourceWatcher;
-import io.grpc.xds.XdsClient.CdsUpdate;
-import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayDeque;
@@ -221,7 +221,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
     }
 
-    private final class ClusterState implements CdsResourceWatcher {
+    private final class ClusterState implements ResourceWatcher<CdsUpdate> {
       private final String name;
       @Nullable
       private Map<String, ClusterState> childClusterStates;
@@ -237,12 +237,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       private void start() {
-        xdsClient.watchCdsResource(name, this);
+        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this);
       }
 
       void shutdown() {
         shutdown = true;
-        xdsClient.cancelCdsResourceWatch(name, this);
+        xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, this);
         if (childClusterStates != null) {  // recursively shut down all descendants
           for (ClusterState state : childClusterStates.values()) {
             state.shutdown();
@@ -300,6 +300,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             if (shutdown) {
               return;
             }
+
             logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
             discovered = true;
             result = update;

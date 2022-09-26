@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
@@ -675,7 +676,7 @@ public class PriorityLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
             .build());
-    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), isA(SubchannelPicker.class));
 
     // LB shutdown and subchannel state change can happen simultaneously. If shutdown runs first,
     // any further balancing state update should be ignored.

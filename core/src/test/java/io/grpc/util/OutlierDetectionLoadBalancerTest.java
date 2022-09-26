@@ -202,7 +202,7 @@ public class OutlierDetectionLoadBalancerTest {
 
   @Test
   public void handleNameResolutionError_withChildLb() {
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(
         new OutlierDetectionLoadBalancerConfig.Builder()
             .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
             .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build(),
@@ -217,7 +217,7 @@ public class OutlierDetectionLoadBalancerTest {
    */
   @Test
   public void shutdown() {
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(
         new OutlierDetectionLoadBalancerConfig.Builder()
             .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
             .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build(),
@@ -230,14 +230,14 @@ public class OutlierDetectionLoadBalancerTest {
    * Base case for accepting new resolved addresses.
    */
   @Test
-  public void handleResolvedAddresses() {
+  public void acceptResolvedAddresses() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
         .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
-    loadBalancer.handleResolvedAddresses(resolvedAddresses);
+    loadBalancer.acceptResolvedAddresses(resolvedAddresses);
 
     // Handling of resolved addresses is delegated
     verify(mockChildLb).handleResolvedAddresses(
@@ -256,14 +256,14 @@ public class OutlierDetectionLoadBalancerTest {
    * Outlier detection first enabled, then removed.
    */
   @Test
-  public void handleResolvedAddresses_outlierDetectionDisabled() {
+  public void acceptResolvedAddresses_outlierDetectionDisabled() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
         .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
-    loadBalancer.handleResolvedAddresses(resolvedAddresses);
+    loadBalancer.acceptResolvedAddresses(resolvedAddresses);
 
     fakeClock.forwardTime(15, TimeUnit.SECONDS);
 
@@ -272,7 +272,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     config = new OutlierDetectionLoadBalancerConfig.Builder().setChildPolicy(
         new PolicySelection(mockChildLbProvider, null)).build();
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
 
     // Pending task should be gone since OD is disabled.
@@ -284,14 +284,14 @@ public class OutlierDetectionLoadBalancerTest {
    * Tests different scenarios when the timer interval in the config changes.
    */
   @Test
-  public void handleResolvedAddresses_intervalUpdate() {
+  public void acceptResolvedAddresses_intervalUpdate() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
         .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
-    loadBalancer.handleResolvedAddresses(resolvedAddresses);
+    loadBalancer.acceptResolvedAddresses(resolvedAddresses);
 
     // Config update has doubled the interval
     config = new OutlierDetectionLoadBalancerConfig.Builder()
@@ -299,7 +299,7 @@ public class OutlierDetectionLoadBalancerTest {
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
         .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
 
     // If the timer has not run yet the task is just rescheduled to run after the new delay.
@@ -320,7 +320,7 @@ public class OutlierDetectionLoadBalancerTest {
     // not changing in the config, the next task due time should remain unchanged.
     fakeClock.forwardTime(4, TimeUnit.SECONDS);
     task = fakeClock.getPendingTasks().iterator().next();
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
     assertThat(task.dueTimeNanos).isEqualTo(config.intervalNanos + config.intervalNanos + 1);
   }
@@ -334,7 +334,7 @@ public class OutlierDetectionLoadBalancerTest {
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
 
     // Make one of the subchannels READY.
     final Subchannel readySubchannel = subchannels.values().iterator().next();
@@ -361,7 +361,7 @@ public class OutlierDetectionLoadBalancerTest {
             new SuccessRateEjection.Builder().setMinimumHosts(3).setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(), 7);
 
@@ -385,7 +385,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -410,7 +410,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -430,7 +430,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setEnforcementPercentage(0).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), 8);
 
@@ -455,7 +455,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -488,7 +488,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(20).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     // We produce an outlier, but don't give it enough calls to reach the minimum volume.
     generateLoad(
@@ -516,7 +516,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(20).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(
         ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
@@ -546,7 +546,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -571,7 +571,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setStdevFactor(1).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(
         subchannel1, Status.DEADLINE_EXCEEDED,
@@ -600,7 +600,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setStdevFactor(1).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(
         subchannel1, Status.DEADLINE_EXCEEDED,
@@ -634,7 +634,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     // By default all calls will return OK.
     generateLoad(ImmutableMap.of(), 7);
@@ -659,7 +659,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -683,7 +683,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(100).build()) // We won't produce this much volume...
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -708,7 +708,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(20).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(
         ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED),
@@ -738,7 +738,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -767,7 +767,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     // Three subchannels with problems, but one only has a single call that failed.
     // This is not enough for success rate to catch, but failure percentage is
@@ -804,7 +804,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -851,7 +851,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(), 7);
 
@@ -895,7 +895,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
 
@@ -957,7 +957,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build())
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(), 7);
 
@@ -984,7 +984,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setEnforcementPercentage(0).build()) // Configured, but not enforcing.
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -1011,7 +1011,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10).build()) // Configured, but not enforcing.
         .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
-    loadBalancer.handleResolvedAddresses(buildResolvedAddress(config, servers));
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
@@ -1127,7 +1127,7 @@ public class OutlierDetectionLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       subchannelList = new ArrayList<>();
       for (EquivalentAddressGroup eag: resolvedAddresses.getAddresses()) {
         Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
@@ -1136,6 +1136,7 @@ public class OutlierDetectionLoadBalancerTest {
         subchannel.start(mock(SubchannelStateListener.class));
         deliverSubchannelState(READY);
       }
+      return true;
     }
 
     @Override

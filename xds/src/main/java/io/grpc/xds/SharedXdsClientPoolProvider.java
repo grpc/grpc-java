@@ -28,7 +28,7 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-import io.grpc.xds.internal.sds.TlsContextManagerImpl;
+import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;

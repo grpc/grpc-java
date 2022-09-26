@@ -25,6 +25,8 @@ import static java.lang.Math.min;
 import com.google.common.base.Preconditions;
 import io.grpc.okhttp.internal.framed.FrameWriter;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
 import javax.annotation.Nullable;
 import okio.Buffer;
 
@@ -152,6 +154,7 @@ class OutboundFlowController {
    */
   public void writeStreams() {
     StreamState[] states = transport.getActiveStreams();
+    Collections.shuffle(Arrays.asList(states));
     int connectionWindow = connectionState.window();
     for (int numStreams = states.length; numStreams > 0 && connectionWindow > 0;) {
       int nextNumStreams = 0;

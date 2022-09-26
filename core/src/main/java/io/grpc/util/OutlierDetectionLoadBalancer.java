@@ -89,7 +89,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     OutlierDetectionLoadBalancerConfig config
         = (OutlierDetectionLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
 
@@ -142,6 +142,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     switchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
             .build());
+    return true;
   }
 
   @Override

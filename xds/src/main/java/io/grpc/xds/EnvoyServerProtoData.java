@@ -22,7 +22,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Objects;
