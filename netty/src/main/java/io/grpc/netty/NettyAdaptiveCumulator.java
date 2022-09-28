@@ -155,8 +155,23 @@ class NettyAdaptiveCumulator implements Cumulator {
         // Take ownership of the tail.
         newTail = tail.retain();
 
-        // TODO(sergiitk): remove when netty issue resolved.
-        // Correct the indexes.
+        // TODO(https://github.com/netty/netty/issues/12844): remove when we use Netty with
+        //   the issue fixed.
+        // In certain cases, removing the CompositeByteBuf component, and then adding it back
+        // isn't idempotent. An example is provided in https://github.com/netty/netty/issues/12844.
+        // This happens because the buffer returned by composite.component() has out-of-sync
+        // indexes. Under the hood the CompositeByteBuf returns a duplicate() of the underlying
+        // buffer, but doesn't set the indexes.
+        //
+        // To get the right indexes we use the fact that composite.internalComponent() returns
+        // the slice() into the readable portion of the underlying buffer.
+        // We use this implementation detail (internalComponent() returning a *SlicedByteBuf),
+        // and combine it with the fact that SlicedByteBuf duplicates have their indexes
+        // adjusted so they correspond to the to the readable portion of the slice.
+        //
+        // Hence composite.internalComponent().duplicate() returns a buffer with the
+        // indexes that should've been on the composite.component() in the first place.
+        // Until the issue is fixed, we manually adjust the indexes of the removed component.
         ByteBuf sliceDuplicate = composite.internalComponent(tailComponentIndex).duplicate();
         newTail.setIndex(sliceDuplicate.readerIndex(), sliceDuplicate.writerIndex());
 

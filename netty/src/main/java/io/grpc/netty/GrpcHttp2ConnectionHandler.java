@@ -34,9 +34,9 @@ import javax.annotation.Nullable;
  */
 @Internal
 public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler {
-  protected static final int CUMULATOR_COMPOSE_MIN_SIZE = 1024;
-  public static final Cumulator ADAPTIVE_CUMULATOR =
-      new NettyAdaptiveCumulator(CUMULATOR_COMPOSE_MIN_SIZE);
+  static final int ADAPTIVE_CUMULATOR_COMPOSE_MIN_SIZE_DEFAULT = 1024;
+  static final Cumulator ADAPTIVE_CUMULATOR =
+      new NettyAdaptiveCumulator(ADAPTIVE_CUMULATOR_COMPOSE_MIN_SIZE_DEFAULT);
 
   @Nullable
   protected final ChannelPromise channelUnused;
