@@ -79,10 +79,16 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (this.resolvedAddresses != null) {
-      return;
+      return true;
     }
+    // if (resolvedAddresses.getAddresses().isEmpty()) {
+    //   handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+    //       "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+    //           + ", attrs=" + resolvedAddresses.getAttributes()));
+    //   return false;
+    // }
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
     xdsClientPool = resolvedAddresses.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL);
@@ -91,6 +97,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     logger.log(XdsLogLevel.INFO, "Config: {0}", config);
     cdsLbState = new CdsLbState(config.name);
     cdsLbState.start();
+    return true;
   }
 
   @Override
