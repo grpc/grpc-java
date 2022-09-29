@@ -50,10 +50,10 @@ final class RlsRequestFactory {
   private static Map<String, GrpcKeyBuilder> createKeyBuilderTable(
       RouteLookupConfig config) {
     Map<String, GrpcKeyBuilder> table = new HashMap<>();
-    for (GrpcKeyBuilder grpcKeyBuilder : config.grpcKeyBuilders()) {
+    for (GrpcKeyBuilder grpcKeyBuilder : config.grpcKeybuilders()) {
       for (Name name : grpcKeyBuilder.names()) {
-        boolean hasMethod = name.method() == null || name.method().isEmpty();
-        String method = hasMethod ? "*" : name.method();
+        boolean noMethod = name.method() == null || name.method().isEmpty();
+        String method = noMethod ? "*" : name.method();
         String path = "/" + name.service() + "/" + method;
         table.put(path, grpcKeyBuilder);
       }
@@ -89,7 +89,7 @@ final class RlsRequestFactory {
       rlsRequestHeaders.put(extraKeys.method(), method);
     }
     rlsRequestHeaders.putAll(constantKeys);
-    return RouteLookupRequest.create(rlsRequestHeaders.build());
+    return RouteLookupRequest.create(rlsRequestHeaders.buildOrThrow());
   }
 
   private ImmutableMap.Builder<String, String> createRequestHeaders(

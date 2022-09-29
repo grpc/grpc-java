@@ -21,9 +21,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -55,12 +56,12 @@ import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.rls.CachingRlsLbClient.CacheEntry;
 import io.grpc.rls.CachingRlsLbClient.CachedRouteLookupResponse;
 import io.grpc.rls.CachingRlsLbClient.RlsPicker;
-import io.grpc.rls.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
 import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LruCache.EvictionListener;
@@ -79,8 +80,10 @@ import io.grpc.testing.TestMethodDescriptors;
 import java.io.IOException;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -130,13 +133,11 @@ public class CachingRlsLbClientTest {
       new ChildLbResolvedAddressFactory(
           ImmutableList.of(new EquivalentAddressGroup(socketAddress)), Attributes.EMPTY);
   private final TestLoadBalancerProvider lbProvider = new TestLoadBalancerProvider();
-  private final DoNotUseDirectScheduledExecutorService fakeScheduledExecutorService =
-      mock(DoNotUseDirectScheduledExecutorService.class, CALLS_REAL_METHODS);
-  private final FakeTimeProvider fakeTimeProvider =
-      fakeScheduledExecutorService.getFakeTimeProvider();
+  private final FakeClock fakeClock = new FakeClock();
   private final StaticFixedDelayRlsServerImpl rlsServerImpl =
       new StaticFixedDelayRlsServerImpl(
-          TimeUnit.MILLISECONDS.toNanos(SERVER_LATENCY_MILLIS), fakeScheduledExecutorService);
+          TimeUnit.MILLISECONDS.toNanos(SERVER_LATENCY_MILLIS),
+          fakeClock.getScheduledExecutorService());
   private final ChildLoadBalancingPolicy childLbPolicy =
       new ChildLoadBalancingPolicy("target", Collections.<String, Object>emptyMap(), lbProvider);
   private final Helper helper =
@@ -158,7 +159,7 @@ public class CachingRlsLbClientTest {
             .setHelper(helper)
             .setLbPolicyConfig(lbPolicyConfiguration)
             .setThrottler(fakeThrottler)
-            .setTimeProvider(fakeTimeProvider)
+            .setTicker(fakeClock.getTicker())
             .build();
   }
 
@@ -200,19 +201,19 @@ public class CachingRlsLbClientTest {
     assertThat(resp.isPending()).isTrue();
 
     // server response
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
 
     // cache hit for staled entry
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
+    fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
 
     // async refresh finishes
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
     inOrder
         .verify(evictionListener)
         .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.REPLACED));
@@ -222,7 +223,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // existing cache expired
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.maxAgeInNanos(), TimeUnit.NANOSECONDS);
+    fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.maxAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
@@ -256,7 +257,7 @@ public class CachingRlsLbClientTest {
             .setHelper(helper)
             .setLbPolicyConfig(lbPolicyConfiguration)
             .setThrottler(fakeThrottler)
-            .setTimeProvider(fakeTimeProvider)
+            .setTicker(fakeClock.getTicker())
             .build();
     RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
@@ -270,7 +271,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.isPending()).isTrue();
 
     // server response
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
@@ -296,7 +297,7 @@ public class CachingRlsLbClientTest {
 
     assertThat(resp.hasError()).isTrue();
 
-    fakeTimeProvider.forwardTime(10, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
     // initially backed off entry is backed off again
     verify(evictionListener)
         .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.REPLACED));
@@ -307,14 +308,14 @@ public class CachingRlsLbClientTest {
 
     // let it pass throttler
     fakeThrottler.nextResult = false;
-    fakeTimeProvider.forwardTime(10, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
     assertThat(resp.isPending()).isTrue();
 
     // server responses
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
@@ -337,7 +338,7 @@ public class CachingRlsLbClientTest {
     // valid channel
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
@@ -369,7 +370,7 @@ public class CachingRlsLbClientTest {
         RouteLookupRequest.create(ImmutableMap.<String, String>of());
     CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.isPending()).isTrue();
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.hasError()).isTrue();
@@ -386,7 +387,7 @@ public class CachingRlsLbClientTest {
             headers,
             CallOptions.DEFAULT));
     assertThat(pickResult.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(pickResult.getStatus().getDescription()).isEqualTo("fallback not available");
+    assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
   }
 
   @Test
@@ -405,20 +406,21 @@ public class CachingRlsLbClientTest {
 
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
     assertThat(resp.getHeaderData()).isEqualTo("header");
 
     ChildPolicyWrapper childPolicyWrapper = resp.getChildPolicyWrapper();
+    assertNotNull(childPolicyWrapper);
     assertThat(childPolicyWrapper.getTarget()).isEqualTo("target");
     assertThat(childPolicyWrapper.getPicker()).isNotInstanceOf(RlsPicker.class);
 
     // request2 has same target, it should reuse childPolicyWrapper
     CachedRouteLookupResponse resp2 = getInSyncContext(routeLookupRequest2);
     assertThat(resp2.isPending()).isTrue();
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp2 = getInSyncContext(routeLookupRequest2);
     assertThat(resp2.hasData()).isTrue();
@@ -426,9 +428,75 @@ public class CachingRlsLbClientTest {
     assertThat(resp2.getChildPolicyWrapper()).isEqualTo(resp.getChildPolicyWrapper());
   }
 
+  @Test
+  public void get_childPolicyWrapper_multiTarget() throws Exception {
+    setUpRlsLbClient();
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequest,
+            RouteLookupResponse.create(
+                ImmutableList.of("target1", "target2", "target3"),
+                "header")));
+
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.isPending()).isTrue();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isTrue();
+    List<ChildPolicyWrapper> policyWrappers = new ArrayList<>();
+
+    for (int i = 1; i <= 3; i++) {
+      String target = "target" + i;
+      policyWrappers.add(resp.getChildPolicyWrapper(target));
+    }
+
+    // Set to states: null, READY, null
+    setState(policyWrappers.get(1), ConnectivityState.READY);
+    ChildPolicyWrapper childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: null, CONNECTING, null
+    setState(policyWrappers.get(1), ConnectivityState.CONNECTING);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: null, CONNECTING, READY
+    setState(policyWrappers.get(2), ConnectivityState.READY);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: READY, CONNECTING, READY
+    setState(policyWrappers.get(0), ConnectivityState.READY);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: TRANSIENT_FAILURE, CONNECTING, READY
+    setState(policyWrappers.get(0), ConnectivityState.TRANSIENT_FAILURE);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(1), childPolicy);
+
+    // Set to states: TRANSIENT_FAILURE, TRANSIENT_FAILURE, TRANSIENT_FAILURE
+    setState(policyWrappers.get(1), ConnectivityState.TRANSIENT_FAILURE);
+    setState(policyWrappers.get(2), ConnectivityState.TRANSIENT_FAILURE);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(0), childPolicy);
+
+    // Set to states: TRANSIENT_FAILURE, TRANSIENT_FAILURE, READY
+    setState(policyWrappers.get(2), ConnectivityState.READY);
+    childPolicy = resp.getChildPolicyWrapper();
+    assertSame(policyWrappers.get(2), childPolicy);
+  }
+
+  private void setState(ChildPolicyWrapper policyWrapper, ConnectivityState newState) {
+    policyWrapper.getHelper().updateBalancingState(newState, policyWrapper.getPicker());
+  }
+
   private static RouteLookupConfig getRouteLookupConfig() {
     return RouteLookupConfig.builder()
-        .grpcKeyBuilders(ImmutableList.of(
+        .grpcKeybuilders(ImmutableList.of(
             GrpcKeyBuilder.create(
                 ImmutableList.of(Name.create("service1", "create")),
                 ImmutableList.of(
@@ -437,7 +505,7 @@ public class CachingRlsLbClientTest {
                 ExtraKeys.create("server", "service-key", "method-key"),
                 ImmutableMap.<String, String>of())))
         .lookupService("service1")
-        .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+        .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(10))
         .maxAgeInNanos(TimeUnit.SECONDS.toNanos(300))
         .staleAgeInNanos(TimeUnit.SECONDS.toNanos(240))
         .cacheSizeBytes(1000)
@@ -500,7 +568,7 @@ public class CachingRlsLbClientTest {
       LoadBalancer loadBalancer = new LoadBalancer() {
 
         @Override
-        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           Map<?, ?> config = (Map<?, ?>) resolvedAddresses.getLoadBalancingPolicyConfig();
           if (DEFAULT_TARGET.equals(config.get("target"))) {
             helper.updateBalancingState(
@@ -509,7 +577,7 @@ public class CachingRlsLbClientTest {
                   @Override
                   public PickResult pickSubchannel(PickSubchannelArgs args) {
                     return PickResult.withError(
-                        Status.UNAVAILABLE.withDescription("fallback not available"));
+                            Status.UNAVAILABLE.withDescription("fallback not available"));
                   }
                 });
           } else {
@@ -522,6 +590,8 @@ public class CachingRlsLbClientTest {
                   }
                 });
           }
+
+          return true;
         }
 
         @Override
@@ -670,7 +740,7 @@ public class CachingRlsLbClientTest {
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return fakeScheduledExecutorService;
+      return fakeClock.getScheduledExecutorService();
     }
 
     @Override

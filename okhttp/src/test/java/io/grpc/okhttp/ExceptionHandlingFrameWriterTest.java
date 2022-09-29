@@ -50,8 +50,7 @@ public class ExceptionHandlingFrameWriterTest {
   private final TransportExceptionHandler transportExceptionHandler =
       mock(TransportExceptionHandler.class);
   private final ExceptionHandlingFrameWriter exceptionHandlingFrameWriter =
-      new ExceptionHandlingFrameWriter(transportExceptionHandler, mockedFrameWriter,
-          new OkHttpFrameLogger(Level.FINE, logger));
+      new ExceptionHandlingFrameWriter(transportExceptionHandler, mockedFrameWriter);
 
   @Test
   public void exception() throws IOException {

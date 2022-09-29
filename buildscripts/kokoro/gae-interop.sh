@@ -29,6 +29,7 @@ cd "$GRPC_JAVA_DIR"
 ## Deploy the dummy 'default' version of the service
 ##
 GRADLE_FLAGS="--stacktrace -DgaeStopPreviousVersion=false -PskipCodegen=true -PskipAndroid=true"
+export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 
 # Deploy the dummy 'default' version. We only require that it exists when cleanup() is called.
 # It ok if we race with another run and fail here, because the end result is idempotent.

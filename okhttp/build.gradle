@@ -11,18 +11,20 @@ description = "gRPC: OkHttp"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    api project(':grpc-core'),
-            libraries.okhttp
+    api project(':grpc-core')
     implementation libraries.okio,
             libraries.guava,
-            libraries.perfmark
+            libraries.perfmark.api
+    // Make okhttp dependencies compile only
+    compileOnly libraries.okhttp
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-netty')
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
+            libraries.netty.codec.http2,
+            libraries.okhttp
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 project.sourceSets {
@@ -30,15 +32,17 @@ project.sourceSets {
     test { java { srcDir "${projectDir}/third_party/okhttp/test/java" } }
 }
 
-checkstyleMain.exclude '**/io/grpc/okhttp/internal/**'
+tasks.named("checkstyleMain").configure {
+    exclude '**/io/grpc/okhttp/internal/**'
+}
 
-javadoc {
+tasks.named("javadoc").configure {
     options.links 'http://square.github.io/okhttp/2.x/okhttp/'
     exclude 'io/grpc/okhttp/Internal*'
     exclude 'io/grpc/okhttp/internal/**'
 }
 
-jacocoTestReport {
+tasks.named("jacocoTestReport").configure {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
         exclude: [

@@ -16,9 +16,9 @@
 # Update GIT_ORIGIN_REV_ID then in this directory run ./import.sh
 
 set -e
-BRANCH=master
+BRANCH=main
 # import GIT_ORIGIN_REV_ID from one of the google internal CLs
-GIT_ORIGIN_REV_ID=ab56c3dd1cf9b516b62c5087e1ec1471bd63631e
+GIT_ORIGIN_REV_ID=dfcdc5ea103dda467963fb7079e4df28debcfd28
 GIT_REPO="https://github.com/envoyproxy/protoc-gen-validate.git"
 GIT_BASE_DIR=protoc-gen-validate
 SOURCE_PROTO_BASE_DIR=protoc-gen-validate

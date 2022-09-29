@@ -8,16 +8,11 @@ fi
 cd github
 
 pushd grpc-java/interop-testing
-branch=$(git branch --all --no-color --contains "${KOKORO_GITHUB_COMMIT}" \
-      | grep -v HEAD | head -1)
-shopt -s extglob
-branch="${branch//[[:space:]]}"
-branch="${branch##remotes/origin/}"
-shopt -u extglob
-../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
+GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'" \
+  ../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
 popd
 
-git clone -b "${branch}" --single-branch --depth=1 https://github.com/grpc/grpc.git
+git clone -b master --single-branch --depth=1 https://github.com/grpc/grpc.git
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
 
@@ -28,7 +23,7 @@ grpc/tools/run_tests/helper_scripts/prep_xds.sh
 # --test_case after they are added into "all".
 JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
   python3 grpc/tools/run_tests/run_xds_tests.py \
-    --test_case="all,circuit_breaking,timeout,fault_injection,csds" \
+    --test_case="ping_pong,circuit_breaking" \
     --project_id=grpc-testing \
     --project_num=830293263384 \
     --source_image=projects/grpc-testing/global/images/xds-test-server-5 \

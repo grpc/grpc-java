@@ -2,15 +2,77 @@ load("//:java_grpc_library.bzl", "java_grpc_library")
 
 package(default_visibility = ["//visibility:public"])
 
+# Mirrors the dependencies included in the artifact on Maven Central for usage
+# with maven_install's override_targets. Purposefully does not export any
+# symbols, as it should only be used as a dep for pre-compiled binaries on
+# Maven Central.
+java_library(
+    name = "services_maven",
+    runtime_deps = [
+        ":admin",
+        ":binarylog",
+        ":channelz",
+        ":health",
+        ":healthlb",
+        ":metrics",
+        ":metrics_internal",
+        ":reflection",
+    ],
+)
+
+java_library(
+    name = "admin",
+    srcs = [
+        "src/main/java/io/grpc/services/AdminInterface.java",
+    ],
+    deps = [
+        ":channelz",
+        "//api",
+        "@com_google_code_findbugs_jsr305//jar",
+    ],
+)
+
+java_library(
+    name = "metrics",
+    srcs = [
+        "src/main/java/io/grpc/services/CallMetricRecorder.java",
+        "src/main/java/io/grpc/services/MetricRecorder.java",
+        "src/main/java/io/grpc/services/MetricReport.java",
+    ],
+    deps = [
+        "//api",
+        "//context",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_errorprone_error_prone_annotations//jar",
+        "@com_google_guava_guava//jar",
+    ],
+)
+
+java_library(
+    name = "metrics_internal",
+    srcs = [
+        "src/main/java/io/grpc/services/InternalCallMetricRecorder.java",
+        "src/main/java/io/grpc/services/InternalMetricRecorder.java",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":metrics",
+        "//api",
+        "//context",
+    ],
+)
+
 java_library(
     name = "binarylog",
     srcs = [
         "src/main/java/io/grpc/protobuf/services/BinaryLogProvider.java",
         "src/main/java/io/grpc/protobuf/services/BinaryLogProviderImpl.java",
         "src/main/java/io/grpc/protobuf/services/BinaryLogSink.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogs.java",
         "src/main/java/io/grpc/protobuf/services/BinlogHelper.java",
         "src/main/java/io/grpc/protobuf/services/InetAddressUtil.java",
         "src/main/java/io/grpc/protobuf/services/TempFileSink.java",
+        "src/main/java/io/grpc/services/BinaryLogs.java",
     ],
     deps = [
         "//api",
@@ -33,7 +95,6 @@ java_library(
     deps = [
         ":_channelz_java_grpc",
         "//api",
-        "//context",
         "//stub",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
@@ -51,9 +112,6 @@ java_library(
     deps = [
         ":_reflection_java_grpc",
         "//api",
-        "//context",
-        "//core:internal",
-        "//core:util",
         "//protobuf",
         "//stub",
         "@com_google_code_findbugs_jsr305//jar",
@@ -76,6 +134,27 @@ java_library(
         "//api",
         "//context",
         "//stub",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@io_grpc_grpc_proto//:health_java_proto",
+    ],
+)
+
+java_library(
+    name = "healthlb",
+    srcs = [
+        "src/main/java/io/grpc/protobuf/services/HealthCheckingLoadBalancerFactory.java",
+        "src/main/java/io/grpc/protobuf/services/HealthCheckingLoadBalancerUtil.java",
+        "src/main/java/io/grpc/protobuf/services/internal/HealthCheckingRoundRobinLoadBalancerProvider.java",
+    ],
+    resources = [
+        "src/main/resources/META-INF/services/io.grpc.LoadBalancerProvider",
+    ],
+    deps = [
+        ":_health_java_grpc",
+        "//api",
+        "//core:internal",
+        "//core:util",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
         "@io_grpc_grpc_proto//:health_java_proto",

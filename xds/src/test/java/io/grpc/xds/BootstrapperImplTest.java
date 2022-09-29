@@ -578,6 +578,8 @@ public class BootstrapperImplTest {
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
+    // xds v2: xds v3 disabled
     assertThat(serverInfo.useProtocolV3()).isFalse();
   }
 
@@ -600,7 +602,57 @@ public class BootstrapperImplTest {
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
+    // xds_v3 enabled
     assertThat(serverInfo.useProtocolV3()).isTrue();
+  }
+
+  @Test
+  public void serverFeatureIgnoreResourceDeletion() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\"ignore_resource_deletion\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    // Only ignore_resource_deletion feature enabled: confirm it's on, and xds_v3 is off.
+    assertThat(serverInfo.useProtocolV3()).isFalse();
+    assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
+  }
+
+  @Test
+  public void serverFeatureIgnoreResourceDeletion_xdsV3() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\"xds_v3\", \"ignore_resource_deletion\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    // xds_v3 and ignore_resource_deletion features enabled: confirm both are on.
+    assertThat(serverInfo.useProtocolV3()).isTrue();
+    assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
 
   @Test
@@ -827,6 +879,7 @@ public class BootstrapperImplTest {
             .setBuildVersion(buildVersion.toString())
             .setUserAgentName(buildVersion.getUserAgent())
             .setUserAgentVersion(buildVersion.getImplementationVersion())
-            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
+            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING)
+            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_RESOURCE_IN_SOTW);
   }
 }

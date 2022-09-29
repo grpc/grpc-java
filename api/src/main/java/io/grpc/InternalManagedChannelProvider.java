@@ -25,6 +25,10 @@ public final class InternalManagedChannelProvider {
   private InternalManagedChannelProvider() {
   }
 
+  public static boolean isAvailable(ManagedChannelProvider provider) {
+    return provider.isAvailable();
+  }
+
   public static ManagedChannelBuilder<?> builderForAddress(ManagedChannelProvider provider,
       String name, int port) {
     return provider.builderForAddress(name, port);

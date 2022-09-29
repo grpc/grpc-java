@@ -110,7 +110,8 @@ public final class Attributes {
   }
 
   /**
-   * Key for an key-value pair.
+   * Key for an key-value pair. Uses reference equality.
+   *
    * @param <T> type of the value in the key-value pair
    */
   @Immutable

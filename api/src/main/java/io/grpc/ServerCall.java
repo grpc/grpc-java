@@ -212,6 +212,21 @@ public abstract class ServerCall<ReqT, RespT> {
   }
 
   /**
+   * Returns the level of security guarantee in communications
+   *
+   * <p>Determining the level of security offered by the transport for RPCs on server-side.
+   * This can be approximated by looking for the SSLSession, but that doesn't work for ALTS and
+   * maybe some future TLS approaches. May return a lower security level when it cannot be
+   * determined precisely.
+   *
+   * @return non-{@code null} SecurityLevel enum
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4692")
+  public SecurityLevel getSecurityLevel() {
+    return SecurityLevel.NONE;
+  }
+
+  /**
    * Returns properties of a single call.
    *
    * <p>Attributes originate from the transport and can be altered by {@link ServerTransportFilter}.

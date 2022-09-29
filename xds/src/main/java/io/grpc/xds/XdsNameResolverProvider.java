@@ -23,7 +23,11 @@ import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.ObjectPool;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
@@ -75,8 +79,9 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetUri);
       String name = targetPath.substring(1);
       return new XdsNameResolver(
-          targetUri.getAuthority(), name, args.getServiceConfigParser(),
-          args.getSynchronizationContext(), args.getScheduledExecutorService(),
+          targetUri.getAuthority(), name, args.getOverrideAuthority(),
+          args.getServiceConfigParser(), args.getSynchronizationContext(),
+          args.getScheduledExecutorService(),
           bootstrapOverride);
     }
     return null;
@@ -97,6 +102,11 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
     // Set priority value to be < 5 as we still want DNS resolver to be the primary default
     // resolver.
     return 4;
+  }
+
+  @Override
+  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+    return Collections.singleton(InetSocketAddress.class);
   }
 
   interface XdsClientPoolFactory {

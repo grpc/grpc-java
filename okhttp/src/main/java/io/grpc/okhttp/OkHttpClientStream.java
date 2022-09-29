@@ -53,8 +53,6 @@ class OkHttpClientStream extends AbstractClientStream {
   private final String userAgent;
   private final StatsTraceContext statsTraceCtx;
   private String authority;
-  private Object outboundFlowState;
-  private volatile int id = ABSENT_ID;
   private final TransportState state;
   private final Sink sink = new Sink();
   private final Attributes attributes;
@@ -118,10 +116,6 @@ class OkHttpClientStream extends AbstractClientStream {
    */
   public MethodDescriptor.MethodType getType() {
     return method.getType();
-  }
-
-  public int id() {
-    return id;
   }
 
   /**
@@ -198,7 +192,8 @@ class OkHttpClientStream extends AbstractClientStream {
     }
   }
 
-  class TransportState extends Http2ClientStreamTransportState {
+  class TransportState extends Http2ClientStreamTransportState
+      implements OutboundFlowController.Stream {
     private final int initialWindowSize;
     private final Object lock;
     @GuardedBy("lock")
@@ -223,6 +218,9 @@ class OkHttpClientStream extends AbstractClientStream {
     @GuardedBy("lock")
     private boolean canStart = true;
     private final Tag tag;
+    @GuardedBy("lock")
+    private OutboundFlowController.StreamState outboundFlowState;
+    private int id = ABSENT_ID;
 
     public TransportState(
         int maxMessageSize,
@@ -249,6 +247,7 @@ class OkHttpClientStream extends AbstractClientStream {
     public void start(int streamId) {
       checkState(id == ABSENT_ID, "the stream has been started with id %s", streamId);
       id = streamId;
+      outboundFlowState = outboundFlow.createState(this, streamId);
       // TODO(b/145386688): This access should be guarded by 'OkHttpClientStream.this.state.lock';
       // instead found: 'this.lock'
       state.onStreamAllocated();
@@ -260,7 +259,9 @@ class OkHttpClientStream extends AbstractClientStream {
         requestHeaders = null;
 
         if (pendingData.size() > 0) {
-          outboundFlow.data(pendingDataHasEndOfStream, id, pendingData, flushPendingData);
+          outboundFlow.data(
+              pendingDataHasEndOfStream, outboundFlowState, pendingData, flushPendingData);
+
         }
         canStart = false;
       }
@@ -396,7 +397,7 @@ class OkHttpClientStream extends AbstractClientStream {
         checkState(id() != ABSENT_ID, "streamId should be set");
         // If buffer > frameWriter.maxDataLength() the flow-controller will ensure that it is
         // properly chunked.
-        outboundFlow.data(endOfStream, id(), buffer, flush);
+        outboundFlow.data(endOfStream, outboundFlowState, buffer, flush);
       }
     }
 
@@ -419,13 +420,15 @@ class OkHttpClientStream extends AbstractClientStream {
     Tag tag() {
       return tag;
     }
-  }
 
-  void setOutboundFlowState(Object outboundFlowState) {
-    this.outboundFlowState = outboundFlowState;
-  }
+    int id() {
+      return id;
+    }
 
-  Object getOutboundFlowState() {
-    return outboundFlowState;
+    OutboundFlowController.StreamState getOutboundFlowState() {
+      synchronized (lock) {
+        return outboundFlowState;
+      }
+    }
   }
 }

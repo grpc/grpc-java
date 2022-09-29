@@ -98,12 +98,14 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         StringBuilder builder =
             new StringBuilder(
                 String.format(
+                    Locale.US,
                     "Call timeout set to '%d' ns, due to context deadline.", remainingNanos));
         if (deadline == null) {
           builder.append(" Explicit call timeout was not set.");
         } else {
           long callTimeout = deadline.timeRemaining(TimeUnit.NANOSECONDS);
-          builder.append(String.format(" Explicit call timeout was '%d' ns.", callTimeout));
+          builder.append(String.format(
+              Locale.US, " Explicit call timeout was '%d' ns.", callTimeout));
         }
         logger.fine(builder.toString());
       }
@@ -119,6 +121,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     buf.append(seconds);
     buf.append(String.format(Locale.US, ".%09d", nanos));
     buf.append("s. ");
+
     /** Cancels the call if deadline exceeded prior to the real call being set. */
     class DeadlineExceededRunnable implements Runnable {
       @Override
@@ -141,15 +144,20 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    * <p>No-op if either this method or {@link #cancel} have already been called.
    */
   // When this method returns, passThrough is guaranteed to be true
-  public final void setCall(ClientCall<ReqT, RespT> call) {
+  public final Runnable setCall(ClientCall<ReqT, RespT> call) {
     synchronized (this) {
       // If realCall != null, then either setCall() or cancel() has been called.
       if (realCall != null) {
-        return;
+        return null;
       }
       setRealCall(checkNotNull(call, "call"));
     }
-    drainPendingCalls();
+    return new ContextRunnable(context) {
+      @Override
+      public void runInContext() {
+        drainPendingCalls();
+      }
+    };
   }
 
   @Override

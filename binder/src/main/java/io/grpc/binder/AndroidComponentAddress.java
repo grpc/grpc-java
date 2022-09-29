@@ -121,14 +121,29 @@ public class AndroidComponentAddress extends SocketAddress { // NOTE: Only tempo
 
   /**
    * Returns this address as an "android-app://" uri.
+   *
+   * <p>See {@link Intent#URI_ANDROID_APP_SCHEME} for details.
    */
   public String asAndroidAppUri() {
-    return bindIntent.toUri(URI_ANDROID_APP_SCHEME);
+    Intent intentForUri = bindIntent;
+    if (intentForUri.getPackage() == null) {
+      // URI_ANDROID_APP_SCHEME requires an "explicit package name" which isn't set by any of our
+      // factory methods. Oddly, our explicit ComponentName is not enough.
+      intentForUri = intentForUri.cloneFilter().setPackage(getComponent().getPackageName());
+    }
+    return intentForUri.toUri(URI_ANDROID_APP_SCHEME);
   }
 
   @Override
   public int hashCode() {
-    return bindIntent.filterHashCode();
+    Intent intentForHashCode = bindIntent;
+    // Clear a (usually redundant) package filter to work around an Android >= 31 bug where certain
+    // Intents compare filterEquals() but have different filterHashCode() values. It's always safe
+    // to include fewer fields in the hashCode() computation.
+    if (intentForHashCode.getPackage() != null) {
+      intentForHashCode = intentForHashCode.cloneFilter().setPackage(null);
+    }
+    return intentForHashCode.filterHashCode();
   }
 
   @Override

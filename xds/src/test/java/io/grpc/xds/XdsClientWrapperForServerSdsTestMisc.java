@@ -18,13 +18,14 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector.NO_FILTER_CHAIN;
-import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
+import static io.grpc.xds.internal.security.SecurityProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,13 +44,13 @@ import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
-import io.grpc.xds.XdsClient.LdsUpdate;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SslContextProvider;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.SslContextProvider;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -83,6 +84,7 @@ import org.mockito.MockitoAnnotations;
 public class XdsClientWrapperForServerSdsTestMisc {
 
   private static final int PORT = 7000;
+  private static final int START_WAIT_AFTER_LISTENER_MILLIS = 100;
 
   private EmbeddedChannel channel;
   private ChannelPipeline pipeline;
@@ -158,15 +160,16 @@ public class XdsClientWrapperForServerSdsTestMisc {
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:" + PORT);
 
-    EnvoyServerProtoData.Listener listener =
+    EnvoyServerProtoData.Listener tcpListener =
         EnvoyServerProtoData.Listener.create(
             "listener1",
             "10.1.2.3",
             ImmutableList.of(),
             null);
-    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(tcpListener);
     xdsClient.ldsWatcher.onChanged(listenerUpdate);
-    start.get(5, TimeUnit.SECONDS);
+    verify(listener, timeout(5000)).onServing();
+    start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
     FilterChainSelector selector = selectorManager.getSelectorToUpdateSelector();
     assertThat(getSslContextProviderSupplier(selector)).isNull();
   }
@@ -186,56 +189,9 @@ public class XdsClientWrapperForServerSdsTestMisc {
     });
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsWatched);
+    verify(listener, timeout(5000)).onNotServing(any());
     try {
-      start.get(5, TimeUnit.SECONDS);
-      fail("Start should throw exception");
-    } catch (TimeoutException ex) {
-      assertThat(start.isDone()).isFalse();
-    }
-    assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
-  }
-
-  @Test
-  public void registerServerWatcher_notifyInternalError() throws Exception {
-    final SettableFuture<Server> start = SettableFuture.create();
-    Executors.newSingleThreadExecutor().execute(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          start.set(xdsServerWrapper.start());
-        } catch (Exception ex) {
-          start.setException(ex);
-        }
-      }
-    });
-    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    xdsClient.ldsWatcher.onError(Status.INTERNAL);
-    try {
-      start.get(5, TimeUnit.SECONDS);
-      fail("Start should throw exception");
-    } catch (TimeoutException ex) {
-      assertThat(start.isDone()).isFalse();
-    }
-    assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
-  }
-
-  @Test
-  public void registerServerWatcher_notifyPermDeniedError() throws Exception {
-    final SettableFuture<Server> start = SettableFuture.create();
-    Executors.newSingleThreadExecutor().execute(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          start.set(xdsServerWrapper.start());
-        } catch (Exception ex) {
-          start.setException(ex);
-        }
-      }
-    });
-    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    xdsClient.ldsWatcher.onError(Status.PERMISSION_DENIED);
-    try {
-      start.get(5, TimeUnit.SECONDS);
+      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
       fail("Start should throw exception");
     } catch (TimeoutException ex) {
       assertThat(start.isDone()).isFalse();
@@ -322,23 +278,6 @@ public class XdsClientWrapperForServerSdsTestMisc {
   }
 
   @Test
-  public void releaseOldSupplierOnPermDeniedError_verifyClose() throws Exception {
-    SslContextProvider sslContextProvider1 = mock(SslContextProvider.class);
-    when(tlsContextManager.findOrCreateServerSslContextProvider(eq(tlsContext1)))
-            .thenReturn(sslContextProvider1);
-    InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
-    localAddress = new InetSocketAddress(ipLocalAddress, PORT);
-    sendListenerUpdate(localAddress, tlsContext1, null,
-            tlsContextManager);
-    SslContextProviderSupplier returnedSupplier =
-            getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
-    assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
-    callUpdateSslContext(returnedSupplier);
-    xdsClient.ldsWatcher.onError(Status.PERMISSION_DENIED);
-    verify(tlsContextManager, times(1)).releaseServerSslContextProvider(eq(sslContextProvider1));
-  }
-
-  @Test
   public void releaseOldSupplierOnTemporaryError_noClose() throws Exception {
     SslContextProvider sslContextProvider1 = mock(SslContextProvider.class);
     when(tlsContextManager.findOrCreateServerSslContextProvider(eq(tlsContext1)))
@@ -380,7 +319,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
     XdsServerTestHelper
             .generateListenerUpdate(xdsClient, ImmutableList.of(), tlsContext,
                     tlsContextForDefaultFilterChain, tlsContextManager);
-    start.get(5, TimeUnit.SECONDS);
+    verify(listener, timeout(5000)).onServing();
+    start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
     InetAddress ipRemoteAddress = InetAddress.getByName("10.4.5.6");
     final InetSocketAddress remoteAddress = new InetSocketAddress(ipRemoteAddress, 1234);
     channel = new EmbeddedChannel() {

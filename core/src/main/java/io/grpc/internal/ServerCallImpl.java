@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.internal.GrpcAttributes.ATTR_SECURITY_LEVEL;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
@@ -34,8 +35,10 @@ import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
+import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.perfmark.PerfMark;
@@ -167,7 +170,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     try {
       InputStream resp = method.streamResponse(message);
       stream.writeMessage(resp);
-      stream.flush();
+      if (!getMethodDescriptor().getType().serverSendsOneMessage()) {
+        stream.flush();
+      }
     } catch (RuntimeException e) {
       close(Status.fromThrowable(e), new Metadata());
     } catch (Error e) {
@@ -248,6 +253,16 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   @Override
   public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
     return method;
+  }
+
+  @Override
+  public SecurityLevel getSecurityLevel() {
+    final Attributes attributes = getAttributes();
+    if (attributes == null) {
+      return super.getSecurityLevel();
+    }
+    final SecurityLevel securityLevel = attributes.get(ATTR_SECURITY_LEVEL);
+    return securityLevel == null ? super.getSecurityLevel() : securityLevel;
   }
 
   /**
@@ -354,19 +369,22 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     private void closedInternal(Status status) {
+      Throwable cancelCause = null;
       try {
         if (status.isOk()) {
           listener.onComplete();
         } else {
           call.cancelled = true;
           listener.onCancel();
+          // The status will not have a cause in all failure scenarios but we want to make sure
+          // we always cancel the context with one to keep the context cancelled state consistent.
+          cancelCause = InternalStatus.asRuntimeException(
+              Status.CANCELLED.withDescription("RPC cancelled"), null, false);
         }
       } finally {
         // Cancel context after delivering RPC closure notification to allow the application to
         // clean up and update any state based on whether onComplete or onCancel was called.
-        // Note that in failure situations JumpToApplicationThreadServerStreamListener has already
-        // closed the context. In these situations this cancel() call will be a no-op.
-        context.cancel(null);
+        context.cancel(cancelCause);
       }
     }
 

@@ -25,16 +25,16 @@ evaluationDependsOn(project(':grpc-api').path)
 dependencies {
     api project(':grpc-api')
     implementation libraries.gson,
-            libraries.android_annotations,
-            libraries.animalsniffer_annotations,
-            libraries.errorprone,
+            libraries.android.annotations,
+            libraries.animalsniffer.annotations,
+            libraries.errorprone.annotations,
             libraries.guava,
-            libraries.perfmark
+            libraries.perfmark.api
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava_testlib) {
+    testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
 
@@ -42,11 +42,11 @@ dependencies {
 
     jmh project(':grpc-testing')
 
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     exclude 'io/grpc/internal/**'
     exclude 'io/grpc/inprocess/Internal*'
     // Disabled until kinda stable.
@@ -87,7 +87,7 @@ def replaceConstant(File file, String needle, String replacement) {
 }
 
 plugins.withId("java") {
-    compileJava {
+    tasks.named("compileJava").configure {
         doLast {
             // Replace value of Signature Attribute.
             // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.7.9
@@ -109,13 +109,13 @@ plugins.withId("java") {
         }
     }
 
-    compileJmhJava {
+    tasks.named("compileJmhJava").configure {
         // This project targets Java 7 (no method references)
         options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
     }
 }
 
-task versionFile() {
+tasks.register("versionFile") {
     doLast {
         new File(buildDir, "version").write("${project.version}\n")
     }

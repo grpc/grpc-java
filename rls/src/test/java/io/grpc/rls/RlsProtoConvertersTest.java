@@ -101,7 +101,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig() throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
@@ -177,7 +177,7 @@ public class RlsProtoConvertersTest {
 
     RouteLookupConfig expectedConfig =
         RouteLookupConfig.builder()
-            .grpcKeyBuilders(ImmutableList.of(
+            .grpcKeybuilders(ImmutableList.of(
                 GrpcKeyBuilder.create(
                     ImmutableList.of(Name.create("service1", "create")),
                     ImmutableList.of(
@@ -216,7 +216,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig_emptyKeyBuilders()  throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [],\n"
+        + "  \"grpcKeybuilders\": [],\n"
         + "  \"lookupService\": \"service1\",\n"
         + "  \"lookupServiceTimeout\": \"2s\",\n"
         + "  \"maxAge\": \"300s\",\n"
@@ -240,7 +240,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig_namesNotUnique() throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
@@ -329,7 +329,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig_defaultValues() throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
@@ -345,7 +345,7 @@ public class RlsProtoConvertersTest {
 
     RouteLookupConfig expectedConfig =
         RouteLookupConfig.builder()
-            .grpcKeyBuilders(ImmutableList.of(
+            .grpcKeybuilders(ImmutableList.of(
                 GrpcKeyBuilder.create(
                     ImmutableList.of(Name.create("service1", null)),
                     ImmutableList.<NameMatcher>of(),
@@ -369,7 +369,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig_staleAgeCappedByMaxAge() throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
@@ -402,7 +402,7 @@ public class RlsProtoConvertersTest {
 
     RouteLookupConfig expectedConfig =
         RouteLookupConfig.builder()
-            .grpcKeyBuilders(ImmutableList.of(
+            .grpcKeybuilders(ImmutableList.of(
                 GrpcKeyBuilder.create(
                     ImmutableList.of(Name.create("service1", "create")),
                     ImmutableList.of(
@@ -428,7 +428,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig_staleAgeGivenWithoutMaxAge() throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
@@ -472,7 +472,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig_keyBuilderWithoutName() throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"headers\": [\n"
         + "        {\n"
@@ -510,7 +510,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig_nameWithoutService() throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
@@ -553,7 +553,7 @@ public class RlsProtoConvertersTest {
   @Test
   public void convert_jsonRlsConfig_keysNotUnique() throws IOException {
     String jsonStr = "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"

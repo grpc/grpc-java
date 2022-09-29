@@ -221,15 +221,14 @@ abstract class Outbound {
   @GuardedBy("this")
   @SuppressWarnings("fallthrough")
   protected final void sendInternal() throws StatusException {
-    Parcel parcel = Parcel.obtain();
-    int flags = 0;
-    parcel.writeInt(0); // Placeholder for flags. Will be filled in below.
-    parcel.writeInt(transactionIndex++);
-    try {
+    try (ParcelHolder parcel = ParcelHolder.obtain()) {
+      int flags = 0;
+      parcel.get().writeInt(0); // Placeholder for flags. Will be filled in below.
+      parcel.get().writeInt(transactionIndex++);
       switch (outboundState) {
         case INITIAL:
           flags |= TransactionUtils.FLAG_PREFIX;
-          flags |= writePrefix(parcel);
+          flags |= writePrefix(parcel.get());
           onOutboundState(State.PREFIX_SENT);
           if (!messageAvailable() && !suffixReady) {
             break;
@@ -239,7 +238,7 @@ abstract class Outbound {
           InputStream messageStream = peekNextMessage();
           if (messageStream != null) {
             flags |= TransactionUtils.FLAG_MESSAGE_DATA;
-            flags |= writeMessageData(parcel, messageStream);
+            flags |= writeMessageData(parcel.get(), messageStream);
           } else {
             checkState(suffixReady);
           }
@@ -252,20 +251,19 @@ abstract class Outbound {
           // Fall-through.
         case ALL_MESSAGES_SENT:
           flags |= TransactionUtils.FLAG_SUFFIX;
-          flags |= writeSuffix(parcel);
+          flags |= writeSuffix(parcel.get());
           onOutboundState(State.SUFFIX_SENT);
           break;
         default:
           throw new AssertionError();
       }
-      TransactionUtils.fillInFlags(parcel, flags);
+      TransactionUtils.fillInFlags(parcel.get(), flags);
+      int dataSize = parcel.get().dataSize();
       transport.sendTransaction(callId, parcel);
-      statsTraceContext.outboundWireSize(parcel.dataSize());
-      statsTraceContext.outboundUncompressedSize(parcel.dataSize());
+      statsTraceContext.outboundWireSize(dataSize);
+      statsTraceContext.outboundUncompressedSize(dataSize);
     } catch (IOException e) {
       throw Status.INTERNAL.withCause(e).asException();
-    } finally {
-      parcel.recycle();
     }
   }
 

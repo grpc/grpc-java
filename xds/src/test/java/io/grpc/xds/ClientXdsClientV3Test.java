@@ -41,6 +41,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
+import io.envoyproxy.envoy.config.cluster.v3.OutlierDetection;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
@@ -86,6 +87,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContex
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
+import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -107,15 +109,26 @@ import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
 /**
  * Tests for {@link ClientXdsClient} with protocol version v3.
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
+
+  /** Parameterized test cases. */
+  @Parameters(name = "ignoreResourceDeletion={0}")
+  public static Iterable<? extends Boolean> data() {
+    return ImmutableList.of(false, true);
+  }
+
+  @Parameter
+  public boolean ignoreResourceDeletion;
 
   @Override
   protected BindableService createAdsService() {
@@ -173,6 +186,11 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
   @Override
   protected boolean useProtocolV3() {
     return true;
+  }
+
+  @Override
+  protected boolean ignoreResourceDeletion() {
+    return ignoreResourceDeletion;
   }
 
   private static class DiscoveryRpcCallV3 extends DiscoveryRpcCall {
@@ -260,6 +278,13 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
   }
 
   private static class MessageFactoryV3 extends MessageFactory {
+
+    @Override
+    protected Any buildWrappedResource(Any originalResource) {
+      return Any.pack(Resource.newBuilder()
+          .setResource(originalResource)
+          .build());
+    }
 
     @SuppressWarnings("unchecked")
     @Override
@@ -452,10 +477,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         String lbPolicy, @Nullable Message ringHashLbConfig,
         @Nullable Message leastRequestLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, String transportSocketName,
-        @Nullable Message circuitBreakers) {
+        @Nullable Message circuitBreakers, @Nullable Message outlierDetection) {
       Cluster.Builder builder = initClusterBuilder(
           clusterName, lbPolicy, ringHashLbConfig, leastRequestLbConfig,
-          enableLrs, upstreamTlsContext, transportSocketName, circuitBreakers);
+          enableLrs, upstreamTlsContext, transportSocketName, circuitBreakers, outlierDetection);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -474,7 +499,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(
           clusterName, lbPolicy, ringHashLbConfig, leastRequestLbConfig,
-          enableLrs, upstreamTlsContext, "envoy.transport_sockets.tls", circuitBreakers);
+          enableLrs, upstreamTlsContext, "envoy.transport_sockets.tls", circuitBreakers, null);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       builder.setLoadAssignment(
           ClusterLoadAssignment.newBuilder().addEndpoints(
@@ -494,7 +519,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
-              .setName(ClientXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
+              .setName(XdsResourceType.AGGREGATE_CLUSTER_TYPE_NAME)
               .setTypedConfig(Any.pack(clusterConfig))
               .build();
       Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);
@@ -515,7 +540,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
         @Nullable Message ringHashLbConfig, @Nullable Message leastRequestLbConfig,
         boolean enableLrs, @Nullable Message upstreamTlsContext, String transportSocketName,
-        @Nullable Message circuitBreakers) {
+        @Nullable Message circuitBreakers, @Nullable Message outlierDetection) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
       if (lbPolicy.equals("round_robin")) {
@@ -542,6 +567,9 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       }
       if (circuitBreakers != null) {
         builder.setCircuitBreakers((CircuitBreakers) circuitBreakers);
+      }
+      if (outlierDetection != null) {
+        builder.setOutlierDetection((OutlierDetection) outlierDetection);
       }
       return builder;
     }

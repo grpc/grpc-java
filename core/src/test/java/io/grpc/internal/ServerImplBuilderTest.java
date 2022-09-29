@@ -18,11 +18,20 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
+import io.grpc.InternalGlobalInterceptors;
 import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
+import io.grpc.StaticTestingClassLoader;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -38,6 +47,21 @@ public class ServerImplBuilderTest {
           throw new UnsupportedOperationException();
         }
       };
+  private static final ServerInterceptor DUMMY_TEST_INTERCEPTOR =
+      new ServerInterceptor() {
+
+        @Override
+        public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+            ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+          throw new UnsupportedOperationException();
+        }
+      };
+  private final StaticTestingClassLoader classLoader =
+      new StaticTestingClassLoader(
+          getClass().getClassLoader(),
+          Pattern.compile(
+              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
+                  + "io\\.grpc\\.internal\\.[^.]+"));
 
   private ServerImplBuilder builder;
 
@@ -100,5 +124,78 @@ public class ServerImplBuilderTest {
     builder.setStatsEnabled(false);
     List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
     assertThat(factories).containsExactly(DUMMY_USER_TRACER);
+  }
+
+  @Test
+  public void getTracerFactories_callsGet() throws Exception {
+    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsGet.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  public static final class StaticTestingClassLoaderCallsGet implements Runnable {
+    @Override
+    public void run() {
+      ServerImplBuilder builder =
+          new ServerImplBuilder(
+              streamTracerFactories -> {
+                throw new UnsupportedOperationException();
+              });
+      assertThat(builder.getTracerFactories()).hasSize(2);
+      assertThat(builder.interceptors).hasSize(0);
+      try {
+        InternalGlobalInterceptors.setInterceptorsTracers(
+            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        fail("exception expected");
+      } catch (IllegalStateException e) {
+        assertThat(e).hasMessageThat().contains("Set cannot be called after any get call");
+      }
+    }
+  }
+
+  @Test
+  public void getTracerFactories_callsSet() throws Exception {
+    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsSet.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  public static final class StaticTestingClassLoaderCallsSet implements Runnable {
+    @Override
+    public void run() {
+      InternalGlobalInterceptors.setInterceptorsTracers(
+          Collections.emptyList(),
+          Arrays.asList(DUMMY_TEST_INTERCEPTOR),
+          Arrays.asList(DUMMY_USER_TRACER));
+      ServerImplBuilder builder =
+          new ServerImplBuilder(
+              streamTracerFactories -> {
+                throw new UnsupportedOperationException();
+              });
+      assertThat(builder.getTracerFactories()).containsExactly(DUMMY_USER_TRACER);
+      assertThat(builder.interceptors).containsExactly(DUMMY_TEST_INTERCEPTOR);
+    }
+  }
+
+  @Test
+  public void getEffectiveInterceptors_setEmpty() throws Exception {
+    Class<?> runnable =
+        classLoader.loadClass(StaticTestingClassLoaderCallsSetEmpty.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  // UsedReflectively
+  public static final class StaticTestingClassLoaderCallsSetEmpty implements Runnable {
+
+    @Override
+    public void run() {
+      InternalGlobalInterceptors.setInterceptorsTracers(
+          Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+      ServerImplBuilder builder =
+          new ServerImplBuilder(
+              streamTracerFactories -> {
+                throw new UnsupportedOperationException();
+              });
+      assertThat(builder.getTracerFactories()).isEmpty();
+      assertThat(builder.interceptors).isEmpty();
+    }
   }
 }

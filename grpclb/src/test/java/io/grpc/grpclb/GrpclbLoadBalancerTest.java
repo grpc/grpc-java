@@ -1179,24 +1179,34 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void grpclbFallback_initialTimeout_serverListReceivedBeforeTimerExpires() {
-    subtestGrpclbFallbackInitialTimeout(false);
+    subtestGrpclbFallbackTimeout(false, GrpclbState.FALLBACK_TIMEOUT_MS);
   }
 
   @Test
   public void grpclbFallback_initialTimeout_timerExpires() {
-    subtestGrpclbFallbackInitialTimeout(true);
+    subtestGrpclbFallbackTimeout(true, GrpclbState.FALLBACK_TIMEOUT_MS);
+  }
+
+  @Test
+  public void grpclbFallback_timeout_serverListReceivedBeforeTimerExpires() {
+    subtestGrpclbFallbackTimeout(false, 12345);
+  }
+
+  @Test
+  public void grpclbFallback_timeout_timerExpires() {
+    subtestGrpclbFallbackTimeout(true, 12345);
   }
 
   // Fallback or not within the period of the initial timeout.
-  private void subtestGrpclbFallbackInitialTimeout(boolean timerExpires) {
+  private void subtestGrpclbFallbackTimeout(boolean timerExpires, long timeout) {
     long loadReportIntervalMillis = 1983;
     InOrder inOrder = inOrder(helper, subchannelPool);
 
     // Create balancer and backend addresses
     List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
-    deliverResolvedAddresses(backendList, grpclbBalancerList);
-
+    deliverResolvedAddresses(
+        backendList, grpclbBalancerList, GrpclbConfig.create(Mode.ROUND_ROBIN, null, timeout));
     inOrder.verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
         eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
 
@@ -1220,7 +1230,7 @@ public class GrpclbLoadBalancerTest {
     inOrder.verifyNoMoreInteractions();
 
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
-    fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS - 1, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(timeout - 1, TimeUnit.MILLISECONDS);
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
 
     //////////////////////////////////
@@ -1246,7 +1256,10 @@ public class GrpclbLoadBalancerTest {
     // Name resolver sends new resolution results without any backend addr
     //////////////////////////////////////////////////////////////////////
     grpclbBalancerList = createResolvedBalancerAddresses(2);
-    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(),grpclbBalancerList);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList,
+        GrpclbConfig.create(Mode.ROUND_ROBIN, null, timeout));
 
     // New addresses are updated to the OobChannel
     inOrder.verify(helper).updateOobChannelAddresses(
@@ -1276,7 +1289,8 @@ public class GrpclbLoadBalancerTest {
     subchannelPool.clear();
     backendList = createResolvedBackendAddresses(2);
     grpclbBalancerList = createResolvedBalancerAddresses(1);
-    deliverResolvedAddresses(backendList, grpclbBalancerList);
+    deliverResolvedAddresses(
+        backendList, grpclbBalancerList, GrpclbConfig.create(Mode.ROUND_ROBIN, null, timeout));
 
     // New LB address is updated to the OobChannel
     inOrder.verify(helper).updateOobChannelAddresses(
@@ -1326,7 +1340,8 @@ public class GrpclbLoadBalancerTest {
     ///////////////////////////////////////////////////////////////
     backendList = createResolvedBackendAddresses(1);
     grpclbBalancerList = createResolvedBalancerAddresses(1);
-    deliverResolvedAddresses(backendList, grpclbBalancerList);
+    deliverResolvedAddresses(
+        backendList, grpclbBalancerList, GrpclbConfig.create(Mode.ROUND_ROBIN, null, timeout));
     // Will not affect the round robin list at all
     inOrder.verify(helper, never())
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
@@ -2142,16 +2157,23 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
-  public void pickFirstMode_fallback() throws Exception {
+  public void pickFirstMode_defaultTimeout_fallback() throws Exception {
+    pickFirstModeFallback(GrpclbState.FALLBACK_TIMEOUT_MS);
+  }
+
+  @Test
+  public void pickFirstMode_serviceConfigTimeout_fallback() throws Exception {
+    pickFirstModeFallback(12345);
+  }
+
+  private void pickFirstModeFallback(long timeout) throws Exception {
     InOrder inOrder = inOrder(helper);
 
     // Name resolver returns balancer and backend addresses
     List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(
-        backendList,
-        grpclbBalancerList,
-        GrpclbConfig.create(Mode.PICK_FIRST));
+        backendList, grpclbBalancerList, GrpclbConfig.create(Mode.PICK_FIRST, null, timeout));
 
     // Attempted to connect to balancer
     assertEquals(1, fakeOobChannels.size());
@@ -2160,7 +2182,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(1, lbRequestObservers.size());
 
     // Fallback timer expires with no response
-    fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(timeout, TimeUnit.MILLISECONDS);
 
     // Entering fallback mode
     inOrder.verify(helper).createSubchannel(createSubchannelArgsCaptor.capture());
@@ -2401,7 +2423,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(
         Collections.<EquivalentAddressGroup>emptyList(),
         grpclbBalancerList,
-        GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName));
+        GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName, GrpclbState.FALLBACK_TIMEOUT_MS));
 
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
@@ -2443,7 +2465,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(
         Collections.<EquivalentAddressGroup>emptyList(),
         newGrpclbResolutionList,
-        GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName));
+        GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName, GrpclbState.FALLBACK_TIMEOUT_MS));
 
     // GrpclbState will be shutdown, and a new one will be created
     assertThat(oobChannel.isShutdown()).isTrue();

@@ -248,6 +248,15 @@ final class LbPolicyConfiguration {
     }
 
     // GuardedBy CachingRlsLbClient.lock
+    List<ChildPolicyWrapper> createOrGet(List<String> targets) {
+      List<ChildPolicyWrapper> retVal = new ArrayList<>();
+      for (String target : targets) {
+        retVal.add(createOrGet(target));
+      }
+      return retVal;
+    }
+
+    // GuardedBy CachingRlsLbClient.lock
     void release(ChildPolicyWrapper childPolicyWrapper) {
       checkNotNull(childPolicyWrapper, "childPolicyWrapper");
       String target = childPolicyWrapper.getTarget();
@@ -310,6 +319,10 @@ final class LbPolicyConfiguration {
 
     ChildPolicyReportingHelper getHelper() {
       return helper;
+    }
+
+    public ConnectivityState getState() {
+      return state;
     }
 
     void refreshState() {

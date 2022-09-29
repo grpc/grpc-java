@@ -16,6 +16,7 @@
 
 package io.grpc.binder;
 
+import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.content.ComponentName;
@@ -24,9 +25,11 @@ import android.content.Intent;
 import android.net.Uri;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.testing.EqualsTester;
+import java.net.URISyntaxException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
 public final class AndroidComponentAddressTest {
@@ -61,6 +64,30 @@ public final class AndroidComponentAddressTest {
   }
 
   @Test
+  @Config(sdk = 30)
+  public void testAsAndroidAppUriSdk30() throws URISyntaxException {
+    AndroidComponentAddress addr =
+        AndroidComponentAddress.forRemoteComponent("com.foo", "com.foo.Service");
+    AndroidComponentAddress addrClone =
+        AndroidComponentAddress.forBindIntent(
+            Intent.parseUri(addr.asAndroidAppUri(), URI_ANDROID_APP_SCHEME));
+    assertThat(addr).isEqualTo(addrClone);
+  }
+
+  @Test
+  @Config(sdk = 29)
+  public void testAsAndroidAppUriSdk29() throws URISyntaxException {
+    AndroidComponentAddress addr =
+        AndroidComponentAddress.forRemoteComponent("com.foo", "com.foo.Service");
+    AndroidComponentAddress addrClone =
+        AndroidComponentAddress.forBindIntent(
+            Intent.parseUri(addr.asAndroidAppUri(), URI_ANDROID_APP_SCHEME));
+    // Can't test for equality because URI_ANDROID_APP_SCHEME adds a (redundant) package filter.
+    assertThat(addr.getComponent()).isEqualTo(addrClone.getComponent());
+    assertThat(addr.getAuthority()).isEqualTo(addrClone.getAuthority());
+  }
+
+  @Test
   public void testEquality() {
     new EqualsTester()
         .addEqualityGroup(
@@ -83,6 +110,37 @@ public final class AndroidComponentAddressTest {
                     .setAction("custom-action")
                     .setType("some-type")
                     .setComponent(hostComponent)))
+        .testEquals();
+  }
+
+  @Test
+  @Config(sdk = 30)
+  public void testPackageFilterEquality30AndUp() {
+    new EqualsTester()
+        .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent().setAction("action").setComponent(new ComponentName("pkg", "cls"))),
+            AndroidComponentAddress.forBindIntent(
+                new Intent()
+                    .setAction("action")
+                    .setPackage("pkg")
+                    .setComponent(new ComponentName("pkg", "cls"))))
+        .testEquals();
+  }
+
+  @Test
+  @Config(sdk = 29)
+  public void testPackageFilterEqualityPre30() {
+    new EqualsTester()
+        .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent().setAction("action").setComponent(new ComponentName("pkg", "cls"))))
+        .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent()
+                    .setAction("action")
+                    .setPackage("pkg")
+                    .setComponent(new ComponentName("pkg", "cls"))))
         .testEquals();
   }
 }

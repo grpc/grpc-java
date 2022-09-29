@@ -92,6 +92,13 @@ public abstract class CallCredentials {
     public abstract MethodDescriptor<?, ?> getMethodDescriptor();
 
     /**
+     * The call options used to call this RPC.
+     */
+    public CallOptions getCallOptions() {
+      throw new UnsupportedOperationException("Not implemented");
+    }
+
+    /**
      * The security level on the transport.
      */
     public abstract SecurityLevel getSecurityLevel();

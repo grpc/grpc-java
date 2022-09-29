@@ -9,10 +9,10 @@ plugins {
 description = "gRPC: Auth"
 dependencies {
     api project(':grpc-api'),
-            libraries.google_auth_credentials
+            libraries.google.auth.credentials
     implementation libraries.guava
     testImplementation project(':grpc-testing'),
-            libraries.google_auth_oauth2_http
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
+            libraries.google.auth.oauth2Http
+    signature libraries.signature.java
+    signature libraries.signature.android
 }

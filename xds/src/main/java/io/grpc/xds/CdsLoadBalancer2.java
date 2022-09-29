@@ -25,19 +25,19 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
-import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
-import io.grpc.xds.XdsClient.CdsResourceWatcher;
-import io.grpc.xds.XdsClient.CdsUpdate;
-import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
-import io.grpc.xds.XdsClient.CdsUpdate.LbPolicy;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayDeque;
@@ -159,7 +159,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
               instance = DiscoveryMechanism.forEds(
                   clusterState.name, clusterState.result.edsServiceName(),
                   clusterState.result.lrsServerInfo(), clusterState.result.maxConcurrentRequests(),
-                  clusterState.result.upstreamTlsContext());
+                  clusterState.result.upstreamTlsContext(), clusterState.result.outlierDetection());
             } else {  // logical DNS
               instance = DiscoveryMechanism.forLogicalDns(
                   clusterState.name, clusterState.result.dnsHostName(),
@@ -185,22 +185,27 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
         return;
       }
-      LoadBalancerProvider lbProvider = null;
-      Object lbConfig = null;
-      if (root.result.lbPolicy() == LbPolicy.RING_HASH) {
-        lbProvider = lbRegistry.getProvider("ring_hash_experimental");
-        lbConfig = new RingHashConfig(root.result.minRingSize(), root.result.maxRingSize());
-      }
-      if (root.result.lbPolicy() == LbPolicy.LEAST_REQUEST) {
-        lbProvider = lbRegistry.getProvider("least_request_experimental");
-        lbConfig = new LeastRequestConfig(root.result.choiceCount());
-      }
+
+      // The LB policy config is provided in service_config.proto/JSON format. It is unwrapped
+      // to determine the name of the policy in the load balancer registry.
+      LbConfig unwrappedLbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
+          root.result.lbPolicyConfig());
+      LoadBalancerProvider lbProvider = lbRegistry.getProvider(unwrappedLbConfig.getPolicyName());
       if (lbProvider == null) {
-        lbProvider = lbRegistry.getProvider("round_robin");
-        lbConfig = null;
+        throw NameResolver.ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
+                "No provider available for LB: " + unwrappedLbConfig.getPolicyName())).getError()
+            .asRuntimeException();
       }
+      NameResolver.ConfigOrError configOrError = lbProvider.parseLoadBalancingPolicyConfig(
+          unwrappedLbConfig.getRawConfigValue());
+      if (configOrError.getError() != null) {
+        throw configOrError.getError().augmentDescription("Unable to parse the LB config")
+            .asRuntimeException();
+      }
+
       ClusterResolverConfig config = new ClusterResolverConfig(
-          Collections.unmodifiableList(instances), new PolicySelection(lbProvider, lbConfig));
+          Collections.unmodifiableList(instances),
+          new PolicySelection(lbProvider, configOrError.getConfig()));
       if (childLb == null) {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }
@@ -216,7 +221,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
     }
 
-    private final class ClusterState implements CdsResourceWatcher {
+    private final class ClusterState implements ResourceWatcher<CdsUpdate> {
       private final String name;
       @Nullable
       private Map<String, ClusterState> childClusterStates;
@@ -232,12 +237,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       private void start() {
-        xdsClient.watchCdsResource(name, this);
+        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this);
       }
 
       void shutdown() {
         shutdown = true;
-        xdsClient.cancelCdsResourceWatch(name, this);
+        xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, this);
         if (childClusterStates != null) {  // recursively shut down all descendants
           for (ClusterState state : childClusterStates.values()) {
             state.shutdown();
@@ -246,7 +251,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       @Override
-      public void onError(final Status error) {
+      public void onError(Status error) {
+        Status status = Status.UNAVAILABLE
+            .withDescription(
+                String.format("Unable to load CDS %s. xDS server returned: %s: %s",
+                  name, error.getCode(), error.getDescription()))
+            .withCause(error.getCause());
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
@@ -255,7 +265,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             }
             // All watchers should receive the same error, so we only propagate it once.
             if (ClusterState.this == root) {
-              handleClusterDiscoveryError(error);
+              handleClusterDiscoveryError(status);
             }
           }
         });
@@ -290,6 +300,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             if (shutdown) {
               return;
             }
+
             logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
             discovered = true;
             result = update;

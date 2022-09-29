@@ -94,6 +94,8 @@ public interface ManagedClientTransport extends ClientTransport {
     /**
      * The transport is ready to accept traffic, because the connection is established.  This is
      * called at most once.
+     *
+     * <p>Streams created before this milestone are not guaranteed to function.
      */
     void transportReady();
 

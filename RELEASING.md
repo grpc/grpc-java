@@ -36,6 +36,7 @@ $ VERSION_FILES=(
   examples/example-tls/build.gradle
   examples/example-tls/pom.xml
   examples/example-xds/build.gradle
+  examples/example-orca/build.gradle
   )
 ```
 
@@ -50,7 +51,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
 
 1. Review the issues in the current release [milestone](https://github.com/grpc/grpc-java/milestones)
    for issues that won't make the cut. Check if any of them can be
-   closed. Be aware of the issues with the 'release blocker' label.
+   closed. Be aware of the issues with the [TODO:release blocker][] label.
    Consider reaching out to the assignee for the status update.
 2. For `master`, change root build files to the next minor snapshot (e.g.
    ``1.8.0-SNAPSHOT``).
@@ -88,11 +89,16 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
      git log --oneline "$(git merge-base v$MAJOR.$((MINOR-1)).0 upstream/v$MAJOR.$MINOR.x)"..v$MAJOR.$((MINOR-1)).0^
    ```
 
+[TODO:release blocker]: https://github.com/grpc/grpc-java/issues?q=label%3A%22TODO%3Arelease+blocker%22
+[TODO:backport]: https://github.com/grpc/grpc-java/issues?q=label%3ATODO%3Abackport
+
 Tagging the Release
 -------------------
 
 1. Verify there are no open issues in the release milestone. Open issues should
-   either be deferred or resolved and the fix backported.
+   either be deferred or resolved and the fix backported. Verify there are no
+   [TODO:release blocker][] nor [TODO:backport][] issues (open or closed), or
+   that they are tracking an issue for a different branch.
 2. Ensure that Google-internal steps completed at go/grpc/java/releasing#before-tagging-a-release.
 3. For vMajor.Minor.x branch, change `README.md` to refer to the next release
    version. _Also_ update the version numbers for protoc if the protobuf library
@@ -103,7 +109,7 @@ Tagging the Release
    $ git pull upstream v$MAJOR.$MINOR.x
    $ git checkout -b release
    # Bump documented gRPC versions.
-   # Also update protoc version to match protocVersion in build.gradle.
+   # Also update protoc version to match protobuf version in gradle/libs.versions.toml.
    $ ${EDITOR:-nano -w} README.md
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
    $ ${EDITOR:-nano -w} cronet/README.md
@@ -187,7 +193,7 @@ $ git cherry-pick v$MAJOR.$MINOR.$PATCH^
 Update version referenced by tutorials
 --------------------------------------
 
-Update the `grpc_java_release_tag` in
+Update `params.grpc_vers.java` in
 [config.yaml](https://github.com/grpc/grpc.io/blob/master/config.yaml)
 of the grpc.io repository.
 

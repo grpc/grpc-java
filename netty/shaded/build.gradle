@@ -9,6 +9,7 @@ plugins {
     id "maven-publish"
 
     id "com.github.johnrengelman.shadow"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Netty Shaded"
@@ -17,9 +18,43 @@ sourceSets { testShadow {} }
 
 dependencies {
     implementation project(':grpc-netty')
-    runtimeOnly libraries.netty_tcnative,
-            libraries.netty_epoll,
-	    libraries.netty_epoll_arm64
+    runtimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
+    runtimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    runtimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-aarch_64"
+        }
+    }
+    runtimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-x86_64"
+        }
+    }
+    runtimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-aarch_64"
+        }
+    }
+    runtimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "windows-x86_64"
+        }
+    }
+    runtimeOnly (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    runtimeOnly (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-aarch_64"
+        }
+    }
     testShadowImplementation files(shadowJar),
             project(':grpc-testing-proto'),
             project(':grpc-testing'),
@@ -27,14 +62,16 @@ dependencies {
     shadow project(':grpc-netty').configurations.runtimeClasspath.allDependencies.matching {
         it.group != 'io.netty'
     }
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
-jar {
+tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
 }
 
-shadowJar {
+tasks.named("shadowJar").configure {
     archiveClassifier = null
     dependencies {
         include(project(':grpc-netty'))
@@ -86,14 +123,18 @@ publishing {
     }
 }
 
-task testShadow(type: Test) {
+tasks.register("testShadow", Test) {
     testClassesDirs = sourceSets.testShadow.output.classesDirs
     classpath = sourceSets.testShadow.runtimeClasspath
 }
-compileTestShadowJava.options.compilerArgs = compileTestJava.options.compilerArgs
-compileTestShadowJava.options.encoding = compileTestJava.options.encoding
+tasks.named("compileTestShadowJava").configure {
+    options.compilerArgs = compileTestJava.options.compilerArgs
+    options.encoding = compileTestJava.options.encoding
+}
 
-test.dependsOn testShadow
+tasks.named("test").configure {
+    dependsOn tasks.named("testShadow")
+}
 
 /**
  * A Transformer which updates the Netty JAR META-INF/ resources to accurately

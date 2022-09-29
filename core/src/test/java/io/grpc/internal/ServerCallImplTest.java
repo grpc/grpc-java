@@ -20,6 +20,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.io.CharStreams;
+import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
@@ -41,6 +43,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
@@ -187,7 +190,6 @@ public class ServerCallImplTest {
     call.sendMessage(1234L);
 
     verify(stream).writeMessage(isA(InputStream.class));
-    verify(stream).flush();
   }
 
   @Test
@@ -353,6 +355,23 @@ public class ServerCallImplTest {
   }
 
   @Test
+  public void getSecurityLevel() {
+    Attributes attributes = Attributes.newBuilder()
+        .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.INTEGRITY).build();
+    when(stream.getAttributes()).thenReturn(attributes);
+    assertEquals(SecurityLevel.INTEGRITY, call.getSecurityLevel());
+    verify(stream).getAttributes();
+  }
+
+  @Test
+  public void getNullSecurityLevel() {
+    when(stream.getAttributes()).thenReturn(null);
+    assertEquals(SecurityLevel.NONE, call.getSecurityLevel());
+    verify(stream).getAttributes();
+  }
+
+
+  @Test
   public void setMessageCompression() {
     call.setMessageCompression(true);
 
@@ -406,7 +425,7 @@ public class ServerCallImplTest {
 
     verify(callListener).onCancel();
     assertTrue(context.isCancelled());
-    assertNull(context.cancellationCause());
+    assertNotNull(context.cancellationCause());
   }
 
   @Test

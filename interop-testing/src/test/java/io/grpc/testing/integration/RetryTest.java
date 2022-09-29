@@ -209,7 +209,7 @@ public class RetryTest {
 
   private void assertRpcStartedRecorded() throws Exception {
     MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
-    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT))
+    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS))
         .isEqualTo(1);
   }
 
@@ -249,9 +249,9 @@ public class RetryTest {
     assertThat(statusTag.asString()).isEqualTo(code.toString());
     assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
         .isEqualTo(1);
-    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY))
+    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY))
         .isEqualTo(roundtripLatencyMs);
-    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT))
+    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC))
         .isEqualTo(outboundMessages);
   }
 
@@ -276,7 +276,7 @@ public class RetryTest {
         .put("maxBackoff", "10s")
         .put("backoffMultiplier", 1D)
         .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
-        .build();
+        .buildOrThrow();
     createNewChannel();
     ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
@@ -314,7 +314,7 @@ public class RetryTest {
         .put("maxBackoff", "10s")
         .put("backoffMultiplier", 1D)
         .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
-        .build();
+        .buildOrThrow();
     createNewChannel();
 
     ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
@@ -347,10 +347,10 @@ public class RetryTest {
     fakeClock.forwardTime(2, SECONDS);
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(3);
+    serverCall.close(Status.OK, new Metadata());
     call.request(1);
     assertInboundMessageRecorded();
     assertInboundWireSizeRecorded(1);
-    serverCall.close(Status.OK, new Metadata());
     assertRpcStatusRecorded(Status.Code.OK, 2000, 2);
     assertRetryStatsRecorded(1, 0, 10_000);
   }
@@ -364,7 +364,7 @@ public class RetryTest {
         .put("maxBackoff", "10s")
         .put("backoffMultiplier", 1D)
         .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
-        .build();
+        .buildOrThrow();
     createNewChannel();
 
     // We will have streamClosed return at a particular moment that we want.

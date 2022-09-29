@@ -176,19 +176,18 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private static class DefaultListener implements XdsServingStatusListener {
     private final Logger logger;
     private final String prefix;
-    boolean notServing;
+    boolean notServingDueToError;
 
     DefaultListener(String prefix) {
       logger = Logger.getLogger(DefaultListener.class.getName());
       this.prefix = prefix;
-      notServing = true;
     }
 
     /** Log calls to onServing() following a call to onNotServing() at WARNING level. */
     @Override
     public void onServing() {
-      if (notServing) {
-        notServing = false;
+      if (notServingDueToError) {
+        notServingDueToError = false;
         logger.warning("[" + prefix + "] Entering serving state.");
       }
     }
@@ -196,7 +195,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     @Override
     public void onNotServing(Throwable throwable) {
       logger.warning("[" + prefix + "] " + throwable.getMessage());
-      notServing = true;
+      notServingDueToError = true;
     }
   }
 }

@@ -56,7 +56,7 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.3.0'
     implementation 'androidx.multidex:multidex:2.0.0'
-    implementation libraries.androidx_annotation
+    implementation libraries.androidx.annotation
     implementation 'com.google.android.gms:play-services-base:18.0.1'
 
     implementation project(':grpc-auth'),
@@ -68,13 +68,17 @@ dependencies {
             libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
-            libraries.opencensus_contrib_grpc_metrics
+            libraries.opencensus.contrib.grpc.metrics
 
-    implementation (libraries.google_auth_oauth2_http) {
+    implementation (libraries.google.auth.oauth2Http) {
         exclude group: 'org.apache.httpcomponents'
     }
 
-    compileOnly libraries.javax_annotation
+    implementation (project(':grpc-services')) {
+        exclude group: 'com.google.protobuf'
+    }
+
+    compileOnly libraries.javax.annotation
 
     androidTestImplementation 'androidx.test.ext:junit:1.1.3',
             'androidx.test:runner:1.4.0'
@@ -97,7 +101,7 @@ project.tasks['check'].dependsOn checkStyleMain, checkStyleTest
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-tasks.withType(JavaCompile) {
+tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
             "-Xlint:-cast"
     ]

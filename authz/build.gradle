@@ -13,12 +13,12 @@ dependencies {
     implementation project(':grpc-protobuf'),
             project(':grpc-core')
 
-    annotationProcessor libraries.autovalue
-    compileOnly libraries.javax_annotation
+    annotationProcessor libraries.auto.value
+    compileOnly libraries.javax.annotation
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto')
-    testImplementation (libraries.guava_testlib) {
+    testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
 
@@ -26,14 +26,14 @@ dependencies {
     shadow configurations.implementation.getDependencies().minus([xdsDependency])
     shadow project(path: ':grpc-xds', configuration: 'shadow')
 
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature libraries.signature.java
 }
 
-jar {
+tasks.named("jar").configure {
     classifier = 'original'
 }
 
-shadowJar {
+tasks.named("shadowJar").configure {
     classifier = null
     dependencies {
         exclude(dependency {true})
@@ -68,4 +68,6 @@ publishing {
     }
 }
 
-[publishMavenPublicationToMavenRepository]*.onlyIf {false}
+tasks.named("publishMavenPublicationToMavenRepository").configure {
+    enabled = false
+}

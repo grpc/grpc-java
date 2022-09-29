@@ -349,6 +349,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void run() {
+      // Workaround timer scheduled while in idle mode. This can happen from handleNotInUse() after
+      // an explicit enterIdleMode() by the user. Protecting here as other locations are a bit too
+      // subtle to change rapidly to resolve the channel panic. See #8714
       if (lbHelper == null) {
         return;
       }
@@ -618,10 +621,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.originalChannelCreds = builder.channelCredentials;
     this.originalTransportFactory = clientTransportFactory;
+    this.offloadExecutorHolder =
+        new ExecutorHolder(checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
-        clientTransportFactory, builder.callCredentials, this.executor);
+        clientTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
     this.oobTransportFactory = new CallCredentialsApplyingTransportFactory(
-        clientTransportFactory, null, this.executor);
+        clientTransportFactory, null, this.offloadExecutorHolder);
     this.scheduledExecutor =
         new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;
@@ -633,9 +638,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
     this.retryEnabled = builder.retryEnabled;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
-    this.offloadExecutorHolder =
-        new ExecutorHolder(
-            checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.nameResolverRegistry = builder.nameResolverRegistry;
     ScParser serviceConfigParser =
         new ScParser(
@@ -643,6 +645,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             builder.maxRetryAttempts,
             builder.maxHedgedAttempts,
             loadBalancerFactory);
+    this.authorityOverride = builder.authorityOverride;
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
@@ -651,16 +654,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setScheduledExecutorService(scheduledExecutor)
             .setServiceConfigParser(serviceConfigParser)
             .setChannelLogger(channelLogger)
-            .setOffloadExecutor(
-                // Avoid creating the offloadExecutor until it is first used
-                new Executor() {
-                  @Override
-                  public void execute(Runnable command) {
-                    offloadExecutorHolder.getExecutor().execute(command);
-                  }
-                })
+            .setOffloadExecutor(this.offloadExecutorHolder)
+            .setOverrideAuthority(this.authorityOverride)
             .build();
-    this.authorityOverride = builder.authorityOverride;
     this.nameResolverFactory = builder.nameResolverFactory;
     this.nameResolver = getNameResolver(
         target, authorityOverride, nameResolverFactory, nameResolverArgs);
@@ -884,6 +880,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     updateSubchannelPicker(new PanicSubchannelPicker());
+    realChannel.updateConfigSelector(null);
     channelLogger.log(ChannelLogLevel.ERROR, "PANIC! Entering TRANSIENT_FAILURE");
     channelStateManager.gotoState(TRANSIENT_FAILURE);
   }
@@ -1099,22 +1096,25 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       /** Called when it's ready to create a real call and reprocess the pending call. */
       void reprocess() {
-        getCallExecutor(callOptions).execute(
-            new Runnable() {
-              @Override
-              public void run() {
-                ClientCall<ReqT, RespT> realCall;
-                Context previous = context.attach();
-                try {
-                  realCall = newClientCall(method, callOptions);
-                } finally {
-                  context.detach(previous);
-                }
-                setCall(realCall);
-                syncContext.execute(new PendingCallRemoval());
-              }
+        ClientCall<ReqT, RespT> realCall;
+        Context previous = context.attach();
+        try {
+          realCall = newClientCall(method, callOptions);
+        } finally {
+          context.detach(previous);
+        }
+        Runnable toRun = setCall(realCall);
+        if (toRun == null) {
+          syncContext.execute(new PendingCallRemoval());
+        } else {
+          getCallExecutor(callOptions).execute(new Runnable() {
+            @Override
+            public void run() {
+              toRun.run();
+              syncContext.execute(new PendingCallRemoval());
             }
-        );
+          });
+        }
       }
 
       @Override
@@ -1199,7 +1199,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       InternalConfigSelector.Result result = configSelector.selectConfig(args);
       Status status = result.getStatus();
       if (!status.isOk()) {
-        executeCloseObserverInContext(observer, status);
+        executeCloseObserverInContext(observer,
+            GrpcUtil.replaceInappropriateControlPlaneStatus(status));
         delegate = (ClientCall<ReqT, RespT>) NOOP_CALL;
         return;
       }
@@ -1453,8 +1454,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final class LbHelperImpl extends LoadBalancer.Helper {
     AutoConfiguredLoadBalancer lb;
-    boolean nsRefreshedByLb;
-    boolean ignoreRefreshNsCheck;
 
     @Override
     public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
@@ -1493,7 +1492,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void refreshNameResolution() {
       syncContext.throwIfNotInThisSynchronizationContext();
-      nsRefreshedByLb = true;
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
@@ -1502,11 +1500,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       syncContext.execute(new LoadBalancerRefreshNameResolution());
-    }
-
-    @Override
-    public void ignoreRefreshNameResolutionCheck() {
-      ignoreRefreshNsCheck = true;
     }
 
     @Override
@@ -1749,6 +1742,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
+          if (ManagedChannelImpl.this.nameResolver != resolver) {
+            return;
+          }
 
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
           channelLogger.log(
@@ -1815,6 +1811,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 channelLogger.log(
                     ChannelLogLevel.INFO,
                     "Fallback to error due to invalid first service config without default config");
+                // This error could be an "inappropriate" control plane error that should not bleed
+                // through to client code using gRPC. We let them flow through here to the LB as
+                // we later check for these error codes when investigating pick results in
+                // GrpcUtil.getTransportFromPickResult().
                 onError(configOrError.getError());
                 return;
               } else {
@@ -1857,16 +1857,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   .set(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG, healthCheckingConfig)
                   .build();
             }
+            Attributes attributes = attrBuilder.build();
 
-            Status handleResult = helper.lb.tryHandleResolvedAddresses(
+            boolean addressesAccepted = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
-                    .setAttributes(attrBuilder.build())
+                    .setAttributes(attributes)
                     .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
 
-            if (!handleResult.isOk()) {
-              handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
+            if (!addressesAccepted) {
+              scheduleExponentialBackOffInSyncContext();
             }
           }
         }
@@ -1976,16 +1977,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
           checkState(listener != null, "listener is null");
           listener.onSubchannelState(newState);
-          if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-            if (!helper.ignoreRefreshNsCheck && !helper.nsRefreshedByLb) {
-              logger.log(Level.WARNING,
-                  "LoadBalancer should call Helper.refreshNameResolution() to refresh name "
-                      + "resolution if subchannel state becomes TRANSIENT_FAILURE or IDLE. "
-                      + "This will no longer happen automatically in the future releases");
-              refreshAndResetNameResolution();
-              helper.nsRefreshedByLb = true;
-            }
-          }
         }
 
         @Override
@@ -2209,8 +2200,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   /**
    * Lazily request for Executor from an executor pool.
+   * Also act as an Executor directly to simply run a cmd
    */
-  private static final class ExecutorHolder {
+  @VisibleForTesting
+  static final class ExecutorHolder implements Executor {
     private final ObjectPool<? extends Executor> pool;
     private Executor executor;
 
@@ -2229,6 +2222,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
       if (executor != null) {
         executor = pool.returnObject(executor);
       }
+    }
+
+    @Override
+    public void execute(Runnable command) {
+      getExecutor().execute(command);
     }
   }
 

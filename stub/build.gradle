@@ -10,13 +10,13 @@ description = "gRPC: Stub"
 dependencies {
     api project(':grpc-api'),
         libraries.guava
-    implementation libraries.errorprone
+    implementation libraries.errorprone.annotations
     testImplementation libraries.truth,
             project(':grpc-testing')
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     exclude 'io/grpc/stub/Internal*'
 }

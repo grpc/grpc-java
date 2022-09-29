@@ -22,6 +22,8 @@ import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
@@ -60,6 +62,8 @@ public class TestServiceClient {
     TestUtils.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
+    customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
+    LoadBalancerRegistry.getDefaultRegistry().register(customBackendMetricsLoadBalancerProvider);
     client.setUp();
 
     try {
@@ -89,8 +93,10 @@ public class TestServiceClient {
   private int soakIterations = 10;
   private int soakMaxFailures = 0;
   private int soakPerIterationMaxAcceptableLatencyMs = 1000;
+  private int soakMinTimeMsBetweenRpcs = 0;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
+  private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
 
@@ -161,6 +167,8 @@ public class TestServiceClient {
         soakMaxFailures = Integer.parseInt(value);
       } else if ("soak_per_iteration_max_acceptable_latency_ms".equals(key)) {
         soakPerIterationMaxAcceptableLatencyMs = Integer.parseInt(value);
+      } else if ("soak_min_time_ms_between_rpcs".equals(key)) {
+        soakMinTimeMsBetweenRpcs = Integer.parseInt(value);
       } else if ("soak_overall_timeout_seconds".equals(key)) {
         soakOverallTimeoutSeconds = Integer.parseInt(value);
       } else {
@@ -221,6 +229,11 @@ public class TestServiceClient {
           + "\n                              two soak tests (rpc_soak and channel_soak) should "
           + "\n                              take. Default "
             + c.soakPerIterationMaxAcceptableLatencyMs
+          + "\n --soak_min_time_ms_between_rpcs "
+          + "\n                              The minimum time in milliseconds between consecutive "
+          + "\n                              RPCs in a soak test (rpc_soak or channel_soak), "
+          + "\n                              useful for limiting QPS. Default: "
+          + c.soakMinTimeMsBetweenRpcs
           + "\n --soak_overall_timeout_seconds "
           + "\n                              The overall number of seconds after which a soak test "
           + "\n                              should stop and fail, if the desired number of "
@@ -239,6 +252,10 @@ public class TestServiceClient {
   private synchronized void tearDown() {
     try {
       tester.tearDown();
+      if (customBackendMetricsLoadBalancerProvider != null) {
+        LoadBalancerRegistry.getDefaultRegistry()
+            .deregister(customBackendMetricsLoadBalancerProvider);
+      }
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -448,6 +465,7 @@ public class TestServiceClient {
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
+            soakMinTimeMsBetweenRpcs,
             soakOverallTimeoutSeconds);
         break;
       }
@@ -458,7 +476,19 @@ public class TestServiceClient {
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
+            soakMinTimeMsBetweenRpcs,
             soakOverallTimeoutSeconds);
+        break;
+
+      }
+
+      case ORCA_PER_RPC: {
+        tester.testOrcaPerRpc();
+        break;
+      }
+
+      case ORCA_OOB: {
+        tester.testOrcaOob();
         break;
       }
 
@@ -598,6 +628,11 @@ public class TestServiceClient {
       } else {
         return null;
       }
+    }
+
+    @Override
+    protected int operationTimeoutMillis() {
+      return 15000;
     }
   }
 

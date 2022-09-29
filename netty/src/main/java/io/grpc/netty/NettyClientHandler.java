@@ -951,17 +951,16 @@ class NettyClientHandler extends AbstractNettyHandler {
       Http2Ping p = ping;
       if (ackPayload == flowControlPing().payload()) {
         flowControlPing().updateWindow();
-        if (logger.isLoggable(Level.FINE)) {
-          logger.log(Level.FINE, String.format("Window: %d",
-              decoder().flowController().initialWindowSize(connection().connectionStream())));
-        }
+        logger.log(Level.FINE, "Window: {0}",
+            decoder().flowController().initialWindowSize(connection().connectionStream()));
       } else if (p != null) {
         if (p.payload() == ackPayload) {
           p.complete();
           ping = null;
         } else {
-          logger.log(Level.WARNING, String.format(
-              "Received unexpected ping ack. Expecting %d, got %d", p.payload(), ackPayload));
+          logger.log(Level.WARNING,
+              "Received unexpected ping ack. Expecting {0}, got {1}",
+              new Object[] {p.payload(), ackPayload});
         }
       } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");

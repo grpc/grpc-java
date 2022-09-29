@@ -88,11 +88,19 @@ public final class FakeClock {
 
   public class ScheduledTask extends AbstractFuture<Void> implements ScheduledFuture<Void> {
     public final Runnable command;
-    public final long dueTimeNanos;
+    public long dueTimeNanos;
 
-    ScheduledTask(long dueTimeNanos, Runnable command) {
-      this.dueTimeNanos = dueTimeNanos;
+    ScheduledTask(Runnable command) {
       this.command = command;
+    }
+
+    void run() {
+      command.run();
+      set(null);
+    }
+
+    void setDueTimeNanos(long dueTimeNanos) {
+      this.dueTimeNanos = dueTimeNanos;
     }
 
     @Override public boolean cancel(boolean mayInterruptIfRunning) {
@@ -116,10 +124,6 @@ public final class FakeClock {
       }
     }
 
-    void complete() {
-      set(null);
-    }
-
     @Override
     public String toString() {
       return "[due=" + dueTimeNanos + ", task=" + command + "]";
@@ -132,24 +136,33 @@ public final class FakeClock {
       throw new UnsupportedOperationException();
     }
 
-    @Override public ScheduledFuture<?> schedule(Runnable cmd, long delay, TimeUnit unit) {
-      ScheduledTask task = new ScheduledTask(currentTimeNanos + unit.toNanos(delay), cmd);
+    private void schedule(ScheduledTask task, long delay, TimeUnit unit) {
+      task.setDueTimeNanos(currentTimeNanos + unit.toNanos(delay));
       if (delay > 0) {
         scheduledTasks.add(task);
       } else {
         dueTasks.add(task);
       }
+    }
+
+    @Override public ScheduledFuture<?> schedule(Runnable cmd, long delay, TimeUnit unit) {
+      ScheduledTask task = new ScheduledTask(cmd);
+      schedule(task, delay, unit);
       return task;
     }
 
     @Override public ScheduledFuture<?> scheduleAtFixedRate(
-        Runnable command, long initialDelay, long period, TimeUnit unit) {
-      throw new UnsupportedOperationException();
+        Runnable cmd, long initialDelay, long period, TimeUnit unit) {
+      ScheduledTask task = new ScheduleAtFixedRateTask(cmd, period, unit);
+      schedule(task, initialDelay, unit);
+      return task;
     }
 
     @Override public ScheduledFuture<?> scheduleWithFixedDelay(
-        Runnable command, long initialDelay, long delay, TimeUnit unit) {
-      throw new UnsupportedOperationException();
+        Runnable cmd, long initialDelay, long delay, TimeUnit unit) {
+      ScheduledTask task = new ScheduleWithFixedDelayTask(cmd, delay, unit);
+      schedule(task, initialDelay, unit);
+      return task;
     }
 
     @Override public boolean awaitTermination(long timeout, TimeUnit unit) {
@@ -206,6 +219,41 @@ public final class FakeClock {
       // Since it is being enqueued immediately, no point in tracing the future for cancellation.
       Future<?> unused = schedule(command, 0, TimeUnit.NANOSECONDS);
     }
+
+    class ScheduleAtFixedRateTask extends ScheduledTask {
+      final long periodNanos;
+
+      public ScheduleAtFixedRateTask(Runnable command, long period, TimeUnit unit) {
+        super(command);
+        this.periodNanos = unit.toNanos(period);
+      }
+
+      @Override void run() {
+        long startTimeNanos = currentTimeNanos;
+        command.run();
+        if (!isCancelled()) {
+          schedule(this, startTimeNanos + periodNanos - currentTimeNanos, TimeUnit.NANOSECONDS);
+        }
+      }
+    }
+
+    class ScheduleWithFixedDelayTask extends ScheduledTask {
+
+      final long delayNanos;
+
+      ScheduleWithFixedDelayTask(Runnable command, long delay, TimeUnit unit) {
+        super(command);
+        this.delayNanos = unit.toNanos(delay);
+      }
+
+      @Override
+      void run() {
+        command.run();
+        if (!isCancelled()) {
+          schedule(this, delayNanos, TimeUnit.NANOSECONDS);
+        }
+      }
+    }
   }
 
   /**
@@ -258,8 +306,7 @@ public final class FakeClock {
       }
       ScheduledTask task;
       while ((task = dueTasks.poll()) != null) {
-        task.command.run();
-        task.complete();
+        task.run();
         count++;
       }
     }
@@ -357,7 +404,7 @@ public final class FakeClock {
 
   public long currentTimeMillis() {
     // Normally millis and nanos are of different epochs. Add an offset to simulate that.
-    return TimeUnit.NANOSECONDS.toMillis(currentTimeNanos + 123456789L);
+    return TimeUnit.NANOSECONDS.toMillis(currentTimeNanos + 1234567890123456789L);
   }
 
   /**

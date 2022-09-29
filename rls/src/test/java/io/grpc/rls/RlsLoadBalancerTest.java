@@ -21,7 +21,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -56,6 +55,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
@@ -74,6 +74,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import org.junit.After;
 import org.junit.Before;
@@ -98,8 +99,7 @@ public class RlsLoadBalancerTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private final RlsLoadBalancerProvider provider = new RlsLoadBalancerProvider();
-  private final DoNotUseDirectScheduledExecutorService fakeScheduledExecutorService =
-      mock(DoNotUseDirectScheduledExecutorService.class, CALLS_REAL_METHODS);
+  private final FakeClock fakeClock = new FakeClock();
   private final SynchronizationContext syncContext =
       new SynchronizationContext(new UncaughtExceptionHandler() {
         @Override
@@ -111,6 +111,7 @@ public class RlsLoadBalancerTest {
       mock(Helper.class, AdditionalAnswers.delegatesTo(new FakeHelper()));
   private final FakeRlsServerImpl fakeRlsServerImpl = new FakeRlsServerImpl();
   private final Deque<FakeSubchannel> subchannels = new LinkedList<>();
+  private final FakeThrottler fakeThrottler = new FakeThrottler();
   @Mock
   private Marshaller<Object> mockMarshaller;
   @Captor
@@ -121,7 +122,7 @@ public class RlsLoadBalancerTest {
   private String defaultTarget = "defaultTarget";
 
   @Before
-  public void setUp() throws Exception {
+  public void setUp() {
     MockitoAnnotations.initMocks(this);
 
     fakeSearchMethod =
@@ -155,19 +156,51 @@ public class RlsLoadBalancerTest {
     rlsLb.cachingRlsLbClientBuilderProvider = new CachingRlsLbClientBuilderProvider() {
       @Override
       public CachingRlsLbClient.Builder get() {
-        // using default throttler which doesn't throttle
-        return CachingRlsLbClient.newBuilder();
+        // using fake throttler to allow enablement of throttler
+        return CachingRlsLbClient.newBuilder()
+            .setThrottler(fakeThrottler)
+            .setTicker(fakeClock.getTicker());
       }
     };
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
     rlsLb.shutdown();
   }
 
   @Test
-  public void lb_working_withDefaultTarget() throws Exception {
+  public void lb_serverStatusCodeConversion() throws Exception {
+    deliverResolvedAddresses();
+    InOrder inOrder = inOrder(helper);
+    inOrder.verify(helper)
+        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    Metadata headers = new Metadata();
+    PickSubchannelArgsImpl fakeSearchMethodArgs =
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
+    PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
+    FakeSubchannel subchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(subchannel).isNotNull();
+
+    // Ensure happy path is unaffected
+    subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    res = picker.pickSubchannel(fakeSearchMethodArgs);
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
+
+    // Check on conversion
+    Throwable cause = new Throwable("cause");
+    Status aborted = Status.ABORTED.withCause(cause).withDescription("base desc");
+    Status serverStatus = CachingRlsLbClient.convertRlsServerStatus(aborted, "conv.test");
+    assertThat(serverStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(serverStatus.getCause()).isEqualTo(cause);
+    assertThat(serverStatus.getDescription()).contains("RLS server returned: ");
+    assertThat(serverStatus.getDescription()).endsWith("ABORTED: base desc");
+    assertThat(serverStatus.getDescription()).contains("RLS server conv.test");
+  }
+
+  @Test
+  public void lb_working_withDefaultTarget_rlsResponding() throws Exception {
     deliverResolvedAddresses();
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
@@ -207,7 +240,7 @@ public class RlsLoadBalancerTest {
     FakeSubchannel rescueSubchannel = subchannels.getLast();
 
     // search subchannel is down, rescue subchannel is connecting
-    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
+    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -216,40 +249,79 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
 
-    // search again, use pending fallback because searchSubchannel is in failure mode
+    // search again, verify that it doesn't use fallback, since RLS server responded, even though
+    // subchannel is in failure mode
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    assertThat(res.getStatus().isOk()).isTrue();
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
+  }
 
+  @Test
+  public void lb_working_withDefaultTarget_noRlsResponse() throws Exception {
+    fakeThrottler.nextResult = true;
+
+    deliverResolvedAddresses();
+    InOrder inOrder = inOrder(helper);
+    inOrder.verify(helper)
+        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    Metadata headers = new Metadata();
+    PickResult res;
+
+    // Search that when the RLS server doesn't respond, that fallback is used
+    res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    FakeSubchannel fallbackSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(fallbackSubchannel).isNotNull();
+
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
+    assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    assertThat(subchannels).hasSize(3);
-    FakeSubchannel fallbackSubchannel = subchannels.getLast();
     fallbackSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    inOrder.verify(helper, times(2))
+    inOrder.verify(helper, times(1))
         .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
     inOrder.verifyNoMoreInteractions();
 
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
-    assertThat(res.getSubchannel().getAddresses()).isEqualTo(searchSubchannel.getAddresses());
-    assertThat(res.getSubchannel().getAttributes()).isEqualTo(searchSubchannel.getAttributes());
+    assertThat(res.getSubchannel()).isSameInstanceAs(fallbackSubchannel);
 
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
-    assertThat(res.getSubchannel().getAddresses()).isEqualTo(rescueSubchannel.getAddresses());
-    assertThat(res.getSubchannel().getAttributes()).isEqualTo(rescueSubchannel.getAttributes());
+    assertThat(res.getSubchannel()).isSameInstanceAs(fallbackSubchannel);
+
+    // Make sure that when RLS starts communicating that default stops being used
+    fakeThrottler.nextResult = false;
+    fakeClock.forwardTime(2, TimeUnit.SECONDS); // Expires backoff cache entries
+    // Create search subchannel
+    res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
+    FakeSubchannel searchSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(searchSubchannel).isNotNull();
+    searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    // create rescue subchannel
+    res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
+    assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
+    assertThat(res.getSubchannel()).isNotSameInstanceAs(searchSubchannel);
+    FakeSubchannel rescueSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(rescueSubchannel).isNotNull();
+    rescueSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     // all channels are failed
-    rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
-    fallbackSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    inOrder.verifyNoMoreInteractions();
+    rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    fallbackSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+
+    res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(res.getSubchannel()).isNull();
   }
 
   @Test
@@ -373,7 +445,7 @@ public class RlsLoadBalancerTest {
     ConfigOrError parsedConfigOrError =
         provider.parseLoadBalancingPolicyConfig(getServiceConfig());
     assertThat(parsedConfigOrError.getConfig()).isNotNull();
-    rlsLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
+    rlsLb.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mock(SocketAddress.class))))
         .setLoadBalancingPolicyConfig(parsedConfigOrError.getConfig())
         .build());
@@ -392,7 +464,7 @@ public class RlsLoadBalancerTest {
 
   private String getRlsConfigJsonStr() {
     return "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
@@ -501,7 +573,7 @@ public class RlsLoadBalancerTest {
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return fakeScheduledExecutorService;
+      return fakeClock.getScheduledExecutorService();
     }
 
     @Override
@@ -547,7 +619,7 @@ public class RlsLoadBalancerTest {
     private final Attributes attributes;
     private List<EquivalentAddressGroup> eags;
     private SubchannelStateListener listener;
-    private boolean isReady;
+    private volatile boolean isReady;
 
     public FakeSubchannel(List<EquivalentAddressGroup> eags, Attributes attributes) {
       this.eags = Collections.unmodifiableList(eags);
@@ -591,4 +663,20 @@ public class RlsLoadBalancerTest {
   private static boolean subchannelIsReady(Subchannel subchannel) {
     return subchannel instanceof FakeSubchannel && ((FakeSubchannel) subchannel).isReady;
   }
+
+  private static final class FakeThrottler implements Throttler {
+
+    private boolean nextResult = false;
+
+    @Override
+    public boolean shouldThrottle() {
+      return nextResult;
+    }
+
+    @Override
+    public void registerBackendResponse(boolean throttled) {
+      // no-op
+    }
+  }
+
 }

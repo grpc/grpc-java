@@ -1,6 +1,8 @@
 plugins {
     id "java-library"
     id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
 }
 
 description = 'gRPC: Census'
@@ -10,17 +12,20 @@ evaluationDependsOn(project(':grpc-api').path)
 dependencies {
     api project(':grpc-api')
     implementation libraries.guava,
-            libraries.opencensus_api,
-            libraries.opencensus_contrib_grpc_metrics
+            libraries.opencensus.api,
+            libraries.opencensus.contrib.grpc.metrics
 
     testImplementation project(':grpc-api').sourceSets.test.output,
             project(':grpc-context').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing'),
-            libraries.opencensus_impl
+            libraries.opencensus.impl
+
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     failOnError false  // no public or protected classes found to document
     exclude 'io/grpc/census/internal/**'
     exclude 'io/grpc/census/Internal*'

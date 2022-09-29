@@ -434,8 +434,15 @@ public class LoadReportClientTest {
     // Then breaks the RPC
     responseObserver.onError(Status.UNAVAILABLE.asException());
 
-    // Will reset the retry sequence and retry immediately, because balancer has responded.
+    // Will reset the retry sequence retry after a delay. We want to always delay, to restrict any
+    // accidental closed loop of retries to 1 QPS.
     inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    // Fast-forward to a moment before the retry of backoff sequence 2 (2s)
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(2) - 1);
+    verifyNoMoreInteractions(mockLoadReportingService);
+    // Then time for retry
+    fakeClock.forwardNanos(1);
     inOrder.verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
@@ -446,12 +453,12 @@ public class LoadReportClientTest {
     fakeClock.forwardNanos(4);
     responseObserver.onError(Status.UNAVAILABLE.asException());
 
-    // Will be on the first retry (2s) of backoff sequence 2.
+    // Will be on the second retry (20s) of backoff sequence 2.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(2) - 4 - 1);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(20) - 4 - 1);
     verifyNoMoreInteractions(mockLoadReportingService);
     // Then time for retry
     fakeClock.forwardNanos(1);
@@ -471,7 +478,8 @@ public class LoadReportClientTest {
     ClusterStats clusterStats = Iterables.getOnlyElement(request.getClusterStatsList());
     assertThat(clusterStats.getClusterName()).isEqualTo(CLUSTER1);
     assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME1);
-    assertThat(Durations.toSeconds(clusterStats.getLoadReportInterval())).isEqualTo(1L + 10L + 2L);
+    assertThat(Durations.toSeconds(clusterStats.getLoadReportInterval()))
+        .isEqualTo(1L + 10L + 2L + 20L);
     assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getCategory())
         .isEqualTo("lb");
     assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getDroppedCount())
@@ -490,7 +498,7 @@ public class LoadReportClientTest {
     // Wrapping up
     verify(backoffPolicyProvider, times(2)).get();
     verify(backoffPolicy1, times(2)).nextBackoffNanos();
-    verify(backoffPolicy2, times(1)).nextBackoffNanos();
+    verify(backoffPolicy2, times(2)).nextBackoffNanos();
   }
 
   @Test

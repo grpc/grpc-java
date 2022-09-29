@@ -49,8 +49,16 @@ final class RlsLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(ChannelLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
+
+    if (resolvedAddresses.getAddresses().isEmpty()) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+              + ", attrs=" + resolvedAddresses.getAttributes()));
+      return false;
+    }
+
     LbPolicyConfiguration lbPolicyConfiguration =
         (LbPolicyConfiguration) resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbPolicyConfiguration, "Missing rls lb config");
@@ -78,6 +86,8 @@ final class RlsLoadBalancer extends LoadBalancer {
       //  not required.
       this.lbPolicyConfiguration = lbPolicyConfiguration;
     }
+
+    return true;
   }
 
   @Override

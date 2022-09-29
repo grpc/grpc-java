@@ -31,8 +31,8 @@ For a guided tour, take a look at the [quick start
 guide](https://grpc.io/docs/languages/java/quickstart) or the more explanatory [gRPC
 basics](https://grpc.io/docs/languages/java/basics).
 
-The [examples](https://github.com/grpc/grpc-java/tree/v1.44.1/examples) and the
-[Android example](https://github.com/grpc/grpc-java/tree/v1.44.1/examples/android)
+The [examples](https://github.com/grpc/grpc-java/tree/v1.49.0/examples) and the
+[Android example](https://github.com/grpc/grpc-java/tree/v1.49.0/examples/android)
 are standalone projects that showcase the usage of gRPC.
 
 Download
@@ -43,18 +43,18 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
-  <version>1.44.1</version>
+  <version>1.49.0</version>
   <scope>runtime</scope>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.44.1</version>
+  <version>1.49.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.44.1</version>
+  <version>1.49.0</version>
 </dependency>
 <dependency> <!-- necessary for Java 9+ -->
   <groupId>org.apache.tomcat</groupId>
@@ -66,23 +66,23 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-runtimeOnly 'io.grpc:grpc-netty-shaded:1.44.1'
-implementation 'io.grpc:grpc-protobuf:1.44.1'
-implementation 'io.grpc:grpc-stub:1.44.1'
+runtimeOnly 'io.grpc:grpc-netty-shaded:1.49.0'
+implementation 'io.grpc:grpc-protobuf:1.49.0'
+implementation 'io.grpc:grpc-stub:1.49.0'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-implementation 'io.grpc:grpc-okhttp:1.44.1'
-implementation 'io.grpc:grpc-protobuf-lite:1.44.1'
-implementation 'io.grpc:grpc-stub:1.44.1'
+implementation 'io.grpc:grpc-okhttp:1.49.0'
+implementation 'io.grpc:grpc-protobuf-lite:1.49.0'
+implementation 'io.grpc:grpc-stub:1.49.0'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 [the JARs]:
-https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.44.1
+https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.49.0
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
@@ -112,9 +112,9 @@ For protobuf-based codegen integrated with the Maven build system, you can use
       <artifactId>protobuf-maven-plugin</artifactId>
       <version>0.6.1</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.19.2:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.21.1:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.44.1:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.49.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -135,16 +135,16 @@ For non-Android protobuf-based codegen integrated with the Gradle build system,
 you can use [protobuf-gradle-plugin][]:
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.8.17'
+    id 'com.google.protobuf' version '0.8.18'
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.19.2"
+    artifact = "com.google.protobuf:protoc:3.21.1"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.44.1'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.49.0'
     }
   }
   generateProtoTasks {
@@ -161,23 +161,23 @@ The prebuilt protoc-gen-grpc-java binary uses glibc on Linux. If you are
 compiling on Alpine Linux, you may want to use the [Alpine grpc-java package][]
 which uses musl instead.
 
-[Alpine grpc-java package]: https://pkgs.alpinelinux.org/package/edge/testing/x86_64/grpc-java
+[Alpine grpc-java package]: https://pkgs.alpinelinux.org/package/edge/community/x86_64/grpc-java
 
 For Android protobuf-based codegen integrated with the Gradle build system, also
 use protobuf-gradle-plugin but specify the 'lite' options:
 
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.8.17'
+    id 'com.google.protobuf' version '0.8.18'
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.19.2"
+    artifact = "com.google.protobuf:protoc:3.21.1"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.44.1'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.49.0'
     }
   }
   generateProtoTasks {

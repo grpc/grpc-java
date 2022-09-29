@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -56,17 +57,16 @@ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHan
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsClient.LdsResourceWatcher;
-import io.grpc.xds.XdsClient.RdsResourceWatcher;
-import io.grpc.xds.XdsClient.RdsUpdate;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
 import io.grpc.xds.XdsServerWrapper.ConfigApplyingInterceptor;
 import io.grpc.xds.XdsServerWrapper.ServerRoutingConfig;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -91,6 +91,8 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class XdsServerWrapperTest {
+  private static final int START_WAIT_AFTER_LISTENER_MILLIS = 100;
+
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -174,6 +176,7 @@ public class XdsServerWrapperTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void testBootstrap_templateWithXdstp() throws Exception {
     Bootstrapper.BootstrapInfo b = Bootstrapper.BootstrapInfo.builder()
         .servers(Arrays.asList(
@@ -184,6 +187,7 @@ public class XdsServerWrapperTest {
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")
         .build();
     XdsClient xdsClient = mock(XdsClient.class);
+    XdsListenerResource listenerResource = XdsListenerResource.getInstance();
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
@@ -197,10 +201,11 @@ public class XdsServerWrapperTest {
         }
       }
     });
-    verify(xdsClient, timeout(5000)).watchLdsResource(
+    verify(xdsClient, timeout(5000)).watchXdsResource(
+        eq(listenerResource),
         eq("xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/"
             + "%5B::FFFF:129.144.52.38%5D:80"),
-        any(LdsResourceWatcher.class));
+        any(ResourceWatcher.class));
   }
 
   @Test
@@ -227,7 +232,8 @@ public class XdsServerWrapperTest {
     xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
-    start.get(5000, TimeUnit.MILLISECONDS);
+    verify(listener, timeout(5000)).onServing();
+    start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
     verify(mockServer).start();
     xdsServerWrapper.shutdown();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
@@ -296,8 +302,9 @@ public class XdsServerWrapperTest {
     });
     String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    verify(listener, timeout(5000)).onNotServing(any());
     try {
-      start.get(5000, TimeUnit.MILLISECONDS);
+      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
       fail("server should not start() successfully.");
     } catch (TimeoutException ex) {
       // expect to block here.
@@ -449,6 +456,47 @@ public class XdsServerWrapperTest {
         selectorManager.getSelectorToUpdateSelector().getRoutingConfigs().get(filterChain).get();
     assertThat(realConfig.virtualHosts()).isEqualTo(httpConnectionManager.virtualHosts());
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
+    verify(listener).onServing();
+    verify(mockServer).start();
+  }
+
+  @Test
+  public void discoverState_restart_afterResourceNotExist() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsResource).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    VirtualHost virtualHost =
+            VirtualHost.create(
+                    "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
+                    ImmutableMap.<String, FilterConfig>of());
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
+    EnvoyServerProtoData.FilterChain filterChain = EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
+            mock(TlsContextManager.class));
+    xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
+    start.get(5000, TimeUnit.MILLISECONDS);
+    verify(listener).onServing();
+    verify(mockServer).start();
+
+    // server shutdown after resourceDoesNotExist
+    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    verify(mockServer).shutdown();
+
+    // re-deliver lds resource
+    reset(mockServer);
+    reset(listener);
+    xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
     verify(listener).onServing();
     verify(mockServer).start();
   }
@@ -665,8 +713,9 @@ public class XdsServerWrapperTest {
     });
     String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    verify(listener, timeout(5000)).onNotServing(any());
     try {
-      start.get(5000, TimeUnit.MILLISECONDS);
+      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
       fail("server should not start()");
     } catch (TimeoutException ex) {
       // expect to block here.
@@ -680,7 +729,7 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onError(Status.INTERNAL);
     assertThat(selectorManager.getSelectorToUpdateSelector())
         .isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
-    assertThat(xdsClient.rdsWatchers).isEmpty();
+    ResourceWatcher<RdsUpdate> saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     verify(mockBuilder, times(1)).build();
     verify(listener, times(2)).onNotServing(any(StatusException.class));
     assertThat(sslSupplier0.isShutdown()).isFalse();
@@ -700,7 +749,6 @@ public class XdsServerWrapperTest {
       assertThat(ex.getCause()).isInstanceOf(IOException.class);
       assertThat(ex.getCause().getMessage()).isEqualTo("error!");
     }
-    RdsResourceWatcher saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     assertThat(executor.forwardNanos(RETRY_DELAY_NANOS)).isEqualTo(1);
     verify(mockBuilder, times(1)).build();
     verify(mockServer, times(2)).start();
@@ -734,7 +782,7 @@ public class XdsServerWrapperTest {
     // not serving after serving
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
     assertThat(xdsClient.rdsWatchers).isEmpty();
-    verify(mockServer, times(3)).shutdown();
+    verify(mockServer, times(2)).shutdown();
     when(mockServer.isShutdown()).thenReturn(true);
     assertThat(selectorManager.getSelectorToUpdateSelector())
         .isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
@@ -772,8 +820,9 @@ public class XdsServerWrapperTest {
 
     assertThat(executor.numPendingTasks()).isEqualTo(1);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
-    verify(mockServer, times(4)).shutdown();
+    verify(mockServer, times(3)).shutdown();
     verify(listener, times(4)).onNotServing(any(StatusException.class));
+    verify(listener, times(1)).onNotServing(any(IOException.class));
     when(mockServer.isShutdown()).thenReturn(true);
     assertThat(executor.numPendingTasks()).isEqualTo(0);
     assertThat(sslSupplier2.isShutdown()).isTrue();
@@ -799,7 +848,7 @@ public class XdsServerWrapperTest {
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
 
     xdsServerWrapper.shutdown();
-    verify(mockServer, times(5)).shutdown();
+    verify(mockServer, times(4)).shutdown();
     assertThat(sslSupplier3.isShutdown()).isTrue();
     when(mockServer.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
     assertThat(xdsServerWrapper.awaitTermination(5, TimeUnit.SECONDS)).isTrue();

@@ -40,4 +40,14 @@ public final class InternalCallMetricRecorder {
   public static Map<String, Double> finalizeAndDump(CallMetricRecorder recorder) {
     return recorder.finalizeAndDump();
   }
+
+  public static MetricReport finalizeAndDump2(CallMetricRecorder recorder) {
+    return recorder.finalizeAndDump2();
+  }
+
+  public static MetricReport createMetricReport(double cpuUtilization, double memoryUtilization,
+      Map<String, Double> requestCostMetrics, Map<String, Double> utilizationMetrics) {
+    return new MetricReport(cpuUtilization, memoryUtilization,
+        requestCostMetrics, utilizationMetrics);
+  }
 }

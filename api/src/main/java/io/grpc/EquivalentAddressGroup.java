@@ -40,11 +40,16 @@ public final class EquivalentAddressGroup {
    * However, if the channel has overridden authority via
    * {@link ManagedChannelBuilder#overrideAuthority(String)}, the transport will use the channel's
    * authority override.
+   *
+   * <p>The authority <strong>must</strong> be from a trusted source, because if the authority is
+   * tampered with, RPCs may be sent to attackers which may leak sensitive user data. If the
+   * authority was acquired by doing I/O, the communication must be authenticated (e.g., via TLS).
+   * Recognize that the server that provided the authority can trivially impersonate the service.
    */
   @Attr
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6138")
   public static final Attributes.Key<String> ATTR_AUTHORITY_OVERRIDE =
-      Attributes.Key.create("io.grpc.EquivalentAddressGroup.authorityOverride");
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE");
   private final List<SocketAddress> addrs;
   private final Attributes attrs;
 

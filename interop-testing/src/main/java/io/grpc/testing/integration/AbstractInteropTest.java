@@ -40,6 +40,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.MessageLite;
+import com.google.protobuf.StringValue;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -91,6 +92,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
@@ -100,7 +102,6 @@ import io.opencensus.tags.TagValue;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Tracing;
-import io.opencensus.trace.unsafe.ContextUtils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -114,8 +115,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -187,6 +190,11 @@ public abstract class AbstractInteropTest {
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
+
+  static final CallOptions.Key<AtomicReference<TestOrcaReport>>
+      ORCA_RPC_REPORT_KEY = CallOptions.Key.create("orca-rpc-report");
+  static final CallOptions.Key<AtomicReference<TestOrcaReport>>
+      ORCA_OOB_REPORT_KEY = CallOptions.Key.create("orca-oob-report");
 
   private static final class ServerStreamTracerInfo {
     final String fullMethodName;
@@ -1059,10 +1067,9 @@ public abstract class AbstractInteropTest {
   public void exchangeMetadataUnaryCall() throws Exception {
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
-    // Send a context proto (as it's in the default extension registry)
-    Messages.SimpleContext contextValue =
-        Messages.SimpleContext.newBuilder().setValue("dog").build();
-    fixedHeaders.put(Util.METADATA_KEY, contextValue);
+    // Send a metadata proto
+    StringValue metadataValue = StringValue.newBuilder().setValue("dog").build();
+    fixedHeaders.put(Util.METADATA_KEY, metadataValue);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
@@ -1073,18 +1080,17 @@ public abstract class AbstractInteropTest {
     assertNotNull(stub.emptyCall(EMPTY));
 
     // Assert that our side channel object is echoed back in both headers and trailers
-    Assert.assertEquals(contextValue, headersCapture.get().get(Util.METADATA_KEY));
-    Assert.assertEquals(contextValue, trailersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, headersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, trailersCapture.get().get(Util.METADATA_KEY));
   }
 
   @Test
   public void exchangeMetadataStreamingCall() throws Exception {
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
-    // Send a context proto (as it's in the default extension registry)
-    Messages.SimpleContext contextValue =
-        Messages.SimpleContext.newBuilder().setValue("dog").build();
-    fixedHeaders.put(Util.METADATA_KEY, contextValue);
+    // Send a metadata proto
+    StringValue metadataValue = StringValue.newBuilder().setValue("dog").build();
+    fixedHeaders.put(Util.METADATA_KEY, metadataValue);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
@@ -1115,8 +1121,8 @@ public abstract class AbstractInteropTest {
     org.junit.Assert.assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
 
     // Assert that our side channel object is echoed back in both headers and trailers
-    Assert.assertEquals(contextValue, headersCapture.get().get(Util.METADATA_KEY));
-    Assert.assertEquals(contextValue, trailersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, headersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(metadataValue, trailersCapture.get().get(Util.METADATA_KEY));
   }
 
   @Test
@@ -1547,6 +1553,7 @@ public abstract class AbstractInteropTest {
         Collections.singleton(streamingRequest), Collections.singleton(goldenStreamingResponse));
   }
 
+  @SuppressWarnings("deprecation")
   @Test(timeout = 10000)
   public void censusContextsPropagated() {
     Assume.assumeTrue("Skip the test because server is not in the same process.", server != null);
@@ -1561,7 +1568,7 @@ public abstract class AbstractInteropTest {
                 .emptyBuilder()
                 .putLocal(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
                 .build());
-    ctx = ContextUtils.withValue(ctx, clientParentSpan);
+    ctx = io.opencensus.trace.unsafe.ContextUtils.withValue(ctx, clientParentSpan);
     Context origCtx = ctx.attach();
     try {
       blockingStub.unaryCall(SimpleRequest.getDefaultInstance());
@@ -1581,7 +1588,7 @@ public abstract class AbstractInteropTest {
       }
       assertTrue("tag not found", tagFound);
 
-      Span span = ContextUtils.getValue(serverCtx);
+      Span span = io.opencensus.trace.unsafe.ContextUtils.getValue(serverCtx);
       assertNotNull(span);
       SpanContext spanContext = span.getContext();
       assertEquals(clientParentSpan.getContext().getTraceId(), spanContext.getTraceId());
@@ -1730,6 +1737,91 @@ public abstract class AbstractInteropTest {
   public void getServerAddressAndLocalAddressFromClient() {
     assertNotNull(obtainRemoteServerAddr());
     assertNotNull(obtainLocalClientAddr());
+  }
+
+  /**
+   *  Test backend metrics per query reporting: expect the test client LB policy to receive load
+   *  reports.
+   */
+  public void testOrcaPerRpc() throws Exception {
+    AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
+    TestOrcaReport answer = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.8210)
+        .setMemoryUtilization(0.5847)
+        .putRequestCost("cost", 3456.32)
+        .putUtilization("util", 0.30499)
+        .build();
+    blockingStub.withOption(ORCA_RPC_REPORT_KEY, reportHolder).unaryCall(
+        SimpleRequest.newBuilder().setOrcaPerQueryReport(answer).build());
+    assertThat(reportHolder.get()).isEqualTo(answer);
+  }
+
+  /**
+   *  Test backend metrics OOB reporting: expect the test client LB policy to receive load reports.
+   */
+  public void testOrcaOob() throws Exception {
+    AtomicReference<TestOrcaReport> reportHolder = new AtomicReference<>();
+    final TestOrcaReport answer = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.8210)
+        .setMemoryUtilization(0.5847)
+        .putUtilization("util", 0.30499)
+        .build();
+    final TestOrcaReport answer2 = TestOrcaReport.newBuilder()
+        .setCpuUtilization(0.29309)
+        .setMemoryUtilization(0.2)
+        .putUtilization("util", 100.2039)
+        .build();
+
+    final int retryLimit = 5;
+    BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
+    final Object lastItem = new Object();
+    StreamObserver<StreamingOutputCallRequest> streamObserver =
+        asyncStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
+
+          @Override
+          public void onNext(StreamingOutputCallResponse value) {
+            queue.add(value);
+          }
+
+          @Override
+          public void onError(Throwable t) {
+            queue.add(t);
+          }
+
+          @Override
+          public void onCompleted() {
+            queue.add(lastItem);
+          }
+        });
+
+    streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
+        .setOrcaOobReport(answer)
+        .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
+    assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
+    int i = 0;
+    for (; i < retryLimit; i++) {
+      Thread.sleep(1000);
+      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+      if (answer.equals(reportHolder.get())) {
+        break;
+      }
+    }
+    assertThat(i).isLessThan(retryLimit);
+    streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
+        .setOrcaOobReport(answer2)
+        .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
+    assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
+
+    for (i = 0; i < retryLimit; i++) {
+      Thread.sleep(1000);
+      blockingStub.withOption(ORCA_OOB_REPORT_KEY, reportHolder).emptyCall(EMPTY);
+      if (reportHolder.get().equals(answer2)) {
+        break;
+      }
+    }
+    assertThat(i).isLessThan(retryLimit);
+    streamObserver.onCompleted();
+    assertThat(queue.take()).isSameInstanceAs(lastItem);
   }
 
   /** Sends a large unary rpc with service account credentials. */
@@ -1906,15 +1998,10 @@ public abstract class AbstractInteropTest {
     private Status status = Status.OK;
   }
 
-  private SoakIterationResult performOneSoakIteration(boolean resetChannel) throws Exception {
+  private SoakIterationResult performOneSoakIteration(
+      TestServiceGrpc.TestServiceBlockingStub soakStub) throws Exception {
     long startNs = System.nanoTime();
     Status status = Status.OK;
-    ManagedChannel soakChannel = channel;
-    TestServiceGrpc.TestServiceBlockingStub soakStub = blockingStub;
-    if (resetChannel) {
-      soakChannel = createChannel();
-      soakStub = TestServiceGrpc.newBlockingStub(soakChannel);
-    }
     try {
       final SimpleRequest request =
           SimpleRequest.newBuilder()
@@ -1930,10 +2017,6 @@ public abstract class AbstractInteropTest {
       status = e.getStatus();
     }
     long elapsedNs = System.nanoTime() - startNs;
-    if (resetChannel) {
-      soakChannel.shutdownNow();
-      soakChannel.awaitTermination(10, TimeUnit.SECONDS);
-    }
     return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
   }
 
@@ -1946,36 +2029,61 @@ public abstract class AbstractInteropTest {
       int soakIterations,
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
+      int minTimeMsBetweenRpcs,
       int overallTimeoutSeconds)
       throws Exception {
     int iterationsDone = 0;
     int totalFailures = 0;
     Histogram latencies = new Histogram(4 /* number of significant value digits */);
     long startNs = System.nanoTime();
+    ManagedChannel soakChannel = createChannel();
+    TestServiceGrpc.TestServiceBlockingStub soakStub = TestServiceGrpc
+        .newBlockingStub(soakChannel)
+        .withInterceptors(recordClientCallInterceptor(clientCallCapture));
     for (int i = 0; i < soakIterations; i++) {
       if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
       }
-      SoakIterationResult result = performOneSoakIteration(resetChannelPerIteration);
+      long earliestNextStartNs = System.nanoTime()
+          + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
+      if (resetChannelPerIteration) {
+        soakChannel.shutdownNow();
+        soakChannel.awaitTermination(10, TimeUnit.SECONDS);
+        soakChannel = createChannel();
+        soakStub = TestServiceGrpc
+            .newBlockingStub(soakChannel)
+            .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+      }
+      SoakIterationResult result = performOneSoakIteration(soakStub);
+      SocketAddress peer = clientCallCapture
+          .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       System.err.print(
           String.format(
-              "soak iteration: %d elapsed: %d ms", i, result.getLatencyMs()));
+              Locale.US,
+              "soak iteration: %d elapsed_ms: %d peer: %s",
+              i, result.getLatencyMs(), peer != null ? peer.toString() : "null"));
       if (!result.getStatus().equals(Status.OK)) {
         totalFailures++;
         System.err.println(String.format(" failed: %s", result.getStatus()));
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
         totalFailures++;
         System.err.println(
-            String.format(
-                " exceeds max acceptable latency: %d", maxAcceptablePerIterationLatencyMs));
+            " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
       } else {
         System.err.println(" succeeded");
       }
       iterationsDone++;
       latencies.recordValue(result.getLatencyMs());
+      long remainingNs = earliestNextStartNs - System.nanoTime();
+      if (remainingNs > 0) {
+        TimeUnit.NANOSECONDS.sleep(remainingNs);
+      }
     }
+    soakChannel.shutdownNow();
+    soakChannel.awaitTermination(10, TimeUnit.SECONDS);
     System.err.println(
         String.format(
+            Locale.US,
             "soak test ran: %d / %d iterations\n"
                 + "total failures: %d\n"
                 + "max failures threshold: %d\n"
@@ -1996,6 +2104,7 @@ public abstract class AbstractInteropTest {
     // check if we timed out
     String timeoutErrorMessage =
         String.format(
+            Locale.US,
             "soak test consumed all %d seconds of time and quit early, only "
                 + "having ran %d out of desired %d iterations.",
             overallTimeoutSeconds,
@@ -2005,6 +2114,7 @@ public abstract class AbstractInteropTest {
     // check if we had too many failures
     String tooManyFailuresErrorMessage =
         String.format(
+            Locale.US,
             "soak test total failures: %d exceeds max failures threshold: %d.",
             totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
@@ -2247,9 +2357,10 @@ public abstract class AbstractInteropTest {
     long uncompressedSentSize = 0;
     int seqNo = 0;
     for (MessageLite msg : sentMessages) {
-      assertThat(tracer.nextOutboundEvent()).isEqualTo(String.format("outboundMessage(%d)", seqNo));
+      assertThat(tracer.nextOutboundEvent())
+          .isEqualTo(String.format(Locale.US, "outboundMessage(%d)", seqNo));
       assertThat(tracer.nextOutboundEvent()).matches(
-          String.format("outboundMessageSent\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
+          String.format(Locale.US, "outboundMessageSent\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
       seqNo++;
       uncompressedSentSize += msg.getSerializedSize();
     }
@@ -2257,9 +2368,10 @@ public abstract class AbstractInteropTest {
     long uncompressedReceivedSize = 0;
     seqNo = 0;
     for (MessageLite msg : receivedMessages) {
-      assertThat(tracer.nextInboundEvent()).isEqualTo(String.format("inboundMessage(%d)", seqNo));
+      assertThat(tracer.nextInboundEvent())
+          .isEqualTo(String.format(Locale.US, "inboundMessage(%d)", seqNo));
       assertThat(tracer.nextInboundEvent()).matches(
-          String.format("inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
+          String.format(Locale.US, "inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
       uncompressedReceivedSize += msg.getSerializedSize();
       seqNo++;
     }
@@ -2286,10 +2398,10 @@ public abstract class AbstractInteropTest {
     if (isServer) {
       assertEquals(
           requests.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_SERVER_REQUEST_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC));
       assertEquals(
           responses.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC));
       assertEquals(
           uncompressedRequestsSize,
           record.getMetricAsLongOrFail(
@@ -2298,18 +2410,18 @@ public abstract class AbstractInteropTest {
           uncompressedResponsesSize,
           record.getMetricAsLongOrFail(
               DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_SERVER_LATENCY));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY));
       // It's impossible to get the expected wire sizes because it may be compressed, so we just
       // check if they are recorded.
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_REQUEST_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC));
     } else {
       assertEquals(
           requests.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC));
       assertEquals(
           responses.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC));
       assertEquals(
           uncompressedRequestsSize,
           record.getMetricAsLongOrFail(
@@ -2318,11 +2430,11 @@ public abstract class AbstractInteropTest {
           uncompressedResponsesSize,
           record.getMetricAsLongOrFail(
               DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY));
       // It's impossible to get the expected wire sizes because it may be compressed, so we just
       // check if they are recorded.
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC));
     }
   }
 

@@ -358,12 +358,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     long effectiveTimeout = max(0, effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS));
     StringBuilder builder = new StringBuilder(String.format(
+        Locale.US,
         "Call timeout set to '%d' ns, due to context deadline.", effectiveTimeout));
     if (callDeadline == null) {
       builder.append(" Explicit call timeout was not set.");
     } else {
       long callTimeout = callDeadline.timeRemaining(TimeUnit.NANOSECONDS);
-      builder.append(String.format(" Explicit call timeout was '%d' ns.", callTimeout));
+      builder.append(String.format(Locale.US, " Explicit call timeout was '%d' ns.", callTimeout));
     }
 
     log.fine(builder.toString());

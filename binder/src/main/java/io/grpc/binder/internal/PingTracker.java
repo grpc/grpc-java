@@ -16,10 +16,10 @@
 
 package io.grpc.binder.internal;
 
+import com.google.common.base.Ticker;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientTransport.PingCallback;
-import io.grpc.internal.TimeProvider;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -38,7 +38,7 @@ final class PingTracker {
     void sendPing(int id) throws StatusException;
   }
 
-  private final TimeProvider timeProvider;
+  private final Ticker ticker;
   private final PingSender pingSender;
 
   @GuardedBy("this")
@@ -48,8 +48,8 @@ final class PingTracker {
   @GuardedBy("this")
   private int nextPingId;
 
-  PingTracker(TimeProvider timeProvider, PingSender pingSender) {
-    this.timeProvider = timeProvider;
+  PingTracker(Ticker ticker, PingSender pingSender) {
+    this.ticker = ticker;
     this.pingSender = pingSender;
   }
 
@@ -93,7 +93,7 @@ final class PingTracker {
       this.callback = callback;
       this.executor = executor;
       this.id = id;
-      this.startTimeNanos = timeProvider.currentTimeNanos();
+      this.startTimeNanos = ticker.read();
     }
 
     private synchronized void fail(Status status) {
@@ -107,7 +107,7 @@ final class PingTracker {
       if (!done) {
         done = true;
         executor.execute(
-            () -> callback.onSuccess(timeProvider.currentTimeNanos() - startTimeNanos));
+            () -> callback.onSuccess(ticker.read() - startTimeNanos));
       }
     }
   }

@@ -21,11 +21,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
-import io.grpc.InsecureChannelCredentials;
-import io.grpc.Internal;
 import io.grpc.InternalLogId;
-import io.grpc.TlsChannelCredentials;
-import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
@@ -44,8 +40,7 @@ import javax.annotation.Nullable;
 /**
  * A {@link Bootstrapper} implementation that reads xDS configurations from local file system.
  */
-@Internal
-public class BootstrapperImpl extends Bootstrapper {
+class BootstrapperImpl extends Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
   @VisibleForTesting
@@ -59,14 +54,22 @@ public class BootstrapperImpl extends Bootstrapper {
   private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY = "io.grpc.xds.bootstrapConfig";
   @VisibleForTesting
   static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY);
-  private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
+
+  // Feature-gating environment variables.
+  static boolean enableFederation =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
+          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
+
+  // Client features.
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
   @VisibleForTesting
-  static boolean enableFederation =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
-          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
+  static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
+
+  // Server features.
+  private static final String SERVER_FEATURE_XDS_V3 = "xds_v3";
+  private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
 
   private final XdsLogger logger;
   private FileReader reader = LocalFileReader.INSTANCE;
@@ -179,6 +182,7 @@ public class BootstrapperImpl extends Bootstrapper {
     nodeBuilder.setUserAgentName(buildVersion.getUserAgent());
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
+    nodeBuilder.addClientFeatures(CLIENT_FEATURE_RESOURCE_IN_SOTW);
     builder.node(nodeBuilder.build());
 
     Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawData, "certificate_providers");
@@ -247,7 +251,7 @@ public class BootstrapperImpl extends Bootstrapper {
         authorityInfoMapBuilder.put(
             authorityName, AuthorityInfo.create(clientListnerTemplate, authorityServers));
       }
-      builder.authorities(authorityInfoMapBuilder.build());
+      builder.authorities(authorityInfoMapBuilder.buildOrThrow());
     }
 
     return builder.build();
@@ -278,12 +282,15 @@ public class BootstrapperImpl extends Bootstrapper {
       }
 
       boolean useProtocolV3 = false;
+      boolean ignoreResourceDeletion = false;
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        useProtocolV3 = serverFeatures.contains(XDS_V3_SERVER_FEATURE);
+        useProtocolV3 = serverFeatures.contains(SERVER_FEATURE_XDS_V3);
+        ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
       }
-      servers.add(ServerInfo.create(serverUri, channelCredentials, useProtocolV3));
+      servers.add(
+          ServerInfo.create(serverUri, channelCredentials, useProtocolV3, ignoreResourceDeletion));
     }
     return servers.build();
   }
@@ -326,14 +333,15 @@ public class BootstrapperImpl extends Bootstrapper {
         throw new XdsInitializationException(
             "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
       }
-      switch (type) {
-        case "google_default":
-          return GoogleDefaultChannelCredentials.create();
-        case "insecure":
-          return InsecureChannelCredentials.create();
-        case "tls":
-          return TlsChannelCredentials.create();
-        default:
+      XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
+          .getProvider(type);
+      if (provider != null) {
+        Map<String, ?> config = JsonUtil.getObject(channelCreds, "config");
+        if (config == null) {
+          config = ImmutableMap.of();
+        }
+
+        return provider.newChannelCredentials(config);
       }
     }
     return null;

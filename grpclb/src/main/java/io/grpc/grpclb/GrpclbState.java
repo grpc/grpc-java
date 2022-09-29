@@ -137,6 +137,7 @@ final class GrpclbState {
   }
 
   private final String serviceName;
+  private final long fallbackTimeoutMs;
   private final Helper helper;
   private final Context context;
   private final SynchronizationContext syncContext;
@@ -220,6 +221,7 @@ final class GrpclbState {
     } else {
       this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
     }
+    this.fallbackTimeoutMs = config.getFallbackTimeoutMs();
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     logger.log(ChannelLogLevel.INFO, "[grpclb-<{0}>] Created", serviceName);
   }
@@ -290,9 +292,12 @@ final class GrpclbState {
       // Start the fallback timer if it's never started and we are not already using fallback
       // backends.
       if (fallbackTimer == null && !usingFallbackBackends) {
-        fallbackTimer = syncContext.schedule(
-            new FallbackModeTask(BALANCER_TIMEOUT_STATUS), FALLBACK_TIMEOUT_MS,
-            TimeUnit.MILLISECONDS, timerService);
+        fallbackTimer =
+            syncContext.schedule(
+                new FallbackModeTask(BALANCER_TIMEOUT_STATUS),
+                fallbackTimeoutMs,
+                TimeUnit.MILLISECONDS,
+                timerService);
       }
     }
     if (usingFallbackBackends) {

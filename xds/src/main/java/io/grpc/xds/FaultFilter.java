@@ -48,6 +48,7 @@ import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
+import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -255,6 +256,7 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
                         //   only sent out after the delay. There could be a race between local and
                         //   remote, but it is rather rare.)
                         String description = String.format(
+                            Locale.US,
                             "Deadline exceeded after up to %d ns of fault-injected delay",
                             finalDelayNanos);
                         if (status.getDescription() != null) {
@@ -400,7 +402,10 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
                   activeFaultCounter.decrementAndGet();
                 }
               }
-              setCall(callSupplier.get());
+              Runnable toRun = setCall(callSupplier.get());
+              if (toRun != null) {
+                toRun.run();
+              }
             }
           },
           delayNanos,

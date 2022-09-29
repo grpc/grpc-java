@@ -69,12 +69,13 @@ public final class GrpclbFallbackTestClient {
     System.exit(0);
   }
 
-  private String unrouteLbAndBackendAddrsCmd = "exit 1";
-  private String blackholeLbAndBackendAddrsCmd = "exit 1";
+  private String induceFallbackCmd = "exit 1";
   private String serverUri;
   private String customCredentialsType;
   private String testCase;
   private Boolean skipNetCmd = false;
+  private int numWarmupRpcs;
+  private int fallbackDeadlineSeconds = 1;
 
   private ManagedChannel channel;
   private TestServiceGrpc.TestServiceBlockingStub blockingStub;
@@ -103,14 +104,16 @@ public final class GrpclbFallbackTestClient {
         serverUri = value;
       } else if ("test_case".equals(key)) {
         testCase = value;
-      } else if ("unroute_lb_and_backend_addrs_cmd".equals(key)) {
-        unrouteLbAndBackendAddrsCmd = value;
-      } else if ("blackhole_lb_and_backend_addrs_cmd".equals(key)) {
-        blackholeLbAndBackendAddrsCmd = value;
+      } else if ("induce_fallback_cmd".equals(key)) {
+        induceFallbackCmd = value;
       } else if ("custom_credentials_type".equals(key)) {
         customCredentialsType = value;
       } else if ("skip_net_cmd".equals(key)) {
         skipNetCmd = Boolean.valueOf(value);
+      } else if ("num_warmup_rpcs".equals(key)) {
+        numWarmupRpcs = Integer.valueOf(value);
+      } else if ("fallback_deadline_seconds".equals(key)) {
+        fallbackDeadlineSeconds = Integer.valueOf(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -126,24 +129,25 @@ public final class GrpclbFallbackTestClient {
           + c.serverUri
           + "\n  --custom_credentials_type             Name of Credentials to use. "
           + "Default: " + c.customCredentialsType
-          + "\n  --unroute_lb_and_backend_addrs_cmd    Shell command used to make "
-          + "LB and backend addresses unroutable. Default: "
-          + c.unrouteLbAndBackendAddrsCmd
-          + "\n  --blackhole_lb_and_backend_addrs_cmd  Shell command used to make "
-          + "LB and backend addresses black holed. Default: "
-          + c.blackholeLbAndBackendAddrsCmd
+          + "\n  --induce_fallback_cmd Shell command to induce fallback, e.g. by "
+          + "making LB and/or backend addresses unroutable or black holed. Default: "
+          + c.induceFallbackCmd
           + "\n  --skip_net_cmd                        Skip unroute and blackhole "
           + "shell command to allow setting the net config outside of the test "
           + "client. Default: "
           + c.skipNetCmd
+          + "\n  --num_warmup_rpcs                     Number of RPCs to perform "
+          + "on a separate warmup channel before the actual test runs (each warmup "
+          + "RPC uses a 1 second deadline). Default: "
+          + c.numWarmupRpcs
+          + "\n  --fallback_deadline_seconds           Number of seconds to wait "
+          + "for fallback to occur after inducing fallback. Default: "
+          + c.fallbackDeadlineSeconds
           + "\n  --test_case=TEST_CASE        Test case to run. Valid options are:"
-          + "\n      fast_fallback_before_startup : fallback before LB connection"
-          + "\n      fast_fallback_after_startup : fallback after startup due to "
-          + "LB/backend addresses becoming unroutable"
-          + "\n      slow_fallback_before_startup : fallback before LB connection "
-          + "due to LB/backend addresses being blackholed"
-          + "\n      slow_fallback_after_startup : fallback after startup due to "
-          + "LB/backend addresses becoming blackholed"
+          + "\n      fallback_before_startup : fallback before startup e.g. due to "
+          + "LB/backend addresses being unreachable"
+          + "\n      fallback_after_startup : fallback after startup e.g. due to "
+          + "LB/backend addresses becoming unreachable"
           + "\n      Default: " + c.testCase
       );
       System.exit(1);
@@ -197,14 +201,15 @@ public final class GrpclbFallbackTestClient {
     assertEquals(0, exitCode);
   }
 
-  private GrpclbRouteType doRpcAndGetPath(Deadline deadline) {
+  private GrpclbRouteType doRpcAndGetPath(
+      TestServiceGrpc.TestServiceBlockingStub stub, Deadline deadline) {
     logger.info("doRpcAndGetPath deadline: " + deadline);
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillGrpclbRouteType(true)
         .build();
     GrpclbRouteType result = GrpclbRouteType.GRPCLB_ROUTE_TYPE_UNKNOWN;
     try {
-      SimpleResponse response = blockingStub
+      SimpleResponse response = stub
           .withDeadline(deadline)
           .unaryCall(request);
       result = response.getGrpclbRouteType();
@@ -226,7 +231,7 @@ public final class GrpclbFallbackTestClient {
     boolean fallBack = false;
     while (!fallbackDeadline.isExpired()) {
       GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
-          Deadline.after(1, TimeUnit.SECONDS));
+          blockingStub, Deadline.after(1, TimeUnit.SECONDS));
       if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
         throw new AssertionError("Got grpclb route type backend. Backends are "
             + "supposed to be unreachable, so this test is broken");
@@ -247,55 +252,57 @@ public final class GrpclbFallbackTestClient {
     for (int i = 0; i < 30; i++) {
       assertEquals(
           GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK,
-          doRpcAndGetPath(Deadline.after(20, TimeUnit.SECONDS)));
+          doRpcAndGetPath(blockingStub, Deadline.after(20, TimeUnit.SECONDS)));
       Thread.sleep(1000);
     }
   }
 
-  private void runFastFallbackBeforeStartup() throws Exception {
-    runShellCmd(unrouteLbAndBackendAddrsCmd);
-    final Deadline fallbackDeadline = Deadline.after(5, TimeUnit.SECONDS);
+  private void runFallbackBeforeStartup() throws Exception {
+    runShellCmd(induceFallbackCmd);
+    final Deadline fallbackDeadline = Deadline.after(
+        fallbackDeadlineSeconds, TimeUnit.SECONDS);
     initStub();
     waitForFallbackAndDoRpcs(fallbackDeadline);
   }
 
-  private void runSlowFallbackBeforeStartup() throws Exception {
-    runShellCmd(blackholeLbAndBackendAddrsCmd);
-    final Deadline fallbackDeadline = Deadline.after(20, TimeUnit.SECONDS);
-    initStub();
-    waitForFallbackAndDoRpcs(fallbackDeadline);
-  }
-
-  private void runFastFallbackAfterStartup() throws Exception {
+  private void runFallbackAfterStartup() throws Exception {
     initStub();
     assertEquals(
         GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND,
-        doRpcAndGetPath(Deadline.after(20, TimeUnit.SECONDS)));
-    runShellCmd(unrouteLbAndBackendAddrsCmd);
-    final Deadline fallbackDeadline = Deadline.after(40, TimeUnit.SECONDS);
+        doRpcAndGetPath(blockingStub, Deadline.after(20, TimeUnit.SECONDS)));
+    runShellCmd(induceFallbackCmd);
+    final Deadline fallbackDeadline = Deadline.after(
+        fallbackDeadlineSeconds, TimeUnit.SECONDS);
     waitForFallbackAndDoRpcs(fallbackDeadline);
   }
 
-  private void runSlowFallbackAfterStartup() throws Exception {
-    initStub();
-    assertEquals(
-        GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND,
-        doRpcAndGetPath(Deadline.after(20, TimeUnit.SECONDS)));
-    runShellCmd(blackholeLbAndBackendAddrsCmd);
-    final Deadline fallbackDeadline = Deadline.after(40, TimeUnit.SECONDS);
-    waitForFallbackAndDoRpcs(fallbackDeadline);
+  // The purpose of this warmup method is to get potentially expensive one-per-process
+  // initialization out of the way, so that we can use aggressive timeouts in the actual
+  // test cases. Note that the warmup phase is done using a separate channel from the
+  // actual test cases, so that we don't affect the states of LB policies in the channel
+  // of the actual test case.
+  private void warmup() throws Exception {
+    logger.info("Begin warmup, performing " + numWarmupRpcs + " RPCs on the warmup channel");
+    ManagedChannel channel = createChannel();
+    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel);
+    for (int i = 0; i < numWarmupRpcs; i++) {
+      doRpcAndGetPath(stub, Deadline.after(1, TimeUnit.SECONDS));
+    }
+    try {
+      channel.shutdownNow();
+      channel.awaitTermination(1, TimeUnit.SECONDS);
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
+    }
   }
 
   private void run() throws Exception {
+    warmup();
     logger.info("Begin test case: " + testCase);
-    if (testCase.equals("fast_fallback_before_startup")) {
-      runFastFallbackBeforeStartup();
-    } else if (testCase.equals("slow_fallback_before_startup")) {
-      runSlowFallbackBeforeStartup();
-    } else if (testCase.equals("fast_fallback_after_startup")) {
-      runFastFallbackAfterStartup();
-    } else if (testCase.equals("slow_fallback_after_startup")) {
-      runSlowFallbackAfterStartup();
+    if (testCase.equals("fallback_before_startup")) {
+      runFallbackBeforeStartup();
+    } else if (testCase.equals("fallback_after_startup")) {
+      runFallbackAfterStartup();
     } else {
       throw new RuntimeException("invalid testcase: " + testCase);
     }

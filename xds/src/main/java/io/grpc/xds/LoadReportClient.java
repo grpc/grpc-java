@@ -259,20 +259,16 @@ final class LoadReportClient {
       closed = true;
       cleanUp();
 
-      long delayNanos = 0;
       if (initialResponseReceived || lrsRpcRetryPolicy == null) {
         // Reset the backoff sequence if balancer has sent the initial response, or backoff sequence
         // has never been initialized.
         lrsRpcRetryPolicy = backoffPolicyProvider.get();
       }
-      // Backoff only when balancer wasn't working previously.
-      if (!initialResponseReceived) {
-        // The back-off policy determines the interval between consecutive RPC upstarts, thus the
-        // actual delay may be smaller than the value from the back-off policy, or even negative,
-        // depending how much time was spent in the previous RPC.
-        delayNanos =
-            lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
-      }
+      // The back-off policy determines the interval between consecutive RPC upstarts, thus the
+      // actual delay may be smaller than the value from the back-off policy, or even negative,
+      // depending how much time was spent in the previous RPC.
+      long delayNanos =
+          lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
       logger.log(XdsLogLevel.INFO, "Retry LRS stream in {0} ns", delayNanos);
       if (delayNanos <= 0) {
         startLrsRpc();

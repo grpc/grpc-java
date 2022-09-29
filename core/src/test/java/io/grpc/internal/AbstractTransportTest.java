@@ -408,12 +408,13 @@ public abstract class AbstractTransportTest {
     }
     assumeTrue("transport is not using InetSocketAddress", port != -1);
     server.shutdown();
+    assertTrue(serverListener.waitForShutdown(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     server = newServer(port, Arrays.asList(serverStreamTracerFactory));
     boolean success;
     Thread.currentThread().interrupt();
     try {
-      server.start(serverListener);
+      server.start(serverListener = new MockServerListener());
       success = true;
     } catch (Exception ex) {
       success = false;
@@ -1145,7 +1146,7 @@ public abstract class AbstractTransportTest {
   public void earlyServerClose_serverFailure_withClientCancelOnListenerClosed() throws Exception {
     server.start(serverListener);
     client = newClientTransport(server);
-    runIfNotNull(client.start(mockClientTransportListener));
+    startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverTransport = serverTransportListener.transport;
@@ -1501,6 +1502,36 @@ public abstract class AbstractTransportTest {
     }
     assertNull("no additional message expected", messageQueue.poll());
     return count;
+  }
+
+  @Test
+  public void messageProducerOnlyProducesRequestedMessages() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    serverTransport = serverTransportListener.transport;
+
+    // Start an RPC.
+    ClientStream clientStream = client.newStream(
+        methodDescriptor, new Metadata(), callOptions, tracers);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+    StreamCreation serverStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    assertEquals(methodDescriptor.getFullMethodName(), serverStreamCreation.method);
+
+    // Have the client send two messages.
+    clientStream.writeMessage(methodDescriptor.streamRequest("MESSAGE"));
+    clientStream.writeMessage(methodDescriptor.streamRequest("MESSAGE"));
+    clientStream.flush();
+
+    doPingPong(serverListener);
+
+    // Verify server only receives one message if that's all it requests.
+    serverStreamCreation.stream.request(1);
+    verifyMessageCountAndClose(serverStreamCreation.listener.messageQueue, 1);
   }
 
   @Test

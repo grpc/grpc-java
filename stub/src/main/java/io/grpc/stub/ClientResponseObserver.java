@@ -22,7 +22,7 @@ package io.grpc.stub;
  */
 public interface ClientResponseObserver<ReqT, RespT> extends StreamObserver<RespT> {
   /**
-   * Called by the runtime priot to the start of a call to provide a reference to the
+   * Called by the runtime prior to the start of a call to provide a reference to the
    * {@link ClientCallStreamObserver} for the outbound stream. This can be used to listen to
    * onReady events, disable auto inbound flow and perform other advanced functions.
    *

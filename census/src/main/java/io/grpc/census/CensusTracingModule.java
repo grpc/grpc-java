@@ -41,7 +41,6 @@ import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Status;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
-import io.opencensus.trace.unsafe.ContextUtils;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -66,7 +65,7 @@ final class CensusTracingModule {
 
   @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
 
-  /**
+  /*
    * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their JDK
    * reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
    * (potentially racy) direct updates of the volatile variables.
@@ -93,9 +92,12 @@ final class CensusTracingModule {
   final Metadata.Key<SpanContext> tracingHeader;
   private final TracingClientInterceptor clientInterceptor = new TracingClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
+  private final boolean addMessageEvents;
 
   CensusTracingModule(
-      Tracer censusTracer, final BinaryFormat censusPropagationBinaryFormat) {
+      Tracer censusTracer,
+      final BinaryFormat censusPropagationBinaryFormat,
+      boolean addMessageEvents) {
     this.censusTracer = checkNotNull(censusTracer, "censusTracer");
     checkNotNull(censusPropagationBinaryFormat, "censusPropagationBinaryFormat");
     this.tracingHeader =
@@ -115,6 +117,7 @@ final class CensusTracingModule {
               }
             }
           });
+    this.addMessageEvents = addMessageEvents;
   }
 
   /**
@@ -212,9 +215,12 @@ final class CensusTracingModule {
         .build();
   }
 
-  private static void recordMessageEvent(
+  private void recordMessageEvent(
       Span span, MessageEvent.Type type,
       int seqNo, long optionalWireSize, long optionalUncompressedSize) {
+    if (!addMessageEvents) {
+      return;
+    }
     MessageEvent.Builder eventBuilder = MessageEvent.builder(type, seqNo);
     if (optionalUncompressedSize != -1) {
       eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
@@ -283,7 +289,7 @@ final class CensusTracingModule {
     }
   }
 
-  private static final class ClientTracer extends ClientStreamTracer {
+  private final class ClientTracer extends ClientStreamTracer {
     private final Span span;
     final Metadata.Key<SpanContext> tracingHeader;
     final boolean isSampledToLocalTracing;
@@ -366,12 +372,18 @@ final class CensusTracingModule {
       span.end(createEndSpanOptions(status, isSampledToLocalTracing));
     }
 
+    /*
+     TODO(dnvindhya): Replace deprecated ContextUtils usage with ContextHandleUtils to interact
+     with io.grpc.Context as described in {@link io.opencensus.trace.unsafeContextUtils} to remove
+     SuppressWarnings annotation.
+    */
+    @SuppressWarnings("deprecation")
     @Override
     public Context filterContext(Context context) {
       // Access directly the unsafe trace API to create the new Context. This is a safe usage
       // because gRPC always creates a new Context for each of the server calls and does not
       // inherit from the parent Context.
-      return ContextUtils.withValue(context, span);
+      return io.opencensus.trace.unsafe.ContextUtils.withValue(context, span);
     }
 
     @Override
@@ -404,6 +416,8 @@ final class CensusTracingModule {
 
   @VisibleForTesting
   final class TracingClientInterceptor implements ClientInterceptor {
+
+    @SuppressWarnings("deprecation")
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
@@ -412,7 +426,8 @@ final class CensusTracingModule {
       // as Tracer.getCurrentSpan() except when no value available when the return value is null
       // for the direct access and BlankSpan when Tracer API is used.
       final CallAttemptsTracerFactory tracerFactory =
-          newClientCallTracer(ContextUtils.getValue(Context.current()), method);
+          newClientCallTracer(
+              io.opencensus.trace.unsafe.ContextUtils.getValue(Context.current()), method);
       ClientCall<ReqT, RespT> call =
           next.newCall(
               method,

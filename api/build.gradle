@@ -13,22 +13,22 @@ evaluationDependsOn(project(':grpc-context').path)
 dependencies {
     api project(':grpc-context'),
             libraries.jsr305,
-            libraries.errorprone
+            libraries.errorprone.annotations
     implementation libraries.guava
 
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava_testlib) {
+    testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
     jmh project(':grpc-core')
 
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     // We want io.grpc.Internal, but not io.grpc.Internal*
     exclude 'io/grpc/Internal?*.java'
 }

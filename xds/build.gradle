@@ -11,60 +11,10 @@ plugins {
 
 description = "gRPC: XDS plugin"
 
-[compileJava].each() {
-    it.options.compilerArgs += [
-        // valueOf(int) in RoutingPriority has been deprecated
-        "-Xlint:-deprecation",
-        // only has AutoValue annotation processor
-        "-Xlint:-processing",
-    ]
-    appendToProperty(
-            it.options.errorprone.excludedPaths,
-            ".*/build/generated/sources/annotationProcessor/java/.*",
-            "|")
-}
-
 evaluationDependsOn(project(':grpc-core').path)
 
-dependencies {
-    implementation project(':grpc-protobuf'),
-            project(':grpc-stub'),
-            project(':grpc-core'),
-            project(':grpc-services'),
-            project(':grpc-auth'),
-            project(path: ':grpc-alts', configuration: 'shadow'),
-            libraries.gson,
-            libraries.re2j,
-            libraries.bouncycastle,
-            libraries.autovalue_annotation,
-            libraries.opencensus_proto,
-            libraries.protobuf_util
-    def nettyDependency = implementation project(':grpc-netty')
-
-    testImplementation project(':grpc-rls')
-    testImplementation project(':grpc-core').sourceSets.test.output
-
-    annotationProcessor libraries.autovalue
-    compileOnly libraries.javax_annotation,
-            // At runtime use the epoll included in grpc-netty-shaded
-            libraries.netty_epoll
-
-    testImplementation project(':grpc-testing'),
-            project(':grpc-testing-proto'),
-            libraries.netty_epoll
-    testImplementation (libraries.guava_testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
-
-    shadow configurations.implementation.getDependencies().minus([nettyDependency])
-    shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
-
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    testRuntimeOnly libraries.netty_tcnative
-}
-
 sourceSets {
-    main {
+    thirdparty {
         java {
             srcDir "${projectDir}/third_party/zero-allocation-hashing/main/java"
         }
@@ -83,13 +33,113 @@ sourceSets {
     }
 }
 
-configureProtoCompilation()
-
-jar {
-    archiveClassifier = 'original'
+configurations {
+    pomDeps {
+        extendsFrom configurations.thirdpartyRuntimeClasspath, configurations.shadow
+    }
 }
 
-javadoc {
+dependencies {
+    thirdpartyCompileOnly libraries.javax.annotation
+    thirdpartyImplementation project(':grpc-protobuf'),
+            project(':grpc-stub'),
+            libraries.opencensus.proto
+    implementation sourceSets.thirdparty.output
+    implementation project(':grpc-stub'),
+            project(':grpc-core'),
+            project(':grpc-services'),
+            project(':grpc-auth'),
+            project(path: ':grpc-alts', configuration: 'shadow'),
+            libraries.gson,
+            libraries.re2j,
+            libraries.auto.value.annotations,
+            libraries.protobuf.java.util
+    def nettyDependency = implementation project(':grpc-netty')
+
+    testImplementation project(':grpc-rls')
+    testImplementation project(':grpc-core').sourceSets.test.output
+
+    annotationProcessor libraries.auto.value
+    // At runtime use the epoll included in grpc-netty-shaded
+    compileOnly libraries.netty.transport.epoll
+
+    testImplementation project(':grpc-testing'),
+            project(':grpc-testing-proto')
+    testImplementation (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    testImplementation (libraries.guava.testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
+
+    shadow configurations.implementation.getDependencies().minus([nettyDependency])
+    shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
+
+    signature libraries.signature.java
+    testRuntimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "windows-x86_64"
+        }
+    }
+}
+
+configureProtoCompilation()
+
+tasks.named("compileThirdpartyJava").configure {
+    options.errorprone.enabled = false
+    options.compilerArgs += [
+        // valueOf(int) in RoutingPriority has been deprecated
+        "-Xlint:-deprecation",
+    ]
+}
+
+tasks.named("checkstyleThirdparty").configure {
+    enabled = false
+}
+
+tasks.named("compileJava").configure {
+    it.options.compilerArgs += [
+        // TODO: remove
+        "-Xlint:-deprecation",
+        // only has AutoValue annotation processor
+        "-Xlint:-processing",
+    ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
+}
+
+tasks.named("jar").configure {
+    archiveClassifier = 'original'
+    from sourceSets.thirdparty.output
+}
+
+tasks.named("javadoc").configure {
     // Exclusions here should generally also be relocated
     exclude 'com/github/udpa/**'
     exclude 'com/github/xds/**'
@@ -109,7 +159,7 @@ javadoc {
 }
 
 def prefixName = 'io.grpc.xds'
-shadowJar {
+tasks.named("shadowJar").configure {
     archiveClassifier = null
     dependencies {
         include(project(':grpc-xds'))
@@ -130,7 +180,9 @@ shadowJar {
     exclude "**/*.proto"
 }
 
-task checkPackageLeakage(dependsOn: shadowJar) {
+def checkPackageLeakage = tasks.register("checkPackageLeakage") {
+    inputs.files(shadowJar).withNormalizer(CompileClasspathNormalizer)
+    outputs.file("${buildDir}/tmp/${name}") // Fake output for UP-TO-DATE checking
     doLast {
         def jarEntryPrefixName = prefixName.replaceAll('\\.', '/')
         shadowJar.outputs.getFiles().each { jar ->
@@ -153,11 +205,11 @@ task checkPackageLeakage(dependsOn: shadowJar) {
     }
 }
 
-test {
+tasks.named("test").configure {
     dependsOn checkPackageLeakage
 }
 
-jacocoTestReport {
+tasks.named("jacocoTestReport").configure {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
         exclude: [ // Exclusions here should generally also be relocated
@@ -182,7 +234,11 @@ publishing {
 
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')
-                project.configurations.shadow.allDependencies.each { dep ->
+                project.configurations.pomDeps.allDependencies.each { dep ->
+                    if (dep.group == null && dep.name == 'unspecified') {
+                        // Ignore the thirdparty self-dependency
+                        return;
+                    }
                     def dependencyNode = dependenciesNode.appendNode('dependency')
                     dependencyNode.appendNode('groupId', dep.group)
                     dependencyNode.appendNode('artifactId', dep.name)

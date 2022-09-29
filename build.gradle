@@ -4,6 +4,7 @@ plugins {
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
     id "net.ltgt.errorprone" apply false
+    id 'com.google.cloud.tools.jib' apply false
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -19,7 +20,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.45.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.51.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -28,7 +29,7 @@ subprojects {
         mavenLocal()
     }
 
-    tasks.withType(JavaCompile) {
+    tasks.withType(JavaCompile).configureEach {
         it.options.compilerArgs += [
             "-Xlint:all",
             "-Xlint:-options",
@@ -41,7 +42,7 @@ subprojects {
         }
     }
 
-    tasks.withType(GenerateModuleMetadata) {
+    tasks.withType(GenerateModuleMetadata).configureEach {
         // Module metadata, introduced in Gradle 6.0, conflicts with our publishing task for
         // grpc-alts and grpc-compiler.
         enabled = false
@@ -55,14 +56,6 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.72.Final'
-        guavaVersion = '31.0.1-android'
-        googleauthVersion = '1.4.0'
-        protobufVersion = '3.19.2'
-        protocVersion = protobufVersion
-        opencensusVersion = '0.28.0'
-        autovalueVersion = '1.9'
-
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"
             project.protobuf {
@@ -70,7 +63,7 @@ subprojects {
                     if (project.hasProperty('protoc')) {
                         path = project.protoc
                     } else {
-                        artifact = "com.google.protobuf:protoc:${protocVersion}"
+                        artifact = libs.protobuf.protoc.get()
                     }
                 }
                 generateProtoTasks {
@@ -89,7 +82,7 @@ subprojects {
             if (rootProject.childProjects.containsKey('grpc-compiler')) {
                 // Only when the codegen is built along with the project, will we be able to run
                 // the grpc code generator.
-                task syncGeneratedSources { }
+                def syncGeneratedSources = tasks.register("syncGeneratedSources") { }
                 project.protobuf {
                     plugins { grpc { path = javaPluginPath } }
                     generateProtoTasks {
@@ -104,16 +97,20 @@ subprojects {
                                 }
                                 dependsOn "generate${source}Proto"
                             }
-                            syncGeneratedSources.dependsOn syncTask
+                            syncGeneratedSources.configure {
+                                dependsOn syncTask
+                            }
 
-                            task.dependsOn ':grpc-compiler:java_pluginExecutable'
-                            // Recompile protos when the codegen has been changed
-                            task.inputs.file javaPluginPath
-                            task.plugins { grpc { option 'noversion' } }
-                            if (isAndroid) {
-                                task.plugins {
-                                    grpc {
-                                        option 'lite'
+                            task.configure {
+                                dependsOn ':grpc-compiler:java_pluginExecutable'
+                                // Recompile protos when the codegen has been changed
+                                inputs.file javaPluginPath
+                                plugins { grpc { option 'noversion' } }
+                                if (isAndroid) {
+                                    plugins {
+                                        grpc {
+                                            option 'lite'
+                                        }
                                     }
                                 }
                             }
@@ -121,7 +118,9 @@ subprojects {
                     }
                 }
                 // Re-sync as part of a normal build, to avoid forgetting to run the sync
-                assemble.dependsOn syncGeneratedSources
+                tasks.named("assemble").configure {
+                    dependsOn syncGeneratedSources
+                }
             } else {
                 // Otherwise, we just use the checked-in generated code.
                 if (isAndroid) {
@@ -130,14 +129,13 @@ subprojects {
                         release { java { srcDir "${generatedSourcePath}/release/grpc" } }
                     }
                 } else {
-                    project.sourceSets {
-                        main { java { srcDir "${generatedSourcePath}/main/grpc" } }
-                        test { java { srcDir "${generatedSourcePath}/test/grpc" } }
+                    project.sourceSets.each() { sourceSet ->
+                        sourceSet.java { srcDir "${generatedSourcePath}/${sourceSet.name}/grpc" }
                     }
                 }
             }
 
-            tasks.withType(JavaCompile) {
+            tasks.withType(JavaCompile).configureEach {
                 appendToProperty(
                     it.options.errorprone.excludedPaths,
                     ".*/src/generated/[^/]+/java/.*" +
@@ -146,72 +144,7 @@ subprojects {
             }
         }
 
-        libraries = [
-            android_annotations: "com.google.android:annotations:4.1.1.4",
-            animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.19",
-            autovalue: "com.google.auto.value:auto-value:${autovalueVersion}",
-            autovalue_annotation: "com.google.auto.value:auto-value-annotations:${autovalueVersion}",
-            errorprone: "com.google.errorprone:error_prone_annotations:2.10.0",
-            cronet_api: 'org.chromium.net:cronet-api:92.4515.131',
-            cronet_embedded: 'org.chromium.net:cronet-embedded:92.4515.131',
-            gson: "com.google.code.gson:gson:2.8.9",
-            guava: "com.google.guava:guava:${guavaVersion}",
-            javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
-            jsr305: 'com.google.code.findbugs:jsr305:3.0.2',
-            google_api_protos: 'com.google.api.grpc:proto-google-common-protos:2.0.1',
-            google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",
-            google_auth_oauth2_http: "com.google.auth:google-auth-library-oauth2-http:${googleauthVersion}",
-            okhttp: 'com.squareup.okhttp:okhttp:2.7.4',
-            okio: 'com.squareup.okio:okio:1.17.5',
-            opencensus_api: "io.opencensus:opencensus-api:${opencensusVersion}",
-            opencensus_contrib_grpc_metrics: "io.opencensus:opencensus-contrib-grpc-metrics:${opencensusVersion}",
-            opencensus_impl: "io.opencensus:opencensus-impl:${opencensusVersion}",
-            opencensus_impl_lite: "io.opencensus:opencensus-impl-lite:${opencensusVersion}",
-            opencensus_proto: "io.opencensus:opencensus-proto:0.2.0",
-            instrumentation_api: 'com.google.instrumentation:instrumentation-api:0.4.3',
-            perfmark: 'io.perfmark:perfmark-api:0.23.0',
-            protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
-            protobuf_lite: "com.google.protobuf:protobuf-javalite:${protobufVersion}",
-            protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
-
-            netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
-            netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}:linux-x86_64",
-            netty_epoll_arm64: "io.netty:netty-transport-native-epoll:${nettyVersion}:linux-aarch_64",
-            netty_proxy_handler: "io.netty:netty-handler-proxy:${nettyVersion}",
-
-            // Keep the following references of tcnative version in sync whenever it's updated
-            // SECURITY.md (multiple occurrences)
-            // examples/example-tls/build.gradle
-            // examples/example-tls/pom.xml
-            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.46.Final',
-
-            conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.5.1',
-            re2j: 'com.google.re2j:re2j:1.5',
-
-            bouncycastle: 'org.bouncycastle:bcpkix-jdk15on:1.67',
-
-            // Test dependencies.
-            junit: 'junit:junit:4.12',
-            mockito: 'org.mockito:mockito-core:3.3.3',
-            mockito_android: 'org.mockito:mockito-android:3.8.0',
-            truth: 'com.google.truth:truth:1.0.1',
-            guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
-            androidx_annotation: "androidx.annotation:annotation:1.1.0",
-            androidx_core: "androidx.core:core:1.3.0",
-            androidx_lifecycle_common: "androidx.lifecycle:lifecycle-common:2.3.0",
-            androidx_lifecycle_service: "androidx.lifecycle:lifecycle-service:2.3.0",
-            androidx_test: "androidx.test:core:1.3.0",
-            androidx_test_rules: "androidx.test:rules:1.3.0",
-            androidx_test_ext_junit: "androidx.test.ext:junit:1.1.2",
-            robolectric: "org.robolectric:robolectric:4.4",
-
-            // Benchmark dependencies
-            hdrhistogram: 'org.hdrhistogram:HdrHistogram:2.1.12',
-            math: 'org.apache.commons:commons-math3:3.6.1',
-
-            // Jetty ALPN dependencies
-            jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.10'
-        ]
+        libraries = libs
 
         appendToProperty = { Property<String> property, String value, String separator ->
             if (property.present) {
@@ -225,7 +158,7 @@ subprojects {
     // Disable JavaDoc doclint on Java 8. It's annoying.
     if (JavaVersion.current().isJava8Compatible()) {
         allprojects {
-            tasks.withType(Javadoc) {
+            tasks.withType(Javadoc).configureEach {
                 options.addStringOption('Xdoclint:none', '-quiet')
             }
         }
@@ -233,7 +166,7 @@ subprojects {
 
     checkstyle {
         configDirectory = file("$rootDir/buildscripts")
-        toolVersion = "6.17"
+        toolVersion = libs.versions.checkstyle.get()
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
@@ -242,12 +175,12 @@ subprojects {
 
     if (!project.hasProperty('errorProne') || errorProne.toBoolean()) {
         dependencies {
-            errorprone 'com.google.errorprone:error_prone_core:2.10.0'
-            errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
+            errorprone libs.errorprone.core
+            errorproneJavac libs.errorprone.javac
         }
     } else {
         // Disable Error Prone
-        tasks.withType(JavaCompile) {
+        tasks.withType(JavaCompile).configureEach {
             options.errorprone.enabled = false
         }
     }
@@ -258,40 +191,44 @@ subprojects {
 
         dependencies {
             testImplementation libraries.junit,
-                    libraries.mockito,
+                    libraries.mockito.core,
                     libraries.truth
         }
 
-        compileTestJava {
+        tasks.named("compileTestJava").configure {
             // serialVersionUID is basically guaranteed to be useless in our tests
             options.compilerArgs += [
                 "-Xlint:-serial"
             ]
         }
 
-        jar.manifest {
-            attributes('Implementation-Title': name,
-            'Implementation-Version': version)
+        tasks.named("jar").configure {
+            manifest {
+                attributes('Implementation-Title': name,
+                        'Implementation-Version': project.version)
+            }
         }
 
-        javadoc.options {
-            encoding = 'UTF-8'
-            use = true
-            links 'https://docs.oracle.com/javase/8/docs/api/'
-            source = "8"
+        tasks.named("javadoc").configure {
+            options {
+                encoding = 'UTF-8'
+                use = true
+                links 'https://docs.oracle.com/javase/8/docs/api/'
+                source = "8"
+            }
         }
 
-        checkstyleMain {
+        tasks.named("checkstyleMain").configure {
             source = fileTree(dir: "$projectDir/src/main", include: "**/*.java")
         }
 
-        checkstyleTest {
+        tasks.named("checkstyleTest").configure {
             source = fileTree(dir: "$projectDir/src/test", include: "**/*.java")
         }
 
         // At a test failure, log the stack trace to the console so that we don't
         // have to open the HTML in a browser.
-        test {
+        tasks.named("test").configure {
             testLogging {
                 exceptionFormat = 'full'
                 showExceptions true
@@ -303,11 +240,11 @@ subprojects {
 
         if (!project.hasProperty('errorProne') || errorProne.toBoolean()) {
             dependencies {
-                annotationProcessor 'com.google.guava:guava-beta-checker:1.0'
+                annotationProcessor libs.guava.betaChecker
             }
         }
 
-        compileJava {
+        tasks.named("compileJava").configure {
             // This project targets Java 7 (no method references)
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             // This project targets Java 7 (no time.Duration class)
@@ -316,7 +253,7 @@ subprojects {
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
         }
-        compileTestJava {
+        tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
@@ -327,8 +264,7 @@ subprojects {
         plugins.withId("ru.vyarus.animalsniffer") {
 	    // Only available after java plugin has loaded
             animalsniffer {
-                // Breaks on upgrade: https://github.com/mojohaus/animal-sniffer/issues/131
-                toolVersion = '1.18'
+                toolVersion = libs.versions.animalsniffer.get()
             }
         }
     }
@@ -337,11 +273,13 @@ subprojects {
         // Detect Maven Enforcer's dependencyConvergence failures. We only care
         // for artifacts used as libraries by others with Maven.
         tasks.register('checkUpperBoundDeps') {
+            inputs.files(configurations.runtimeClasspath).withNormalizer(ClasspathNormalizer)
+            outputs.file("${buildDir}/tmp/${name}") // Fake output for UP-TO-DATE checking
             doLast {
                 requireUpperBoundDepsMatch(configurations.runtimeClasspath, project)
             }
         }
-        tasks.named('compileJava') {
+        tasks.named('compileJava').configure {
             dependsOn checkUpperBoundDeps
         }
     }
@@ -349,11 +287,11 @@ subprojects {
     plugins.withId("me.champeau.jmh") {
         // invoke jmh on a single benchmark class like so:
         //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
-	compileJmhJava {
+	tasks.named("compileJmhJava").configure {
 	    sourceCompatibility = 1.8
 	    targetCompatibility = 1.8
 	}
-        jmh {
+        tasks.named("jmh").configure {
             warmupIterations = 10
             iterations = 10
             fork = 1
@@ -366,6 +304,24 @@ subprojects {
                     project.property('jmhIncludeSingleClass')
                 ]
             }
+        }
+    }
+
+    plugins.withId("com.github.johnrengelman.shadow") {
+        tasks.named("shadowJar").configure {
+            // Do a dance to remove Class-Path. This needs to run after the doFirst() from the
+            // shadow plugin that adds Class-Path and before the core jar action. Using doFirst will
+            // have this run before the shadow plugin, and doLast will run after the core jar
+            // action. See #8606.
+            // The shadow plugin adds another doFirst when application is used for setting
+            // Main-Class. Ordering with it doesn't matter.
+            actions.add(plugins.hasPlugin("application") ? 2 : 1, new Action<Task>() {
+                @Override public void execute(Task task) {
+                    if (!task.manifest.attributes.remove("Class-Path")) {
+                        throw new AssertionError("Did not find Class-Path to remove from manifest")
+                    }
+                }
+            })
         }
     }
 
@@ -498,7 +454,8 @@ subprojects {
         }
 
         // Add a japicmp task that compares the current .jar with baseline .jar
-        task japicmp(type: me.champeau.gradle.japicmp.JapicmpTask, dependsOn: jar) {
+        tasks.register("japicmp", me.champeau.gradle.japicmp.JapicmpTask) {
+            dependsOn jar
             oldClasspath = files(baselineArtifact)
             newClasspath = files(jar.archivePath)
             onlyBinaryIncompatibleModified = false

@@ -75,7 +75,7 @@ final class RlsProtoData {
      * keyed by name. If no GrpcKeyBuilder matches, an empty key_map will be sent to the lookup
      * service; it should likely reply with a global default route and raise an alert.
      */
-    abstract ImmutableList<GrpcKeyBuilder> grpcKeyBuilders();
+    abstract ImmutableList<GrpcKeyBuilder> grpcKeybuilders();
 
     /**
      * Returns the name of the lookup service as a gRPC URI. Typically, this will be a subdomain of
@@ -119,7 +119,7 @@ final class RlsProtoData {
     @AutoValue.Builder
     abstract static class Builder {
 
-      abstract Builder grpcKeyBuilders(ImmutableList<GrpcKeyBuilder> grpcKeyBuilders);
+      abstract Builder grpcKeybuilders(ImmutableList<GrpcKeyBuilder> grpcKeybuilders);
 
       abstract Builder lookupService(String lookupService);
 

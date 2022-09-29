@@ -20,11 +20,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -67,10 +65,14 @@ public final class AutoConfiguredLoadBalancerFactory {
 
     @Override
     @Deprecated
-    public void handleResolvedAddressGroups(List<EquivalentAddressGroup> s, Attributes a) {}
+    @SuppressWarnings("InlineMeSuggester")
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {}
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return true;
+    }
 
     @Override
     public void handleNameResolutionError(Status error) {}
@@ -97,14 +99,10 @@ public final class AutoConfiguredLoadBalancerFactory {
     }
 
     /**
-     * Returns non-OK status if resolvedAddresses is empty and delegate lb requires address ({@link
-     * LoadBalancer#canHandleEmptyAddressListFromNameResolution()} returns {@code false}). {@code
-     * AutoConfiguredLoadBalancer} doesn't expose {@code
-     * canHandleEmptyAddressListFromNameResolution} because it depends on the delegated LB.
+     * Returns non-OK status if the delegate rejects the resolvedAddresses (e.g. if it does not
+     * support an empty list).
      */
-    Status tryHandleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
-      Attributes attributes = resolvedAddresses.getAttributes();
+    boolean tryAcceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       PolicySelection policySelection =
           (PolicySelection) resolvedAddresses.getLoadBalancingPolicyConfig();
 
@@ -118,7 +116,7 @@ public final class AutoConfiguredLoadBalancerFactory {
           delegate.shutdown();
           delegateProvider = null;
           delegate = new NoopLoadBalancer();
-          return Status.OK;
+          return true;
         }
         policySelection =
             new PolicySelection(defaultProvider, /* config= */ null);
@@ -141,20 +139,12 @@ public final class AutoConfiguredLoadBalancerFactory {
             ChannelLogLevel.DEBUG, "Load-balancing config: {0}", policySelection.config);
       }
 
-      LoadBalancer delegate = getDelegate();
-      if (resolvedAddresses.getAddresses().isEmpty()
-          && !delegate.canHandleEmptyAddressListFromNameResolution()) {
-        return Status.UNAVAILABLE.withDescription(
-            "NameResolver returned no usable address. addrs=" + servers + ", attrs=" + attributes);
-      } else {
-        delegate.handleResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(resolvedAddresses.getAddresses())
-                .setAttributes(attributes)
-                .setLoadBalancingPolicyConfig(lbConfig)
-                .build());
-        return Status.OK;
-      }
+      return getDelegate().acceptResolvedAddresses(
+          ResolvedAddresses.newBuilder()
+              .setAddresses(resolvedAddresses.getAddresses())
+              .setAttributes(resolvedAddresses.getAttributes())
+              .setLoadBalancingPolicyConfig(lbConfig)
+              .build());
     }
 
     void handleNameResolutionError(Status error) {

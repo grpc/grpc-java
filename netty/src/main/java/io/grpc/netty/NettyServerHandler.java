@@ -44,14 +44,17 @@ import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.internal.MaxConnectionIdleManager;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -283,16 +286,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {
       maxConnectionIdleManager = null;
     } else {
-      maxConnectionIdleManager = new MaxConnectionIdleManager(maxConnectionIdleInNanos) {
-        @Override
-        void close(ChannelHandlerContext ctx) {
-          if (gracefulShutdown == null) {
-            gracefulShutdown = new GracefulShutdown("max_idle", null);
-            gracefulShutdown.start(ctx);
-            ctx.flush();
-          }
-        }
-      };
+      maxConnectionIdleManager = new MaxConnectionIdleManager(maxConnectionIdleInNanos);
     }
 
     connection.addListener(new Http2ConnectionAdapter() {
@@ -363,7 +357,16 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
 
     if (maxConnectionIdleManager != null) {
-      maxConnectionIdleManager.start(ctx);
+      maxConnectionIdleManager.start(new Runnable() {
+        @Override
+        public void run() {
+          if (gracefulShutdown == null) {
+            gracefulShutdown = new GracefulShutdown("max_idle", null);
+            gracefulShutdown.start(ctx);
+            ctx.flush();
+          }
+        }
+      }, ctx.executor());
     }
 
     if (keepAliveTimeInNanos != SERVER_KEEPALIVE_TIME_NANOS_DISABLED) {
@@ -854,6 +857,9 @@ class NettyServerHandler extends AbstractNettyHandler {
         keepAliveManager.onDataReceived();
       }
       NettyServerHandler.this.onHeadersRead(ctx, streamId, headers);
+      if (endStream) {
+        NettyServerHandler.this.onDataRead(streamId, Unpooled.EMPTY_BUFFER, 0, endStream);
+      }
     }
 
     @Override
@@ -890,10 +896,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       }
       if (data == flowControlPing().payload()) {
         flowControlPing().updateWindow();
-        if (logger.isLoggable(Level.FINE)) {
-          logger.log(Level.FINE, String.format("Window: %d",
-              decoder().flowController().initialWindowSize(connection().connectionStream())));
-        }
+        logger.log(Level.FINE, "Window: {0}",
+            decoder().flowController().initialWindowSize(connection().connectionStream()));
       } else if (data == GRACEFUL_SHUTDOWN_PING) {
         if (gracefulShutdown == null) {
           // this should never happen

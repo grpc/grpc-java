@@ -37,25 +37,28 @@ import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ManagedChannelImplBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
-import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.internal.CipherSuite;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.okhttp.internal.TlsVersion;
+import io.grpc.util.CertificateUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
-import java.security.cert.CertificateFactory;
+import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.EnumSet;
 import java.util.Set;
@@ -71,6 +74,7 @@ import javax.annotation.Nullable;
 import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.KeyManager;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
@@ -100,7 +104,7 @@ public final class OkHttpChannelBuilder extends
     PLAINTEXT
   }
 
-  @VisibleForTesting
+  // @VisibleForTesting
   static final ConnectionSpec INTERNAL_DEFAULT_CONNECTION_SPEC =
       new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
           .cipherSuites(
@@ -137,6 +141,8 @@ public final class OkHttpChannelBuilder extends
           ((ExecutorService) executor).shutdown();
         }
       };
+  static final ObjectPool<Executor> DEFAULT_TRANSPORT_EXECUTOR_POOL =
+      SharedResourcePool.forResource(SHARED_EXECUTOR);
 
   /** Creates a new builder for the given server host and port. */
   public static OkHttpChannelBuilder forAddress(String host, int port) {
@@ -168,8 +174,9 @@ public final class OkHttpChannelBuilder extends
     return new OkHttpChannelBuilder(target, creds, result.callCredentials, result.factory);
   }
 
-  private Executor transportExecutor;
-  private ScheduledExecutorService scheduledExecutorService;
+  private ObjectPool<Executor> transportExecutorPool = DEFAULT_TRANSPORT_EXECUTOR_POOL;
+  private ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool =
+      SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
   private SocketFactory socketFactory;
   private SSLSocketFactory sslSocketFactory;
@@ -247,7 +254,11 @@ public final class OkHttpChannelBuilder extends
    * to shutdown the executor when appropriate.
    */
   public OkHttpChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
-    this.transportExecutor = transportExecutor;
+    if (transportExecutor == null) {
+      this.transportExecutorPool = DEFAULT_TRANSPORT_EXECUTOR_POOL;
+    } else {
+      this.transportExecutorPool = new FixedObjectPool<>(transportExecutor);
+    }
     return this;
   }
 
@@ -468,8 +479,8 @@ public final class OkHttpChannelBuilder extends
    */
   public OkHttpChannelBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
-    this.scheduledExecutorService =
-        checkNotNull(scheduledExecutorService, "scheduledExecutorService");
+    this.scheduledExecutorServicePool =
+        new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
     return this;
   }
 
@@ -505,11 +516,11 @@ public final class OkHttpChannelBuilder extends
     return this;
   }
 
-  ClientTransportFactory buildTransportFactory() {
+  OkHttpTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(
-        transportExecutor,
-        scheduledExecutorService,
+        transportExecutorPool,
+        scheduledExecutorServicePool,
         socketFactory,
         createSslSocketFactory(),
         hostnameVerifier,
@@ -588,7 +599,16 @@ public final class OkHttpChannelBuilder extends
       if (tlsCreds.getKeyManagers() != null) {
         km = tlsCreds.getKeyManagers().toArray(new KeyManager[0]);
       } else if (tlsCreds.getPrivateKey() != null) {
-        return SslSocketFactoryResult.error("byte[]-based private key unsupported. Use KeyManager");
+        if (tlsCreds.getPrivateKeyPassword() != null) {
+          return SslSocketFactoryResult.error("byte[]-based private key with password unsupported. "
+              + "Use unencrypted file or KeyManager");
+        }
+        try {
+          km = createKeyManager(tlsCreds.getCertificateChain(), tlsCreds.getPrivateKey());
+        } catch (GeneralSecurityException gse) {
+          log.log(Level.FINE, "Exception loading private key from credential", gse);
+          return SslSocketFactoryResult.error("Unable to load private key: " + gse.getMessage());
+        }
       } // else don't have a client cert
       TrustManager[] tm = null;
       if (tlsCreds.getTrustManagers() != null) {
@@ -643,6 +663,39 @@ public final class OkHttpChannelBuilder extends
     }
   }
 
+  static KeyManager[] createKeyManager(byte[] certChain, byte[] privateKey)
+      throws GeneralSecurityException {
+    X509Certificate[] chain;
+    ByteArrayInputStream inCertChain = new ByteArrayInputStream(certChain);
+    try {
+      chain = CertificateUtils.getX509Certificates(inCertChain);
+    } finally {
+      GrpcUtil.closeQuietly(inCertChain);
+    }
+    PrivateKey key;
+    ByteArrayInputStream inPrivateKey = new ByteArrayInputStream(privateKey);
+    try {
+      key = CertificateUtils.getPrivateKey(inPrivateKey);
+    } catch (IOException uee) {
+      throw new GeneralSecurityException("Unable to decode private key", uee);
+    } finally {
+      GrpcUtil.closeQuietly(inPrivateKey);
+    }
+    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+    try {
+      ks.load(null, null);
+    } catch (IOException ex) {
+      // Shouldn't really happen, as we're not loading any data.
+      throw new GeneralSecurityException(ex);
+    }
+    ks.setKeyEntry("key", key, new char[0], chain);
+
+    KeyManagerFactory keyManagerFactory =
+        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+    keyManagerFactory.init(ks, new char[0]);
+    return keyManagerFactory.getKeyManagers();
+  }
+
   static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     try {
@@ -651,14 +704,16 @@ public final class OkHttpChannelBuilder extends
       // Shouldn't really happen, as we're not loading any data.
       throw new GeneralSecurityException(ex);
     }
-    CertificateFactory cf = CertificateFactory.getInstance("X.509");
+    X509Certificate[] certs;
     ByteArrayInputStream in = new ByteArrayInputStream(rootCerts);
     try {
-      X509Certificate cert = (X509Certificate) cf.generateCertificate(in);
-      X500Principal principal = cert.getSubjectX500Principal();
-      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+      certs = CertificateUtils.getX509Certificates(in);
     } finally {
       GrpcUtil.closeQuietly(in);
+    }
+    for (X509Certificate cert : certs) {
+      X500Principal principal = cert.getSubjectX500Principal();
+      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
     }
 
     TrustManagerFactory trustManagerFactory =
@@ -712,30 +767,30 @@ public final class OkHttpChannelBuilder extends
    */
   @Internal
   static final class OkHttpTransportFactory implements ClientTransportFactory {
-    private final Executor executor;
-    private final boolean usingSharedExecutor;
-    private final boolean usingSharedScheduler;
-    private final TransportTracer.Factory transportTracerFactory;
-    private final SocketFactory socketFactory;
-    @Nullable private final SSLSocketFactory sslSocketFactory;
+    private final ObjectPool<Executor> executorPool;
+    final Executor executor;
+    private final ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool;
+    final ScheduledExecutorService scheduledExecutorService;
+    final TransportTracer.Factory transportTracerFactory;
+    final SocketFactory socketFactory;
+    @Nullable final SSLSocketFactory sslSocketFactory;
     @Nullable
-    private final HostnameVerifier hostnameVerifier;
-    private final ConnectionSpec connectionSpec;
-    private final int maxMessageSize;
+    final HostnameVerifier hostnameVerifier;
+    final ConnectionSpec connectionSpec;
+    final int maxMessageSize;
     private final boolean enableKeepAlive;
     private final long keepAliveTimeNanos;
     private final AtomicBackoff keepAliveBackoff;
     private final long keepAliveTimeoutNanos;
-    private final int flowControlWindow;
+    final int flowControlWindow;
     private final boolean keepAliveWithoutCalls;
-    private final int maxInboundMetadataSize;
-    private final ScheduledExecutorService timeoutService;
-    private final boolean useGetForSafeMethods;
+    final int maxInboundMetadataSize;
+    final boolean useGetForSafeMethods;
     private boolean closed;
 
     private OkHttpTransportFactory(
-        Executor executor,
-        @Nullable ScheduledExecutorService timeoutService,
+        ObjectPool<Executor> executorPool,
+        ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool,
         @Nullable SocketFactory socketFactory,
         @Nullable SSLSocketFactory sslSocketFactory,
         @Nullable HostnameVerifier hostnameVerifier,
@@ -749,9 +804,10 @@ public final class OkHttpChannelBuilder extends
         int maxInboundMetadataSize,
         TransportTracer.Factory transportTracerFactory,
         boolean useGetForSafeMethods) {
-      usingSharedScheduler = timeoutService == null;
-      this.timeoutService = usingSharedScheduler
-          ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : timeoutService;
+      this.executorPool = executorPool;
+      this.executor = executorPool.getObject();
+      this.scheduledExecutorServicePool = scheduledExecutorServicePool;
+      this.scheduledExecutorService = scheduledExecutorServicePool.getObject();
       this.socketFactory = socketFactory;
       this.sslSocketFactory = sslSocketFactory;
       this.hostnameVerifier = hostnameVerifier;
@@ -766,15 +822,8 @@ public final class OkHttpChannelBuilder extends
       this.maxInboundMetadataSize = maxInboundMetadataSize;
       this.useGetForSafeMethods = useGetForSafeMethods;
 
-      usingSharedExecutor = executor == null;
       this.transportTracerFactory =
           Preconditions.checkNotNull(transportTracerFactory, "transportTracerFactory");
-      if (usingSharedExecutor) {
-        // The executor was unspecified, using the shared executor.
-        this.executor = SharedResourceHolder.get(SHARED_EXECUTOR);
-      } else {
-        this.executor = executor;
-      }
     }
 
     @Override
@@ -793,22 +842,13 @@ public final class OkHttpChannelBuilder extends
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       // TODO(carl-mastrangelo): Pass channelLogger in.
       OkHttpClientTransport transport = new OkHttpClientTransport(
+          this,
           inetSocketAddr,
           options.getAuthority(),
           options.getUserAgent(),
           options.getEagAttributes(),
-          executor,
-          socketFactory,
-          sslSocketFactory,
-          hostnameVerifier,
-          connectionSpec,
-          maxMessageSize,
-          flowControlWindow,
           options.getHttpConnectProxiedSocketAddress(),
-          tooManyPingsRunnable,
-          maxInboundMetadataSize,
-          transportTracerFactory.create(),
-          useGetForSafeMethods);
+          tooManyPingsRunnable);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);
@@ -818,7 +858,7 @@ public final class OkHttpChannelBuilder extends
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return timeoutService;
+      return scheduledExecutorService;
     }
 
     @Nullable
@@ -830,8 +870,8 @@ public final class OkHttpChannelBuilder extends
         return null;
       }
       ClientTransportFactory factory = new OkHttpTransportFactory(
-          executor,
-          timeoutService,
+          executorPool,
+          scheduledExecutorServicePool,
           socketFactory,
           result.factory,
           hostnameVerifier,
@@ -855,13 +895,8 @@ public final class OkHttpChannelBuilder extends
       }
       closed = true;
 
-      if (usingSharedScheduler) {
-        SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
-      }
-
-      if (usingSharedExecutor) {
-        SharedResourceHolder.release(SHARED_EXECUTOR, executor);
-      }
+      executorPool.returnObject(executor);
+      scheduledExecutorServicePool.returnObject(scheduledExecutorService);
     }
   }
 }

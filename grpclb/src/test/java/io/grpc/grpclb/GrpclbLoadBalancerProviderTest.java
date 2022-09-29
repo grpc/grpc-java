@@ -19,6 +19,7 @@ package io.grpc.grpclb;
 import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.JsonParser;
 import java.util.Map;
@@ -41,6 +42,7 @@ public class GrpclbLoadBalancerProviderTest {
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
     assertThat(config.getServiceName()).isNull();
+    assertThat(config.getFallbackTimeoutMs()).isEqualTo(GrpclbState.FALLBACK_TIMEOUT_MS);
   }
 
   @Test
@@ -54,6 +56,54 @@ public class GrpclbLoadBalancerProviderTest {
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
     assertThat(config.getServiceName()).isNull();
+    assertThat(config.getFallbackTimeoutMs()).isEqualTo(GrpclbState.FALLBACK_TIMEOUT_MS);
+  }
+
+  @Test
+  public void setTimeoutToLbConfig() throws Exception {
+    String lbConfig =
+        "{\"initialFallbackTimeout\" : \"123s\", \"childPolicy\" : [{\"pick_first\" : {}},"
+            + " {\"round_robin\" : {}}]}";
+
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+
+    assertThat(configOrError.getConfig()).isNotNull();
+    GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
+    assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
+    assertThat(config.getServiceName()).isNull();
+    assertThat(config.getFallbackTimeoutMs()).isEqualTo(123000);
+  }
+
+  @Test
+  public void setInvalidTimeoutToLbConfig() throws Exception {
+    String lbConfig =
+        "{\"initialFallbackTimeout\" : \"-1s\", \"childPolicy\" : [{\"pick_first\" : {}},"
+            + " {\"round_robin\" : {}}]}";
+
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+
+    assertThat(configOrError.getConfig()).isNull();
+    assertThat(configOrError.getError()).isNotNull();
+    Status errorStatus = configOrError.getError();
+    assertThat(errorStatus.getCause()).hasMessageThat().isEqualTo("Invalid timeout (-1000)");
+  }
+
+  @Test
+  public void setInvalidTimeoutDurationProtoToLbConfig() throws Exception {
+    String lbConfig =
+        "{\"initialFallbackTimeout\" : \"1000\", \"childPolicy\" : [{\"pick_first\" : {}},"
+            + " {\"round_robin\" : {}}]}";
+
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+
+    assertThat(configOrError.getError()).isNotNull();
+    Status errorStatus = configOrError.getError();
+    assertThat(errorStatus.getCause())
+        .hasMessageThat()
+        .isEqualTo("java.text.ParseException: Invalid duration string: 1000");
   }
 
   @Test
@@ -65,6 +115,7 @@ public class GrpclbLoadBalancerProviderTest {
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
     assertThat(config.getServiceName()).isNull();
+    assertThat(config.getFallbackTimeoutMs()).isEqualTo(GrpclbState.FALLBACK_TIMEOUT_MS);
   }
 
   @Test
@@ -78,6 +129,7 @@ public class GrpclbLoadBalancerProviderTest {
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
     assertThat(config.getServiceName()).isNull();
+    assertThat(config.getFallbackTimeoutMs()).isEqualTo(GrpclbState.FALLBACK_TIMEOUT_MS);
   }
 
   @Test
@@ -91,6 +143,7 @@ public class GrpclbLoadBalancerProviderTest {
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.ROUND_ROBIN);
     assertThat(config.getServiceName()).isNull();
+    assertThat(config.getFallbackTimeoutMs()).isEqualTo(GrpclbState.FALLBACK_TIMEOUT_MS);
   }
 
   @Test
@@ -117,6 +170,7 @@ public class GrpclbLoadBalancerProviderTest {
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
     assertThat(config.getServiceName()).isNull();
+    assertThat(config.getFallbackTimeoutMs()).isEqualTo(GrpclbState.FALLBACK_TIMEOUT_MS);
   }
 
   @Test
@@ -131,6 +185,7 @@ public class GrpclbLoadBalancerProviderTest {
     GrpclbConfig config = (GrpclbConfig) configOrError.getConfig();
     assertThat(config.getMode()).isEqualTo(Mode.PICK_FIRST);
     assertThat(config.getServiceName()).isEqualTo("foo.google.com");
+    assertThat(config.getFallbackTimeoutMs()).isEqualTo(GrpclbState.FALLBACK_TIMEOUT_MS);
   }
 
   @Test

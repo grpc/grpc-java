@@ -17,32 +17,65 @@ evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     api project(':grpc-core'),
-            libraries.netty
-    implementation libraries.netty_proxy_handler,
+            libraries.netty.codec.http2
+    implementation libs.netty.handler.proxy,
             libraries.guava,
-            libraries.errorprone,
-            libraries.perfmark
+            libraries.errorprone.annotations,
+            libraries.perfmark.api,
+            libraries.netty.unix.common
 
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-testing-proto')
-    testRuntimeOnly libraries.netty_tcnative,
+            project(':grpc-testing-proto'),
             libraries.conscrypt,
-            libraries.netty_epoll
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    alpnagent libraries.jetty_alpn_agent
+            libraries.netty.transport.epoll
+    testRuntimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "windows-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    signature libraries.signature.java
+    signature libraries.signature.android
+    alpnagent libraries.jetty.alpn.agent
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-[compileJava, compileTestJava].each() {
+[tasks.named("compileJava"), tasks.named("compileTestJava")]*.configure {
     // Netty retuns a lot of futures that we mostly don't care about.
-    it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
+    options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     options.links 'http://netty.io/4.1/api/'
     exclude 'io/grpc/netty/Internal*'
 }
@@ -51,17 +84,17 @@ project.sourceSets {
     main { java { srcDir "${projectDir}/third_party/netty/java" } }
 }
 
-test {
+tasks.named("test").configure {
     // Allow testing Jetty ALPN in TlsTest
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
 }
 
-jmh {
+tasks.named("jmh").configure {
     // Workaround
     // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
     includeTests = true
 }
 
-checkstyleMain {
+tasks.named("checkstyleMain").configure {
     source = source.minus(fileTree(dir: "src/main", include: "**/Http2ControlFrameLimitEncoder.java"))
 }

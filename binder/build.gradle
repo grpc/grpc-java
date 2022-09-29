@@ -23,14 +23,14 @@ android {
             }
         }
     }
-    compileSdkVersion 29
+    compileSdkVersion 30
     compileOptions {
         sourceCompatibility 1.8
         targetCompatibility 1.8
     }
     defaultConfig {
         minSdkVersion 19
-        targetSdkVersion 29
+        targetSdkVersion 30
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -47,45 +47,45 @@ repositories {
 dependencies {
     api project(':grpc-core')
 
-    implementation libraries.androidx_annotation
-    implementation libraries.androidx_core
-    implementation libraries.androidx_lifecycle_common
+    implementation libraries.androidx.annotation
+    implementation libraries.androidx.core
+    implementation libraries.androidx.lifecycle.common
     implementation libraries.guava
-    testImplementation libraries.androidx_core
-    testImplementation libraries.androidx_test
-    testImplementation libraries.androidx_lifecycle_common
-    testImplementation libraries.androidx_lifecycle_service
+    testImplementation libraries.androidx.core
+    testImplementation libraries.androidx.test.core
+    testImplementation libraries.androidx.lifecycle.common
+    testImplementation libraries.androidx.lifecycle.service
     testImplementation libraries.junit
-    testImplementation libraries.mockito
+    testImplementation libraries.mockito.core
     testImplementation (libraries.robolectric) {
         // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
         exclude group: 'com.google.auto.service', module: 'auto-service'
     }
-    testImplementation (libraries.guava_testlib) {
+    testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
     testImplementation libraries.truth
 
-    androidTestAnnotationProcessor libraries.autovalue
+    androidTestAnnotationProcessor libraries.auto.value
     androidTestImplementation project(':grpc-testing')
     androidTestImplementation project(':grpc-protobuf-lite')
-    androidTestImplementation libraries.autovalue_annotation
+    androidTestImplementation libraries.auto.value.annotations
     androidTestImplementation libraries.junit
-    androidTestImplementation libraries.androidx_core
-    androidTestImplementation libraries.androidx_test
-    androidTestImplementation libraries.androidx_test_rules
-    androidTestImplementation libraries.androidx_test_ext_junit
+    androidTestImplementation libraries.androidx.core
+    androidTestImplementation libraries.androidx.test.core
+    androidTestImplementation libraries.androidx.test.rules
+    androidTestImplementation libraries.androidx.test.ext.junit
     androidTestImplementation libraries.truth
-    androidTestImplementation libraries.mockito_android
-    androidTestImplementation libraries.androidx_lifecycle_service
-    androidTestImplementation (libraries.guava_testlib) {
+    androidTestImplementation libraries.mockito.android
+    androidTestImplementation libraries.androidx.lifecycle.service
+    androidTestImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-tasks.withType(JavaCompile) {
+tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
             "-Xlint:-cast"
     ]
@@ -94,8 +94,10 @@ tasks.withType(JavaCompile) {
     options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
 }
 
-task javadocs(type: Javadoc) {
+tasks.register("javadocs", Javadoc) {
     source = android.sourceSets.main.java.srcDirs
+    exclude 'io/grpc/binder/internal/**'
+    exclude 'io/grpc/binder/Internal*'
     classpath += files(android.getBootClasspath())
     classpath += files({
         android.libraryVariants.collect { variant ->
@@ -110,12 +112,13 @@ task javadocs(type: Javadoc) {
     }
 }
 
-task javadocJar(type: Jar, dependsOn: javadocs) {
+tasks.register("javadocJar", Jar) {
+    dependsOn javadocs
     archiveClassifier = 'javadoc'
     from javadocs.destinationDir
 }
 
-task sourcesJar(type: Jar) {
+tasks.register("sourcesJar", Jar) {
     archiveClassifier = 'sources'
     from android.sourceSets.main.java.srcDirs
 }
