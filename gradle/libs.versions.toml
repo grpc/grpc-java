@@ -8,7 +8,7 @@ guava = "31.1-android"
 netty = '4.1.79.Final'
 nettytcnative = '2.0.54.Final'
 opencensus = "0.31.0"
-protobuf = "3.21.1"
+protobuf = "3.21.7"
 
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"
