@@ -70,8 +70,6 @@ import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
-import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -86,6 +84,8 @@ import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
+import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
@@ -117,10 +117,10 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 /**
- * Tests for {@link ClientXdsClient}.
+ * Tests for {@link XdsClientImpl}.
  */
 @RunWith(JUnit4.class)
-public abstract class ClientXdsClientTestBase {
+public abstract class XdsClientImplTestBase {
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
@@ -264,7 +264,7 @@ public abstract class ClientXdsClientTestBase {
   private ManagedChannel channel;
   private ManagedChannel channelForCustomAuthority;
   private ManagedChannel channelForEmptyAuthority;
-  private ClientXdsClient xdsClient;
+  private XdsClientImpl xdsClient;
   private boolean originalEnableFaultInjection;
   private boolean originalEnableRbac;
   private boolean originalEnableLeastRequest;
@@ -342,7 +342,7 @@ public abstract class ClientXdsClientTestBase {
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();
     xdsClient =
-        new ClientXdsClient(
+        new XdsClientImpl(
             xdsChannelFactory,
             bootstrapInfo,
             Context.ROOT,
@@ -589,7 +589,7 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
     // Server failed to return subscribed resource within expected time window.
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
@@ -872,7 +872,7 @@ public abstract class ClientXdsClientTestBase {
   public void cachedLdsResource_absent() {
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     // Add another watcher.
     ResourceWatcher<LdsUpdate> watcher = mock(ResourceWatcher.class);
@@ -1264,7 +1264,7 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(LDS, ldsResourceTwo);
     verifySubscribedResourcesMetadataSizes(2, 0, 0, 0);
 
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(ldsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(ldsResourceTwo);
@@ -1305,7 +1305,7 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
     // Server failed to return subscribed resource within expected time window.
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
@@ -1468,7 +1468,7 @@ public abstract class ClientXdsClientTestBase {
   public void cachedRdsResource_absent() {
     DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
         RDS_RESOURCE, rdsResourceWatcher);
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     // Add another watcher.
     ResourceWatcher<RdsUpdate> watcher = mock(ResourceWatcher.class);
@@ -1630,7 +1630,7 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(RDS, rdsResourceTwo);
     verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
 
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(rdsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(rdsResourceTwo);
@@ -1677,7 +1677,7 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
     // Server failed to return subscribed resource within expected time window.
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
@@ -2138,7 +2138,7 @@ public abstract class ClientXdsClientTestBase {
     // The response NACKed with errors indicating indices of the failed resources.
     String errorMsg =  "CDS response Cluster 'cluster.googleapis.com' validation error: "
             + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
-            + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: "
+            + "io.grpc.xds.XdsClientImpl$ResourceInvalidException: "
             + "ca_certificate_provider_instance is required in upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
@@ -2288,7 +2288,7 @@ public abstract class ClientXdsClientTestBase {
 
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
         + "Cluster cluster.googleapis.com: malformed outlier_detection: "
-        + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: outlier_detection "
+        + "io.grpc.xds.XdsClientImpl$ResourceInvalidException: outlier_detection "
         + "max_ejection_percent is > 100";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
@@ -2417,7 +2417,7 @@ public abstract class ClientXdsClientTestBase {
   public void cachedCdsResource_absent() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     ResourceWatcher<CdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(),CDS_RESOURCE, watcher);
@@ -2612,7 +2612,7 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(CDS, cdsResourceTwo);
     verifySubscribedResourcesMetadataSizes(0, 2, 0, 0);
 
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(cdsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(cdsResourceTwo);
@@ -2690,7 +2690,7 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
     // Server failed to return subscribed resource within expected time window.
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
@@ -2860,7 +2860,7 @@ public abstract class ClientXdsClientTestBase {
   public void cachedEdsResource_absent() {
     DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
         edsResourceWatcher);
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     ResourceWatcher<EdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),EDS_RESOURCE, watcher);
@@ -3034,7 +3034,7 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(EDS, edsResourceTwo);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
 
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(edsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(edsResourceTwo);
@@ -3339,7 +3339,7 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void serverSideListenerFound() {
     Assume.assumeTrue(useProtocolV3());
-    ClientXdsClientTestBase.DiscoveryRpcCall call =
+    XdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
@@ -3376,7 +3376,7 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void serverSideListenerNotFound() {
     Assume.assumeTrue(useProtocolV3());
-    ClientXdsClientTestBase.DiscoveryRpcCall call =
+    XdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
@@ -3396,7 +3396,7 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
 
     verifyNoInteractions(ldsResourceWatcher);
-    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LISTENER_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -3404,7 +3404,7 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void serverSideListenerResponseErrorHandling_badDownstreamTlsContext() {
     Assume.assumeTrue(useProtocolV3());
-    ClientXdsClientTestBase.DiscoveryRpcCall call =
+    XdsClientImplTestBase.DiscoveryRpcCall call =
             startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
                 ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
@@ -3431,7 +3431,7 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void serverSideListenerResponseErrorHandling_badTransportSocketName() {
     Assume.assumeTrue(useProtocolV3());
-    ClientXdsClientTestBase.DiscoveryRpcCall call =
+    XdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
@@ -3485,7 +3485,7 @@ public abstract class ClientXdsClientTestBase {
     ScheduledTask timeoutTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
     assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
-        .isEqualTo(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
+        .isEqualTo(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
     return call;
   }
 

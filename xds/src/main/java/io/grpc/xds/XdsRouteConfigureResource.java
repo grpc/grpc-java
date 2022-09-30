@@ -17,8 +17,8 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
@@ -40,7 +40,6 @@ import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.Status;
-import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Filter.FilterConfig;
@@ -52,9 +51,10 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
+import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
-import io.grpc.xds.internal.Matchers;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;

@@ -117,7 +117,6 @@ import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.LbEndpoint;
@@ -130,6 +129,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsResourceType.StructOrError;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
@@ -152,7 +152,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class ClientXdsClientDataTest {
+public class XdsClientImplDataTest {
 
   private static final ServerInfo LRS_SERVER_INFO =
       ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
