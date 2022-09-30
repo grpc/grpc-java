@@ -4,9 +4,9 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "rules_jvm_external",
-    sha256 = "c21ce8b8c4ccac87c809c317def87644cdc3a9dd650c74f41698d761c95175f3",
-    strip_prefix = "rules_jvm_external-1498ac6ccd3ea9cdb84afed65aa257c57abf3e0a",
-    url = "https://github.com/bazelbuild/rules_jvm_external/archive/1498ac6ccd3ea9cdb84afed65aa257c57abf3e0a.zip",
+    strip_prefix = "rules_jvm_external-4.4.2",
+    sha256 = "735602f50813eb2ea93ca3f5e43b1959bd80b213b836a07a62a29d757670b77b",
+    url = "https://github.com/bazelbuild/rules_jvm_external/archive/refs/tags/4.4.2.zip",
 )
 
 load("@rules_jvm_external//:defs.bzl", "maven_install")
@@ -34,14 +34,16 @@ switched_rules_by_language(
 
 maven_install(
     artifacts = IO_GRPC_GRPC_JAVA_ARTIFACTS + PROTOBUF_MAVEN_ARTIFACTS,
-    generate_compat_repositories = True,
     override_targets = IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
     repositories = [
         "https://repo.maven.apache.org/maven2/",
     ],
+    maven_install_json = "@//:maven_install.json",
     strict_visibility = True,
+    fetch_sources = True,
+    fail_if_repin_required = True,
 )
 
-load("@maven//:compat.bzl", "compat_repositories")
+load("@maven//:defs.bzl", "pinned_maven_install")
 
-compat_repositories()
+pinned_maven_install()
