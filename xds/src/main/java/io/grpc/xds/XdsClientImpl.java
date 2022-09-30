@@ -72,7 +72,7 @@ import javax.annotation.Nullable;
 /**
  * XdsClient implementation for client side usages.
  */
-final class ClientXdsClient extends XdsClient implements XdsResponseHandler, ResourceStore {
+final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -118,7 +118,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   private volatile boolean isShutdown;
 
   // TODO(zdapeng): rename to XdsClientImpl
-  ClientXdsClient(
+  XdsClientImpl(
       XdsChannelFactory xdsChannelFactory,
       Bootstrapper.BootstrapInfo bootstrapInfo,
       Context context,

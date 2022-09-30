@@ -108,10 +108,10 @@ import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
 /**
- * Tests for {@link ClientXdsClient} with protocol version v2.
+ * Tests for {@link XdsClientImpl} with protocol version v2.
  */
 @RunWith(Parameterized.class)
-public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
+public class XdsClientImplV2Test extends XdsClientImplTestBase {
 
   /** Parameterized test cases. */
   @Parameters(name = "ignoreResourceDeletion={0}")
