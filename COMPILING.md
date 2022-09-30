@@ -44,11 +44,11 @@ This section is only necessary if you are making changes to the code
 generation. Most users only need to use `skipCodegen=true` as discussed above.
 
 ### Build Protobuf
-The codegen plugin is C++ code and requires protobuf 3.21.1 or later.
+The codegen plugin is C++ code and requires protobuf 3.21.7 or later.
 
 For Linux, Mac and MinGW:
 ```
-$ PROTOBUF_VERSION=3.21.1
+$ PROTOBUF_VERSION=3.21.7
 $ curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOBUF_VERSION/protobuf-all-$PROTOBUF_VERSION.tar.gz
 $ tar xzf protobuf-all-$PROTOBUF_VERSION.tar.gz
 $ cd protobuf-$PROTOBUF_VERSION
