@@ -18,7 +18,7 @@ sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 def grpcVersion = '1.51.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.21.1'
+def protocVersion = '3.21.7'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
