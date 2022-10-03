@@ -17,9 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import static io.grpc.xds.XdsClusterResource.validateCommonTlsContext;
@@ -81,8 +78,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   }
 
   @Override
-  ResourceType typeName() {
-    return LDS;
+  String typeName() {
+    return "LDS";
   }
 
   @Override
@@ -102,8 +99,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
 
   @Nullable
   @Override
-  ResourceType dependentResource() {
-    return RDS;
+  XdsResourceType<?> dependentResource() {
+    return XdsRouteConfigureResource.getInstance();
   }
 
   @Override

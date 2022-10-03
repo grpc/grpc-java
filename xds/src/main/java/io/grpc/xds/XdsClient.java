@@ -25,7 +25,6 @@ import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
 import io.grpc.Status;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
@@ -296,7 +295,7 @@ abstract class XdsClient {
    * a map ("resource name": "resource metadata").
    */
   // Must be synchronized.
-  ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+  ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
       getSubscribedResourcesMetadataSnapshot() {
     throw new UnsupportedOperationException();
   }
@@ -347,8 +346,8 @@ abstract class XdsClient {
   interface XdsResponseHandler {
     /** Called when a xds response is received. */
     void handleResourceResponse(
-        ResourceType resourceType, ServerInfo serverInfo, String versionInfo, List<Any> resources,
-        String nonce);
+        XdsResourceType<?> resourceType, ServerInfo serverInfo, String versionInfo,
+        List<Any> resources, String nonce);
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.
@@ -369,9 +368,9 @@ abstract class XdsClient {
      */
     // Must be synchronized.
     @Nullable
-    Collection<String> getSubscribedResources(ServerInfo serverInfo, ResourceType type);
+    Collection<String> getSubscribedResources(ServerInfo serverInfo,
+                                              XdsResourceType<? extends ResourceUpdate> type);
 
-    @Nullable
-    XdsResourceType<? extends ResourceUpdate> getXdsResourceType(ResourceType type);
+    Collection<XdsResourceType<? extends ResourceUpdate>> getXdsResourceTypes();
   }
 }

@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
 import static io.grpc.xds.Bootstrapper.ServerInfo;
 import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.canonifyResourceName;
@@ -80,7 +79,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   abstract Class<? extends com.google.protobuf.Message> unpackedClassName();
 
-  abstract ResourceType typeName();
+  abstract String typeName();
 
   abstract String typeUrl();
 
@@ -88,7 +87,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   // Non-null for  State of the World resources.
   @Nullable
-  abstract ResourceType dependentResource();
+  abstract XdsResourceType<?> dependentResource();
 
   static class Args {
     final ServerInfo serverInfo;

@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
@@ -1176,7 +1175,7 @@ public class ClusterResolverLoadBalancerTest {
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                           ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo(EDS);
+      assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);
     }
@@ -1186,7 +1185,7 @@ public class ClusterResolverLoadBalancerTest {
     <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
                                                            String resourceName,
                                                            ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo(EDS);
+      assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }

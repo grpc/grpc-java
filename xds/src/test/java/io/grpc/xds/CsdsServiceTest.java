@@ -17,10 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
@@ -49,13 +45,12 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcServerRule;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -81,6 +76,10 @@ public class CsdsServiceTest {
       .node(BOOTSTRAP_NODE)
       .build();
   private static final XdsClient XDS_CLIENT_NO_RESOURCES = new FakeXdsClient();
+  private static final XdsResourceType<?> LDS = XdsListenerResource.getInstance();
+  private static final XdsResourceType<?> CDS = XdsClusterResource.getInstance();
+  private static final XdsResourceType<?> RDS = XdsRouteConfigureResource.getInstance();
+  private static final XdsResourceType<?> EDS = XdsEndpointResource.getInstance();
 
   @RunWith(JUnit4.class)
   public static class ServiceTests {
@@ -126,7 +125,7 @@ public class CsdsServiceTest {
     public void fetchClientConfig_unexpectedException() {
       XdsClient throwingXdsClient = new FakeXdsClient() {
         @Override
-        ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+        ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
               getSubscribedResourcesMetadataSnapshot() {
           return Futures.immediateFailedFuture(
               new IllegalArgumentException("IllegalArgumentException"));
@@ -150,12 +149,12 @@ public class CsdsServiceTest {
     public void fetchClientConfig_interruptedException() {
       XdsClient throwingXdsClient = new FakeXdsClient() {
         @Override
-        ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+        ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
             getSubscribedResourcesMetadataSnapshot() {
           return Futures.submit(
-              new Callable<Map<ResourceType, Map<String, ResourceMetadata>>>() {
+              new Callable<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>() {
                 @Override
-                public Map<ResourceType, Map<String, ResourceMetadata>> call() {
+                public Map<XdsResourceType<?>, Map<String, ResourceMetadata>> call() {
                   Thread.currentThread().interrupt();
                   return null;
                 }
@@ -323,9 +322,9 @@ public class CsdsServiceTest {
         throws InterruptedException {
       ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(new FakeXdsClient() {
         @Override
-        protected Map<ResourceType, Map<String, ResourceMetadata>>
+        protected Map<XdsResourceType<?>, Map<String, ResourceMetadata>>
             getSubscribedResourcesMetadata() {
-          return new ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>>()
+          return new ImmutableMap.Builder<XdsResourceType<?>, Map<String, ResourceMetadata>>()
               .put(LDS, ImmutableMap.of("subscribedResourceName.LDS", METADATA_ACKED_LDS))
               .put(RDS, ImmutableMap.of("subscribedResourceName.RDS", METADATA_ACKED_RDS))
               .put(CDS, ImmutableMap.of("subscribedResourceName.CDS", METADATA_ACKED_CDS))
@@ -340,7 +339,7 @@ public class CsdsServiceTest {
       // is propagated to the correct resource types.
       int xdsConfigCount = clientConfig.getGenericXdsConfigsCount();
       assertThat(xdsConfigCount).isEqualTo(4);
-      EnumMap<ResourceType, GenericXdsConfig> configDumps = mapConfigDumps(clientConfig);
+      Map<XdsResourceType<?>, GenericXdsConfig> configDumps = mapConfigDumps(clientConfig);
       assertThat(configDumps.keySet()).containsExactly(LDS, RDS, CDS, EDS);
 
       // LDS.
@@ -384,7 +383,7 @@ public class CsdsServiceTest {
   private static void verifyClientConfigNoResources(ClientConfig clientConfig) {
     int xdsConfigCount = clientConfig.getGenericXdsConfigsCount();
     assertThat(xdsConfigCount).isEqualTo(0);
-    EnumMap<ResourceType, GenericXdsConfig> configDumps = mapConfigDumps(clientConfig);
+    Map<XdsResourceType<?>, GenericXdsConfig> configDumps = mapConfigDumps(clientConfig);
     assertThat(configDumps).isEmpty();
   }
 
@@ -398,12 +397,12 @@ public class CsdsServiceTest {
     assertThat(node).isEqualTo(BOOTSTRAP_NODE.toEnvoyProtoNode());
   }
 
-  private static EnumMap<ResourceType, GenericXdsConfig> mapConfigDumps(ClientConfig config) {
-    EnumMap<ResourceType, GenericXdsConfig> xdsConfigMap = new EnumMap<>(ResourceType.class);
+  private static Map<XdsResourceType<?>, GenericXdsConfig> mapConfigDumps(ClientConfig config) {
+    Map<XdsResourceType<?>, GenericXdsConfig> xdsConfigMap = new HashMap<>();
     List<GenericXdsConfig> xdsConfigList = config.getGenericXdsConfigsList();
     for (GenericXdsConfig genericXdsConfig : xdsConfigList) {
-      ResourceType type = ResourceType.fromTypeUrl(genericXdsConfig.getTypeUrl());
-      assertThat(type).isNotEqualTo(ResourceType.UNKNOWN);
+      XdsResourceType<?> type = AbstractXdsClient.fromTypeUrl(genericXdsConfig.getTypeUrl());
+      assertThat(type).isNotNull();
       assertThat(xdsConfigMap).doesNotContainKey(type);
       xdsConfigMap.put(type, genericXdsConfig);
     }
@@ -411,12 +410,13 @@ public class CsdsServiceTest {
   }
 
   private static class FakeXdsClient extends XdsClient {
-    protected Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadata() {
+    protected Map<XdsResourceType<?>, Map<String, ResourceMetadata>>
+        getSubscribedResourcesMetadata() {
       return ImmutableMap.of();
     }
 
     @Override
-    ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+    ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
         getSubscribedResourcesMetadataSnapshot() {
       return Futures.immediateFuture(getSubscribedResourcesMetadata());
     }
