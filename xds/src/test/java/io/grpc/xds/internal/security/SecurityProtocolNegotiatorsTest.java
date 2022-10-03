@@ -168,7 +168,7 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSecret(SslContext sslContext) {
+          public void updateSslContext(SslContext sslContext) {
             future.set(sslContext);
           }
 
@@ -245,7 +245,7 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSecret(SslContext sslContext) {
+          public void updateSslContext(SslContext sslContext) {
             future.set(sslContext);
           }
 
@@ -381,7 +381,7 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSecret(SslContext sslContext) {
+          public void updateSslContext(SslContext sslContext) {
             future.set(sslContext);
           }
 

@@ -57,7 +57,7 @@ public abstract class SslContextProvider implements Closeable {
     }
 
     /** Informs callee of new/updated SslContext. */
-    @VisibleForTesting public abstract void updateSecret(SslContext sslContext);
+    @VisibleForTesting public abstract void updateSslContext(SslContext sslContext);
 
     /** Informs callee of an exception that was generated. */
     @VisibleForTesting protected abstract void onException(Throwable throwable);
@@ -120,7 +120,7 @@ public abstract class SslContextProvider implements Closeable {
           public void run() {
             try {
               SslContext sslContext = sslContextGetter.get();
-              callback.updateSecret(sslContext);
+              callback.updateSslContext(sslContext);
             } catch (Throwable e) {
               callback.onException(e);
             }
