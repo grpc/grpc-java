@@ -48,7 +48,6 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ResourceStore;
-import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
