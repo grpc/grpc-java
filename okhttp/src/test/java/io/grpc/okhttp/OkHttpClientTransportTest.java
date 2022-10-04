@@ -1878,6 +1878,38 @@ public class OkHttpClientTransportTest {
   }
 
   @Test
+  public void proxy_serverHangs() throws Exception {
+    ServerSocket serverSocket = new ServerSocket(0);
+    InetSocketAddress targetAddress = InetSocketAddress.createUnresolved("theservice", 80);
+    clientTransport = new OkHttpClientTransport(
+        channelBuilder.buildTransportFactory(),
+        targetAddress,
+        "authority",
+        "userAgent",
+        EAG_ATTRS,
+        HttpConnectProxiedSocketAddress.newBuilder()
+            .setTargetAddress(targetAddress)
+            .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
+            .build(),
+        tooManyPingsRunnable);
+    clientTransport.proxySocketTimeout = 10;
+    clientTransport.start(transportListener);
+
+    Socket sock = serverSocket.accept();
+    serverSocket.close();
+
+    BufferedReader reader = new BufferedReader(new InputStreamReader(sock.getInputStream(), UTF_8));
+    assertEquals("CONNECT theservice:80 HTTP/1.1", reader.readLine());
+    assertEquals("Host: theservice:80", reader.readLine());
+    while (!"".equals(reader.readLine())) {}
+
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(transportListener, timeout(15)).transportShutdown(captor.capture());
+    sock.close();
+    verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+  }
+
+  @Test
   public void goAway_notUtf8() throws Exception {
     initTransport();
     // 0xFF is never permitted in UTF-8. 0xF0 should have 3 continuations following, and 0x0a isn't
