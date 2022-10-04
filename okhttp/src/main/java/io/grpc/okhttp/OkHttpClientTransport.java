@@ -629,8 +629,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,
       String proxyUsername, String proxyPassword) throws StatusException {
+    Socket sock = null;
     try {
-      Socket sock;
       // The proxy address may not be resolved
       if (proxyAddress.getAddress() != null) {
         sock = socketFactory.createSocket(proxyAddress.getAddress(), proxyAddress.getPort());
@@ -692,6 +692,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       sock.setSoTimeout(0);
       return sock;
     } catch (IOException e) {
+      if (sock != null) {
+        GrpcUtil.closeQuietly(sock);
+      }
       throw Status.UNAVAILABLE.withDescription("Failed trying to connect with proxy").withCause(e)
           .asException();
     }

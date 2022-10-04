@@ -1903,10 +1903,9 @@ public class OkHttpClientTransportTest {
     assertEquals("Host: theservice:80", reader.readLine());
     while (!"".equals(reader.readLine())) {}
 
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(transportListener, timeout(15)).transportShutdown(captor.capture());
-    sock.close();
+    verify(transportListener, timeout(200)).transportShutdown(any(Status.class));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+    sock.close();
   }
 
   @Test
