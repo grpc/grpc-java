@@ -28,7 +28,6 @@ if [ -f ${INSTALL_DIR}/bin/protoc ]; then
 else
   if [[ ! -d "$DOWNLOAD_DIR"/protobuf-"${PROTOBUF_VERSION}" ]]; then
     curl -Ls https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-all-${PROTOBUF_VERSION}.tar.gz | tar xz -C $DOWNLOAD_DIR
-    mv "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}" "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}"
   fi
   pushd $DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}
   # install here so we don't need sudo

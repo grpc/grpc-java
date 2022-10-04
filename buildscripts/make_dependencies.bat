@@ -23,7 +23,6 @@ set PATH=%PATH%;%cd%\%CMAKE_NAME%\bin
 powershell -command "$ErrorActionPreference = 'stop'; & { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; iwr https://github.com/google/protobuf/archive/v%PROTOBUF_VER%.zip -OutFile protobuf.zip }" || exit /b 1
 powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('protobuf.zip', '.') }" || exit /b 1
 del protobuf.zip
-rename protobuf-%PROTOBUF_VER% protobuf-%PROTOBUF_VER%
 mkdir protobuf-%PROTOBUF_VER%\build
 pushd protobuf-%PROTOBUF_VER%\build
 
