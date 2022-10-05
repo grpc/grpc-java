@@ -109,18 +109,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "44f36f1527825b723b1565aad4fe39d739b8069816e254e4fa6b639075ca6c12",
-        strip_prefix = "protobuf-3.16.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.16.1.zip"],
+        sha256 = "fd70da0383d7ab11b3751e5645372677da14a92f789a5dbb2ea7d4f824074ee6",
+        strip_prefix = "protobuf-3.16.3",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.16.3.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "44f36f1527825b723b1565aad4fe39d739b8069816e254e4fa6b639075ca6c12",
-        strip_prefix = "protobuf-3.16.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.16.1.zip"],
+        sha256 = "fd70da0383d7ab11b3751e5645372677da14a92f789a5dbb2ea7d4f824074ee6",
+        strip_prefix = "protobuf-3.16.3",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.16.3.zip"],
     )
 
 def io_grpc_grpc_proto():
