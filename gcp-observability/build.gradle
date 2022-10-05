@@ -35,6 +35,7 @@ dependencies {
             libraries.perfmark,
             libraries.opencensus_contrib_grpc_metrics,
             libraries.gson,
+	    libraries.protobuf_util, // Prefer our newer version
             ('com.google.guava:guava:31.0.1-jre'),
             ('com.google.errorprone:error_prone_annotations:2.11.0'),
             ('com.google.auth:google-auth-library-credentials:1.4.0'),
