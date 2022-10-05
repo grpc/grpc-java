@@ -29,6 +29,8 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-alts'),
             libraries.google_auth_oauth2_http,
+            libraries.protobuf_util, // Prefer our newer version
+            libraries.gson, // Prefer our newer version
             libraries.autovalue_annotation,
             libraries.perfmark,
             ('com.google.guava:guava:31.0.1-jre'),
