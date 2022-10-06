@@ -115,7 +115,6 @@ import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
 import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
@@ -2699,21 +2698,28 @@ public class XdsClientImplDataTest {
   @Test
   public void validateResourceName() {
     String traditionalResource = "cluster1.google.com";
-    assertThat(XdsClient.isResourceNameValid(traditionalResource, ResourceType.CDS.typeUrl()))
+    assertThat(XdsClient.isResourceNameValid(traditionalResource,
+        XdsClusterResource.getInstance().typeUrl()))
         .isTrue();
-    assertThat(XdsClient.isResourceNameValid(traditionalResource, ResourceType.RDS.typeUrlV2()))
+    assertThat(XdsClient.isResourceNameValid(traditionalResource,
+        XdsRouteConfigureResource.getInstance().typeUrlV2()))
         .isTrue();
 
     String invalidPath = "xdstp:/abc/efg";
-    assertThat(XdsClient.isResourceNameValid(invalidPath, ResourceType.CDS.typeUrl())).isFalse();
+    assertThat(XdsClient.isResourceNameValid(invalidPath,
+        XdsClusterResource.getInstance().typeUrl())).isFalse();
 
     String invalidPath2 = "xdstp:///envoy.config.route.v3.RouteConfiguration";
-    assertThat(XdsClient.isResourceNameValid(invalidPath2, ResourceType.RDS.typeUrl())).isFalse();
+    assertThat(XdsClient.isResourceNameValid(invalidPath2,
+        XdsRouteConfigureResource.getInstance().typeUrl())).isFalse();
 
     String typeMatch = "xdstp:///envoy.config.route.v3.RouteConfiguration/foo/route1";
-    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.LDS.typeUrl())).isFalse();
-    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.RDS.typeUrl())).isTrue();
-    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.RDS.typeUrlV2())).isFalse();
+    assertThat(XdsClient.isResourceNameValid(typeMatch,
+        XdsListenerResource.getInstance().typeUrl())).isFalse();
+    assertThat(XdsClient.isResourceNameValid(typeMatch,
+        XdsRouteConfigureResource.getInstance().typeUrl())).isTrue();
+    assertThat(XdsClient.isResourceNameValid(typeMatch,
+        XdsRouteConfigureResource.getInstance().typeUrlV2())).isFalse();
   }
 
   @Test

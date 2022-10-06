@@ -17,8 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -66,8 +64,8 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  ResourceType typeName() {
-    return EDS;
+  String typeName() {
+    return "EDS";
   }
 
   @Override
@@ -82,7 +80,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
 
   @Nullable
   @Override
-  ResourceType dependentResource() {
+  XdsResourceType<?> dependentResource() {
     return null;
   }
 

@@ -47,7 +47,6 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
@@ -202,8 +201,9 @@ final class XdsNameResolver extends NameResolver {
       replacement = XdsClient.percentEncodePath(replacement);
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
-    if (!XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrl())
-        && !XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrlV2())) {
+    if (!XdsClient.isResourceNameValid(ldsResourceName, XdsListenerResource.getInstance().typeUrl())
+        && !XdsClient.isResourceNameValid(ldsResourceName,
+        XdsListenerResource.getInstance().typeUrlV2())) {
       listener.onError(Status.INVALID_ARGUMENT.withDescription(
           "invalid listener resource URI for service authority: " + serviceAuthority));
       return;

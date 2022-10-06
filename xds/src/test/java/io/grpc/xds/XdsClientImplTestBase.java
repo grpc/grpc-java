@@ -18,10 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
@@ -66,7 +62,6 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
@@ -137,6 +132,10 @@ public abstract class XdsClientImplTestBase {
   private static final Node NODE = Node.newBuilder().setId(NODE_ID).build();
   private static final Any FAILING_ANY = MessageFactory.FAILING_ANY;
   private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
+  private static final XdsResourceType<?> LDS = XdsListenerResource.getInstance();
+  private static final XdsResourceType<?> CDS = XdsClusterResource.getInstance();
+  private static final XdsResourceType<?> RDS = XdsRouteConfigureResource.getInstance();
+  private static final XdsResourceType<?> EDS = XdsEndpointResource.getInstance();
 
   // xDS control plane server info.
   private ServerInfo xdsServerInfo;
@@ -399,15 +398,27 @@ public abstract class XdsClientImplTestBase {
 
   private void verifySubscribedResourcesMetadataSizes(
       int ldsSize, int cdsSize, int rdsSize, int edsSize) {
-    Map<ResourceType, Map<String, ResourceMetadata>> subscribedResourcesMetadata =
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> subscribedResourcesMetadata =
         awaitSubscribedResourcesMetadata();
-    assertThat(subscribedResourcesMetadata.get(LDS)).hasSize(ldsSize);
-    assertThat(subscribedResourcesMetadata.get(CDS)).hasSize(cdsSize);
-    assertThat(subscribedResourcesMetadata.get(RDS)).hasSize(rdsSize);
-    assertThat(subscribedResourcesMetadata.get(EDS)).hasSize(edsSize);
+    verifyResourceCount(subscribedResourcesMetadata, LDS, ldsSize);
+    verifyResourceCount(subscribedResourcesMetadata, CDS, cdsSize);
+    verifyResourceCount(subscribedResourcesMetadata, RDS, rdsSize);
+    verifyResourceCount(subscribedResourcesMetadata, EDS, edsSize);
   }
 
-  private Map<ResourceType, Map<String, ResourceMetadata>> awaitSubscribedResourcesMetadata() {
+  private void verifyResourceCount(
+      Map<XdsResourceType<?>, Map<String, ResourceMetadata>> subscribedResourcesMetadata,
+      XdsResourceType<?> type,
+      int size) {
+    if (size == 0) {
+      assertThat(subscribedResourcesMetadata.containsKey(type)).isFalse();
+    } else {
+      assertThat(subscribedResourcesMetadata.get(type)).hasSize(size);
+    }
+  }
+
+  private Map<XdsResourceType<?>, Map<String, ResourceMetadata>>
+      awaitSubscribedResourcesMetadata() {
     try {
       return xdsClient.getSubscribedResourcesMetadataSnapshot().get(20, TimeUnit.SECONDS);
     } catch (Exception e) {
@@ -419,20 +430,20 @@ public abstract class XdsClientImplTestBase {
   }
 
   /** Verify the resource requested, but not updated. */
-  private void verifyResourceMetadataRequested(ResourceType type, String resourceName) {
+  private void verifyResourceMetadataRequested(XdsResourceType<?> type, String resourceName) {
     verifyResourceMetadata(
         type, resourceName, null, ResourceMetadataStatus.REQUESTED, "", 0, false);
   }
 
   /** Verify that the requested resource does not exist. */
-  private void verifyResourceMetadataDoesNotExist(ResourceType type, String resourceName) {
+  private void verifyResourceMetadataDoesNotExist(XdsResourceType<?> type, String resourceName) {
     verifyResourceMetadata(
         type, resourceName, null, ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, false);
   }
 
   /** Verify the resource to be acked. */
   private void verifyResourceMetadataAcked(
-      ResourceType type, String resourceName, Any rawResource, String versionInfo,
+      XdsResourceType<?> type, String resourceName, Any rawResource, String versionInfo,
       long updateTimeNanos) {
     verifyResourceMetadata(type, resourceName, rawResource, ResourceMetadataStatus.ACKED,
         versionInfo, updateTimeNanos, false);
@@ -443,7 +454,7 @@ public abstract class XdsClientImplTestBase {
    * corresponding i-th element of {@code List<String> failedDetails}.
    */
   private void verifyResourceMetadataNacked(
-      ResourceType type, String resourceName, Any rawResource, String versionInfo,
+      XdsResourceType<?> type, String resourceName, Any rawResource, String versionInfo,
       long updateTime, String failedVersion, long failedUpdateTimeNanos,
       List<String> failedDetails) {
     ResourceMetadata resourceMetadata =
@@ -465,7 +476,7 @@ public abstract class XdsClientImplTestBase {
   }
 
   private ResourceMetadata verifyResourceMetadata(
-      ResourceType type, String resourceName, Any rawResource, ResourceMetadataStatus status,
+      XdsResourceType<?> type, String resourceName, Any rawResource, ResourceMetadataStatus status,
       String versionInfo, long updateTimeNanos, boolean hasErrorState) {
     ResourceMetadata metadata = awaitSubscribedResourcesMetadata().get(type).get(resourceName);
     assertThat(metadata).isNotNull();
@@ -1297,7 +1308,7 @@ public abstract class XdsClientImplTestBase {
         RDS_RESOURCE, rdsResourceWatcher);
     Any routeConfig = Any.pack(mf.buildRouteConfiguration("route-bar.googleapis.com",
             mf.buildOpaqueVirtualHosts(2)));
-    call.sendResponse(ResourceType.RDS, routeConfig, VERSION_1, "0000");
+    call.sendResponse(RDS, routeConfig, VERSION_1, "0000");
 
     // Client sends an ACK RDS request.
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
@@ -1934,7 +1945,7 @@ public abstract class XdsClientImplTestBase {
         mf.buildEdsCluster(CDS_RESOURCE, null, "least_request_experimental", null,
             leastRequestConfig, false, null, "envoy.transport_sockets.tls", null, null
         ));
-    call.sendResponse(ResourceType.CDS, clusterRingHash, VERSION_1, "0000");
+    call.sendResponse(CDS, clusterRingHash, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
@@ -1966,7 +1977,7 @@ public abstract class XdsClientImplTestBase {
         mf.buildEdsCluster(CDS_RESOURCE, null, "ring_hash_experimental", ringHashConfig, null,
             false, null, "envoy.transport_sockets.tls", null, null
         ));
-    call.sendResponse(ResourceType.CDS, clusterRingHash, VERSION_1, "0000");
+    call.sendResponse(CDS, clusterRingHash, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
@@ -3353,10 +3364,9 @@ public abstract class XdsClientImplTestBase {
     Message listener =
         mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
-    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    call.sendResponse(LDS, listeners, "0", "0000");
     // Client sends an ACK LDS request.
-    call.verifyRequest(
-        ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
+    call.verifyRequest(LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     EnvoyServerProtoData.Listener parsedListener = ldsUpdateCaptor.getValue().listener();
     assertThat(parsedListener.name()).isEqualTo(LISTENER_RESOURCE);
@@ -3390,10 +3400,9 @@ public abstract class XdsClientImplTestBase {
     Message listener = mf.buildListenerWithFilterChain(
         "grpc/server?xds.resource.listening_address=0.0.0.0:8000", 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
-    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    call.sendResponse(LDS, listeners, "0", "0000");
     // Client sends an ACK LDS request.
-    call.verifyRequest(
-        ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
+    call.verifyRequest(LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
 
     verifyNoInteractions(ldsResourceWatcher);
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
@@ -3418,7 +3427,7 @@ public abstract class XdsClientImplTestBase {
     Message listener =
             mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
-    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    call.sendResponse(LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
     String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address="
         + "0.0.0.0:7000\' validation error: "
@@ -3445,7 +3454,7 @@ public abstract class XdsClientImplTestBase {
     Message listener =
         mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
-    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    call.sendResponse(LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
     String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address="
         + "0.0.0.0:7000\' validation error: "
@@ -3460,28 +3469,27 @@ public abstract class XdsClientImplTestBase {
       XdsResourceType<T> type, String name, ResourceWatcher<T> watcher) {
     FakeClock.TaskFilter timeoutTaskFilter;
     switch (type.typeName()) {
-      case LDS:
+      case "LDS":
         timeoutTaskFilter = LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
         xdsClient.watchXdsResource(type, name, watcher);
         break;
-      case RDS:
+      case "RDS":
         timeoutTaskFilter = RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
         xdsClient.watchXdsResource(type, name, watcher);
         break;
-      case CDS:
+      case "CDS":
         timeoutTaskFilter = CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
         xdsClient.watchXdsResource(type, name, watcher);
         break;
-      case EDS:
+      case "EDS":
         timeoutTaskFilter = EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
         xdsClient.watchXdsResource(type, name, watcher);
         break;
-      case UNKNOWN:
       default:
         throw new AssertionError("should never be here");
     }
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
-    call.verifyRequest(type.typeName(), Collections.singletonList(name), "", "", NODE);
+    call.verifyRequest(type, Collections.singletonList(name), "", "", NODE);
     ScheduledTask timeoutTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
     assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
@@ -3492,19 +3500,20 @@ public abstract class XdsClientImplTestBase {
   protected abstract static class DiscoveryRpcCall {
 
     protected abstract void verifyRequest(
-        ResourceType type, List<String> resources, String versionInfo, String nonce, Node node);
+        XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
+        Node node);
 
     protected void verifyRequest(
-        ResourceType type, String resource, String versionInfo, String nonce, Node node) {
+        XdsResourceType<?> type, String resource, String versionInfo, String nonce, Node node) {
       verifyRequest(type, ImmutableList.of(resource), versionInfo, nonce, node);
     }
 
     protected abstract void verifyRequestNack(
-        ResourceType type, List<String> resources, String versionInfo, String nonce, Node node,
-        List<String> errorMessages);
+        XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
+        Node node, List<String> errorMessages);
 
     protected void verifyRequestNack(
-        ResourceType type, String resource, String versionInfo, String nonce, Node node,
+        XdsResourceType<?> type, String resource, String versionInfo, String nonce, Node node,
         List<String> errorMessages) {
       verifyRequestNack(type, ImmutableList.of(resource), versionInfo, nonce, node, errorMessages);
     }
@@ -3512,9 +3521,10 @@ public abstract class XdsClientImplTestBase {
     protected abstract void verifyNoMoreRequest();
 
     protected abstract void sendResponse(
-        ResourceType type, List<Any> resources, String versionInfo, String nonce);
+        XdsResourceType<?> type, List<Any> resources, String versionInfo, String nonce);
 
-    protected void sendResponse(ResourceType type, Any resource, String versionInfo, String nonce) {
+    protected void sendResponse(XdsResourceType<?> type, Any resource, String versionInfo,
+                                String nonce) {
       sendResponse(type, ImmutableList.of(resource), versionInfo, nonce);
     }
 

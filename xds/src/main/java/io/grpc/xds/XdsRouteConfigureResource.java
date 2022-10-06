@@ -17,8 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
@@ -95,8 +93,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  ResourceType typeName() {
-    return RDS;
+  String typeName() {
+    return "RDS";
   }
 
   @Override
@@ -111,7 +109,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
   @Nullable
   @Override
-  ResourceType dependentResource() {
+  XdsResourceType<?> dependentResource() {
     return null;
   }
 

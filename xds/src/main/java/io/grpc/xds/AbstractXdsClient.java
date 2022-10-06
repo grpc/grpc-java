@@ -48,7 +48,6 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ResourceStore;
-import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -82,7 +81,7 @@ final class AbstractXdsClient {
   // Last successfully applied version_info for each resource type. Starts with empty string.
   // A version_info is used to update management server with client's most recent knowledge of
   // resources.
-  private final Map<ResourceType, String> versions = new HashMap<>();
+  private final Map<XdsResourceType<?>, String> versions = new HashMap<>();
 
   private boolean shutdown;
   @Nullable
@@ -160,8 +159,7 @@ final class AbstractXdsClient {
     if (adsStream == null) {
       startRpcStream();
     }
-    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo,
-        resourceType.typeName());
+    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
     if (resources != null) {
       adsStream.sendDiscoveryRequest(resourceType, resources);
     }
@@ -172,11 +170,10 @@ final class AbstractXdsClient {
    * and sends an ACK request to the management server.
    */
   // Must be synchronized.
-  void ackResponse(XdsResourceType<?> xdsResourceType, String versionInfo, String nonce) {
-    ResourceType type = xdsResourceType.typeName();
+  void ackResponse(XdsResourceType<?> type, String versionInfo, String nonce) {
     versions.put(type, versionInfo);
     logger.log(XdsLogLevel.INFO, "Sending ACK for {0} update, nonce: {1}, current version: {2}",
-        type, nonce, versionInfo);
+        type.typeName(), nonce, versionInfo);
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
     if (resources == null) {
       resources = Collections.emptyList();
@@ -189,11 +186,10 @@ final class AbstractXdsClient {
    * accepted version) to the management server.
    */
   // Must be synchronized.
-  void nackResponse(XdsResourceType<?> xdsResourceType, String nonce, String errorDetail) {
-    ResourceType type = xdsResourceType.typeName();
+  void nackResponse(XdsResourceType<?> type, String nonce, String errorDetail) {
     String versionInfo = versions.getOrDefault(type, "");
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",
-        type, nonce, versionInfo);
+        type.typeName(), nonce, versionInfo);
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
     if (resources == null) {
       resources = Collections.emptyList();
@@ -239,77 +235,38 @@ final class AbstractXdsClient {
         return;
       }
       startRpcStream();
-      for (ResourceType type : ResourceType.values()) {
-        if (type == ResourceType.UNKNOWN) {
-          continue;
-        }
+      for (XdsResourceType<?> type : resourceStore.getXdsResourceTypes()) {
         Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
         if (resources != null) {
-          adsStream.sendDiscoveryRequest(resourceStore.getXdsResourceType(type), resources);
+          adsStream.sendDiscoveryRequest(type, resources);
         }
       }
       xdsResponseHandler.handleStreamRestarted(serverInfo);
     }
   }
 
-  // TODO(zivy) : remove and replace with XdsResourceType
-  enum ResourceType {
-    UNKNOWN, LDS, RDS, CDS, EDS;
-
-    String typeUrl() {
-      switch (this) {
-        case LDS:
-          return ADS_TYPE_URL_LDS;
-        case RDS:
-          return ADS_TYPE_URL_RDS;
-        case CDS:
-          return ADS_TYPE_URL_CDS;
-        case EDS:
-          return ADS_TYPE_URL_EDS;
-        case UNKNOWN:
-        default:
-          throw new AssertionError("Unknown or missing case in enum switch: " + this);
-      }
-    }
-
-    String typeUrlV2() {
-      switch (this) {
-        case LDS:
-          return ADS_TYPE_URL_LDS_V2;
-        case RDS:
-          return ADS_TYPE_URL_RDS_V2;
-        case CDS:
-          return ADS_TYPE_URL_CDS_V2;
-        case EDS:
-          return ADS_TYPE_URL_EDS_V2;
-        case UNKNOWN:
-        default:
-          throw new AssertionError("Unknown or missing case in enum switch: " + this);
-      }
-    }
-
-    @VisibleForTesting
-    static ResourceType fromTypeUrl(String typeUrl) {
-      switch (typeUrl) {
-        case ADS_TYPE_URL_LDS:
-          // fall trough
-        case ADS_TYPE_URL_LDS_V2:
-          return LDS;
-        case ADS_TYPE_URL_RDS:
-          // fall through
-        case ADS_TYPE_URL_RDS_V2:
-          return RDS;
-        case ADS_TYPE_URL_CDS:
-          // fall through
-        case ADS_TYPE_URL_CDS_V2:
-          return CDS;
-        case ADS_TYPE_URL_EDS:
-          // fall through
-        case ADS_TYPE_URL_EDS_V2:
-          return EDS;
-        default:
-          return UNKNOWN;
-      }
+  @VisibleForTesting
+  @Nullable
+  static XdsResourceType<?> fromTypeUrl(String typeUrl) {
+    switch (typeUrl) {
+      case ADS_TYPE_URL_LDS:
+        // fall trough
+      case ADS_TYPE_URL_LDS_V2:
+        return XdsListenerResource.getInstance();
+      case ADS_TYPE_URL_RDS:
+        // fall through
+      case ADS_TYPE_URL_RDS_V2:
+        return XdsRouteConfigureResource.getInstance();
+      case ADS_TYPE_URL_CDS:
+        // fall through
+      case ADS_TYPE_URL_CDS_V2:
+        return XdsClusterResource.getInstance();
+      case ADS_TYPE_URL_EDS:
+        // fall through
+      case ADS_TYPE_URL_EDS_V2:
+        return XdsEndpointResource.getInstance();
+      default:
+        return null;
     }
   }
 
@@ -322,7 +279,7 @@ final class AbstractXdsClient {
     // used for management server to identify which response the client is ACKing/NACking.
     // To avoid confusion, client-initiated requests will always use the nonce in
     // most recently received responses of each resource type.
-    private final Map<ResourceType, String> respNonces = new HashMap<>();
+    private final Map<XdsResourceType<?>, String> respNonces = new HashMap<>();
 
     abstract void start();
 
@@ -334,27 +291,27 @@ final class AbstractXdsClient {
      * client-initiated discovery requests, use {@link
      * #sendDiscoveryRequest(XdsResourceType, Collection)}.
      */
-    abstract void sendDiscoveryRequest(ResourceType type, String version,
+    abstract void sendDiscoveryRequest(XdsResourceType<?> type, String version,
         Collection<String> resources, String nonce, @Nullable String errorDetail);
 
     /**
      * Sends a client-initiated discovery request.
      */
-    final void sendDiscoveryRequest(XdsResourceType<? extends ResourceUpdate> xdsResourceType,
-                                    Collection<String> resources) {
-      ResourceType type = xdsResourceType.typeName();
+    final void sendDiscoveryRequest(XdsResourceType<?> type, Collection<String> resources) {
       logger.log(XdsLogLevel.INFO, "Sending {0} request for resources: {1}", type, resources);
       sendDiscoveryRequest(type, versions.getOrDefault(type, ""), resources,
           respNonces.getOrDefault(type, ""), null);
     }
 
-    final void handleRpcResponse(
-        ResourceType type, String versionInfo, List<Any> resources, String nonce) {
+    final void handleRpcResponse(XdsResourceType<?> type, String versionInfo, List<Any> resources,
+                                 String nonce) {
       if (closed) {
         return;
       }
       responseReceived = true;
-      respNonces.put(type, nonce);
+      if (type != null) {
+        respNonces.put(type, nonce);
+      }
       xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce);
     }
 
@@ -422,7 +379,7 @@ final class AbstractXdsClient {
               syncContext.execute(new Runnable() {
                 @Override
                 public void run() {
-                  ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
+                  XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
                   if (logger.isLoggable(XdsLogLevel.DEBUG)) {
                     logger.log(
                         XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
@@ -458,8 +415,9 @@ final class AbstractXdsClient {
     }
 
     @Override
-    void sendDiscoveryRequest(ResourceType type, String versionInfo, Collection<String> resources,
-        String nonce, @Nullable String errorDetail) {
+    void sendDiscoveryRequest(XdsResourceType<?> type, String versionInfo,
+                              Collection<String> resources, String nonce,
+                              @Nullable String errorDetail) {
       checkState(requestWriter != null, "ADS stream has not been started");
       io.envoyproxy.envoy.api.v2.DiscoveryRequest.Builder builder =
           io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
@@ -502,7 +460,7 @@ final class AbstractXdsClient {
           syncContext.execute(new Runnable() {
             @Override
             public void run() {
-              ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
+              XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
               if (logger.isLoggable(XdsLogLevel.DEBUG)) {
                 logger.log(
                     XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
@@ -538,8 +496,9 @@ final class AbstractXdsClient {
     }
 
     @Override
-    void sendDiscoveryRequest(ResourceType type, String versionInfo, Collection<String> resources,
-        String nonce, @Nullable String errorDetail) {
+    void sendDiscoveryRequest(XdsResourceType<?> type, String versionInfo,
+                              Collection<String> resources, String nonce,
+                              @Nullable String errorDetail) {
       checkState(requestWriter != null, "ADS stream has not been started");
       DiscoveryRequest.Builder builder =
           DiscoveryRequest.newBuilder()

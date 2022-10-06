@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -657,7 +656,7 @@ public class CdsLoadBalancer2Test {
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                           ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo(CDS);
+      assertThat(type.typeName()).isEqualTo("CDS");
       assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, (ResourceWatcher<CdsUpdate>)watcher);
     }
@@ -667,7 +666,7 @@ public class CdsLoadBalancer2Test {
     <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
                                                            String resourceName,
                                                            ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo(CDS);
+      assertThat(type.typeName()).isEqualTo("CDS");
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }
