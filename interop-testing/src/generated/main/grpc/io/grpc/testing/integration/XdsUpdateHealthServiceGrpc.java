@@ -10,7 +10,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 @javax.annotation.Generated(
     value = "by gRPC proto compiler",
     comments = "Source: grpc/testing/test.proto")
-@io.grpc.stub.annotations.GrpcGenerated
 public final class XdsUpdateHealthServiceGrpc {
 
   private XdsUpdateHealthServiceGrpc() {}
