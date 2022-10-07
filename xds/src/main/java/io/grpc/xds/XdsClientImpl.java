@@ -91,6 +91,7 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
   private final Map<XdsResourceType<? extends ResourceUpdate>,
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
       resourceSubscribers = new HashMap<>();
+  private final Map<String, XdsResourceType<?>> subscribedResourceTypeUrls = new HashMap<>();
   private final LoadStatsManager2 loadStatsManager;
   private final Map<ServerInfo, LoadReportClient> serverLrsClientMap = new HashMap<>();
   private final XdsChannelFactory xdsChannelFactory;
@@ -228,8 +229,8 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
   }
 
   @Override
-  public Collection<XdsResourceType<? extends ResourceUpdate>> getXdsResourceTypes() {
-    return resourceSubscribers.keySet();
+  public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
+    return subscribedResourceTypeUrls;
   }
 
   @Nullable
@@ -289,6 +290,8 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
       public void run() {
         if (!resourceSubscribers.containsKey(type)) {
           resourceSubscribers.put(type, new HashMap<>());
+          subscribedResourceTypeUrls.put(type.typeUrl(), type);
+          subscribedResourceTypeUrls.put(type.typeUrlV2(), type);
         }
         ResourceSubscriber<T> subscriber =
             (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);;
@@ -319,6 +322,8 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
         if (!subscriber.isWatched()) {
           subscriber.cancelResourceWatch();
           resourceSubscribers.get(type).remove(resourceName);
+          subscribedResourceTypeUrls.remove(type.typeUrl());
+          subscribedResourceTypeUrls.remove(type.typeUrlV2());
           if (subscriber.xdsChannel != null) {
             subscriber.xdsChannel.adjustResourceSubscription(type);
           }

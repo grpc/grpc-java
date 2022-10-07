@@ -400,19 +400,26 @@ public abstract class XdsClientImplTestBase {
       int ldsSize, int cdsSize, int rdsSize, int edsSize) {
     Map<XdsResourceType<?>, Map<String, ResourceMetadata>> subscribedResourcesMetadata =
         awaitSubscribedResourcesMetadata();
-    verifyResourceCount(subscribedResourcesMetadata, LDS, ldsSize);
-    verifyResourceCount(subscribedResourcesMetadata, CDS, cdsSize);
-    verifyResourceCount(subscribedResourcesMetadata, RDS, rdsSize);
-    verifyResourceCount(subscribedResourcesMetadata, EDS, edsSize);
+    Map<String, XdsResourceType<?>> subscribedTypeUrls =
+        xdsClient.getSubscribedResourceTypesWithTypeUrl();
+    verifyResourceCount(subscribedTypeUrls, subscribedResourcesMetadata, LDS, ldsSize);
+    verifyResourceCount(subscribedTypeUrls, subscribedResourcesMetadata, CDS, cdsSize);
+    verifyResourceCount(subscribedTypeUrls, subscribedResourcesMetadata, RDS, rdsSize);
+    verifyResourceCount(subscribedTypeUrls, subscribedResourcesMetadata, EDS, edsSize);
   }
 
   private void verifyResourceCount(
+      Map<String, XdsResourceType<?>> subscribedTypeUrls,
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> subscribedResourcesMetadata,
       XdsResourceType<?> type,
       int size) {
     if (size == 0) {
+      assertThat(subscribedTypeUrls.containsKey(type.typeUrl())).isFalse();
+      assertThat(subscribedTypeUrls.containsKey(type.typeUrlV2())).isFalse();
       assertThat(subscribedResourcesMetadata.containsKey(type)).isFalse();
     } else {
+      assertThat(subscribedTypeUrls.containsKey(type.typeUrl())).isTrue();
+      assertThat(subscribedTypeUrls.containsKey(type.typeUrlV2())).isTrue();
       assertThat(subscribedResourcesMetadata.get(type)).hasSize(size);
     }
   }
