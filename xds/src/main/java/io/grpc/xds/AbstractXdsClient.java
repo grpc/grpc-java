@@ -19,14 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.xds.XdsClusterResource.ADS_TYPE_URL_CDS;
-import static io.grpc.xds.XdsClusterResource.ADS_TYPE_URL_CDS_V2;
-import static io.grpc.xds.XdsEndpointResource.ADS_TYPE_URL_EDS;
-import static io.grpc.xds.XdsEndpointResource.ADS_TYPE_URL_EDS_V2;
-import static io.grpc.xds.XdsListenerResource.ADS_TYPE_URL_LDS;
-import static io.grpc.xds.XdsListenerResource.ADS_TYPE_URL_LDS_V2;
-import static io.grpc.xds.XdsRouteConfigureResource.ADS_TYPE_URL_RDS;
-import static io.grpc.xds.XdsRouteConfigureResource.ADS_TYPE_URL_RDS_V2;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -54,8 +46,10 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -235,7 +229,9 @@ final class AbstractXdsClient {
         return;
       }
       startRpcStream();
-      for (XdsResourceType<?> type : resourceStore.getXdsResourceTypes()) {
+      Set<XdsResourceType<?>> subscribedResourceTypes =
+          new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
+      for (XdsResourceType<?> type : subscribedResourceTypes) {
         Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
         if (resources != null) {
           adsStream.sendDiscoveryRequest(type, resources);
@@ -247,27 +243,8 @@ final class AbstractXdsClient {
 
   @VisibleForTesting
   @Nullable
-  static XdsResourceType<?> fromTypeUrl(String typeUrl) {
-    switch (typeUrl) {
-      case ADS_TYPE_URL_LDS:
-        // fall trough
-      case ADS_TYPE_URL_LDS_V2:
-        return XdsListenerResource.getInstance();
-      case ADS_TYPE_URL_RDS:
-        // fall through
-      case ADS_TYPE_URL_RDS_V2:
-        return XdsRouteConfigureResource.getInstance();
-      case ADS_TYPE_URL_CDS:
-        // fall through
-      case ADS_TYPE_URL_CDS_V2:
-        return XdsClusterResource.getInstance();
-      case ADS_TYPE_URL_EDS:
-        // fall through
-      case ADS_TYPE_URL_EDS_V2:
-        return XdsEndpointResource.getInstance();
-      default:
-        return null;
-    }
+  XdsResourceType<?> fromTypeUrl(String typeUrl) {
+    return resourceStore.getSubscribedResourceTypesWithTypeUrl().get(typeUrl);
   }
 
   private abstract class AbstractAdsStream {

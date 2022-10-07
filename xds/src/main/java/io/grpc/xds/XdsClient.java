@@ -371,6 +371,6 @@ abstract class XdsClient {
     Collection<String> getSubscribedResources(ServerInfo serverInfo,
                                               XdsResourceType<? extends ResourceUpdate> type);
 
-    Collection<XdsResourceType<? extends ResourceUpdate>> getXdsResourceTypes();
+    Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
   }
 }

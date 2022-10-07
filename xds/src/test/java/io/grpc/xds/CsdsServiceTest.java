@@ -50,6 +50,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,7 +76,7 @@ public class CsdsServiceTest {
           ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), true)))
       .node(BOOTSTRAP_NODE)
       .build();
-  private static final XdsClient XDS_CLIENT_NO_RESOURCES = new FakeXdsClient();
+  private static final FakeXdsClient XDS_CLIENT_NO_RESOURCES = new FakeXdsClient();
   private static final XdsResourceType<?> LDS = XdsListenerResource.getInstance();
   private static final XdsResourceType<?> CDS = XdsClusterResource.getInstance();
   private static final XdsResourceType<?> RDS = XdsRouteConfigureResource.getInstance();
@@ -263,7 +264,7 @@ public class CsdsServiceTest {
       assertThat(response.getConfigCount()).isEqualTo(1);
       ClientConfig clientConfig = response.getConfig(0);
       verifyClientConfigNode(clientConfig);
-      verifyClientConfigNoResources(clientConfig);
+      verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
     }
 
     private void verifyRequestInvalidResponseStatus(Status status) {
@@ -320,7 +321,7 @@ public class CsdsServiceTest {
     @Test
     public void getClientConfigForXdsClient_subscribedResourcesToGenericXdsConfig()
         throws InterruptedException {
-      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(new FakeXdsClient() {
+      FakeXdsClient fakeXdsClient = new FakeXdsClient() {
         @Override
         protected Map<XdsResourceType<?>, Map<String, ResourceMetadata>>
             getSubscribedResourcesMetadata() {
@@ -331,7 +332,18 @@ public class CsdsServiceTest {
               .put(EDS, ImmutableMap.of("subscribedResourceName.EDS", METADATA_ACKED_EDS))
               .buildOrThrow();
         }
-      });
+
+        @Override
+        public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
+          return ImmutableMap.of(
+              LDS.typeUrl(), LDS,
+              RDS.typeUrl(), RDS,
+              CDS.typeUrl(), CDS,
+              EDS.typeUrl(), EDS
+          );
+        }
+      };
+      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(fakeXdsClient);
 
       verifyClientConfigNode(clientConfig);
 
@@ -339,7 +351,8 @@ public class CsdsServiceTest {
       // is propagated to the correct resource types.
       int xdsConfigCount = clientConfig.getGenericXdsConfigsCount();
       assertThat(xdsConfigCount).isEqualTo(4);
-      Map<XdsResourceType<?>, GenericXdsConfig> configDumps = mapConfigDumps(clientConfig);
+      Map<XdsResourceType<?>, GenericXdsConfig> configDumps = mapConfigDumps(fakeXdsClient,
+          clientConfig);
       assertThat(configDumps.keySet()).containsExactly(LDS, RDS, CDS, EDS);
 
       // LDS.
@@ -372,7 +385,7 @@ public class CsdsServiceTest {
     public void getClientConfigForXdsClient_noSubscribedResources() throws InterruptedException {
       ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES);
       verifyClientConfigNode(clientConfig);
-      verifyClientConfigNoResources(clientConfig);
+      verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
     }
   }
 
@@ -380,10 +393,11 @@ public class CsdsServiceTest {
    * Assuming {@link MetadataToProtoTests} passes, and metadata converted to corresponding
    * config dumps correctly, perform a minimal verification of the general shape of ClientConfig.
    */
-  private static void verifyClientConfigNoResources(ClientConfig clientConfig) {
+  private static void verifyClientConfigNoResources(FakeXdsClient xdsClient,
+                                                    ClientConfig clientConfig) {
     int xdsConfigCount = clientConfig.getGenericXdsConfigsCount();
     assertThat(xdsConfigCount).isEqualTo(0);
-    Map<XdsResourceType<?>, GenericXdsConfig> configDumps = mapConfigDumps(clientConfig);
+    Map<XdsResourceType<?>, GenericXdsConfig> configDumps = mapConfigDumps(xdsClient, clientConfig);
     assertThat(configDumps).isEmpty();
   }
 
@@ -397,11 +411,13 @@ public class CsdsServiceTest {
     assertThat(node).isEqualTo(BOOTSTRAP_NODE.toEnvoyProtoNode());
   }
 
-  private static Map<XdsResourceType<?>, GenericXdsConfig> mapConfigDumps(ClientConfig config) {
+  private static Map<XdsResourceType<?>, GenericXdsConfig> mapConfigDumps(FakeXdsClient client,
+                                                                          ClientConfig config) {
     Map<XdsResourceType<?>, GenericXdsConfig> xdsConfigMap = new HashMap<>();
     List<GenericXdsConfig> xdsConfigList = config.getGenericXdsConfigsList();
     for (GenericXdsConfig genericXdsConfig : xdsConfigList) {
-      XdsResourceType<?> type = AbstractXdsClient.fromTypeUrl(genericXdsConfig.getTypeUrl());
+      XdsResourceType<?> type = client.getSubscribedResourceTypesWithTypeUrl()
+          .get(genericXdsConfig.getTypeUrl());
       assertThat(type).isNotNull();
       assertThat(xdsConfigMap).doesNotContainKey(type);
       xdsConfigMap.put(type, genericXdsConfig);
@@ -409,7 +425,7 @@ public class CsdsServiceTest {
     return xdsConfigMap;
   }
 
-  private static class FakeXdsClient extends XdsClient {
+  private static class FakeXdsClient extends XdsClient implements XdsClient.ResourceStore {
     protected Map<XdsResourceType<?>, Map<String, ResourceMetadata>>
         getSubscribedResourcesMetadata() {
       return ImmutableMap.of();
@@ -424,6 +440,18 @@ public class CsdsServiceTest {
     @Override
     BootstrapInfo getBootstrapInfo() {
       return BOOTSTRAP_INFO;
+    }
+
+    @Nullable
+    @Override
+    public Collection<String> getSubscribedResources(ServerInfo serverInfo,
+                  XdsResourceType<? extends ResourceUpdate> type) {
+      return null;
+    }
+
+    @Override
+    public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
+      return ImmutableMap.of();
     }
   }
 
