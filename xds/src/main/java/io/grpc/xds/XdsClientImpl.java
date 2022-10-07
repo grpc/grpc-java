@@ -230,7 +230,7 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
 
   @Override
   public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
-    return subscribedResourceTypeUrls;
+    return Collections.unmodifiableMap(subscribedResourceTypeUrls);
   }
 
   @Nullable
