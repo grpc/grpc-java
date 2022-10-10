@@ -2735,7 +2735,7 @@ public class GrpclbLoadBalancerTest {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        balancer.handleResolvedAddresses(
+        balancer.acceptResolvedAddresses(
             ResolvedAddresses.newBuilder()
                 .setAddresses(backendAddrs)
                 .setAttributes(attrs)
