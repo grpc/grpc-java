@@ -139,21 +139,21 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   private EventType convertEventType(String val) {
     switch (val) {
       case "GRPC_CALL_UNKNOWN":
-        return EventType.GRPC_CALL_UNKNOWN;
-      case "GRPC_CALL_REQUEST_HEADER":
-        return EventType.GRPC_CALL_REQUEST_HEADER;
-      case "GRPC_CALL_RESPONSE_HEADER":
-        return EventType.GRPC_CALL_RESPONSE_HEADER;
-      case "GRPC_CALL_REQUEST_MESSAGE":
-        return EventType.GRPC_CALL_REQUEST_MESSAGE;
-      case "GRPC_CALL_RESPONSE_MESSAGE":
-        return EventType.GRPC_CALL_RESPONSE_MESSAGE;
-      case "GRPC_CALL_TRAILER":
-        return EventType.GRPC_CALL_TRAILER;
-      case "GRPC_CALL_HALF_CLOSE":
-        return EventType.GRPC_CALL_HALF_CLOSE;
-      case "GRPC_CALL_CANCEL":
-        return EventType.GRPC_CALL_CANCEL;
+        return EventType.EVENT_TYPE_UNKNOWN;
+      case "CLIENT_HEADER":
+        return EventType.CLIENT_HEADER;
+      case "SERVER_HEADER":
+        return EventType.SERVER_HEADER;
+      case "CLIENT_MESSAGE":
+        return EventType.CLIENT_MESSAGE;
+      case "SERVER_MESSAGE":
+        return EventType.SERVER_MESSAGE;
+      case "SERVER_TRAILER":
+        return EventType.SERVER_TRAILER;
+      case "CLIENT_HALF_CLOSE":
+        return EventType.CLIENT_HALF_CLOSE;
+      case "CANCEL":
+        return EventType.CANCEL;
       default:
         throw new IllegalArgumentException("Unknown event type value:" + val);
     }

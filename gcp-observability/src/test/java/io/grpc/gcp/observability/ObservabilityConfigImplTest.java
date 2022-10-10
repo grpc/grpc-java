@@ -46,7 +46,7 @@ public class ObservabilityConfigImplTest {
   private static final String EVENT_TYPES = "{\n"
       + "    \"enable_cloud_logging\": false,\n"
       + "    \"event_types\": "
-      + "[\"GRPC_CALL_REQUEST_HEADER\", \"GRPC_CALL_HALF_CLOSE\", \"GRPC_CALL_TRAILER\"]\n"
+      + "[\"CLIENT_HEADER\", \"CLIENT_HALF_CLOSE\", \"SERVER_TRAILER\"]\n"
       + "}";
 
   private static final String LOG_FILTERS = "{\n"
@@ -199,8 +199,8 @@ public class ObservabilityConfigImplTest {
     assertFalse(observabilityConfig.isEnableCloudLogging());
     List<EventType> eventTypes = observabilityConfig.getEventTypes();
     assertThat(eventTypes).isEqualTo(
-        ImmutableList.of(EventType.GRPC_CALL_REQUEST_HEADER, EventType.GRPC_CALL_HALF_CLOSE,
-            EventType.GRPC_CALL_TRAILER));
+        ImmutableList.of(EventType.CLIENT_HEADER, EventType.CLIENT_HALF_CLOSE,
+            EventType.SERVER_TRAILER));
   }
 
   @Test
