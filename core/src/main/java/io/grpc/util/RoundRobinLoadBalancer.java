@@ -70,6 +70,13 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
 
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    if (resolvedAddresses.getAddresses().isEmpty()) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+              + ", attrs=" + resolvedAddresses.getAttributes()));
+      return false;
+    }
+
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(servers);
