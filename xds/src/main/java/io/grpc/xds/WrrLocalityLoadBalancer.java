@@ -61,7 +61,7 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
 
     // The configuration with the child policy is combined with the locality weights
@@ -76,7 +76,7 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
       Status unavailable =
           Status.UNAVAILABLE.withDescription("wrr_locality error: no locality weights provided");
       helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
-      return;
+      return false;
     }
 
     // Weighted target LB expects a WeightedPolicySelection for each locality as it will create a
@@ -101,6 +101,8 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
         resolvedAddresses.toBuilder()
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(weightedPolicySelections))
             .build());
+
+    return true;
   }
 
   @Override
