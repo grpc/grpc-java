@@ -93,7 +93,8 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     final Duration timeout = deadline == null ? null
         : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
 
-    FilterParams filterParams = filterHelper.isMethodToBeLogged(call.getMethodDescriptor());
+    FilterParams filterParams =
+        filterHelper.logRpcMethod(call.getMethodDescriptor().getFullMethodName(), false);
     if (!filterParams.log()) {
       return next.startCall(call, headers);
     }
@@ -102,28 +103,26 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     final int maxMessageBytes = filterParams.messageBytes();
 
     // Event: EventType.CLIENT_HEADER
-    if (filterHelper.isEventToBeLogged(EventType.CLIENT_HEADER)) {
-      try {
-        helper.logClientHeader(
-            seq.getAndIncrement(),
-            serviceName,
-            methodName,
-            authority,
-            timeout,
-            headers,
-            maxHeaderBytes,
-            EventLogger.SERVER,
-            callId,
-            peerAddress);
-      } catch (Exception e) {
-        // Catching generic exceptions instead of specific ones for all the events.
-        // This way we can catch both expected and unexpected exceptions instead of re-throwing
-        // exceptions to callers which will lead to RPC getting aborted.
-        // Expected exceptions to be caught:
-        // 1. IllegalArgumentException
-        // 2. NullPointerException
-        logger.log(Level.SEVERE, "Unable to log request header", e);
-      }
+    try {
+      helper.logClientHeader(
+          seq.getAndIncrement(),
+          serviceName,
+          methodName,
+          authority,
+          timeout,
+          headers,
+          maxHeaderBytes,
+          EventLogger.SERVER,
+          callId,
+          peerAddress);
+    } catch (Exception e) {
+      // Catching generic exceptions instead of specific ones for all the events.
+      // This way we can catch both expected and unexpected exceptions instead of re-throwing
+      // exceptions to callers which will lead to RPC getting aborted.
+      // Expected exceptions to be caught:
+      // 1. IllegalArgumentException
+      // 2. NullPointerException
+      logger.log(Level.SEVERE, "Unable to log request header", e);
     }
 
     ServerCall<ReqT, RespT> wrapperCall =
@@ -131,21 +130,19 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           @Override
           public void sendHeaders(Metadata headers) {
             // Event: EventType.SERVER_HEADER
-            if (filterHelper.isEventToBeLogged(EventType.SERVER_HEADER)) {
-              try {
-                helper.logServerHeader(
-                    seq.getAndIncrement(),
-                    serviceName,
-                    methodName,
-                    authority,
-                    headers,
-                    maxHeaderBytes,
-                    EventLogger.SERVER,
-                    callId,
-                    null);
-              } catch (Exception e) {
-                logger.log(Level.SEVERE, "Unable to log response header", e);
-              }
+            try {
+              helper.logServerHeader(
+                  seq.getAndIncrement(),
+                  serviceName,
+                  methodName,
+                  authority,
+                  headers,
+                  maxHeaderBytes,
+                  EventLogger.SERVER,
+                  callId,
+                  null);
+            } catch (Exception e) {
+              logger.log(Level.SEVERE, "Unable to log response header", e);
             }
             super.sendHeaders(headers);
           }
@@ -154,21 +151,19 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           public void sendMessage(RespT message) {
             // Event: EventType.SERVER_MESSAGE
             EventType responseMessageType = EventType.SERVER_MESSAGE;
-            if (filterHelper.isEventToBeLogged(responseMessageType)) {
-              try {
-                helper.logRpcMessage(
-                    seq.getAndIncrement(),
-                    serviceName,
-                    methodName,
-                    authority,
-                    responseMessageType,
-                    message,
-                    maxMessageBytes,
-                    EventLogger.SERVER,
-                    callId);
-              } catch (Exception e) {
-                logger.log(Level.SEVERE, "Unable to log response message", e);
-              }
+            try {
+              helper.logRpcMessage(
+                  seq.getAndIncrement(),
+                  serviceName,
+                  methodName,
+                  authority,
+                  responseMessageType,
+                  message,
+                  maxMessageBytes,
+                  EventLogger.SERVER,
+                  callId);
+            } catch (Exception e) {
+              logger.log(Level.SEVERE, "Unable to log response message", e);
             }
             super.sendMessage(message);
           }
@@ -176,22 +171,20 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           @Override
           public void close(Status status, Metadata trailers) {
             // Event: EventType.SERVER_TRAILER
-            if (filterHelper.isEventToBeLogged(EventType.SERVER_TRAILER)) {
-              try {
-                helper.logTrailer(
-                    seq.getAndIncrement(),
-                    serviceName,
-                    methodName,
-                    authority,
-                    status,
-                    trailers,
-                    maxHeaderBytes,
-                    EventLogger.SERVER,
-                    callId,
-                    null);
-              } catch (Exception e) {
-                logger.log(Level.SEVERE, "Unable to log trailer", e);
-              }
+            try {
+              helper.logTrailer(
+                  seq.getAndIncrement(),
+                  serviceName,
+                  methodName,
+                  authority,
+                  status,
+                  trailers,
+                  maxHeaderBytes,
+                  EventLogger.SERVER,
+                  callId,
+                  null);
+            } catch (Exception e) {
+              logger.log(Level.SEVERE, "Unable to log trailer", e);
             }
             super.close(status, trailers);
           }
@@ -201,23 +194,22 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     return new SimpleForwardingServerCallListener<ReqT>(listener) {
       @Override
       public void onMessage(ReqT message) {
+
         // Event: EventType.CLIENT_MESSAGE
         EventType requestMessageType = EventType.CLIENT_MESSAGE;
-        if (filterHelper.isEventToBeLogged(requestMessageType)) {
-          try {
-            helper.logRpcMessage(
-                seq.getAndIncrement(),
-                serviceName,
-                methodName,
-                authority,
-                requestMessageType,
-                message,
-                maxMessageBytes,
-                EventLogger.SERVER,
-                callId);
-          } catch (Exception e) {
-            logger.log(Level.SEVERE, "Unable to log request message", e);
-          }
+        try {
+          helper.logRpcMessage(
+              seq.getAndIncrement(),
+              serviceName,
+              methodName,
+              authority,
+              requestMessageType,
+              message,
+              maxMessageBytes,
+              EventLogger.SERVER,
+              callId);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log request message", e);
         }
         super.onMessage(message);
       }
@@ -225,18 +217,16 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
       @Override
       public void onHalfClose() {
         // Event: EventType.CLIENT_HALF_CLOSE
-        if (filterHelper.isEventToBeLogged(EventType.CLIENT_HALF_CLOSE)) {
-          try {
-            helper.logHalfClose(
-                seq.getAndIncrement(),
-                serviceName,
-                methodName,
-                authority,
-                EventLogger.SERVER,
-                callId);
-          } catch (Exception e) {
-            logger.log(Level.SEVERE, "Unable to log half close", e);
-          }
+        try {
+          helper.logHalfClose(
+              seq.getAndIncrement(),
+              serviceName,
+              methodName,
+              authority,
+              EventLogger.SERVER,
+              callId);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log half close", e);
         }
         super.onHalfClose();
       }
@@ -244,18 +234,16 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
       @Override
       public void onCancel() {
         // Event: EventType.CANCEL
-        if (filterHelper.isEventToBeLogged(EventType.CANCEL)) {
-          try {
-            helper.logCancel(
-                seq.getAndIncrement(),
-                serviceName,
-                methodName,
-                authority,
-                EventLogger.SERVER,
-                callId);
-          } catch (Exception e) {
-            logger.log(Level.SEVERE, "Unable to log cancel", e);
-          }
+        try {
+          helper.logCancel(
+              seq.getAndIncrement(),
+              serviceName,
+              methodName,
+              authority,
+              EventLogger.SERVER,
+              callId);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log cancel", e);
         }
         super.onCancel();
       }

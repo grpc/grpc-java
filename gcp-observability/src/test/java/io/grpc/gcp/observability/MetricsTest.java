@@ -97,7 +97,7 @@ public class MetricsTest {
           mock(InternalLoggingServerInterceptor.Factory.class);
 
       when(mockConfig.isEnableCloudMonitoring()).thenReturn(true);
-      when(mockConfig.getDestinationProjectId()).thenReturn(PROJECT_ID);
+      when(mockConfig.getProjectId()).thenReturn(PROJECT_ID);
 
       try {
         GcpObservability observability =

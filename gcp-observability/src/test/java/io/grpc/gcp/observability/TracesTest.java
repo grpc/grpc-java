@@ -100,7 +100,7 @@ public class TracesTest {
 
       when(mockConfig.isEnableCloudTracing()).thenReturn(true);
       when(mockConfig.getSampler()).thenReturn(Samplers.alwaysSample());
-      when(mockConfig.getDestinationProjectId()).thenReturn(PROJECT_ID);
+      when(mockConfig.getProjectId()).thenReturn(PROJECT_ID);
 
       try {
         GcpObservability observability =

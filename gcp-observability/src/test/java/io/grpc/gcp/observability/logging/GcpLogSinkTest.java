@@ -169,10 +169,10 @@ public class GcpLogSinkTest {
   @SuppressWarnings("unchecked")
   public void emptyCustomTags_setSourceProject() {
     Map<String, String> emptyCustomTags = null;
-    String destinationProjectId = "DESTINATION_PROJECT";
+    String projectId = "PROJECT";
     Map<String, String> expectedLabels = GcpLogSink.getCustomTags(emptyCustomTags, LOCATION_TAGS,
-        destinationProjectId);
-    GcpLogSink sink = new GcpLogSink(mockLogging, destinationProjectId, LOCATION_TAGS,
+        projectId);
+    GcpLogSink sink = new GcpLogSink(mockLogging, projectId, LOCATION_TAGS,
         emptyCustomTags, Collections.emptySet());
     sink.write(LOG_PROTO);
 

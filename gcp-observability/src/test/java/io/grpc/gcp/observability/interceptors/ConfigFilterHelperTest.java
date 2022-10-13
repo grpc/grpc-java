@@ -17,44 +17,36 @@
 package io.grpc.gcp.observability.interceptors;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
-import io.grpc.MethodDescriptor;
 import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
 import io.grpc.gcp.observability.interceptors.ConfigFilterHelper.FilterParams;
-import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
-import io.grpc.testing.TestMethodDescriptors;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import org.junit.Before;
 import org.junit.Test;
 
 public class ConfigFilterHelperTest {
   private static final ImmutableList<LogFilter> configLogFilters =
       ImmutableList.of(
-          new LogFilter("service1/Method2",1024,1024),
-          new LogFilter("service2/*",2048,1024),
-          new LogFilter("*",128,128),
-          new LogFilter("service2/*",2048,1024));
-
-  private static final ImmutableList<EventType> configEventTypes =
-      ImmutableList.of(
-          EventType.CLIENT_HEADER,
-          EventType.CLIENT_HALF_CLOSE,
-          EventType.SERVER_TRAILER);
-
-  private final MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod()
-      .toBuilder();
-  private MethodDescriptor<Void, Void> method;
+          new LogFilter(Collections.singletonList("service1/Method2"), false,
+              Collections.emptySet(), Collections.singleton("service1/Method2"),
+              1024, 1024, false),
+          new LogFilter(
+              Arrays.asList("service2/*, service4/method2"), false,
+              Collections.singleton("service2"), Collections.singleton("service4/method2"),
+              2048, 1024, false),
+          new LogFilter(
+              Arrays.asList("service2/*, service4/method3"), false,
+              Collections.singleton("service2"), Collections.singleton("service4/method3"),
+              2048, 1024, true),
+          new LogFilter(
+              Collections.singletonList("*"), true, Collections.emptySet(), Collections.emptySet(),
+              128, 128, false));
 
   private ObservabilityConfig mockConfig;
   private ConfigFilterHelper configFilterHelper;
@@ -66,153 +58,98 @@ public class ConfigFilterHelperTest {
   }
 
   @Test
-  public void disableCloudLogging_emptyLogFilters() {
-    when(mockConfig.isEnableCloudLogging()).thenReturn(false);
-    assertFalse(configFilterHelper.methodOrServiceFilterPresent);
-    assertThat(configFilterHelper.perServiceFilters).isEmpty();
-    assertThat(configFilterHelper.perServiceFilters).isEmpty();
-    assertThat(configFilterHelper.perMethodFilters).isEmpty();
-    assertThat(configFilterHelper.logEventTypeSet).isNull();
+  public void enableCloudLogging_withoutLogFilters() {
+    when(mockConfig.isEnableCloudLogging()).thenReturn(true);
+    assertThat(mockConfig.getClientLogFilters()).isEmpty();
+    assertThat(mockConfig.getServerLogFilters()).isEmpty();
   }
 
   @Test
-  public void enableCloudLogging_emptyLogFilters() {
+  public void checkMethodLog_withoutLogFilters() {
     when(mockConfig.isEnableCloudLogging()).thenReturn(true);
-    when(mockConfig.getLogFilters()).thenReturn(null);
-    when(mockConfig.getEventTypes()).thenReturn(null);
-    configFilterHelper.setMethodOrServiceFilterMaps();
-    configFilterHelper.setEventFilterSet();
+    assertThat(mockConfig.getClientLogFilters()).isEmpty();
+    assertThat(mockConfig.getServerLogFilters()).isEmpty();
 
-    assertFalse(configFilterHelper.methodOrServiceFilterPresent);
-    assertThat(configFilterHelper.perServiceFilters).isEmpty();
-    assertThat(configFilterHelper.perServiceFilters).isEmpty();
-    assertThat(configFilterHelper.perMethodFilters).isEmpty();
-    assertThat(configFilterHelper.logEventTypeSet).isNull();
-  }
-
-  @Test
-  public void enableCloudLogging_withLogFilters() {
-    when(mockConfig.isEnableCloudLogging()).thenReturn(true);
-    when(mockConfig.getLogFilters()).thenReturn(configLogFilters);
-    when(mockConfig.getEventTypes()).thenReturn(configEventTypes);
-
-    configFilterHelper.setMethodOrServiceFilterMaps();
-    configFilterHelper.setEventFilterSet();
-
-    assertTrue(configFilterHelper.methodOrServiceFilterPresent);
-
-    Map<String, FilterParams> expectedServiceFilters = new HashMap<>();
-    expectedServiceFilters.put("*",
-        FilterParams.create(true, 128, 128));
-    expectedServiceFilters.put("service2",
-        FilterParams.create(true, 2048, 1024));
-    assertThat(configFilterHelper.perServiceFilters).isEqualTo(expectedServiceFilters);
-
-    Map<String, FilterParams> expectedMethodFilters = new HashMap<>();
-    expectedMethodFilters.put("service1/Method2",
-        FilterParams.create(true, 1024, 1024));
-    assertThat(configFilterHelper.perMethodFilters).isEqualTo(expectedMethodFilters);
-
-    Set<EventType> expectedLogEventTypeSet = ImmutableSet.copyOf(configEventTypes);
-    assertThat(configFilterHelper.logEventTypeSet).isEqualTo(expectedLogEventTypeSet);
+    FilterParams expectedParams =
+        FilterParams.create(false, 0, 0);
+    FilterParams clientResultParams
+        = configFilterHelper.logRpcMethod("service3/Method3", true);
+    assertThat(clientResultParams).isEqualTo(expectedParams);
+    FilterParams serverResultParams
+        = configFilterHelper.logRpcMethod("service3/Method3", false);
+    assertThat(serverResultParams).isEqualTo(expectedParams);
   }
 
   @Test
   public void checkMethodAlwaysLogged() {
-    List<LogFilter> sampleLogFilters = ImmutableList.of(
-            new LogFilter("*", 4096, 4096));
-    when(mockConfig.getLogFilters()).thenReturn(sampleLogFilters);
-    configFilterHelper.setMethodOrServiceFilterMaps();
+    List<LogFilter> sampleLogFilters =
+        ImmutableList.of(
+            new LogFilter(
+                Collections.singletonList("*"), true, Collections.emptySet(),
+                Collections.emptySet(), 4096, 4096, false));
+    when(mockConfig.getClientLogFilters()).thenReturn(sampleLogFilters);
+    when(mockConfig.getServerLogFilters()).thenReturn(sampleLogFilters);
 
     FilterParams expectedParams =
         FilterParams.create(true, 4096, 4096);
-    method = builder.setFullMethodName("service1/Method6").build();
-    FilterParams resultParams
-        = configFilterHelper.isMethodToBeLogged(method);
-    assertThat(resultParams).isEqualTo(expectedParams);
+    FilterParams clientResultParams
+        = configFilterHelper.logRpcMethod("service1/Method6", true);
+    assertThat(clientResultParams).isEqualTo(expectedParams);
+    FilterParams serverResultParams
+        = configFilterHelper.logRpcMethod("service1/Method6", false);
+    assertThat(serverResultParams).isEqualTo(expectedParams);
   }
 
   @Test
   public void checkMethodNotToBeLogged() {
-    List<LogFilter> sampleLogFilters = ImmutableList.of(
-            new LogFilter("service1/Method2", 1024, 1024),
-            new LogFilter("service2/*", 2048, 1024));
-    when(mockConfig.getLogFilters()).thenReturn(sampleLogFilters);
-    configFilterHelper.setMethodOrServiceFilterMaps();
+    List<LogFilter> sampleLogFilters =
+        ImmutableList.of(
+            new LogFilter(Collections.singletonList("service2/*"), false,
+                Collections.emptySet(), Collections.singleton("service2/*"),
+                1024, 1024, true),
+            new LogFilter(
+                Collections.singletonList("service2/Method1"), false,
+                Collections.singleton("service2/Method1"), Collections.emptySet(),
+                2048, 1024, false));
+    when(mockConfig.getClientLogFilters()).thenReturn(sampleLogFilters);
+    when(mockConfig.getServerLogFilters()).thenReturn(sampleLogFilters);
 
     FilterParams expectedParams =
         FilterParams.create(false, 0, 0);
-    method = builder.setFullMethodName("service3/Method3").build();
-    FilterParams resultParams
-        = configFilterHelper.isMethodToBeLogged(method);
-    assertThat(resultParams).isEqualTo(expectedParams);
+    FilterParams clientResultParams1
+        = configFilterHelper.logRpcMethod("service3/Method3", true);
+    assertThat(clientResultParams1).isEqualTo(expectedParams);
+
+    FilterParams clientResultParams2
+        = configFilterHelper.logRpcMethod("service2/Method1", true);
+    assertThat(clientResultParams2).isEqualTo(expectedParams);
+
+    FilterParams serverResultParams
+        = configFilterHelper.logRpcMethod("service2/Method1", false);
+    assertThat(serverResultParams).isEqualTo(expectedParams);
   }
 
   @Test
   public void checkMethodToBeLoggedConditional() {
-    when(mockConfig.getLogFilters()).thenReturn(configLogFilters);
-    configFilterHelper.setMethodOrServiceFilterMaps();
+    when(mockConfig.getClientLogFilters()).thenReturn(configLogFilters);
+    when(mockConfig.getServerLogFilters()).thenReturn(configLogFilters);
 
     FilterParams expectedParams =
         FilterParams.create(true, 1024, 1024);
-    method = builder.setFullMethodName("service1/Method2").build();
     FilterParams resultParams
-        = configFilterHelper.isMethodToBeLogged(method);
+        = configFilterHelper.logRpcMethod("service1/Method2", true);
     assertThat(resultParams).isEqualTo(expectedParams);
 
     FilterParams expectedParamsWildCard =
         FilterParams.create(true, 2048, 1024);
-    method = builder.setFullMethodName("service2/Method1").build();
     FilterParams resultParamsWildCard
-        = configFilterHelper.isMethodToBeLogged(method);
+        = configFilterHelper.logRpcMethod("service2/Method1", true);
     assertThat(resultParamsWildCard).isEqualTo(expectedParamsWildCard);
-  }
 
-  @Test
-  public void checkEventToBeLogged_noFilter_defaultLogAllEventTypes() {
-    List<EventType> eventList = new ArrayList<>();
-    eventList.add(EventType.CLIENT_HEADER);
-    eventList.add(EventType.SERVER_HEADER);
-    eventList.add(EventType.CLIENT_MESSAGE);
-    eventList.add(EventType.SERVER_MESSAGE);
-    eventList.add(EventType.CLIENT_HALF_CLOSE);
-    eventList.add(EventType.SERVER_TRAILER);
-    eventList.add(EventType.CANCEL);
-
-    for (EventType event : eventList) {
-      assertTrue(configFilterHelper.isEventToBeLogged(event));
-    }
-  }
-
-
-  @Test
-  public void checkEventToBeLogged_emptyFilter_doNotLogEventTypes() {
-    when(mockConfig.getEventTypes()).thenReturn(new ArrayList<>());
-    configFilterHelper.setEventFilterSet();
-
-    List<EventType> eventList = new ArrayList<>();
-    eventList.add(EventType.CLIENT_HEADER);
-    eventList.add(EventType.SERVER_HEADER);
-    eventList.add(EventType.CLIENT_MESSAGE);
-    eventList.add(EventType.SERVER_MESSAGE);
-    eventList.add(EventType.CLIENT_HALF_CLOSE);
-    eventList.add(EventType.SERVER_TRAILER);
-    eventList.add(EventType.CANCEL);
-
-    for (EventType event : eventList) {
-      assertFalse(configFilterHelper.isEventToBeLogged(event));
-    }
-  }
-
-  @Test
-  public void checkEventToBeLogged_withEventTypesFromConfig() {
-    when(mockConfig.getEventTypes()).thenReturn(configEventTypes);
-    configFilterHelper.setEventFilterSet();
-
-    EventType logEventType = EventType.CLIENT_HEADER;
-    assertTrue(configFilterHelper.isEventToBeLogged(logEventType));
-
-    EventType doNotLogEventType = EventType.SERVER_MESSAGE;
-    assertFalse(configFilterHelper.isEventToBeLogged(doNotLogEventType));
+    FilterParams excludeParams =
+        FilterParams.create(false, 0, 0);
+    FilterParams serverResultParams
+        = configFilterHelper.logRpcMethod("service4/method3", false);
+    assertThat(serverResultParams).isEqualTo(excludeParams);
   }
 }
