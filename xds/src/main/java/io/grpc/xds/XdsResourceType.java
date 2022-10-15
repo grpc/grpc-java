@@ -17,12 +17,11 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
 import static io.grpc.xds.Bootstrapper.ServerInfo;
-import static io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.canonifyResourceName;
 import static io.grpc.xds.XdsClient.isResourceNameValid;
+import static io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
@@ -80,7 +79,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   abstract Class<? extends com.google.protobuf.Message> unpackedClassName();
 
-  abstract ResourceType typeName();
+  abstract String typeName();
 
   abstract String typeUrl();
 
@@ -88,7 +87,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   // Non-null for  State of the World resources.
   @Nullable
-  abstract ResourceType dependentResource();
+  abstract XdsResourceType<?> dependentResource();
 
   static class Args {
     final ServerInfo serverInfo;
@@ -158,7 +157,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       T resourceUpdate;
       try {
         resourceUpdate = doParse(args, unpackedMessage, retainedResources, isResourceV3);
-      } catch (ClientXdsClient.ResourceInvalidException e) {
+      } catch (XdsClientImpl.ResourceInvalidException e) {
         errors.add(String.format("%s response %s '%s' validation error: %s",
                 typeName(), unpackedClassName().getSimpleName(), cname, e.getMessage()));
         invalidResources.add(cname);

@@ -70,16 +70,16 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
-      handleResolvedAddressesInternal(resolvedAddresses);
+      return acceptResolvedAddressesInternal(resolvedAddresses);
     } finally {
       resolvingAddresses = false;
     }
   }
 
-  public void handleResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -109,6 +109,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     // Must update channel picker before return so that new RPCs will not be routed to deleted
     // clusters and resolver can remove them in service config.
     updateOverallBalancingState();
+    return true;
   }
 
   @Override
@@ -124,11 +125,6 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     if (gotoTransientFailure) {
       helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
     }
-  }
-
-  @Override
-  public boolean canHandleEmptyAddressListFromNameResolution() {
-    return true;
   }
 
   @Override

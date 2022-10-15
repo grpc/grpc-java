@@ -17,8 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -27,10 +25,10 @@ import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -66,8 +64,8 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  ResourceType typeName() {
-    return EDS;
+  String typeName() {
+    return "EDS";
   }
 
   @Override
@@ -82,7 +80,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
 
   @Nullable
   @Override
-  ResourceType dependentResource() {
+  XdsResourceType<?> dependentResource() {
     return null;
   }
 

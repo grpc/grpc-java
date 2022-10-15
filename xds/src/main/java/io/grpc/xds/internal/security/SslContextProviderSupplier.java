@@ -66,8 +66,8 @@ public final class SslContextProviderSupplier implements Closeable {
           new SslContextProvider.Callback(callback.getExecutor()) {
 
             @Override
-            public void updateSecret(SslContext sslContext) {
-              callback.updateSecret(sslContext);
+            public void updateSslContext(SslContext sslContext) {
+              callback.updateSslContext(sslContext);
               releaseSslContextProvider(toRelease);
             }
 
