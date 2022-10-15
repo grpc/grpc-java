@@ -184,12 +184,12 @@ public class XdsServerTestHelper {
                                                      String resourceName,
                                                      ResourceWatcher<T> watcher) {
       switch (resourceType.typeName()) {
-        case LDS:
+        case "LDS":
           assertThat(ldsWatcher).isNull();
           ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
           ldsResource.set(resourceName);
           break;
-        case RDS:
+        case "RDS":
           //re-register is not allowed.
           assertThat(rdsWatchers.put(resourceName, (ResourceWatcher<RdsUpdate>)watcher)).isNull();
           rdsCount.countDown();
@@ -203,12 +203,12 @@ public class XdsServerTestHelper {
                                                            String resourceName,
                                 ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
-        case LDS:
+        case "LDS":
           assertThat(ldsWatcher).isNotNull();
           ldsResource = null;
           ldsWatcher = null;
           break;
-        case RDS:
+        case "RDS":
           rdsWatchers.remove(resourceName);
           break;
         default:

@@ -208,10 +208,10 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSecret(SslContext sslContext) {
+            public void updateSslContext(SslContext sslContext) {
               logger.log(
                   Level.FINEST,
-                  "ClientSdsHandler.updateSecret authority={0}, ctx.name={1}",
+                  "ClientSdsHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
                   InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
@@ -347,7 +347,7 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSecret(SslContext sslContext) {
+            public void updateSslContext(SslContext sslContext) {
               ChannelHandler handler =
                   InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
 

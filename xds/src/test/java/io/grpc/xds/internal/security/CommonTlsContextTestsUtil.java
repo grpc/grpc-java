@@ -424,7 +424,7 @@ public class CommonTlsContextTestsUtil {
     }
 
     @Override
-    public void updateSecret(SslContext sslContext) {
+    public void updateSslContext(SslContext sslContext) {
       updatedSslContext = sslContext;
     }
 

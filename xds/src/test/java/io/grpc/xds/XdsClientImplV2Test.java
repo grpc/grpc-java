@@ -92,7 +92,6 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -108,10 +107,10 @@ import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
 /**
- * Tests for {@link ClientXdsClient} with protocol version v2.
+ * Tests for {@link XdsClientImpl} with protocol version v2.
  */
 @RunWith(Parameterized.class)
-public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
+public class XdsClientImplV2Test extends XdsClientImplTestBase {
 
   /** Parameterized test cases. */
   @Parameters(name = "ignoreResourceDeletion={0}")
@@ -197,7 +196,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
     @Override
     protected void verifyRequest(
-        ResourceType type, List<String> resources, String versionInfo, String nonce,
+        XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
         EnvoyProtoData.Node node) {
       verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
           node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce, null, null)));
@@ -205,7 +204,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
     @Override
     protected void verifyRequestNack(
-        ResourceType type, List<String> resources, String versionInfo, String nonce,
+        XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
         EnvoyProtoData.Node node, List<String> errorMessages) {
       verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
           node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce,
@@ -219,7 +218,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
     @Override
     protected void sendResponse(
-        ResourceType type, List<Any> resources, String versionInfo, String nonce) {
+        XdsResourceType<?> type, List<Any> resources, String versionInfo, String nonce) {
       DiscoveryResponse response =
           DiscoveryResponse.newBuilder()
               .setVersionInfo(versionInfo)

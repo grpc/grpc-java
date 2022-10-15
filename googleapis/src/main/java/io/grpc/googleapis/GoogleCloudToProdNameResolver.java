@@ -191,9 +191,14 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     serverBuilder.put("channel_creds",
         ImmutableList.of(ImmutableMap.of("type", "google_default")));
     serverBuilder.put("server_features", ImmutableList.of("xds_v3"));
+    ImmutableMap.Builder<String, Object> authoritiesBuilder = ImmutableMap.builder();
+    authoritiesBuilder.put(
+        "traffic-director-c2p.xds.googleapis.com",
+        ImmutableMap.of("xds_servers", ImmutableList.of(serverBuilder.buildOrThrow())));
     return ImmutableMap.of(
         "node", nodeBuilder.buildOrThrow(),
-        "xds_servers", ImmutableList.of(serverBuilder.buildOrThrow()));
+        "xds_servers", ImmutableList.of(serverBuilder.buildOrThrow()),
+        "authorities", authoritiesBuilder.buildOrThrow());
   }
 
   @Override

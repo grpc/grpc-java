@@ -17,9 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.Bootstrapper.ServerInfo;
 
 import com.google.auto.value.AutoValue;
@@ -42,10 +39,10 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import java.util.List;
 import java.util.Locale;
@@ -77,8 +74,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  ResourceType typeName() {
-    return CDS;
+  String typeName() {
+    return "CDS";
   }
 
   @Override
@@ -93,8 +90,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
   @Nullable
   @Override
-  ResourceType dependentResource() {
-    return EDS;
+  XdsResourceType<?> dependentResource() {
+    return XdsEndpointResource.getInstance();
   }
 
   @Override
