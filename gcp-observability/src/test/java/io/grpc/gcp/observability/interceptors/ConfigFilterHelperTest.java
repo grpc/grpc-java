@@ -24,7 +24,6 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
 import io.grpc.gcp.observability.interceptors.ConfigFilterHelper.FilterParams;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.junit.Before;
@@ -33,19 +32,16 @@ import org.junit.Test;
 public class ConfigFilterHelperTest {
   private static final ImmutableList<LogFilter> configLogFilters =
       ImmutableList.of(
-          new LogFilter(Collections.singletonList("service1/Method2"), false,
-              Collections.emptySet(), Collections.singleton("service1/Method2"),
+          new LogFilter(Collections.emptySet(), Collections.singleton("service1/Method2"), false,
               1024, 1024, false),
           new LogFilter(
-              Arrays.asList("service2/*, service4/method2"), false,
-              Collections.singleton("service2"), Collections.singleton("service4/method2"),
+              Collections.singleton("service2"), Collections.singleton("service4/method2"), false,
               2048, 1024, false),
           new LogFilter(
-              Arrays.asList("service2/*, service4/method3"), false,
-              Collections.singleton("service2"), Collections.singleton("service4/method3"),
+              Collections.singleton("service2"), Collections.singleton("service4/method3"), false,
               2048, 1024, true),
           new LogFilter(
-              Collections.singletonList("*"), true, Collections.emptySet(), Collections.emptySet(),
+              Collections.emptySet(), Collections.emptySet(), true,
               128, 128, false));
 
   private ObservabilityConfig mockConfig;
@@ -54,7 +50,7 @@ public class ConfigFilterHelperTest {
   @Before
   public void setup() {
     mockConfig = mock(ObservabilityConfig.class);
-    configFilterHelper = new ConfigFilterHelper(mockConfig);
+    configFilterHelper = ConfigFilterHelper.getInstance(mockConfig);
   }
 
   @Test
@@ -85,8 +81,8 @@ public class ConfigFilterHelperTest {
     List<LogFilter> sampleLogFilters =
         ImmutableList.of(
             new LogFilter(
-                Collections.singletonList("*"), true, Collections.emptySet(),
-                Collections.emptySet(), 4096, 4096, false));
+                Collections.emptySet(), Collections.emptySet(), true,
+                4096, 4096, false));
     when(mockConfig.getClientLogFilters()).thenReturn(sampleLogFilters);
     when(mockConfig.getServerLogFilters()).thenReturn(sampleLogFilters);
 
@@ -104,12 +100,10 @@ public class ConfigFilterHelperTest {
   public void checkMethodNotToBeLogged() {
     List<LogFilter> sampleLogFilters =
         ImmutableList.of(
-            new LogFilter(Collections.singletonList("service2/*"), false,
-                Collections.emptySet(), Collections.singleton("service2/*"),
+            new LogFilter(Collections.emptySet(), Collections.singleton("service2/*"), false,
                 1024, 1024, true),
             new LogFilter(
-                Collections.singletonList("service2/Method1"), false,
-                Collections.singleton("service2/Method1"), Collections.emptySet(),
+                Collections.singleton("service2/Method1"), Collections.emptySet(), false,
                 2048, 1024, false));
     when(mockConfig.getClientLogFilters()).thenReturn(sampleLogFilters);
     when(mockConfig.getServerLogFilters()).thenReturn(sampleLogFilters);

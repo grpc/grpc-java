@@ -35,8 +35,7 @@ public class ConfigFilterHelper {
 
   private final ObservabilityConfig config;
 
-  @VisibleForTesting
-  ConfigFilterHelper(ObservabilityConfig config) {
+  private ConfigFilterHelper(ObservabilityConfig config) {
     this.config = config;
   }
 
@@ -57,14 +56,16 @@ public class ConfigFilterHelper {
    * Filters are evaluated in text order, first match is used.
    *
    * @param fullMethodName the fully qualified name of the method
+   * @param client set to true if method being checked is a client method; false otherwise
    * @return FilterParams object 1. specifies if the corresponding method needs to be logged
    *     (log field will be set to true) 2. values of payload limits retrieved from configuration
    */
-  public FilterParams logRpcMethod(String fullMethodName, Boolean client) {
+  public FilterParams logRpcMethod(String fullMethodName, boolean client) {
     FilterParams params = NO_FILTER_PARAMS;
 
     int index = checkNotNull(fullMethodName, "fullMethodName").lastIndexOf('/');
     String serviceName = fullMethodName.substring(0, index);
+
     List<LogFilter> logFilters =
         client ? config.getClientLogFilters() : config.getServerLogFilters();
 
@@ -75,8 +76,8 @@ public class ConfigFilterHelper {
         if (logFilter.excludePattern) {
           return params;
         }
-        int currentHeaderBytes = logFilter.headerBytes != null ? logFilter.headerBytes : 0;
-        int currentMessageBytes = logFilter.messageBytes != null ? logFilter.messageBytes : 0;
+        int currentHeaderBytes = logFilter.headerBytes;
+        int currentMessageBytes = logFilter.messageBytes;
         return FilterParams.create(true, currentHeaderBytes, currentMessageBytes);
       }
     }

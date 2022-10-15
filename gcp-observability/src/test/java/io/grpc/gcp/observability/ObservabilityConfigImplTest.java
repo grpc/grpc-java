@@ -18,7 +18,6 @@ package io.grpc.gcp.observability;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -30,7 +29,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -206,11 +204,10 @@ public class ObservabilityConfigImplTest {
     assertFalse(observabilityConfig.isEnableCloudLogging());
     assertFalse(observabilityConfig.isEnableCloudMonitoring());
     assertFalse(observabilityConfig.isEnableCloudTracing());
-    assertNull(observabilityConfig.getProjectId());
-    assertThat(observabilityConfig.getClientLogFilters()).isNull();
-    assertThat(observabilityConfig.getServerLogFilters()).isNull();
+    assertThat(observabilityConfig.getClientLogFilters()).isEmpty();
+    assertThat(observabilityConfig.getServerLogFilters()).isEmpty();
     assertThat(observabilityConfig.getSampler()).isNull();
-    assertThat(observabilityConfig.getCustomTags()).isNull();
+    assertThat(observabilityConfig.getCustomTags()).isEmpty();
   }
 
   @Test
@@ -231,11 +228,10 @@ public class ObservabilityConfigImplTest {
     assertFalse(observabilityConfig.isEnableCloudLogging());
     assertFalse(observabilityConfig.isEnableCloudMonitoring());
     assertFalse(observabilityConfig.isEnableCloudTracing());
-    assertNull(observabilityConfig.getProjectId());
-    assertThat(observabilityConfig.getClientLogFilters()).isNull();
-    assertThat(observabilityConfig.getServerLogFilters()).isNull();
+    assertThat(observabilityConfig.getClientLogFilters()).isEmpty();
+    assertThat(observabilityConfig.getServerLogFilters()).isEmpty();
     assertThat(observabilityConfig.getSampler()).isNull();
-    assertThat(observabilityConfig.getCustomTags()).isNull();
+    assertThat(observabilityConfig.getCustomTags()).isEmpty();
   }
 
   @Test
@@ -253,20 +249,18 @@ public class ObservabilityConfigImplTest {
 
     List<LogFilter> clientLogFilters = observabilityConfig.getClientLogFilters();
     assertThat(clientLogFilters).hasSize(1);
-    assertThat(clientLogFilters.get(0).pattern).isEqualTo(Arrays.asList("*"));
     assertThat(clientLogFilters.get(0).headerBytes).isEqualTo(4096);
-    assertThat(clientLogFilters.get(0).messageBytes).isNull();
-    assertThat(clientLogFilters.get(0).excludePattern).isNull();
+    assertThat(clientLogFilters.get(0).messageBytes).isEqualTo(0);
+    assertThat(clientLogFilters.get(0).excludePattern).isFalse();
     assertThat(clientLogFilters.get(0).matchAll).isTrue();
     assertThat(clientLogFilters.get(0).services).isEmpty();
     assertThat(clientLogFilters.get(0).methods).isEmpty();
 
     List<LogFilter> serverLogFilters = observabilityConfig.getServerLogFilters();
     assertThat(serverLogFilters).hasSize(1);
-    assertThat(serverLogFilters.get(0).pattern).isEqualTo(Arrays.asList("*"));
     assertThat(serverLogFilters.get(0).headerBytes).isEqualTo(32);
     assertThat(serverLogFilters.get(0).messageBytes).isEqualTo(64);
-    assertThat(serverLogFilters.get(0).excludePattern).isNull();
+    assertThat(serverLogFilters.get(0).excludePattern).isFalse();
     assertThat(serverLogFilters.get(0).matchAll).isTrue();
     assertThat(serverLogFilters.get(0).services).isEmpty();
     assertThat(serverLogFilters.get(0).methods).isEmpty();
@@ -279,18 +273,15 @@ public class ObservabilityConfigImplTest {
     assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");
     List<LogFilter> logFilterList = observabilityConfig.getClientLogFilters();
     assertThat(logFilterList).hasSize(2);
-    assertThat(logFilterList.get(0).pattern).isEqualTo(Arrays.asList("*"));
     assertThat(logFilterList.get(0).headerBytes).isEqualTo(4096);
     assertThat(logFilterList.get(0).messageBytes).isEqualTo(2048);
-    assertThat(logFilterList.get(0).excludePattern).isNull();
+    assertThat(logFilterList.get(0).excludePattern).isFalse();
     assertThat(logFilterList.get(0).matchAll).isTrue();
     assertThat(logFilterList.get(0).services).isEmpty();
     assertThat(logFilterList.get(0).methods).isEmpty();
 
-    assertThat(logFilterList.get(1).pattern)
-        .isEqualTo(Arrays.asList("service1/Method2", "Service2/*"));
-    assertThat(logFilterList.get(1).headerBytes).isNull();
-    assertThat(logFilterList.get(1).messageBytes).isNull();
+    assertThat(logFilterList.get(1).headerBytes).isEqualTo(0);
+    assertThat(logFilterList.get(1).messageBytes).isEqualTo(0);
     assertThat(logFilterList.get(1).excludePattern).isTrue();
     assertThat(logFilterList.get(1).matchAll).isFalse();
     assertThat(logFilterList.get(1).services).isEqualTo(Collections.singleton("Service2"));
@@ -306,11 +297,9 @@ public class ObservabilityConfigImplTest {
     assertTrue(observabilityConfig.isEnableCloudLogging());
     List<LogFilter> logFilterList = observabilityConfig.getServerLogFilters();
     assertThat(logFilterList).hasSize(2);
-    assertThat(logFilterList.get(0).pattern)
-        .isEqualTo(Arrays.asList("service1/method4", "service2/method234"));
     assertThat(logFilterList.get(0).headerBytes).isEqualTo(32);
     assertThat(logFilterList.get(0).messageBytes).isEqualTo(64);
-    assertThat(logFilterList.get(0).excludePattern).isNull();
+    assertThat(logFilterList.get(0).excludePattern).isFalse();
     assertThat(logFilterList.get(0).matchAll).isFalse();
     assertThat(logFilterList.get(0).services).isEmpty();
     assertThat(logFilterList.get(0).methods)
@@ -318,10 +307,8 @@ public class ObservabilityConfigImplTest {
 
     Set<String> expectedServices = Stream.of("service4", "Service2")
         .collect(Collectors.toCollection(HashSet::new));
-    assertThat(logFilterList.get(1).pattern)
-        .isEqualTo(Arrays.asList("service4/*", "Service2/*"));
-    assertThat(logFilterList.get(1).headerBytes).isNull();
-    assertThat(logFilterList.get(1).messageBytes).isNull();
+    assertThat(logFilterList.get(1).headerBytes).isEqualTo(0);
+    assertThat(logFilterList.get(1).messageBytes).isEqualTo(0);
     assertThat(logFilterList.get(1).excludePattern).isTrue();
     assertThat(logFilterList.get(1).matchAll).isFalse();
     assertThat(logFilterList.get(1).services).isEqualTo(expectedServices);
@@ -405,27 +392,21 @@ public class ObservabilityConfigImplTest {
     assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");
     List<LogFilter> logFilters = observabilityConfig.getClientLogFilters();
     assertThat(logFilters).hasSize(2);
-    assertThat(logFilters.get(0).pattern).isEqualTo(Arrays.asList("*"));
     assertThat(logFilters.get(0).headerBytes).isEqualTo(4096);
     assertThat(logFilters.get(0).messageBytes).isEqualTo(2048);
-    assertThat(logFilters.get(1).pattern)
-        .isEqualTo(Arrays.asList("service1/Method2", "Service2/*"));
-    assertThat(logFilters.get(1).headerBytes).isNull();
-    assertThat(logFilters.get(1).messageBytes).isNull();
+    assertThat(logFilters.get(1).headerBytes).isEqualTo(0);
+    assertThat(logFilters.get(1).messageBytes).isEqualTo(0);
 
     assertThat(logFilters).hasSize(2);
-    assertThat(logFilters.get(0).pattern).isEqualTo(Arrays.asList("*"));
     assertThat(logFilters.get(0).headerBytes).isEqualTo(4096);
     assertThat(logFilters.get(0).messageBytes).isEqualTo(2048);
-    assertThat(logFilters.get(0).excludePattern).isNull();
+    assertThat(logFilters.get(0).excludePattern).isFalse();
     assertThat(logFilters.get(0).matchAll).isTrue();
     assertThat(logFilters.get(0).services).isEmpty();
     assertThat(logFilters.get(0).methods).isEmpty();
 
-    assertThat(logFilters.get(1).pattern)
-        .isEqualTo(Arrays.asList("service1/Method2", "Service2/*"));
-    assertThat(logFilters.get(1).headerBytes).isNull();
-    assertThat(logFilters.get(1).messageBytes).isNull();
+    assertThat(logFilters.get(1).headerBytes).isEqualTo(0);
+    assertThat(logFilters.get(1).messageBytes).isEqualTo(0);
     assertThat(logFilters.get(1).excludePattern).isTrue();
     assertThat(logFilters.get(1).matchAll).isFalse();
     assertThat(logFilters.get(1).services).isEqualTo(Collections.singleton("Service2"));
@@ -473,7 +454,7 @@ public class ObservabilityConfigImplTest {
       fail("exception expected!");
     } catch (IllegalArgumentException iae) {
       assertThat(iae.getMessage()).contains(
-          "invalid service or method string");
+          "invalid service or method filter");
     }
   }
 }

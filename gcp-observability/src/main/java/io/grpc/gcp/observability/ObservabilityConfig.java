@@ -54,44 +54,39 @@ public interface ObservabilityConfig {
    */
   @ThreadSafe
   class LogFilter {
-    /** Pattern for service/method filter. */
-    public final List<String> pattern;
-
-    /** Boolean to indicate all services and methods. */
-    public final Boolean matchAll;
-
     /** Set of services. */
     public final Set<String> services;
 
     /* Set of fullMethodNames. */
     public final Set<String> methods;
 
+    /** Boolean to indicate all services and methods. */
+    public final boolean matchAll;
+
     /** Number of bytes of header to log. */
-    public final Integer headerBytes;
+    public final int headerBytes;
 
     /** Number of bytes of message to log. */
-    public final Integer messageBytes;
+    public final int messageBytes;
 
     /** Boolean to indicate if services and methods matching pattern needs to be excluded. */
-    public final Boolean excludePattern;
+    public final boolean excludePattern;
 
     /**
      * Object used to represent filter used in configuration.
-     * @param pattern List of service/method filter
-     * @param matchAll If true, match all services and methods
      * @param services Set of services derived from pattern
      * @param serviceMethods Set of fullMethodNames derived from pattern
+     * @param matchAll If true, match all services and methods
      * @param headerBytes Total number of bytes of header to log
      * @param messageBytes Total number of bytes of  message to log
      * @param excludePattern If true, services and methods matching pattern be excluded
      */
-    public LogFilter(List<String> pattern, Boolean matchAll, Set<String> services,
-        Set<String> serviceMethods, Integer headerBytes, Integer messageBytes,
-        Boolean excludePattern) {
-      this.pattern = pattern;
-      this.matchAll = matchAll;
+    public LogFilter(Set<String> services, Set<String> serviceMethods, boolean matchAll,
+        int headerBytes, int messageBytes,
+        boolean excludePattern) {
       this.services = services;
       this.methods = serviceMethods;
+      this.matchAll = matchAll;
       this.headerBytes = headerBytes;
       this.messageBytes = messageBytes;
       this.excludePattern = excludePattern;
