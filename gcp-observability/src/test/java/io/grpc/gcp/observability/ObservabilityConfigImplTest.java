@@ -152,6 +152,7 @@ public class ObservabilityConfigImplTest {
       + "}";
 
   private static final String CUSTOM_TAGS = "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
           + "    \"cloud_logging\": {},\n"
           + "    \"labels\": {\n"
           + "      \"SOURCE_VERSION\" : \"J2e1Cf\",\n"
