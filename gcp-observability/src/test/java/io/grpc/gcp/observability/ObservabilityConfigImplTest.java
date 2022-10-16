@@ -79,6 +79,7 @@ public class ObservabilityConfigImplTest {
       + "}";
 
   private static final String SERVER_LOG_FILTERS = "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
           + "    \"cloud_logging\": {\n"
           + "    \"server_rpc_events\": [{\n"
           + "        \"methods\": [\"service1/method4\", \"service2/method234\"],\n"
@@ -94,48 +95,57 @@ public class ObservabilityConfigImplTest {
           + "}";
 
   private static final String PROJECT_ID = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_logging\": {},\n"
       + "    \"project_id\": \"grpc-testing\"\n"
       + "}";
 
-  private static final String DISABLE_OBSERVABILITY = "{}";
+  private static final String EMPTY_CONFIG = "{}";
 
   private static final String ENABLE_CLOUD_MONITORING_AND_TRACING = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_monitoring\": {},\n"
       + "    \"cloud_tracing\": {}\n"
       + "}";
 
   private static final String ENABLE_CLOUD_MONITORING = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_monitoring\": {}\n"
       + "}";
 
   private static final String ENABLE_CLOUD_TRACING = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_tracing\": {}\n"
       + "}";
 
   private static final String TRACING_ALWAYS_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_tracing\": {\n"
       + "      \"sampling_rate\": 1.00\n"
       + "    }\n"
       + "}";
 
   private static final String TRACING_NEVER_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_tracing\": {\n"
       + "      \"sampling_rate\": 0.00\n"
       + "    }\n"
       + "}";
 
   private static final String TRACING_PROBABILISTIC_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_tracing\": {\n"
       + "      \"sampling_rate\": 0.75\n"
       + "    }\n"
       + "}";
 
   private static final String TRACING_DEFAULT_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_tracing\": {}\n"
       + "}";
 
   private static final String GLOBAL_TRACING_BAD_PROBABILISTIC_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_tracing\": {\n"
       + "      \"sampling_rate\": -0.75\n"
       + "    }\n"
@@ -152,6 +162,7 @@ public class ObservabilityConfigImplTest {
 
   private static final String BAD_CUSTOM_TAGS =
       "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
           + "    \"cloud_monitoring\": {},\n"
           + "    \"labels\": {\n"
           + "      \"SOURCE_VERSION\" : \"J2e1Cf\",\n"
@@ -162,6 +173,7 @@ public class ObservabilityConfigImplTest {
 
   private static final String LOG_FILTER_GLOBAL_EXCLUDE =
       "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
           + "    \"cloud_logging\": {\n"
           + "    \"client_rpc_events\": [{\n"
           + "        \"methods\": [\"service1/Method2\", \"*\"],\n"
@@ -175,6 +187,7 @@ public class ObservabilityConfigImplTest {
 
   private static final String LOG_FILTER_INVALID_METHOD =
       "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
           + "    \"cloud_logging\": {\n"
           + "    \"client_rpc_events\": [{\n"
           + "        \"methods\": [\"s*&%ervice1/Method2\", \"*\"],\n"
@@ -200,13 +213,14 @@ public class ObservabilityConfigImplTest {
 
   @Test
   public void emptyConfig() throws IOException {
-    observabilityConfig.parse("{}");
+    observabilityConfig.parse(EMPTY_CONFIG);
     assertFalse(observabilityConfig.isEnableCloudLogging());
     assertFalse(observabilityConfig.isEnableCloudMonitoring());
     assertFalse(observabilityConfig.isEnableCloudTracing());
     assertThat(observabilityConfig.getClientLogFilters()).isEmpty();
     assertThat(observabilityConfig.getServerLogFilters()).isEmpty();
     assertThat(observabilityConfig.getSampler()).isNull();
+    assertThat(observabilityConfig.getProjectId()).isNull();
     assertThat(observabilityConfig.getCustomTags()).isEmpty();
   }
 
@@ -220,18 +234,6 @@ public class ObservabilityConfigImplTest {
       assertThat(iae.getMessage()).isEqualTo(
           "GRPC_GCP_OBSERVABILITY_CONFIG_FILE is empty!");
     }
-  }
-
-  @Test
-  public void disableObservability() throws IOException {
-    observabilityConfig.parse(DISABLE_OBSERVABILITY);
-    assertFalse(observabilityConfig.isEnableCloudLogging());
-    assertFalse(observabilityConfig.isEnableCloudMonitoring());
-    assertFalse(observabilityConfig.isEnableCloudTracing());
-    assertThat(observabilityConfig.getClientLogFilters()).isEmpty();
-    assertThat(observabilityConfig.getServerLogFilters()).isEmpty();
-    assertThat(observabilityConfig.getSampler()).isNull();
-    assertThat(observabilityConfig.getCustomTags()).isEmpty();
   }
 
   @Test

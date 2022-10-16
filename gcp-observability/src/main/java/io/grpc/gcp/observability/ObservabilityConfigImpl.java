@@ -88,6 +88,12 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
 
   private void parseConfig(Map<String, ?> config) {
     checkArgument(config != null, "Invalid configuration");
+    if (config.isEmpty()) {
+      clientLogFilters = Collections.emptyList();
+      serverLogFilters = Collections.emptyList();
+      customTags = Collections.emptyMap();
+      return;
+    }
     projectId = fetchProjectId(JsonUtil.getString(config, "project_id"));
 
     Map<String, ?> rawCloudLoggingObject = JsonUtil.getObject(config, "cloud_logging");
@@ -131,7 +137,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     // If project_id is not specified in config, get default GCP project id from the environment
     String projectId = configProjectId != null ? configProjectId : getDefaultGcpProjectId();
     checkArgument(projectId != null, "Unable to detect project_id");
-    logger.log(Level.INFO, "Found project ID : ", projectId);
+    logger.log(Level.FINE, "Found project ID : ", projectId);
     return projectId;
   }
 
