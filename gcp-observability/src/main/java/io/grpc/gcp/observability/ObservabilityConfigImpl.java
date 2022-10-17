@@ -137,7 +137,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     // If project_id is not specified in config, get default GCP project id from the environment
     String projectId = configProjectId != null ? configProjectId : getDefaultGcpProjectId();
     checkArgument(projectId != null, "Unable to detect project_id");
-    logger.log(Level.FINE, "Found project ID : ", projectId);
+    logger.log(Level.FINEST, "Found project ID : ", projectId);
     return projectId;
   }
 

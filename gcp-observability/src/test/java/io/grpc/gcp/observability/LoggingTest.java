@@ -21,6 +21,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -36,6 +38,8 @@ import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
 import io.grpc.gcp.observability.interceptors.LogHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
+import io.grpc.internal.TimeProvider;
+import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.IOException;
@@ -46,6 +50,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 @RunWith(JUnit4.class)
@@ -95,6 +100,13 @@ public class LoggingTest {
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
 
+  @Test
+  public void clientServer_interceptorCalled_logEvents_usingMockSink() throws Exception {
+    Class<?> runnable =
+        classLoader.loadClass(StaticTestingClassLogEventsUsingMockSink.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
   // UsedReflectively
   public static final class StaticTestingClassEndtoEndLogging implements Runnable {
 
@@ -123,7 +135,7 @@ public class LoggingTest {
               sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
         Server server =
             ServerBuilder.forPort(0)
-                .addService(new LoggingTestHelper.SimpleServiceImpl())
+                .addService(new ObservabilityTestHelper.SimpleServiceImpl())
                 .build()
                 .start();
         int port = cleanupRule.register(server).getPort();
@@ -131,7 +143,7 @@ public class LoggingTest {
             SimpleServiceGrpc.newBlockingStub(
                 cleanupRule.register(
                     ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
-        assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+        assertThat(ObservabilityTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
             .isEqualTo("Hello buddy");
         assertThat(Mockito.mockingDetails(spyLogHelper).getInvocations().size()).isGreaterThan(11);
       } catch (IOException e) {
@@ -165,7 +177,7 @@ public class LoggingTest {
               mockSink, config, channelInterceptorFactory, serverInterceptorFactory)) {
         Server server =
             ServerBuilder.forPort(0)
-                .addService(new LoggingTestHelper.SimpleServiceImpl())
+                .addService(new ObservabilityTestHelper.SimpleServiceImpl())
                 .build()
                 .start();
         int port = cleanupRule.register(server).getPort();
@@ -173,12 +185,66 @@ public class LoggingTest {
             SimpleServiceGrpc.newBlockingStub(
                 cleanupRule.register(
                     ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
-        assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+        assertThat(ObservabilityTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
             .isEqualTo("Hello buddy");
         verifyNoInteractions(spyLogHelper);
         verifyNoInteractions(mockSink);
       } catch (IOException e) {
         throw new AssertionError("Exception while testing logging event filter", e);
+      }
+    }
+  }
+
+  public static final class StaticTestingClassLogEventsUsingMockSink implements Runnable {
+
+    @Override
+    public void run() {
+      Sink mockSink = mock(GcpLogSink.class);
+      ObservabilityConfig config = mock(ObservabilityConfig.class);
+      LogHelper spyLogHelper = spy(new LogHelper(mockSink, TimeProvider.SYSTEM_TIME_PROVIDER));
+      ConfigFilterHelper mockFilterHelper2 = mock(ConfigFilterHelper.class);
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+          new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper2);
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+          new InternalLoggingServerInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper2);
+
+      when(config.isEnableCloudLogging()).thenReturn(true);
+      FilterParams logAlwaysFilterParams = FilterParams.create(true, 0, 0);
+      when(mockFilterHelper2.logRpcMethod(anyString(), eq(true)))
+          .thenReturn(logAlwaysFilterParams);
+      when(mockFilterHelper2.logRpcMethod(anyString(), eq(false)))
+          .thenReturn(logAlwaysFilterParams);
+
+      try (GcpObservability observability =
+          GcpObservability.grpcInit(
+              mockSink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+        Server server =
+            ServerBuilder.forPort(0)
+                .addService(new ObservabilityTestHelper.SimpleServiceImpl())
+                .build()
+                .start();
+        int port = cleanupRule.register(server).getPort();
+        SimpleServiceGrpc.SimpleServiceBlockingStub stub =
+            SimpleServiceGrpc.newBlockingStub(
+                cleanupRule.register(
+                    ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
+        assertThat(ObservabilityTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+            .isEqualTo("Hello buddy");
+        // Total number of calls should have been 14 (6 from client and 6 from server)
+        // Since cancel is not invoked, it will be 12.
+        // Request message(Total count:2 (1 from client and 1 from server) and Response
+        // message(count:2)
+        // events are not in the event_types list, i.e  14 - 2(cancel) - 2(req_msg) - 2(resp_msg)
+        // = 8
+        assertThat(Mockito.mockingDetails(mockSink).getInvocations().size()).isEqualTo(12);
+        ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
+        verify(mockSink, times(12)).write(captor.capture());
+        for (GrpcLogRecord record : captor.getAllValues()) {
+          assertThat(record.getEventType()).isInstanceOf(GrpcLogRecord.EventType.class);
+          assertThat(record.getEventLogger()).isInstanceOf(GrpcLogRecord.EventLogger.class);
+        }
+      } catch (IOException e) {
+        throw new AssertionError("Exception while testing logging using mock sink", e);
       }
     }
   }

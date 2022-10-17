@@ -107,7 +107,7 @@ public class MetricsTest {
 
         Server server =
             ServerBuilder.forPort(0)
-                .addService(new LoggingTestHelper.SimpleServiceImpl())
+                .addService(new ObservabilityTestHelper.SimpleServiceImpl())
                 .build()
                 .start();
         int port = cleanupRule.register(server).getPort();
@@ -115,7 +115,7 @@ public class MetricsTest {
             SimpleServiceGrpc.newBlockingStub(
                 cleanupRule.register(
                     ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
-        assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+        assertThat(ObservabilityTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
             .isEqualTo("Hello buddy");
         // Adding sleep to ensure metrics are exported before querying cloud monitoring backend
         TimeUnit.SECONDS.sleep(40);
