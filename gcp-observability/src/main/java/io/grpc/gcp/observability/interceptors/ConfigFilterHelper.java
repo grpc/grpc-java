@@ -69,6 +69,7 @@ public class ConfigFilterHelper {
     List<LogFilter> logFilters =
         client ? config.getClientLogFilters() : config.getServerLogFilters();
 
+    // TODO (dnvindhya): Optimize by caching results for fullMethodName.
     for (LogFilter logFilter : logFilters) {
       if (logFilter.matchAll
           || logFilter.services.contains(serviceName)

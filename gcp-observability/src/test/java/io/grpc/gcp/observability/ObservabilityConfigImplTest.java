@@ -105,7 +105,7 @@ public class ObservabilityConfigImplTest {
   private static final String ENABLE_CLOUD_MONITORING_AND_TRACING = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_monitoring\": {},\n"
-      + "    \"cloud_tracing\": {}\n"
+      + "    \"cloud_trace\": {}\n"
       + "}";
 
   private static final String ENABLE_CLOUD_MONITORING = "{\n"
@@ -113,40 +113,40 @@ public class ObservabilityConfigImplTest {
       + "    \"cloud_monitoring\": {}\n"
       + "}";
 
-  private static final String ENABLE_CLOUD_TRACING = "{\n"
+  private static final String ENABLE_CLOUD_TRACE = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
-      + "    \"cloud_tracing\": {}\n"
+      + "    \"cloud_trace\": {}\n"
       + "}";
 
   private static final String TRACING_ALWAYS_SAMPLER = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
-      + "    \"cloud_tracing\": {\n"
+      + "    \"cloud_trace\": {\n"
       + "      \"sampling_rate\": 1.00\n"
       + "    }\n"
       + "}";
 
   private static final String TRACING_NEVER_SAMPLER = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
-      + "    \"cloud_tracing\": {\n"
+      + "    \"cloud_trace\": {\n"
       + "      \"sampling_rate\": 0.00\n"
       + "    }\n"
       + "}";
 
   private static final String TRACING_PROBABILISTIC_SAMPLER = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
-      + "    \"cloud_tracing\": {\n"
+      + "    \"cloud_trace\": {\n"
       + "      \"sampling_rate\": 0.75\n"
       + "    }\n"
       + "}";
 
   private static final String TRACING_DEFAULT_SAMPLER = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
-      + "    \"cloud_tracing\": {}\n"
+      + "    \"cloud_trace\": {}\n"
       + "}";
 
   private static final String GLOBAL_TRACING_BAD_PROBABILISTIC_SAMPLER = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
-      + "    \"cloud_tracing\": {\n"
+      + "    \"cloud_trace\": {\n"
       + "      \"sampling_rate\": -0.75\n"
       + "    }\n"
       + "}";
@@ -326,7 +326,7 @@ public class ObservabilityConfigImplTest {
 
   @Test
   public void enableCloudTracing() throws IOException {
-    observabilityConfig.parse(ENABLE_CLOUD_TRACING);
+    observabilityConfig.parse(ENABLE_CLOUD_TRACE);
     assertTrue(observabilityConfig.isEnableCloudTracing());
   }
 

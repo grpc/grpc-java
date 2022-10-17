@@ -23,7 +23,6 @@ import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import io.grpc.MethodDescriptor;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.opencensus.trace.Sampler;
@@ -36,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -111,7 +111,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
       enableCloudMonitoring = true;
     }
 
-    Map<String, ?> rawCloudTracingObject = JsonUtil.getObject(config, "cloud_tracing");
+    Map<String, ?> rawCloudTracingObject = JsonUtil.getObject(config, "cloud_trace");
     if (rawCloudTracingObject != null) {
       enableCloudTracing = true;
       sampler = parseTracingObject(rawCloudTracingObject);
@@ -218,14 +218,14 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
       ImmutableSet.Builder<String> methodsSetBuilder) {
     boolean globalFilter = false;
     for (String methodOrServicePattern : patternList) {
+      Matcher matcher = METHOD_NAME_REGEX.matcher(methodOrServicePattern);
       checkArgument(
-          METHOD_NAME_REGEX.matcher(methodOrServicePattern).matches(),
-          "invalid service or method filter : " + methodOrServicePattern);
-      if (methodOrServicePattern.equals("*")) {
+          matcher.matches(), "invalid service or method filter : " + methodOrServicePattern);
+      if ("*".equals(methodOrServicePattern)) {
         checkArgument(!exclude, "cannot have 'exclude' and '*' wildcard in the same filter");
         globalFilter = true;
-      } else if (methodOrServicePattern.endsWith("/*")) {
-        String service = MethodDescriptor.extractFullServiceName(methodOrServicePattern);
+      } else if ("*".equals(matcher.group(5))) {
+        String service = matcher.group(4);
         servicesSetBuilder.add(service);
       } else {
         methodsSetBuilder.add(methodOrServicePattern);
