@@ -645,6 +645,24 @@ public class LogHelperTest {
               .setLogger(EventLogger.SERVER)
               .build());
     }
+    // message is not of type : com.google.protobuf.Message or byte[]
+    {
+      logHelper.logRpcMessage(
+          seqId,
+          serviceName,
+          methodName,
+          authority,
+          EventType.CLIENT_MESSAGE,
+          new String("message"),
+          MESSAGE_LIMIT,
+          EventLogger.CLIENT,
+          callId);
+      verify(sink).write(
+          base.toBuilder()
+              .clearPayload()
+              .clearPayloadTruncated()
+              .build());
+    }
   }
 
   @Test

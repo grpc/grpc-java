@@ -45,7 +45,6 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   private boolean enableCloudMonitoring = false;
   private boolean enableCloudTracing = false;
   private String destinationProjectId = null;
-  private Long flushMessageCount = null;
   private List<LogFilter> logFilters;
   private List<EventType> eventTypes;
   private Sampler sampler;
@@ -87,7 +86,6 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         enableCloudTracing = value;
       }
       destinationProjectId = JsonUtil.getString(config, "destination_project_id");
-      flushMessageCount = JsonUtil.getNumberAsLong(config, "flush_message_count");
       List<?> rawList = JsonUtil.getList(config, "log_filters");
       if (rawList != null) {
         List<Map<String, ?>> jsonLogFilters = JsonUtil.checkObjectList(rawList);
@@ -102,7 +100,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         List<String> jsonEventTypes = JsonUtil.checkStringList(rawList);
         ImmutableList.Builder<EventType> eventTypesBuilder = new ImmutableList.Builder<>();
         for (String jsonEventType : jsonEventTypes) {
-          eventTypesBuilder.add(convertEventType(jsonEventType));
+          eventTypesBuilder.add(EventType.valueOf(jsonEventType));
         }
         this.eventTypes = eventTypesBuilder.build();
       }
@@ -136,28 +134,6 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     }
   }
 
-  private EventType convertEventType(String val) {
-    switch (val) {
-      case "GRPC_CALL_UNKNOWN":
-        return EventType.EVENT_TYPE_UNKNOWN;
-      case "CLIENT_HEADER":
-        return EventType.CLIENT_HEADER;
-      case "SERVER_HEADER":
-        return EventType.SERVER_HEADER;
-      case "CLIENT_MESSAGE":
-        return EventType.CLIENT_MESSAGE;
-      case "SERVER_MESSAGE":
-        return EventType.SERVER_MESSAGE;
-      case "SERVER_TRAILER":
-        return EventType.SERVER_TRAILER;
-      case "CLIENT_HALF_CLOSE":
-        return EventType.CLIENT_HALF_CLOSE;
-      case "CANCEL":
-        return EventType.CANCEL;
-      default:
-        throw new IllegalArgumentException("Unknown event type value:" + val);
-    }
-  }
 
   private LogFilter parseJsonLogFilter(Map<String, ?> logFilterMap) {
     return new LogFilter(JsonUtil.getString(logFilterMap, "pattern"),
@@ -183,11 +159,6 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   @Override
   public String getDestinationProjectId() {
     return destinationProjectId;
-  }
-
-  @Override
-  public Long getFlushMessageCount() {
-    return flushMessageCount;
   }
 
   @Override

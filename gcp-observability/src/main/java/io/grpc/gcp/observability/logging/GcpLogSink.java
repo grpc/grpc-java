@@ -118,7 +118,7 @@ public class GcpLogSink implements Sink {
       }
       LogEntry grpcLogEntry = grpcLogEntryBuilder.build();
       synchronized (this) {
-        logger.log(Level.FINEST, "Writing gRPC eventType : {0} to Cloud Logging", eventType);
+        logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", eventType);
         gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
       }
     } catch (Exception e) {

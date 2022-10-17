@@ -90,6 +90,7 @@ public class LogHelper {
       @Nullable SocketAddress peerAddress) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
+    checkNotNull(authority, "authority");
     checkNotNull(callId, "callId");
     checkArgument(
         peerAddress == null || eventLogger == GrpcLogRecord.EventLogger.SERVER,
@@ -130,6 +131,7 @@ public class LogHelper {
       @Nullable SocketAddress peerAddress) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
+    checkNotNull(authority, "authority");
     checkNotNull(callId, "callId");
     // Logging peer address only on the first incoming event. On server side, peer address will
     // of logging request header
@@ -171,6 +173,7 @@ public class LogHelper {
       @Nullable SocketAddress peerAddress) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
+    checkNotNull(authority, "authority");
     checkNotNull(status, "status");
     checkNotNull(callId, "callId");
     checkArgument(
@@ -219,6 +222,7 @@ public class LogHelper {
       String callId) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
+    checkNotNull(authority, "authority");
     checkNotNull(callId, "callId");
     checkArgument(
         eventType == EventType.CLIENT_MESSAGE
@@ -236,7 +240,7 @@ public class LogHelper {
     } else if (message instanceof byte[]) {
       messageBytesArray = (byte[]) message;
     } else {
-      logger.log(Level.WARNING, "message is of UNKNOWN type, message and payload_size fields"
+      logger.log(Level.WARNING, "message is of UNKNOWN type, message and payload_size fields "
           + "of GrpcLogRecord proto will not be logged");
     }
     PayloadBuilderHelper<Payload.Builder> pair = null;
@@ -250,10 +254,11 @@ public class LogHelper {
         .setAuthority(authority)
         .setType(eventType)
         .setLogger(eventLogger)
-        .setPayload(pair.payloadBuilder)
-        .setPayloadTruncated(pair.truncated)
         .setCallId(callId);
-
+    if (pair != null) {
+      logEntryBuilder.setPayload(pair.payloadBuilder)
+          .setPayloadTruncated(pair.truncated);
+    }
     sink.write(logEntryBuilder.build());
   }
 
@@ -269,6 +274,7 @@ public class LogHelper {
       String callId) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
+    checkNotNull(authority, "authority");
     checkNotNull(callId, "callId");
 
     GrpcLogRecord.Builder logEntryBuilder = GrpcLogRecord.newBuilder()
@@ -294,6 +300,7 @@ public class LogHelper {
       String callId) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
+    checkNotNull(authority, "authority");
     checkNotNull(callId, "callId");
 
     GrpcLogRecord.Builder logEntryBuilder = GrpcLogRecord.newBuilder()
@@ -333,7 +340,7 @@ public class LogHelper {
     checkNotNull(metadata, "metadata");
     checkArgument(maxHeaderBytes >= 0,
         "maxHeaderBytes must be non negative");
-    Joiner joiner = Joiner.on(", ").skipNulls();
+    Joiner joiner = Joiner.on(",").skipNulls();
     Payload.Builder payloadBuilder = Payload.newBuilder();
     boolean truncated = false;
     int totalMetadataBytes = 0;
