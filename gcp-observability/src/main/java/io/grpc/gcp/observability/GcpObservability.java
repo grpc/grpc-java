@@ -76,15 +76,15 @@ public final class GcpObservability implements AutoCloseable {
     if (instance == null) {
       GlobalLocationTags globalLocationTags = new GlobalLocationTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
-      Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
+      Sink sink = new GcpLogSink(observabilityConfig.getProjectId(),
           globalLocationTags.getLocationTags(), observabilityConfig.getCustomTags(),
           SERVICES_TO_EXCLUDE);
       LogHelper helper = new LogHelper(sink);
-      ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
+      ConfigFilterHelper configFilterHelper = ConfigFilterHelper.getInstance(observabilityConfig);
       instance = grpcInit(sink, observabilityConfig,
           new InternalLoggingChannelInterceptor.FactoryImpl(helper, configFilterHelper),
           new InternalLoggingServerInterceptor.FactoryImpl(helper, configFilterHelper));
-      instance.registerStackDriverExporter(observabilityConfig.getDestinationProjectId(),
+      instance.registerStackDriverExporter(observabilityConfig.getProjectId(),
           observabilityConfig.getCustomTags());
     }
     return instance;

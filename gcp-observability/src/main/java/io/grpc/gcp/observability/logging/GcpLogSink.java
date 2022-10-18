@@ -65,21 +65,22 @@ public class GcpLogSink implements Sink {
   private final Collection<String> servicesToExclude;
 
   @VisibleForTesting
-  GcpLogSink(Logging loggingClient, String destinationProjectId, Map<String, String> locationTags,
+  GcpLogSink(Logging loggingClient, String projectId, Map<String, String> locationTags,
       Map<String, String> customTags, Collection<String> servicesToExclude) {
-    this(destinationProjectId, locationTags, customTags, servicesToExclude);
+    this(projectId, locationTags, customTags, servicesToExclude);
     this.gcpLoggingClient = loggingClient;
   }
 
   /**
    * Retrieves a single instance of GcpLogSink.
-   *  @param destinationProjectId cloud project id to write logs
+   *
+   * @param projectId GCP project id to write logs
    * @param servicesToExclude service names for which log entries should not be generated
    */
-  public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
+  public GcpLogSink(String projectId, Map<String, String> locationTags,
       Map<String, String> customTags, Collection<String> servicesToExclude) {
-    this.projectId = destinationProjectId;
-    this.customTags = getCustomTags(customTags, locationTags, destinationProjectId);
+    this.projectId = projectId;
+    this.customTags = getCustomTags(customTags, locationTags, projectId);
     this.kubernetesResource = getResource(locationTags);
     this.servicesToExclude = checkNotNull(servicesToExclude, "servicesToExclude");
   }
@@ -136,12 +137,12 @@ public class GcpLogSink implements Sink {
 
   @VisibleForTesting
   static Map<String, String> getCustomTags(Map<String, String> customTags,
-      Map<String, String> locationTags, String destinationProjectId) {
+      Map<String, String> locationTags, String projectId) {
     ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
     String sourceProjectId = locationTags.get("project_id");
-    if (!Strings.isNullOrEmpty(destinationProjectId)
+    if (!Strings.isNullOrEmpty(projectId)
         && !Strings.isNullOrEmpty(sourceProjectId)
-        && !Objects.equals(sourceProjectId, destinationProjectId)) {
+        && !Objects.equals(sourceProjectId, projectId)) {
       tagsBuilder.put("source_project_id", sourceProjectId);
     }
     if (customTags != null) {
