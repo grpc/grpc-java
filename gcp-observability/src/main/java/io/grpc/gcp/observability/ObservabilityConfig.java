@@ -17,10 +17,11 @@
 package io.grpc.gcp.observability;
 
 import io.grpc.Internal;
-import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.opencensus.trace.Sampler;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import javax.annotation.concurrent.ThreadSafe;
 
 @Internal
 public interface ObservabilityConfig {
@@ -33,14 +34,14 @@ public interface ObservabilityConfig {
   /** Is Cloud Tracing enabled. */
   boolean isEnableCloudTracing();
 
-  /** Get destination project ID - where logs will go. */
-  String getDestinationProjectId();
+  /** Get project ID - where logs will go. */
+  String getProjectId();
 
-  /** Get filters set for logging. */
-  List<LogFilter> getLogFilters();
+  /** Get filters for client logging. */
+  List<LogFilter> getClientLogFilters();
 
-  /** Get event types to log. */
-  List<EventType> getEventTypes();
+  /** Get filters for server logging. */
+  List<LogFilter> getServerLogFilters();
 
   /** Get sampler for TraceConfig - when Cloud Tracing is enabled. */
   Sampler getSampler();
@@ -51,27 +52,44 @@ public interface ObservabilityConfig {
   /**
    * POJO for representing a filter used in configuration.
    */
+  @ThreadSafe
   class LogFilter {
-    /** Pattern indicating which service/method to log. */
-    public final String pattern;
+    /** Set of services. */
+    public final Set<String> services;
 
-    /** Number of bytes of each header to log. */
-    public final Integer headerBytes;
+    /* Set of fullMethodNames. */
+    public final Set<String> methods;
 
-    /** Number of bytes of each header to log. */
-    public final Integer messageBytes;
+    /** Boolean to indicate all services and methods. */
+    public final boolean matchAll;
+
+    /** Number of bytes of header to log. */
+    public final int headerBytes;
+
+    /** Number of bytes of message to log. */
+    public final int messageBytes;
+
+    /** Boolean to indicate if services and methods matching pattern needs to be excluded. */
+    public final boolean excludePattern;
 
     /**
      * Object used to represent filter used in configuration.
-     *
-     * @param pattern Pattern indicating which service/method to log
-     * @param headerBytes Number of bytes of each header to log
-     * @param messageBytes Number of bytes of each header to log
+     * @param services Set of services derived from pattern
+     * @param serviceMethods Set of fullMethodNames derived from pattern
+     * @param matchAll If true, match all services and methods
+     * @param headerBytes Total number of bytes of header to log
+     * @param messageBytes Total number of bytes of  message to log
+     * @param excludePattern If true, services and methods matching pattern be excluded
      */
-    public LogFilter(String pattern, Integer headerBytes, Integer messageBytes) {
-      this.pattern = pattern;
+    public LogFilter(Set<String> services, Set<String> serviceMethods, boolean matchAll,
+        int headerBytes, int messageBytes,
+        boolean excludePattern) {
+      this.services = services;
+      this.methods = serviceMethods;
+      this.matchAll = matchAll;
       this.headerBytes = headerBytes;
       this.messageBytes = messageBytes;
+      this.excludePattern = excludePattern;
     }
   }
 }
