@@ -38,7 +38,6 @@ import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
 import io.grpc.gcp.observability.interceptors.LogHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
-import io.grpc.internal.TimeProvider;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
@@ -201,7 +200,7 @@ public class LoggingTest {
     public void run() {
       Sink mockSink = mock(GcpLogSink.class);
       ObservabilityConfig config = mock(ObservabilityConfig.class);
-      LogHelper spyLogHelper = spy(new LogHelper(mockSink, TimeProvider.SYSTEM_TIME_PROVIDER));
+      LogHelper spyLogHelper = spy(new LogHelper(mockSink));
       ConfigFilterHelper mockFilterHelper2 = mock(ConfigFilterHelper.class);
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
           new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper2);
@@ -240,8 +239,8 @@ public class LoggingTest {
         ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
         verify(mockSink, times(12)).write(captor.capture());
         for (GrpcLogRecord record : captor.getAllValues()) {
-          assertThat(record.getEventType()).isInstanceOf(GrpcLogRecord.EventType.class);
-          assertThat(record.getEventLogger()).isInstanceOf(GrpcLogRecord.EventLogger.class);
+          assertThat(record.getType()).isInstanceOf(GrpcLogRecord.EventType.class);
+          assertThat(record.getLogger()).isInstanceOf(GrpcLogRecord.EventLogger.class);
         }
       } catch (IOException e) {
         throw new AssertionError("Exception while testing logging using mock sink", e);

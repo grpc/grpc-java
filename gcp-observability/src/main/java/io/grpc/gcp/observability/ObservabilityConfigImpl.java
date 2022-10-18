@@ -133,7 +133,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     }
   }
 
-  String fetchProjectId(String configProjectId) {
+  private static String fetchProjectId(String configProjectId) {
     // If project_id is not specified in config, get default GCP project id from the environment
     String projectId = configProjectId != null ? configProjectId : getDefaultGcpProjectId();
     checkArgument(projectId != null, "Unable to detect project_id");
@@ -141,11 +141,11 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     return projectId;
   }
 
-  String getDefaultGcpProjectId() {
+  private static String getDefaultGcpProjectId() {
     return ServiceOptions.getDefaultProjectId();
   }
 
-  static void parseLoggingObject(
+  private static void parseLoggingObject(
       Map<String, ?> rawLoggingConfig,
       ImmutableList.Builder<LogFilter> clientFilters,
       ImmutableList.Builder<LogFilter> serverFilters) {
@@ -153,7 +153,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     parseRpcEvents(JsonUtil.getList(rawLoggingConfig, "server_rpc_events"), serverFilters);
   }
 
-  static Sampler parseTracingObject(Map<String, ?> rawCloudTracingConfig) {
+  private static Sampler parseTracingObject(Map<String, ?> rawCloudTracingConfig) {
     Sampler defaultSampler = Samplers.probabilitySampler(0.0);
     Double samplingRate = JsonUtil.getNumberAsDouble(rawCloudTracingConfig, "sampling_rate");
     if (samplingRate == null) {
@@ -168,7 +168,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         : Samplers.probabilitySampler(samplingRate);
   }
 
-  static Map<String, String> parseCustomTags(Map<String, ?> rawCustomTags) {
+  private static Map<String, String> parseCustomTags(Map<String, ?> rawCustomTags) {
     ImmutableMap.Builder<String, String> builder = new ImmutableMap.Builder<>();
     for (Map.Entry<String, ?> entry: rawCustomTags.entrySet()) {
       checkArgument(
@@ -179,7 +179,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     return builder.build();
   }
 
-  static void parseRpcEvents(List<?> rpcEvents, ImmutableList.Builder<LogFilter> filters) {
+  private static void parseRpcEvents(List<?> rpcEvents, ImmutableList.Builder<LogFilter> filters) {
     if (rpcEvents == null) {
       return;
     }
@@ -189,7 +189,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     }
   }
 
-  static LogFilter parseJsonLogFilter(Map<String, ?> logFilterMap) {
+  private static LogFilter parseJsonLogFilter(Map<String, ?> logFilterMap) {
     ImmutableSet.Builder<String> servicesSetBuilder = new ImmutableSet.Builder<>();
     ImmutableSet.Builder<String> methodsSetBuilder = new ImmutableSet.Builder<>();
     boolean wildCardFilter = false;
@@ -213,7 +213,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         excludeFilter);
   }
 
-  static boolean extractMethodOrServicePattern(List<String> patternList, boolean exclude,
+  private static boolean extractMethodOrServicePattern(List<String> patternList, boolean exclude,
       ImmutableSet.Builder<String> servicesSetBuilder,
       ImmutableSet.Builder<String> methodsSetBuilder) {
     boolean globalFilter = false;
