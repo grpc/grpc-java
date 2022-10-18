@@ -167,7 +167,7 @@ public class InternalLoggingServerInterceptorTest {
                 });
     // receive request header
     {
-      verify(mockLogHelper).logRequestHeader(
+      verify(mockLogHelper).logClientHeader(
           /*seq=*/ eq(1L),
           eq("service"),
           eq("method"),
@@ -175,7 +175,7 @@ public class InternalLoggingServerInterceptorTest {
           ArgumentMatchers.isNull(),
           same(clientInitial),
           eq(filterParams.headerBytes()),
-          eq(EventLogger.LOGGER_SERVER),
+          eq(EventLogger.SERVER),
           anyString(),
           same(peer));
       verifyNoMoreInteractions(mockLogHelper);
@@ -188,13 +188,14 @@ public class InternalLoggingServerInterceptorTest {
     {
       Metadata serverInitial = new Metadata();
       interceptedLoggingCall.get().sendHeaders(serverInitial);
-      verify(mockLogHelper).logResponseHeader(
+      verify(mockLogHelper).logServerHeader(
           /*seq=*/ eq(2L),
           eq("service"),
           eq("method"),
+          eq("the-authority"),
           same(serverInitial),
           eq(filterParams.headerBytes()),
-          eq(EventLogger.LOGGER_SERVER),
+          eq(EventLogger.SERVER),
           anyString(),
           ArgumentMatchers.isNull());
       verifyNoMoreInteractions(mockLogHelper);
@@ -212,10 +213,11 @@ public class InternalLoggingServerInterceptorTest {
           /*seq=*/ eq(3L),
           eq("service"),
           eq("method"),
-          eq(EventType.GRPC_CALL_REQUEST_MESSAGE),
+          eq("the-authority"),
+          eq(EventType.CLIENT_MESSAGE),
           same(request),
           eq(filterParams.messageBytes()),
-          eq(EventLogger.LOGGER_SERVER),
+          eq(EventLogger.SERVER),
           anyString());
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onMessage(same(request));
@@ -231,7 +233,8 @@ public class InternalLoggingServerInterceptorTest {
           /*seq=*/ eq(4L),
           eq("service"),
           eq("method"),
-          eq(EventLogger.LOGGER_SERVER),
+          eq("the-authority"),
+          eq(EventLogger.SERVER),
           anyString());
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onHalfClose();
@@ -248,10 +251,11 @@ public class InternalLoggingServerInterceptorTest {
           /*seq=*/ eq(5L),
           eq("service"),
           eq("method"),
-          eq(EventType.GRPC_CALL_RESPONSE_MESSAGE),
+          eq("the-authority"),
+          eq(EventType.SERVER_MESSAGE),
           same(response),
           eq(filterParams.messageBytes()),
-          eq(EventLogger.LOGGER_SERVER),
+          eq(EventLogger.SERVER),
           anyString());
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(response, actualResponse.get());
@@ -269,10 +273,11 @@ public class InternalLoggingServerInterceptorTest {
           /*seq=*/ eq(6L),
           eq("service"),
           eq("method"),
+          eq("the-authority"),
           same(status),
           same(trailers),
           eq(filterParams.headerBytes()),
-          eq(EventLogger.LOGGER_SERVER),
+          eq(EventLogger.SERVER),
           anyString(),
           ArgumentMatchers.isNull());
       verifyNoMoreInteractions(mockLogHelper);
@@ -290,7 +295,8 @@ public class InternalLoggingServerInterceptorTest {
           /*seq=*/ eq(7L),
           eq("service"),
           eq("method"),
-          eq(EventLogger.LOGGER_SERVER),
+          eq("the-authority"),
+          eq(EventLogger.SERVER),
           anyString());
       verify(mockListener).onCancel();
     }
@@ -332,7 +338,7 @@ public class InternalLoggingServerInterceptorTest {
             });
     ArgumentCaptor<Duration> timeoutCaptor = ArgumentCaptor.forClass(Duration.class);
     verify(mockLogHelper, times(1))
-        .logRequestHeader(
+        .logClientHeader(
         /*seq=*/ eq(1L),
         eq("service"),
         eq("method"),
@@ -340,7 +346,7 @@ public class InternalLoggingServerInterceptorTest {
         timeoutCaptor.capture(),
         any(Metadata.class),
         eq(filterParams.headerBytes()),
-        eq(EventLogger.LOGGER_SERVER),
+        eq(EventLogger.SERVER),
         anyString(),
         ArgumentMatchers.isNull());
     verifyNoMoreInteractions(mockLogHelper);
@@ -480,7 +486,7 @@ public class InternalLoggingServerInterceptorTest {
 
   @Test
   public void eventFilter_enabled() {
-    when(mockFilterHelper.isEventToBeLogged(EventType.GRPC_CALL_HALF_CLOSE)).thenReturn(false);
+    when(mockFilterHelper.isEventToBeLogged(EventType.CLIENT_HALF_CLOSE)).thenReturn(false);
 
     Metadata clientInitial = new Metadata();
     final MethodDescriptor<byte[], byte[]> method =
@@ -549,6 +555,7 @@ public class InternalLoggingServerInterceptorTest {
       interceptedLoggingCall.get().close(status, trailers);
       verify(mockLogHelper, never()).logHalfClose(
           anyLong(),
+          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
           AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
           AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
           any(GrpcLogRecord.EventLogger.class),

@@ -35,7 +35,6 @@ import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
 import io.grpc.gcp.observability.interceptors.LogHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
-import io.grpc.internal.TimeProvider;
 import io.opencensus.common.Duration;
 import io.opencensus.contrib.grpc.metrics.RpcViewConstants;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsConfiguration;
@@ -79,8 +78,8 @@ public final class GcpObservability implements AutoCloseable {
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
           globalLocationTags.getLocationTags(), observabilityConfig.getCustomTags(),
-          observabilityConfig.getFlushMessageCount(), SERVICES_TO_EXCLUDE);
-      LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
+          SERVICES_TO_EXCLUDE);
+      LogHelper helper = new LogHelper(sink);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
       instance = grpcInit(sink, observabilityConfig,
           new InternalLoggingChannelInterceptor.FactoryImpl(helper, configFilterHelper),
