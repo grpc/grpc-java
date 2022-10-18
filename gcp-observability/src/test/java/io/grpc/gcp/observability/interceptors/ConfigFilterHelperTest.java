@@ -48,9 +48,9 @@ public class ConfigFilterHelperTest {
 
   private static final ImmutableList<EventType> configEventTypes =
       ImmutableList.of(
-          EventType.GRPC_CALL_REQUEST_HEADER,
-          EventType.GRPC_CALL_HALF_CLOSE,
-          EventType.GRPC_CALL_TRAILER);
+          EventType.CLIENT_HEADER,
+          EventType.CLIENT_HALF_CLOSE,
+          EventType.SERVER_TRAILER);
 
   private final MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod()
       .toBuilder();
@@ -171,13 +171,13 @@ public class ConfigFilterHelperTest {
   @Test
   public void checkEventToBeLogged_noFilter_defaultLogAllEventTypes() {
     List<EventType> eventList = new ArrayList<>();
-    eventList.add(EventType.GRPC_CALL_REQUEST_HEADER);
-    eventList.add(EventType.GRPC_CALL_RESPONSE_HEADER);
-    eventList.add(EventType.GRPC_CALL_REQUEST_MESSAGE);
-    eventList.add(EventType.GRPC_CALL_RESPONSE_MESSAGE);
-    eventList.add(EventType.GRPC_CALL_HALF_CLOSE);
-    eventList.add(EventType.GRPC_CALL_TRAILER);
-    eventList.add(EventType.GRPC_CALL_CANCEL);
+    eventList.add(EventType.CLIENT_HEADER);
+    eventList.add(EventType.SERVER_HEADER);
+    eventList.add(EventType.CLIENT_MESSAGE);
+    eventList.add(EventType.SERVER_MESSAGE);
+    eventList.add(EventType.CLIENT_HALF_CLOSE);
+    eventList.add(EventType.SERVER_TRAILER);
+    eventList.add(EventType.CANCEL);
 
     for (EventType event : eventList) {
       assertTrue(configFilterHelper.isEventToBeLogged(event));
@@ -191,13 +191,13 @@ public class ConfigFilterHelperTest {
     configFilterHelper.setEventFilterSet();
 
     List<EventType> eventList = new ArrayList<>();
-    eventList.add(EventType.GRPC_CALL_REQUEST_HEADER);
-    eventList.add(EventType.GRPC_CALL_RESPONSE_HEADER);
-    eventList.add(EventType.GRPC_CALL_REQUEST_MESSAGE);
-    eventList.add(EventType.GRPC_CALL_RESPONSE_MESSAGE);
-    eventList.add(EventType.GRPC_CALL_HALF_CLOSE);
-    eventList.add(EventType.GRPC_CALL_TRAILER);
-    eventList.add(EventType.GRPC_CALL_CANCEL);
+    eventList.add(EventType.CLIENT_HEADER);
+    eventList.add(EventType.SERVER_HEADER);
+    eventList.add(EventType.CLIENT_MESSAGE);
+    eventList.add(EventType.SERVER_MESSAGE);
+    eventList.add(EventType.CLIENT_HALF_CLOSE);
+    eventList.add(EventType.SERVER_TRAILER);
+    eventList.add(EventType.CANCEL);
 
     for (EventType event : eventList) {
       assertFalse(configFilterHelper.isEventToBeLogged(event));
@@ -209,10 +209,10 @@ public class ConfigFilterHelperTest {
     when(mockConfig.getEventTypes()).thenReturn(configEventTypes);
     configFilterHelper.setEventFilterSet();
 
-    EventType logEventType = EventType.GRPC_CALL_REQUEST_HEADER;
+    EventType logEventType = EventType.CLIENT_HEADER;
     assertTrue(configFilterHelper.isEventToBeLogged(logEventType));
 
-    EventType doNotLogEventType = EventType.GRPC_CALL_RESPONSE_MESSAGE;
+    EventType doNotLogEventType = EventType.SERVER_MESSAGE;
     assertFalse(configFilterHelper.isEventToBeLogged(doNotLogEventType));
   }
 }

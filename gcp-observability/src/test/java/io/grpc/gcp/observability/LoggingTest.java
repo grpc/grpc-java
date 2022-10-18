@@ -36,7 +36,6 @@ import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
 import io.grpc.gcp.observability.interceptors.LogHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
-import io.grpc.internal.TimeProvider;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.testing.GrpcCleanupRule;
@@ -67,7 +66,6 @@ public class LoggingTest {
   private static final ImmutableMap<String, String> CUSTOM_TAGS = ImmutableMap.of(
       "KEY1", "Value1",
       "KEY2", "VALUE2");
-  private static final long FLUSH_LIMIT = 100L;
 
   private final StaticTestingClassLoader classLoader =
       new StaticTestingClassLoader(getClass().getClassLoader(), Pattern.compile("io\\.grpc\\..*"));
@@ -113,9 +111,9 @@ public class LoggingTest {
     public void run() {
       Sink sink =
           new GcpLogSink(
-              PROJECT_ID, LOCATION_TAGS, CUSTOM_TAGS, FLUSH_LIMIT, Collections.emptySet());
+              PROJECT_ID, LOCATION_TAGS, CUSTOM_TAGS, Collections.emptySet());
       ObservabilityConfig config = mock(ObservabilityConfig.class);
-      LogHelper spyLogHelper = spy(new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER));
+      LogHelper spyLogHelper = spy(new LogHelper(sink));
       ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
           new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
@@ -123,7 +121,7 @@ public class LoggingTest {
           new InternalLoggingServerInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
 
       when(config.isEnableCloudLogging()).thenReturn(true);
-      FilterParams logAlwaysFilterParams = FilterParams.create(true, 0, 0);
+      FilterParams logAlwaysFilterParams = FilterParams.create(true, 1024, 10);
       when(mockFilterHelper.isMethodToBeLogged(any(MethodDescriptor.class)))
           .thenReturn(logAlwaysFilterParams);
       when(mockFilterHelper.isEventToBeLogged(any(GrpcLogRecord.EventType.class))).thenReturn(true);
@@ -156,7 +154,7 @@ public class LoggingTest {
     public void run() {
       Sink mockSink = mock(GcpLogSink.class);
       ObservabilityConfig config = mock(ObservabilityConfig.class);
-      LogHelper spyLogHelper = spy(new LogHelper(mockSink, TimeProvider.SYSTEM_TIME_PROVIDER));
+      LogHelper spyLogHelper = spy(new LogHelper(mockSink));
       ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
           new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper);
@@ -209,16 +207,16 @@ public class LoggingTest {
       FilterParams logAlwaysFilterParams = FilterParams.create(true, 0, 0);
       when(mockFilterHelper2.isMethodToBeLogged(any(MethodDescriptor.class)))
           .thenReturn(logAlwaysFilterParams);
-      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_HEADER))
+      when(mockFilterHelper2.isEventToBeLogged(EventType.CLIENT_HEADER))
           .thenReturn(true);
-      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_HEADER))
+      when(mockFilterHelper2.isEventToBeLogged(EventType.SERVER_HEADER))
           .thenReturn(true);
-      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_HALF_CLOSE)).thenReturn(true);
-      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_TRAILER)).thenReturn(true);
-      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_CANCEL)).thenReturn(true);
-      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_MESSAGE))
+      when(mockFilterHelper2.isEventToBeLogged(EventType.CLIENT_HALF_CLOSE)).thenReturn(true);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.SERVER_TRAILER)).thenReturn(true);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.CANCEL)).thenReturn(true);
+      when(mockFilterHelper2.isEventToBeLogged(EventType.CLIENT_MESSAGE))
           .thenReturn(false);
-      when(mockFilterHelper2.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_MESSAGE))
+      when(mockFilterHelper2.isEventToBeLogged(EventType.SERVER_MESSAGE))
           .thenReturn(false);
 
       try (GcpObservability observability =
