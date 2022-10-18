@@ -653,7 +653,7 @@ public class LogHelperTest {
           methodName,
           authority,
           EventType.CLIENT_MESSAGE,
-          new String("message"),
+          "message",
           MESSAGE_LIMIT,
           EventLogger.CLIENT,
           callId);
