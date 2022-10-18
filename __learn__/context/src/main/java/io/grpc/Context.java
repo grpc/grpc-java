@@ -29,5 +29,16 @@ import java.util.logging.Logger;
  *   withCredential.run(() -> { readUserRecords(userId, ENTITLEMENT_KEY.get()); });
  * </pre>
  *
- * <p>Contexts are also used to represent a scoped unit of work. When the unit of work is done the context must be cancelled. The cancellation will cascade to all descendant contexts. You can add a {@link CancellationListener} to inform the context when it or one of its ancestors has been canceleld. Cancellation doesn't release the state stored by a Context and it's okay to {@link #attach()} an already cancelled Context to make it current. To cancel a Context (and its descendants), first create a {@link CancellableContext}. When it's time to signal a cancellation, call {@link CancellableContext#cancel} or {@link CancellableContext#detachAndCancel}.
+ * <p>Scoped units of work are also represented by contexts.
+ * The context must be cancelled with the unit of work is finished.
+ * All descendant contexts will be targeted by the cancellation.
+ * A context can have a {@link CancellationListener} attached to it.
+ * This helps with notifying it when it or one of its ancestors has been cancelled.
+ * It's ok to {@link #attach()} a cancelled context to make it current;
+ * cancellation doesn't release the state stored by the context.
+ * If you're interested in cancelling a context:
+ * a) create a {@link CancellableContext}
+ * b) when you're ready, call either one of these:
+ * - {@link CancellableContext#cancel}
+ * - {@link CancellableContext#detachAndCancel} 
  */
