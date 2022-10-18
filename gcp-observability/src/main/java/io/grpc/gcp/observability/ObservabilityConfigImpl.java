@@ -45,7 +45,6 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   private boolean enableCloudMonitoring = false;
   private boolean enableCloudTracing = false;
   private String destinationProjectId = null;
-  private Long flushMessageCount = null;
   private List<LogFilter> logFilters;
   private List<EventType> eventTypes;
   private Sampler sampler;
@@ -87,7 +86,6 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         enableCloudTracing = value;
       }
       destinationProjectId = JsonUtil.getString(config, "destination_project_id");
-      flushMessageCount = JsonUtil.getNumberAsLong(config, "flush_message_count");
       List<?> rawList = JsonUtil.getList(config, "log_filters");
       if (rawList != null) {
         List<Map<String, ?>> jsonLogFilters = JsonUtil.checkObjectList(rawList);
@@ -102,7 +100,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         List<String> jsonEventTypes = JsonUtil.checkStringList(rawList);
         ImmutableList.Builder<EventType> eventTypesBuilder = new ImmutableList.Builder<>();
         for (String jsonEventType : jsonEventTypes) {
-          eventTypesBuilder.add(convertEventType(jsonEventType));
+          eventTypesBuilder.add(EventType.valueOf(jsonEventType));
         }
         this.eventTypes = eventTypesBuilder.build();
       }
@@ -136,28 +134,6 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     }
   }
 
-  private EventType convertEventType(String val) {
-    switch (val) {
-      case "GRPC_CALL_UNKNOWN":
-        return EventType.GRPC_CALL_UNKNOWN;
-      case "GRPC_CALL_REQUEST_HEADER":
-        return EventType.GRPC_CALL_REQUEST_HEADER;
-      case "GRPC_CALL_RESPONSE_HEADER":
-        return EventType.GRPC_CALL_RESPONSE_HEADER;
-      case "GRPC_CALL_REQUEST_MESSAGE":
-        return EventType.GRPC_CALL_REQUEST_MESSAGE;
-      case "GRPC_CALL_RESPONSE_MESSAGE":
-        return EventType.GRPC_CALL_RESPONSE_MESSAGE;
-      case "GRPC_CALL_TRAILER":
-        return EventType.GRPC_CALL_TRAILER;
-      case "GRPC_CALL_HALF_CLOSE":
-        return EventType.GRPC_CALL_HALF_CLOSE;
-      case "GRPC_CALL_CANCEL":
-        return EventType.GRPC_CALL_CANCEL;
-      default:
-        throw new IllegalArgumentException("Unknown event type value:" + val);
-    }
-  }
 
   private LogFilter parseJsonLogFilter(Map<String, ?> logFilterMap) {
     return new LogFilter(JsonUtil.getString(logFilterMap, "pattern"),
@@ -183,11 +159,6 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   @Override
   public String getDestinationProjectId() {
     return destinationProjectId;
-  }
-
-  @Override
-  public Long getFlushMessageCount() {
-    return flushMessageCount;
   }
 
   @Override
