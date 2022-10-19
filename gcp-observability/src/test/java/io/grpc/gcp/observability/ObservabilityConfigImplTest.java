@@ -18,23 +18,25 @@ package io.grpc.gcp.observability;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.base.Charsets;
-import com.google.common.collect.ImmutableList;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
-import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.opencensus.trace.Sampler;
 import io.opencensus.trace.samplers.Samplers;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -43,79 +45,169 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ObservabilityConfigImplTest {
-  private static final String EVENT_TYPES = "{\n"
-      + "    \"enable_cloud_logging\": false,\n"
-      + "    \"event_types\": "
-      + "[\"CLIENT_HEADER\", \"CLIENT_HALF_CLOSE\", \"SERVER_TRAILER\"]\n"
-      + "}";
-
   private static final String LOG_FILTERS = "{\n"
-      + "    \"enable_cloud_logging\": true,\n"
-      + "    \"destination_project_id\": \"grpc-testing\",\n"
-      + "    \"log_filters\": [{\n"
-      + "        \"pattern\": \"*/*\",\n"
-      + "        \"header_bytes\": 4096,\n"
-      + "        \"message_bytes\": 2048\n"
-      + "    },"
-      + "   {\n"
-      + "        \"pattern\": \"service1/Method2\"\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_logging\": {\n"
+      + "    \"client_rpc_events\": [{\n"
+      + "        \"methods\": [\"*\"],\n"
+      + "        \"max_metadata_bytes\": 4096\n"
+      + "    }"
+      + "    ],\n"
+      + "    \"server_rpc_events\": [{\n"
+      + "        \"methods\": [\"*\"],\n"
+      + "        \"max_metadata_bytes\": 32,\n"
+      + "        \"max_message_bytes\": 64\n"
       + "    }"
       + "    ]\n"
+      + "    }\n"
       + "}";
 
-  private static final String DEST_PROJECT_ID = "{\n"
-      + "    \"enable_cloud_logging\": true,\n"
-      + "    \"destination_project_id\": \"grpc-testing\"\n"
+  private static final String CLIENT_LOG_FILTERS = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_logging\": {\n"
+      + "    \"client_rpc_events\": [{\n"
+      + "        \"methods\": [\"*\"],\n"
+      + "        \"max_metadata_bytes\": 4096,\n"
+      + "        \"max_message_bytes\": 2048\n"
+      + "    },"
+      + "   {\n"
+      + "        \"methods\": [\"service1/Method2\", \"Service2/*\"],\n"
+      + "        \"exclude\": true\n"
+      + "    }"
+      + "    ]\n"
+      + "    }\n"
       + "}";
 
-  private static final String DISABLE_CLOUD_LOGGING = "{\n"
-      + "    \"enable_cloud_logging\": false\n"
+  private static final String SERVER_LOG_FILTERS = "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
+          + "    \"cloud_logging\": {\n"
+          + "    \"server_rpc_events\": [{\n"
+          + "        \"methods\": [\"service1/method4\", \"service2/method234\"],\n"
+          + "        \"max_metadata_bytes\": 32,\n"
+          + "        \"max_message_bytes\": 64\n"
+          + "    },"
+          + "   {\n"
+          + "        \"methods\": [\"service4/*\", \"Service2/*\"],\n"
+          + "        \"exclude\": true\n"
+          + "    }"
+          + "    ]\n"
+          + "    }\n"
+          + "}";
+
+  private static final String VALID_LOG_FILTERS = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_logging\": {\n"
+      + "    \"server_rpc_events\": [{\n"
+      + "        \"methods\": [\"service.Service1/*\", \"service2.Service4/method4\"],\n"
+      + "        \"max_metadata_bytes\": 16,\n"
+      + "        \"max_message_bytes\": 64\n"
+      + "    }"
+      + "    ]\n"
+      + "    }\n"
       + "}";
+
+
+  private static final String PROJECT_ID = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_logging\": {},\n"
+      + "    \"project_id\": \"grpc-testing\"\n"
+      + "}";
+
+  private static final String EMPTY_CONFIG = "{}";
 
   private static final String ENABLE_CLOUD_MONITORING_AND_TRACING = "{\n"
-      + "    \"enable_cloud_monitoring\": true,\n"
-      + "    \"enable_cloud_trace\": true\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_monitoring\": {},\n"
+      + "    \"cloud_trace\": {}\n"
       + "}";
 
-  private static final String GLOBAL_TRACING_ALWAYS_SAMPLER = "{\n"
-      + "    \"enable_cloud_trace\": true,\n"
-      + "    \"global_trace_sampling_rate\": 1.00\n"
+  private static final String ENABLE_CLOUD_MONITORING = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_monitoring\": {}\n"
       + "}";
 
-  private static final String GLOBAL_TRACING_NEVER_SAMPLER = "{\n"
-      + "    \"enable_cloud_trace\": true,\n"
-      + "    \"global_trace_sampling_rate\": 0.00\n"
+  private static final String ENABLE_CLOUD_TRACE = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_trace\": {}\n"
       + "}";
 
-  private static final String GLOBAL_TRACING_PROBABILISTIC_SAMPLER = "{\n"
-      + "    \"enable_cloud_trace\": true,\n"
-      + "    \"global_trace_sampling_rate\": 0.75\n"
+  private static final String TRACING_ALWAYS_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_trace\": {\n"
+      + "      \"sampling_rate\": 1.00\n"
+      + "    }\n"
       + "}";
 
-  private static final String GLOBAL_TRACING_DEFAULT_SAMPLER = "{\n"
-      + "    \"enable_cloud_trace\": true\n"
+  private static final String TRACING_NEVER_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_trace\": {\n"
+      + "      \"sampling_rate\": 0.00\n"
+      + "    }\n"
       + "}";
 
-  private static final String GLOBAL_TRACING_BADPROBABILISTIC_SAMPLER = "{\n"
-      + "    \"enable_cloud_tracing\": true,\n"
-      + "    \"global_trace_sampling_rate\": -0.75\n"
+  private static final String TRACING_PROBABILISTIC_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_trace\": {\n"
+      + "      \"sampling_rate\": 0.75\n"
+      + "    }\n"
+      + "}";
+
+  private static final String TRACING_DEFAULT_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_trace\": {}\n"
+      + "}";
+
+  private static final String GLOBAL_TRACING_BAD_PROBABILISTIC_SAMPLER = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_trace\": {\n"
+      + "      \"sampling_rate\": -0.75\n"
+      + "    }\n"
       + "}";
 
   private static final String CUSTOM_TAGS = "{\n"
-          + "    \"enable_cloud_logging\": true,\n"
-          + "    \"custom_tags\": {\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
+          + "    \"cloud_logging\": {},\n"
+          + "    \"labels\": {\n"
           + "      \"SOURCE_VERSION\" : \"J2e1Cf\",\n"
           + "      \"SERVICE_NAME\" : \"payment-service\",\n"
           + "      \"ENTRYPOINT_SCRIPT\" : \"entrypoint.sh\"\n"
           + "    }\n"
           + "}";
 
-  private static final String BAD_CUSTOM_TAGS = "{\n"
-          + "    \"enable_cloud_monitoring\": true,\n"
-          + "    \"custom_tags\": {\n"
+  private static final String BAD_CUSTOM_TAGS =
+      "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
+          + "    \"cloud_monitoring\": {},\n"
+          + "    \"labels\": {\n"
           + "      \"SOURCE_VERSION\" : \"J2e1Cf\",\n"
           + "      \"SERVICE_NAME\" : { \"SUB_SERVICE_NAME\" : \"payment-service\"},\n"
           + "      \"ENTRYPOINT_SCRIPT\" : \"entrypoint.sh\"\n"
+          + "    }\n"
+          + "}";
+
+  private static final String LOG_FILTER_GLOBAL_EXCLUDE =
+      "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
+          + "    \"cloud_logging\": {\n"
+          + "    \"client_rpc_events\": [{\n"
+          + "        \"methods\": [\"service1/Method2\", \"*\"],\n"
+          + "        \"max_metadata_bytes\": 20,\n"
+          + "        \"max_message_bytes\": 15,\n"
+          + "        \"exclude\": true\n"
+          + "    }"
+          + "    ]\n"
+          + "    }\n"
+          + "}";
+
+  private static final String LOG_FILTER_INVALID_METHOD =
+      "{\n"
+          + "    \"project_id\": \"grpc-testing\",\n"
+          + "    \"cloud_logging\": {\n"
+          + "    \"client_rpc_events\": [{\n"
+          + "        \"methods\": [\"s*&%ervice1/Method2\", \"*\"],\n"
+          + "        \"max_metadata_bytes\": 20\n"
+          + "    }"
+          + "    ]\n"
           + "    }\n"
           + "}";
 
@@ -129,62 +221,126 @@ public class ObservabilityConfigImplTest {
       observabilityConfig.parse(null);
       fail("exception expected!");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae.getMessage()).isEqualTo("GRPC_CONFIG_OBSERVABILITY value is null!");
+      assertThat(iae.getMessage()).isEqualTo("GRPC_GCP_OBSERVABILITY_CONFIG value is null!");
     }
   }
 
   @Test
   public void emptyConfig() throws IOException {
-    observabilityConfig.parse("{}");
+    observabilityConfig.parse(EMPTY_CONFIG);
     assertFalse(observabilityConfig.isEnableCloudLogging());
     assertFalse(observabilityConfig.isEnableCloudMonitoring());
     assertFalse(observabilityConfig.isEnableCloudTracing());
-    assertNull(observabilityConfig.getDestinationProjectId());
-    assertNull(observabilityConfig.getLogFilters());
-    assertNull(observabilityConfig.getEventTypes());
+    assertThat(observabilityConfig.getClientLogFilters()).isEmpty();
+    assertThat(observabilityConfig.getServerLogFilters()).isEmpty();
+    assertThat(observabilityConfig.getSampler()).isNull();
+    assertThat(observabilityConfig.getProjectId()).isNull();
+    assertThat(observabilityConfig.getCustomTags()).isEmpty();
   }
 
   @Test
-  public void disableCloudLogging() throws IOException {
-    observabilityConfig.parse(DISABLE_CLOUD_LOGGING);
-    assertFalse(observabilityConfig.isEnableCloudLogging());
-    assertFalse(observabilityConfig.isEnableCloudMonitoring());
-    assertFalse(observabilityConfig.isEnableCloudTracing());
-    assertNull(observabilityConfig.getDestinationProjectId());
-    assertNull(observabilityConfig.getLogFilters());
-    assertNull(observabilityConfig.getEventTypes());
+  public void emptyConfigFile() throws IOException {
+    File configFile = tempFolder.newFile();
+    try {
+      observabilityConfig.parseFile(configFile.getAbsolutePath());
+      fail("exception expected!");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae.getMessage()).isEqualTo(
+          "GRPC_GCP_OBSERVABILITY_CONFIG_FILE is empty!");
+    }
   }
 
   @Test
-  public void destProjectId() throws IOException {
-    observabilityConfig.parse(DEST_PROJECT_ID);
+  public void setProjectId() throws IOException {
+    observabilityConfig.parse(PROJECT_ID);
     assertTrue(observabilityConfig.isEnableCloudLogging());
-    assertThat(observabilityConfig.getDestinationProjectId()).isEqualTo("grpc-testing");
+    assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");
   }
 
   @Test
   public void logFilters() throws IOException {
     observabilityConfig.parse(LOG_FILTERS);
     assertTrue(observabilityConfig.isEnableCloudLogging());
-    assertThat(observabilityConfig.getDestinationProjectId()).isEqualTo("grpc-testing");
-    List<LogFilter> logFilters = observabilityConfig.getLogFilters();
-    assertThat(logFilters).hasSize(2);
-    assertThat(logFilters.get(0).pattern).isEqualTo("*/*");
-    assertThat(logFilters.get(0).headerBytes).isEqualTo(4096);
-    assertThat(logFilters.get(0).messageBytes).isEqualTo(2048);
-    assertThat(logFilters.get(1).pattern).isEqualTo("service1/Method2");
-    assertThat(logFilters.get(1).headerBytes).isNull();
-    assertThat(logFilters.get(1).messageBytes).isNull();
+    assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");
+
+    List<LogFilter> clientLogFilters = observabilityConfig.getClientLogFilters();
+    assertThat(clientLogFilters).hasSize(1);
+    assertThat(clientLogFilters.get(0).headerBytes).isEqualTo(4096);
+    assertThat(clientLogFilters.get(0).messageBytes).isEqualTo(0);
+    assertThat(clientLogFilters.get(0).excludePattern).isFalse();
+    assertThat(clientLogFilters.get(0).matchAll).isTrue();
+    assertThat(clientLogFilters.get(0).services).isEmpty();
+    assertThat(clientLogFilters.get(0).methods).isEmpty();
+
+    List<LogFilter> serverLogFilters = observabilityConfig.getServerLogFilters();
+    assertThat(serverLogFilters).hasSize(1);
+    assertThat(serverLogFilters.get(0).headerBytes).isEqualTo(32);
+    assertThat(serverLogFilters.get(0).messageBytes).isEqualTo(64);
+    assertThat(serverLogFilters.get(0).excludePattern).isFalse();
+    assertThat(serverLogFilters.get(0).matchAll).isTrue();
+    assertThat(serverLogFilters.get(0).services).isEmpty();
+    assertThat(serverLogFilters.get(0).methods).isEmpty();
   }
 
   @Test
-  public void eventTypes() throws IOException {
-    observabilityConfig.parse(EVENT_TYPES);
-    assertFalse(observabilityConfig.isEnableCloudLogging());
-    List<EventType> eventTypes = observabilityConfig.getEventTypes();
-    assertThat(eventTypes).isEqualTo(
-        ImmutableList.of(EventType.CLIENT_HEADER, EventType.CLIENT_HALF_CLOSE,
-            EventType.SERVER_TRAILER));
+  public void setClientLogFilters() throws IOException {
+    observabilityConfig.parse(CLIENT_LOG_FILTERS);
+    assertTrue(observabilityConfig.isEnableCloudLogging());
+    assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");
+    List<LogFilter> logFilterList = observabilityConfig.getClientLogFilters();
+    assertThat(logFilterList).hasSize(2);
+    assertThat(logFilterList.get(0).headerBytes).isEqualTo(4096);
+    assertThat(logFilterList.get(0).messageBytes).isEqualTo(2048);
+    assertThat(logFilterList.get(0).excludePattern).isFalse();
+    assertThat(logFilterList.get(0).matchAll).isTrue();
+    assertThat(logFilterList.get(0).services).isEmpty();
+    assertThat(logFilterList.get(0).methods).isEmpty();
+
+    assertThat(logFilterList.get(1).headerBytes).isEqualTo(0);
+    assertThat(logFilterList.get(1).messageBytes).isEqualTo(0);
+    assertThat(logFilterList.get(1).excludePattern).isTrue();
+    assertThat(logFilterList.get(1).matchAll).isFalse();
+    assertThat(logFilterList.get(1).services).isEqualTo(Collections.singleton("Service2"));
+    assertThat(logFilterList.get(1).methods)
+        .isEqualTo(Collections.singleton("service1/Method2"));
+  }
+
+  @Test
+  public void setServerLogFilters() throws IOException {
+    Set<String> expectedMethods = Stream.of("service1/method4", "service2/method234")
+        .collect(Collectors.toCollection(HashSet::new));
+    observabilityConfig.parse(SERVER_LOG_FILTERS);
+    assertTrue(observabilityConfig.isEnableCloudLogging());
+    List<LogFilter> logFilterList = observabilityConfig.getServerLogFilters();
+    assertThat(logFilterList).hasSize(2);
+    assertThat(logFilterList.get(0).headerBytes).isEqualTo(32);
+    assertThat(logFilterList.get(0).messageBytes).isEqualTo(64);
+    assertThat(logFilterList.get(0).excludePattern).isFalse();
+    assertThat(logFilterList.get(0).matchAll).isFalse();
+    assertThat(logFilterList.get(0).services).isEmpty();
+    assertThat(logFilterList.get(0).methods)
+        .isEqualTo(expectedMethods);
+
+    Set<String> expectedServices = Stream.of("service4", "Service2")
+        .collect(Collectors.toCollection(HashSet::new));
+    assertThat(logFilterList.get(1).headerBytes).isEqualTo(0);
+    assertThat(logFilterList.get(1).messageBytes).isEqualTo(0);
+    assertThat(logFilterList.get(1).excludePattern).isTrue();
+    assertThat(logFilterList.get(1).matchAll).isFalse();
+    assertThat(logFilterList.get(1).services).isEqualTo(expectedServices);
+    assertThat(logFilterList.get(1).methods).isEmpty();
+  }
+
+  @Test
+  public void enableCloudMonitoring() throws IOException {
+    observabilityConfig.parse(ENABLE_CLOUD_MONITORING);
+    assertTrue(observabilityConfig.isEnableCloudMonitoring());
+  }
+
+  @Test
+  public void enableCloudTracing() throws IOException {
+    observabilityConfig.parse(ENABLE_CLOUD_TRACE);
+    assertTrue(observabilityConfig.isEnableCloudTracing());
   }
 
   @Test
@@ -197,7 +353,7 @@ public class ObservabilityConfigImplTest {
 
   @Test
   public void alwaysSampler() throws IOException {
-    observabilityConfig.parse(GLOBAL_TRACING_ALWAYS_SAMPLER);
+    observabilityConfig.parse(TRACING_ALWAYS_SAMPLER);
     assertTrue(observabilityConfig.isEnableCloudTracing());
     Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
@@ -206,7 +362,7 @@ public class ObservabilityConfigImplTest {
 
   @Test
   public void neverSampler() throws IOException {
-    observabilityConfig.parse(GLOBAL_TRACING_NEVER_SAMPLER);
+    observabilityConfig.parse(TRACING_NEVER_SAMPLER);
     assertTrue(observabilityConfig.isEnableCloudTracing());
     Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
@@ -215,7 +371,7 @@ public class ObservabilityConfigImplTest {
 
   @Test
   public void probabilisticSampler() throws IOException {
-    observabilityConfig.parse(GLOBAL_TRACING_PROBABILISTIC_SAMPLER);
+    observabilityConfig.parse(TRACING_PROBABILISTIC_SAMPLER);
     assertTrue(observabilityConfig.isEnableCloudTracing());
     Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
@@ -224,7 +380,7 @@ public class ObservabilityConfigImplTest {
 
   @Test
   public void defaultSampler() throws IOException {
-    observabilityConfig.parse(GLOBAL_TRACING_DEFAULT_SAMPLER);
+    observabilityConfig.parse(TRACING_DEFAULT_SAMPLER);
     assertTrue(observabilityConfig.isEnableCloudTracing());
     Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
@@ -234,29 +390,44 @@ public class ObservabilityConfigImplTest {
   @Test
   public void badProbabilisticSampler_error() throws IOException {
     try {
-      observabilityConfig.parse(GLOBAL_TRACING_BADPROBABILISTIC_SAMPLER);
+      observabilityConfig.parse(GLOBAL_TRACING_BAD_PROBABILISTIC_SAMPLER);
       fail("exception expected!");
     } catch (IllegalArgumentException iae) {
       assertThat(iae.getMessage()).isEqualTo(
-          "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
+          "'sampling_rate' needs to be between [0.0, 1.0]");
     }
   }
 
   @Test
   public void configFileLogFilters() throws Exception {
     File configFile = tempFolder.newFile();
-    Files.write(Paths.get(configFile.getAbsolutePath()), LOG_FILTERS.getBytes(Charsets.US_ASCII));
+    Files.write(
+        Paths.get(configFile.getAbsolutePath()), CLIENT_LOG_FILTERS.getBytes(Charsets.US_ASCII));
     observabilityConfig.parseFile(configFile.getAbsolutePath());
     assertTrue(observabilityConfig.isEnableCloudLogging());
-    assertThat(observabilityConfig.getDestinationProjectId()).isEqualTo("grpc-testing");
-    List<LogFilter> logFilters = observabilityConfig.getLogFilters();
+    assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");
+    List<LogFilter> logFilters = observabilityConfig.getClientLogFilters();
     assertThat(logFilters).hasSize(2);
-    assertThat(logFilters.get(0).pattern).isEqualTo("*/*");
     assertThat(logFilters.get(0).headerBytes).isEqualTo(4096);
     assertThat(logFilters.get(0).messageBytes).isEqualTo(2048);
-    assertThat(logFilters.get(1).pattern).isEqualTo("service1/Method2");
-    assertThat(logFilters.get(1).headerBytes).isNull();
-    assertThat(logFilters.get(1).messageBytes).isNull();
+    assertThat(logFilters.get(1).headerBytes).isEqualTo(0);
+    assertThat(logFilters.get(1).messageBytes).isEqualTo(0);
+
+    assertThat(logFilters).hasSize(2);
+    assertThat(logFilters.get(0).headerBytes).isEqualTo(4096);
+    assertThat(logFilters.get(0).messageBytes).isEqualTo(2048);
+    assertThat(logFilters.get(0).excludePattern).isFalse();
+    assertThat(logFilters.get(0).matchAll).isTrue();
+    assertThat(logFilters.get(0).services).isEmpty();
+    assertThat(logFilters.get(0).methods).isEmpty();
+
+    assertThat(logFilters.get(1).headerBytes).isEqualTo(0);
+    assertThat(logFilters.get(1).messageBytes).isEqualTo(0);
+    assertThat(logFilters.get(1).excludePattern).isTrue();
+    assertThat(logFilters.get(1).matchAll).isFalse();
+    assertThat(logFilters.get(1).services).isEqualTo(Collections.singleton("Service2"));
+    assertThat(logFilters.get(1).methods)
+        .isEqualTo(Collections.singleton("service1/Method2"));
   }
 
   @Test
@@ -277,7 +448,45 @@ public class ObservabilityConfigImplTest {
       fail("exception expected!");
     } catch (IllegalArgumentException iae) {
       assertThat(iae.getMessage()).isEqualTo(
-              "'custom_tags' needs to be a map of <string, string>");
+              "'labels' needs to be a map of <string, string>");
     }
+  }
+
+  @Test
+  public void globalLogFilterExclude() throws IOException {
+    try {
+      observabilityConfig.parse(LOG_FILTER_GLOBAL_EXCLUDE);
+      fail("exception expected!");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae.getMessage()).isEqualTo(
+          "cannot have 'exclude' and '*' wildcard in the same filter");
+    }
+  }
+
+  @Test
+  public void logFilterInvalidMethod() throws IOException {
+    try {
+      observabilityConfig.parse(LOG_FILTER_INVALID_METHOD);
+      fail("exception expected!");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae.getMessage()).contains(
+          "invalid service or method filter");
+    }
+  }
+
+  @Test
+  public void validLogFilter() throws Exception {
+    observabilityConfig.parse(VALID_LOG_FILTERS);
+    assertTrue(observabilityConfig.isEnableCloudLogging());
+    assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");
+    List<LogFilter> logFilterList = observabilityConfig.getServerLogFilters();
+    assertThat(logFilterList).hasSize(1);
+    assertThat(logFilterList.get(0).headerBytes).isEqualTo(16);
+    assertThat(logFilterList.get(0).messageBytes).isEqualTo(64);
+    assertThat(logFilterList.get(0).excludePattern).isFalse();
+    assertThat(logFilterList.get(0).matchAll).isFalse();
+    assertThat(logFilterList.get(0).services).isEqualTo(Collections.singleton("service.Service1"));
+    assertThat(logFilterList.get(0).methods)
+        .isEqualTo(Collections.singleton("service2.Service4/method4"));
   }
 }

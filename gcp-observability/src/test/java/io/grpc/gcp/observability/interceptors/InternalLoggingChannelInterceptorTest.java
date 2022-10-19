@@ -26,7 +26,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -108,8 +107,6 @@ public class InternalLoggingChannelInterceptorTest {
     cancelCalled = SettableFuture.create();
     peer = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 1234);
     filterParams = FilterParams.create(true, 0, 0);
-    when(mockFilterHelper.isEventToBeLogged(any(GrpcLogRecord.EventType.class)))
-        .thenReturn(true);
   }
 
   @Test
@@ -164,7 +161,7 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(filterParams);
 
     ClientCall<byte[], byte[]> interceptedLoggingCall =
@@ -329,7 +326,7 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(filterParams);
     @SuppressWarnings("unchecked")
     ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
@@ -387,7 +384,7 @@ public class InternalLoggingChannelInterceptorTest {
                   .setRequestMarshaller(BYTEARRAY_MARSHALLER)
                   .setResponseMarshaller(BYTEARRAY_MARSHALLER)
                   .build();
-          when(mockFilterHelper.isMethodToBeLogged(method))
+          when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
               .thenReturn(filterParams);
 
           callFuture.set(
@@ -449,7 +446,7 @@ public class InternalLoggingChannelInterceptorTest {
                   .setRequestMarshaller(BYTEARRAY_MARSHALLER)
                   .setResponseMarshaller(BYTEARRAY_MARSHALLER)
                   .build();
-          when(mockFilterHelper.isMethodToBeLogged(method))
+          when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
               .thenReturn(filterParams);
 
           callFuture.set(
@@ -547,7 +544,7 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(FilterParams.create(false, 0, 0));
 
     ClientCall<byte[], byte[]> interceptedLoggingCall =
@@ -612,7 +609,7 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(FilterParams.create(true, 10, 10));
 
     ClientCall<byte[], byte[]> interceptedLoggingCall =
@@ -634,108 +631,6 @@ public class InternalLoggingChannelInterceptorTest {
       interceptedListener.get().onClose(status, trailers);
       interceptedLoggingCall.cancel(null, null);
       assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(7);
-    }
-  }
-
-  @Test
-  public void eventFilter_enabled() {
-    when(mockFilterHelper.isEventToBeLogged(EventType.CLIENT_HEADER)).thenReturn(false);
-    when(mockFilterHelper.isEventToBeLogged(EventType.SERVER_HEADER)).thenReturn(false);
-
-    Channel channel = new Channel() {
-      @Override
-      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
-          MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
-        return new NoopClientCall<RequestT, ResponseT>() {
-          @Override
-          @SuppressWarnings("unchecked")
-          public void start(Listener<ResponseT> responseListener, Metadata headers) {
-            interceptedListener.set((Listener<byte[]>) responseListener);
-            actualClientInitial.set(headers);
-          }
-
-          @Override
-          public void sendMessage(RequestT message) {
-            actualRequest.set(message);
-          }
-
-          @Override
-          public void cancel(String message, Throwable cause) {
-            cancelCalled.set(null);
-          }
-
-          @Override
-          public void halfClose() {
-            halfCloseCalled.set(null);
-          }
-
-          @Override
-          public Attributes getAttributes() {
-            return Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer).build();
-          }
-        };
-      }
-
-      @Override
-      public String authority() {
-        return "the-authority";
-      }
-    };
-
-    @SuppressWarnings("unchecked")
-    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
-
-    MethodDescriptor<byte[], byte[]> method =
-        MethodDescriptor.<byte[], byte[]>newBuilder()
-            .setType(MethodType.UNKNOWN)
-            .setFullMethodName("service/method")
-            .setRequestMarshaller(BYTEARRAY_MARSHALLER)
-            .setResponseMarshaller(BYTEARRAY_MARSHALLER)
-            .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
-        .thenReturn(FilterParams.create(true, 10, 10));
-
-    ClientCall<byte[], byte[]> interceptedLoggingCall =
-        factory.create()
-            .interceptCall(method,
-                CallOptions.DEFAULT,
-                channel);
-
-    {
-      interceptedLoggingCall.start(mockListener, new Metadata());
-      verify(mockLogHelper, never()).logClientHeader(
-          anyLong(),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          any(Duration.class),
-          any(Metadata.class),
-          anyInt(),
-          any(GrpcLogRecord.EventLogger.class),
-          anyString(),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(),
-              ArgumentMatchers.any()));
-      interceptedListener.get().onHeaders(new Metadata());
-      verify(mockLogHelper, never()).logServerHeader(
-          anyLong(),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          any(Metadata.class),
-          anyInt(),
-          any(GrpcLogRecord.EventLogger.class),
-          anyString(),
-          ArgumentMatchers.any());
-      byte[] request = "this is a request".getBytes(US_ASCII);
-      interceptedLoggingCall.sendMessage(request);
-      interceptedLoggingCall.halfClose();
-      byte[] response = "this is a response".getBytes(US_ASCII);
-      interceptedListener.get().onMessage(response);
-      Status status = Status.INTERNAL.withDescription("trailer description");
-      Metadata trailers = new Metadata();
-      interceptedListener.get().onClose(status, trailers);
-      interceptedLoggingCall.cancel(null, null);
-      assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(5);
     }
   }
 }
