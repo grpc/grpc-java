@@ -50,7 +50,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   private static final double EPSILON = 1e-6;
 
   private static final Pattern METHOD_NAME_REGEX =
-      Pattern.compile("^([*])|((([\\w]+)/((?:\\w+)|[*])))$");
+      Pattern.compile("^([*])|((([\\w.]+)/((?:\\w+)|[*])))$");
 
   private boolean enableCloudLogging = false;
   private boolean enableCloudMonitoring = false;

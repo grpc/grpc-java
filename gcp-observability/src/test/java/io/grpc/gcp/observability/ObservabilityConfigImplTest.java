@@ -94,6 +94,19 @@ public class ObservabilityConfigImplTest {
           + "    }\n"
           + "}";
 
+  private static final String VALID_LOG_FILTERS = "{\n"
+      + "    \"project_id\": \"grpc-testing\",\n"
+      + "    \"cloud_logging\": {\n"
+      + "    \"server_rpc_events\": [{\n"
+      + "        \"methods\": [\"service.Service1/*\", \"service2.Service4/method4\"],\n"
+      + "        \"max_metadata_bytes\": 16,\n"
+      + "        \"max_message_bytes\": 64\n"
+      + "    }"
+      + "    ]\n"
+      + "    }\n"
+      + "}";
+
+
   private static final String PROJECT_ID = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
       + "    \"cloud_logging\": {},\n"
@@ -459,5 +472,21 @@ public class ObservabilityConfigImplTest {
       assertThat(iae.getMessage()).contains(
           "invalid service or method filter");
     }
+  }
+
+  @Test
+  public void validLogFilter() throws Exception {
+    observabilityConfig.parse(VALID_LOG_FILTERS);
+    assertTrue(observabilityConfig.isEnableCloudLogging());
+    assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");
+    List<LogFilter> logFilterList = observabilityConfig.getServerLogFilters();
+    assertThat(logFilterList).hasSize(1);
+    assertThat(logFilterList.get(0).headerBytes).isEqualTo(16);
+    assertThat(logFilterList.get(0).messageBytes).isEqualTo(64);
+    assertThat(logFilterList.get(0).excludePattern).isFalse();
+    assertThat(logFilterList.get(0).matchAll).isFalse();
+    assertThat(logFilterList.get(0).services).isEqualTo(Collections.singleton("service.Service1"));
+    assertThat(logFilterList.get(0).methods)
+        .isEqualTo(Collections.singleton("service2.Service4/method4"));
   }
 }
