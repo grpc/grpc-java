@@ -32,7 +32,7 @@ import java.util.logging.Logger;
 /**
  *  Best effort detecting channels that has not been properly cleaned up.
  *  Use {@link WeakReference} to avoid keeping the channel alive and retaining too much memory.
- *  Check lost references only on new channel creation or JVM shutdown and log message to indicate
+ *  Check lost references only on new channel creation and log message to indicate
  *  the previous channel (id and target) that has not been shutdown. This is done to avoid Object
  *  finalizers.
  */
