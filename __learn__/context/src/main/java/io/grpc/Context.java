@@ -40,5 +40,12 @@ import java.util.logging.Logger;
  * a) create a {@link CancellableContext}
  * b) when you're ready, call either one of these:
  * - {@link CancellableContext#cancel}
- * - {@link CancellableContext#detachAndCancel} 
+ * - {@link CancellableContext#detachAndCancel}
+ *
+ * <p>Contexts can be cancelled with a timeout based on the system nano clock.
+ *
+ * <p>Please be aware:
+ * <ul>
+ *   <li>You can incur memory leaks if you don't (a) detach() after you attach() in the same method, and cancel CancellableContext at some point in time</li>
+ * </ul> 
  */
