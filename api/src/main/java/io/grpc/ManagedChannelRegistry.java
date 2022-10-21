@@ -106,9 +106,7 @@ public final class ManagedChannelRegistry {
       instance = new ManagedChannelRegistry();
       for (ManagedChannelProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
+        instance.addProvider(provider);
       }
       instance.refreshProviders();
     }
