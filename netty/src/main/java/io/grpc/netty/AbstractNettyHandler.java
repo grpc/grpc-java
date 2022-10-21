@@ -208,8 +208,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         return;
       }
 
-      // When it is changing we want to react more quickly
-      pingFrequencyMultiplier = Math.max(pingFrequencyMultiplier - 1, 1);
+      pingFrequencyMultiplier = 1; // react more quickly when size is changing
       lastBandwidth = bandwidth;
       lastTargetWindow = targetWindow;
       int increase = targetWindow - currentWindow;
