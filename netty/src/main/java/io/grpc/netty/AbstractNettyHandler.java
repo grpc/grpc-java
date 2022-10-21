@@ -38,7 +38,6 @@ import java.util.concurrent.TimeUnit;
  */
 abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
   private static final long GRACEFUL_SHUTDOWN_NO_TIMEOUT = -1;
-  public static final int MIN_TIME_RATIO = 5; // pings taking < 1/5 of average are ignored
 
   private final int initialConnectionWindow;
   private final FlowControlPinger flowControlPing;
