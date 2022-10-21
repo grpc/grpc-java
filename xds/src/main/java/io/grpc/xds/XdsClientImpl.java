@@ -708,7 +708,6 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
     }
   }
 
-  @VisibleForTesting
   static final class ResourceInvalidException extends Exception {
     private static final long serialVersionUID = 0L;
 
