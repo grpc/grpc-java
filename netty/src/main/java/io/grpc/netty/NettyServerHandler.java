@@ -34,6 +34,7 @@ import static io.netty.handler.codec.http2.Http2Headers.PseudoHeaderName.AUTHORI
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.base.Ticker;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -213,6 +214,35 @@ class NettyServerHandler extends AbstractNettyHandler {
       boolean permitKeepAliveWithoutCalls,
       long permitKeepAliveTimeInNanos,
       Attributes eagAttributes) {
+    return newHandler(channelUnused, frameReader,frameWriter, transportListener,
+        streamTracerFactories, transportTracer, maxStreams, autoFlowControl, flowControlWindow,
+        maxHeaderListSize, maxMessageSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+        maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
+        permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, eagAttributes,
+        Ticker.systemTicker());
+  }
+
+  static NettyServerHandler newHandler(
+      ChannelPromise channelUnused,
+      Http2FrameReader frameReader,
+      Http2FrameWriter frameWriter,
+      ServerTransportListener transportListener,
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      TransportTracer transportTracer,
+      int maxStreams,
+      boolean autoFlowControl,
+      int flowControlWindow,
+      int maxHeaderListSize,
+      int maxMessageSize,
+      long keepAliveTimeInNanos,
+      long keepAliveTimeoutInNanos,
+      long maxConnectionIdleInNanos,
+      long maxConnectionAgeInNanos,
+      long maxConnectionAgeGraceInNanos,
+      boolean permitKeepAliveWithoutCalls,
+      long permitKeepAliveTimeInNanos,
+      Attributes eagAttributes,
+      Ticker ticker) {
     Preconditions.checkArgument(maxStreams > 0, "maxStreams must be positive: %s", maxStreams);
     Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
         flowControlWindow);
@@ -245,6 +275,10 @@ class NettyServerHandler extends AbstractNettyHandler {
     settings.maxConcurrentStreams(maxStreams);
     settings.maxHeaderListSize(maxHeaderListSize);
 
+    if (ticker == null) {
+      ticker = Ticker.systemTicker();
+    }
+
     return new NettyServerHandler(
         channelUnused,
         connection,
@@ -258,7 +292,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         keepAliveEnforcer,
         autoFlowControl,
-        eagAttributes);
+        eagAttributes, ticker);
   }
 
   private NettyServerHandler(
@@ -278,9 +312,10 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeGraceInNanos,
       final KeepAliveEnforcer keepAliveEnforcer,
       boolean autoFlowControl,
-      Attributes eagAttributes) {
+      Attributes eagAttributes,
+      Ticker ticker) {
     super(channelUnused, decoder, encoder, settings, new ServerChannelLogger(),
-        autoFlowControl, null);
+        autoFlowControl, null, ticker);
 
     final MaxConnectionIdleManager maxConnectionIdleManager;
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {
@@ -325,7 +360,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     this.transportListener = checkNotNull(transportListener, "transportListener");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracer = checkNotNull(transportTracer, "transportTracer");
-
     // Set the frame listener on the decoder.
     decoder().frameListener(new FrameListener());
   }

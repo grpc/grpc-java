@@ -60,6 +60,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
+import io.grpc.internal.AbstractStream;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.KeepAliveManager;
@@ -70,6 +71,7 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
+import io.grpc.testing.TestMethodDescriptors;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelFuture;
@@ -83,6 +85,7 @@ import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -111,8 +114,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Rule
   public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
-
-  private static final int STREAM_ID = 3;
 
   private static final AsciiString HTTP_FAKE_METHOD = AsciiString.of("FAKE");
 
@@ -774,7 +775,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     fakeClock().forwardNanos(keepAliveTimeoutInNanos);
 
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -907,7 +908,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -937,7 +938,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -981,7 +982,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1025,7 +1026,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1079,7 +1080,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1110,7 +1111,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1178,7 +1179,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardTime(2, TimeUnit.MILLISECONDS);
 
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1218,7 +1219,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardTime(2, TimeUnit.MILLISECONDS);
 
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   private void createStream() throws Exception {
@@ -1268,7 +1269,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
-        Attributes.EMPTY);
+        Attributes.EMPTY,
+        fakeClock().getTicker());
   }
 
   @Override
@@ -1280,4 +1282,61 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   protected void makeStream() throws Exception {
     createStream();
   }
+
+  @Override
+  protected AbstractStream stream() {
+    if (stream == null) {
+      NettyServerStream.TransportState state = new NettyServerStream.TransportState(
+          handler(),
+          channel().eventLoop(),
+          connection().connectionStream(),
+          DEFAULT_MAX_MESSAGE_SIZE,
+          stream.statsTraceContext(),
+          transportTracer,
+          TestMethodDescriptors.voidMethod().getFullMethodName());
+
+      stream = new NettyServerStream(channel(), state, Attributes.EMPTY,
+          "test-authority", stream.statsTraceContext(), transportTracer);
+      stream.transportState().setListener(new NoopListener());
+      state.onStreamAllocated();
+    }
+
+    return stream;
+  }
+
+  private static final class NoopListener implements ServerStreamListener {
+    @Override
+    public void messagesAvailable(MessageProducer producer) {
+      InputStream message;
+      while ((message = producer.next()) != null) {
+        try {
+          message.close();
+        } catch (IOException e) {
+          // Close any remaining messages
+          int errorsInClose = 0;
+          while ((message = producer.next()) != null) {
+            try {
+              message.close();
+            } catch (IOException ignore) {
+              errorsInClose++;
+            }
+          }
+          String errMsg = (errorsInClose == 0)
+              ? e.getMessage()
+              : String.format("There were %d errors during message close", errorsInClose);
+          throw new RuntimeException(errMsg, e);
+        }
+      }
+    }
+
+    @Override
+    public void halfClosed() {}
+
+    @Override
+    public void closed(Status status) {}
+
+    @Override
+    public void onReady() {}
+  }
+
 }

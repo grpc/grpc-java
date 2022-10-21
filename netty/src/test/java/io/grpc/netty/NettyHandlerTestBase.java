@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.InternalChannelz.TransportStats;
+import io.grpc.internal.AbstractStream;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.MessageFramer;
 import io.grpc.internal.StatsTraceContext;
@@ -66,6 +67,7 @@ import io.netty.util.concurrent.ScheduledFuture;
 import java.io.ByteArrayInputStream;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -80,6 +82,7 @@ import org.mockito.verification.VerificationMode;
 @RunWith(JUnit4.class)
 public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
+  protected static final int STREAM_ID = 3;
   private ByteBuf content;
 
   private EmbeddedChannel channel;
@@ -328,6 +331,8 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     return handler().connection();
   }
 
+  protected abstract AbstractStream stream();
+
   @CanIgnoreReturnValue
   protected final ChannelFuture enqueue(WriteQueue.QueuedCommand command) {
     ChannelFuture future = writeQueue.enqueue(command, true);
@@ -415,10 +420,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     AbstractNettyHandler handler = (AbstractNettyHandler) handler();
     handler.setAutoTuneFlowControl(true);
 
-    ByteBuf data = ctx().alloc().buffer(1024);
-    while (data.isWritable()) {
-      data.writeLong(1111);
-    }
+    ByteBuf data = initXkbBuffer(1);
     int length = data.readableBytes();
     ByteBuf frame = dataFrame(3, false, data.copy());
     channelRead(frame);
@@ -445,6 +447,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     Http2LocalFlowController localFlowController = connection().local().flowController();
     int maxWindow = handler.flowControlPing().maxWindow();
 
+    fakeClock.forwardTime(10, TimeUnit.SECONDS);
     handler.flowControlPing().setDataSizeAndSincePing(maxWindow);
     long payload = handler.flowControlPing().payload();
     channelRead(pingFrame(true, payload));
@@ -501,4 +504,113 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     assertEquals(flowControlWindow + 8 * Http2CodecUtil.DEFAULT_WINDOW_SIZE,
         connection().local().flowController().windowSize(connection().connectionStream()));
   }
+
+  @Test
+  public void bdpPingLimitOutstanding() throws Exception {
+    this.flowControlWindow = 1024 * 64;
+    manualSetUp();
+    makeStream();
+    AbstractNettyHandler handler = (AbstractNettyHandler) handler();
+    handler.setAutoTuneFlowControl(true);
+    long pingData = handler.flowControlPing().payload();
+
+    ByteBuf data1KbBuf = initXkbBuffer(1);
+    ByteBuf data40KbBuf = initXkbBuffer(40);
+
+    readXCopies(1, data1KbBuf); // should initiate a ping
+
+    readXCopies(1, data40KbBuf); // no ping, already active
+    fakeClock().forwardTime(20, TimeUnit.MILLISECONDS);
+    readPingAck(pingData);
+    assertEquals(1, handler.flowControlPing().getPingCount());
+    assertEquals(1, handler.flowControlPing().getPingReturn());
+
+    readXCopies(4, data40KbBuf); // initiate ping
+    assertEquals(2, handler.flowControlPing().getPingCount());
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    readPingAck(pingData);
+
+    readXCopies(1, data1KbBuf); // ping again since had 160K data since last ping started
+    assertEquals(3, handler.flowControlPing().getPingCount());
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    readPingAck(pingData);
+
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    readXCopies(1, data1KbBuf); // no ping, too little data
+    assertEquals(3, handler.flowControlPing().getPingCount());
+    handler.flowControlPing().setDataSizeAndSincePing(200000);
+
+    for (int i = 0; i <= 10; i++) {
+      int beforeCount = handler.flowControlPing().getPingCount();
+      // should resize on 0
+      readXCopies(6, data40KbBuf); // initiate ping on i= {0, 1, 3, 6, 10}
+      int afterCount = handler.flowControlPing().getPingCount();
+      fakeClock().forwardNanos(200);
+      if (afterCount > beforeCount) {
+        readPingAck(pingData); // should increase backoff multiplier
+      }
+    }
+    assertEquals(8, handler.flowControlPing().getPingCount());
+  }
+
+  @Test
+  public void bdpPingWindowResizing() throws Exception {
+    this.flowControlWindow = 1024 * 100;
+    manualSetUp();
+    makeStream();
+    AbstractNettyHandler handler = (AbstractNettyHandler) handler();
+    handler.setAutoTuneFlowControl(true);
+    Http2LocalFlowController localFlowController = connection().local().flowController();
+    long pingData = handler.flowControlPing().payload();
+    int initialWindowSize = localFlowController.initialWindowSize();
+    ByteBuf data1Kb = initXkbBuffer(1);
+    ByteBuf data40Kb = initXkbBuffer(40);
+
+    readXCopies(1, data1Kb); // initiate ping
+    fakeClock().forwardNanos(2);
+    readPingAck(pingData); // should not resize window because of small target window
+    assertEquals(initialWindowSize, localFlowController.initialWindowSize());
+
+    readXCopies(2, data40Kb); // initiate ping
+    fakeClock().forwardNanos(200);
+    readPingAck(pingData); // should resize window
+    int windowSizeA = localFlowController.initialWindowSize();
+    Assert.assertNotEquals(initialWindowSize, windowSizeA);
+
+    readXCopies(4, data40Kb); // initiate ping
+    fakeClock().forwardNanos(400);
+    readPingAck(pingData); // should not resize window as bandwidth didn't increase
+    Assert.assertEquals(windowSizeA, localFlowController.initialWindowSize());
+
+    readXCopies(4, data40Kb); // initiate ping
+    fakeClock().forwardNanos(200);
+    readPingAck(pingData); // should resize window
+    int windowSizeB = localFlowController.initialWindowSize();
+    Assert.assertNotEquals(windowSizeA, windowSizeB);
+  }
+
+
+  private void readPingAck(long pingData) throws Exception {
+    channelRead(pingFrame(true, pingData));
+  }
+
+  private void readXCopies(int copies, ByteBuf data) throws Exception {
+    for (int i = 0; i < copies; i++) {
+      channelRead(dataFrame(STREAM_ID, false, data.copy())); // buffer it
+      stream().request(1); // consume it
+    }
+  }
+
+  private ByteBuf initXkbBuffer(int multiple) {
+    ByteBuf data = ctx().alloc().buffer(5 + 1024 * multiple);
+    // add header
+    data.writeByte(0);
+    data.writeInt(1024 * multiple);
+    //
+    while (data.isWritable(4)) {
+      data.writeLong(1111);
+    }
+    return data;
+  }
+
 }

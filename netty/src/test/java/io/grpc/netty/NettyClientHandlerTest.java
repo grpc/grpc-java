@@ -54,9 +54,11 @@ import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.internal.AbstractStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport;
@@ -68,6 +70,7 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
+import io.grpc.testing.TestMethodDescriptors;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -118,7 +121,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private Http2Headers grpcHeaders;
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
   private int maxHeaderListSize = Integer.MAX_VALUE;
-  private int streamId = 3;
+  private int streamId = STREAM_ID;
   private ClientTransportLifecycleManager lifecycleManager;
   private KeepAliveManager mockKeepAliveManager = null;
   private List<String> setKeepaliveManagerFor = ImmutableList.of("cancelShouldSucceed",
@@ -136,10 +139,29 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private ClientStreamListener streamListener;
 
   private final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
+  private NettyClientStream stream;
 
   @Override
   protected void manualSetUp() throws Exception {
     setUp();
+  }
+
+  @Override
+  protected AbstractStream stream() {
+    if (stream == null) {
+      stream = new NettyClientStream(streamTransportState,
+          TestMethodDescriptors.voidMethod(),
+          new Metadata(),
+          channel(),
+          AsciiString.of("localhost"),
+          AsciiString.of("http"),
+          AsciiString.of("agent"),
+          StatsTraceContext.NOOP,
+          transportTracer,
+          CallOptions.DEFAULT,
+          false);
+    }
+    return stream;
   }
 
   /**
@@ -201,7 +223,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Create a new stream with id 3.
     ChannelFuture createFuture = enqueue(
         newCreateStreamCommand(grpcHeaders, streamTransportState));
-    assertEquals(3, streamTransportState.id());
+    assertEquals(STREAM_ID, streamTransportState.id());
     // Cancel the stream.
     cancelStream(Status.CANCELLED);
 
@@ -212,7 +234,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Test
   public void createStreamShouldSucceed() throws Exception {
     createStream();
-    verifyWrite().writeHeaders(eq(ctx()), eq(3), eq(grpcHeaders), eq(0),
+    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(grpcHeaders), eq(0),
         eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
   }
 
@@ -221,7 +243,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     createStream();
     cancelStream(Status.CANCELLED);
 
-    verifyWrite().writeRstStream(eq(ctx()), eq(3), eq(Http2Error.CANCEL.code()),
+    verifyWrite().writeRstStream(eq(ctx()), eq(STREAM_ID), eq(Http2Error.CANCEL.code()),
         any(ChannelPromise.class));
     verify(mockKeepAliveManager, times(1)).onTransportActive(); // onStreamActive
     verify(mockKeepAliveManager, times(1)).onTransportIdle(); // onStreamClosed
@@ -233,7 +255,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     createStream();
     cancelStream(Status.DEADLINE_EXCEEDED);
 
-    verifyWrite().writeRstStream(eq(ctx()), eq(3), eq(Http2Error.CANCEL.code()),
+    verifyWrite().writeRstStream(eq(ctx()), eq(STREAM_ID), eq(Http2Error.CANCEL.code()),
         any(ChannelPromise.class));
   }
 
@@ -262,7 +284,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     cancelStream(Status.CANCELLED);
 
-    verifyWrite().writeRstStream(any(ChannelHandlerContext.class), eq(3),
+    verifyWrite().writeRstStream(any(ChannelHandlerContext.class), eq(STREAM_ID),
         eq(Http2Error.CANCEL.code()), any(ChannelPromise.class));
 
     ChannelFuture future = cancelStream(Status.CANCELLED);
@@ -275,7 +297,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     cancelStream(Status.DEADLINE_EXCEEDED);
 
-    verifyWrite().writeRstStream(eq(ctx()), eq(3), eq(Http2Error.CANCEL.code()),
+    verifyWrite().writeRstStream(eq(ctx()), eq(STREAM_ID), eq(Http2Error.CANCEL.code()),
         any(ChannelPromise.class));
 
     ChannelFuture future = cancelStream(Status.CANCELLED);
@@ -291,7 +313,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         = enqueue(new SendGrpcFrameCommand(streamTransportState, content(), true));
 
     assertTrue(future.isSuccess());
-    verifyWrite().writeData(eq(ctx()), eq(3), eq(content()), eq(0), eq(true),
+    verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), eq(content()), eq(0), eq(true),
         any(ChannelPromise.class));
     verify(mockKeepAliveManager, times(1)).onTransportActive(); // onStreamActive
     verifyNoMoreInteractions(mockKeepAliveManager);
@@ -313,7 +335,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
         .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
         .set(as("magic"), as("value"));
-    ByteBuf headersFrame = headersFrame(3, headers);
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
     channelRead(headersFrame);
     ArgumentCaptor<Metadata> captor = ArgumentCaptor.forClass(Metadata.class);
     verify(streamListener).headersRead(captor.capture());
@@ -323,7 +345,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     streamTransportState.requestMessagesFromDeframerForTesting(1);
 
     // Create a data frame and then trigger the handler to read it.
-    ByteBuf frame = grpcDataFrame(3, false, contentAsArray());
+    ByteBuf frame = grpcDataFrame(STREAM_ID, false, contentAsArray());
     channelRead(frame);
     InputStream message = streamListenerMessageQueue.poll();
     assertArrayEquals(ByteBufUtil.getBytes(content()), ByteStreams.toByteArray(message));
@@ -580,7 +602,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void cancelStreamShouldCreateAndThenFailBufferedStream() throws Exception {
     receiveMaxConcurrentStreams(0);
     enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
-    assertEquals(3, streamTransportState.id());
+    assertEquals(STREAM_ID, streamTransportState.id());
     cancelStream(Status.CANCELLED);
     verify(streamListener).closed(eq(Status.CANCELLED), same(PROCESSED), any(Metadata.class));
   }
@@ -627,7 +649,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void createIncrementsIdsForActualAndBufferdStreams() throws Exception {
     receiveMaxConcurrentStreams(2);
     enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
-    assertEquals(3, streamTransportState.id());
+    assertEquals(STREAM_ID, streamTransportState.id());
 
     streamTransportState = new TransportStateImpl(
         handler(),
@@ -766,7 +788,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     ArgumentCaptor<Long> captor = ArgumentCaptor.forClass(long.class);
     verifyWrite().writePing(eq(ctx()), eq(false), captor.capture(), any(ChannelPromise.class));
     long payload = captor.getValue();
-    channelRead(grpcDataFrame(3, false, contentAsArray()));
+    channelRead(grpcDataFrame(STREAM_ID, false, contentAsArray()));
     long pingData = handler().flowControlPing().payload();
     channelRead(pingFrame(true, pingData));
 
@@ -789,18 +811,18 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
         .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
-    channelRead(headersFrame(3, headers));
-    channelRead(dataFrame(3, false, content()));
+    channelRead(headersFrame(STREAM_ID, headers));
+    channelRead(dataFrame(STREAM_ID, false, content()));
     verifyWrite().writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
     channelRead(pingFrame(true, 1234));
 
-    channelRead(dataFrame(3, false, content()));
-    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(dataFrame(STREAM_ID, false, content()));
+    verifyWrite(times(1)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
     channelRead(pingFrame(true, 1234));
 
-    channelRead(dataFrame(3, false, content()));
+    channelRead(dataFrame(STREAM_ID, false, content()));
     // No ping was sent
-    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    verifyWrite(times(1)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
   }
 
   @Test
@@ -820,26 +842,26 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
         .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
-    channelRead(headersFrame(3, headers));
-    channelRead(dataFrame(3, false, content()));
+    channelRead(headersFrame(STREAM_ID, headers));
+    channelRead(dataFrame(STREAM_ID, false, content()));
     verifyWrite().writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
     channelRead(pingFrame(true, 1234));
 
-    channelRead(dataFrame(3, false, content()));
-    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(dataFrame(STREAM_ID, false, content()));
+    verifyWrite(times(1)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
     channelRead(pingFrame(true, 1234));
 
-    channelRead(dataFrame(3, false, content()));
+    channelRead(dataFrame(STREAM_ID, false, content()));
     // No ping was sent
-    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    verifyWrite(times(1)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
 
     channelRead(windowUpdate(0, 2024));
-    channelRead(windowUpdate(3, 2024));
+    channelRead(windowUpdate(STREAM_ID, 2024));
     assertTrue(future.isDone());
     assertTrue(future.isSuccess());
     // But now one is sent
-    channelRead(dataFrame(3, false, content()));
-    verifyWrite(times(3)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(dataFrame(STREAM_ID, false, content()));
+    verifyWrite(times(1)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
   }
 
   @Override
@@ -869,7 +891,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // both client- and server-side.
     Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
         .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
-    ByteBuf headersFrame = headersFrame(3, headers);
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
     channelRead(headersFrame);
   }
 
@@ -928,7 +950,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         transportTracer,
         Attributes.EMPTY,
         "someauthority",
-        null);
+        null,
+        fakeClock().getTicker());
   }
 
   @Override
