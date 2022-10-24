@@ -47,5 +47,20 @@ import java.util.logging.Logger;
  * <p>Please be aware:
  * <ul>
  *   <li>You can incur memory leaks if you don't (a) detach() after you attach() in the same method, and cancel CancellableContext at some point in time</li>
+ *   <li>Context instances don't force their stored state to be immutable even though they themselves are immutable</li>
+ *   <li>Be careful to not depend too much on Context instances when developing an API. Also, remember that Context objects are not designed for transporting optional API parameters</li>
+ *   <li>Please use {@link #ROOT} for a non-null object instead of creating a mocked version</li>
  * </ul> 
  */
+/* @DoNotMock("Use ROOT for a non-null Context") // prevent dependencies being 'summoned' */
+@CheckReturnValue
+public class Context {
+
+  static final Logger log = Logger.getLogger(Context.class.getName());
+
+  // If you have a long context chain chances are you're doing it wrong
+  // The threshold is just randomly chosen
+  // VisibleForTesting
+  static final int CONTET_DEPTH_WARN_THRESH = 1000;
+
+}
