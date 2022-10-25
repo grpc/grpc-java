@@ -2,12 +2,6 @@ package io.grpc.testing.integration;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
 
-import com.google.common.util.concurrent.ListenableFuture;
-import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.stub.StreamObserver;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-
-
 /**
  * <pre>
  * A simple service to test the various types of RPCs and experiment with
@@ -32,7 +26,7 @@ public final class TestServiceGrpc {
       fullMethodName = SERVICE_NAME + '/' + "EmptyCall",
       requestType = EmptyProtos.Empty.class,
       responseType = EmptyProtos.Empty.class,
-      methodType = MethodType.UNARY)
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<EmptyProtos.Empty,
       EmptyProtos.Empty> getEmptyCallMethod() {
     io.grpc.MethodDescriptor<EmptyProtos.Empty, EmptyProtos.Empty> getEmptyCallMethod;
@@ -41,7 +35,7 @@ public final class TestServiceGrpc {
         if ((getEmptyCallMethod = TestServiceGrpc.getEmptyCallMethod) == null) {
           TestServiceGrpc.getEmptyCallMethod = getEmptyCallMethod =
               io.grpc.MethodDescriptor.<EmptyProtos.Empty, EmptyProtos.Empty>newBuilder()
-              .setType(MethodType.UNARY)
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "EmptyCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -63,7 +57,7 @@ public final class TestServiceGrpc {
       fullMethodName = SERVICE_NAME + '/' + "UnaryCall",
       requestType = Messages.SimpleRequest.class,
       responseType = Messages.SimpleResponse.class,
-      methodType = MethodType.UNARY)
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<Messages.SimpleRequest,
       Messages.SimpleResponse> getUnaryCallMethod() {
     io.grpc.MethodDescriptor<Messages.SimpleRequest, Messages.SimpleResponse> getUnaryCallMethod;
@@ -72,7 +66,7 @@ public final class TestServiceGrpc {
         if ((getUnaryCallMethod = TestServiceGrpc.getUnaryCallMethod) == null) {
           TestServiceGrpc.getUnaryCallMethod = getUnaryCallMethod =
               io.grpc.MethodDescriptor.<Messages.SimpleRequest, Messages.SimpleResponse>newBuilder()
-              .setType(MethodType.UNARY)
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "UnaryCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -94,7 +88,7 @@ public final class TestServiceGrpc {
       fullMethodName = SERVICE_NAME + '/' + "CacheableUnaryCall",
       requestType = Messages.SimpleRequest.class,
       responseType = Messages.SimpleResponse.class,
-      methodType = MethodType.UNARY)
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<Messages.SimpleRequest,
       Messages.SimpleResponse> getCacheableUnaryCallMethod() {
     io.grpc.MethodDescriptor<Messages.SimpleRequest, Messages.SimpleResponse> getCacheableUnaryCallMethod;
@@ -103,7 +97,7 @@ public final class TestServiceGrpc {
         if ((getCacheableUnaryCallMethod = TestServiceGrpc.getCacheableUnaryCallMethod) == null) {
           TestServiceGrpc.getCacheableUnaryCallMethod = getCacheableUnaryCallMethod =
               io.grpc.MethodDescriptor.<Messages.SimpleRequest, Messages.SimpleResponse>newBuilder()
-              .setType(MethodType.UNARY)
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "CacheableUnaryCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -125,7 +119,7 @@ public final class TestServiceGrpc {
       fullMethodName = SERVICE_NAME + '/' + "StreamingOutputCall",
       requestType = Messages.StreamingOutputCallRequest.class,
       responseType = Messages.StreamingOutputCallResponse.class,
-      methodType = MethodType.SERVER_STREAMING)
+      methodType = io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
   public static io.grpc.MethodDescriptor<Messages.StreamingOutputCallRequest,
       Messages.StreamingOutputCallResponse> getStreamingOutputCallMethod() {
     io.grpc.MethodDescriptor<Messages.StreamingOutputCallRequest, Messages.StreamingOutputCallResponse> getStreamingOutputCallMethod;
@@ -134,7 +128,7 @@ public final class TestServiceGrpc {
         if ((getStreamingOutputCallMethod = TestServiceGrpc.getStreamingOutputCallMethod) == null) {
           TestServiceGrpc.getStreamingOutputCallMethod = getStreamingOutputCallMethod =
               io.grpc.MethodDescriptor.<Messages.StreamingOutputCallRequest, Messages.StreamingOutputCallResponse>newBuilder()
-              .setType(MethodType.SERVER_STREAMING)
+              .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamingOutputCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -156,7 +150,7 @@ public final class TestServiceGrpc {
       fullMethodName = SERVICE_NAME + '/' + "StreamingInputCall",
       requestType = Messages.StreamingInputCallRequest.class,
       responseType = Messages.StreamingInputCallResponse.class,
-      methodType = MethodType.CLIENT_STREAMING)
+      methodType = io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING)
   public static io.grpc.MethodDescriptor<Messages.StreamingInputCallRequest,
       Messages.StreamingInputCallResponse> getStreamingInputCallMethod() {
     io.grpc.MethodDescriptor<Messages.StreamingInputCallRequest, Messages.StreamingInputCallResponse> getStreamingInputCallMethod;
@@ -165,7 +159,7 @@ public final class TestServiceGrpc {
         if ((getStreamingInputCallMethod = TestServiceGrpc.getStreamingInputCallMethod) == null) {
           TestServiceGrpc.getStreamingInputCallMethod = getStreamingInputCallMethod =
               io.grpc.MethodDescriptor.<Messages.StreamingInputCallRequest, Messages.StreamingInputCallResponse>newBuilder()
-              .setType(MethodType.CLIENT_STREAMING)
+              .setType(io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamingInputCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -187,7 +181,7 @@ public final class TestServiceGrpc {
       fullMethodName = SERVICE_NAME + '/' + "FullDuplexCall",
       requestType = Messages.StreamingOutputCallRequest.class,
       responseType = Messages.StreamingOutputCallResponse.class,
-      methodType = MethodType.BIDI_STREAMING)
+      methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
   public static io.grpc.MethodDescriptor<Messages.StreamingOutputCallRequest,
       Messages.StreamingOutputCallResponse> getFullDuplexCallMethod() {
     io.grpc.MethodDescriptor<Messages.StreamingOutputCallRequest, Messages.StreamingOutputCallResponse> getFullDuplexCallMethod;
@@ -196,7 +190,7 @@ public final class TestServiceGrpc {
         if ((getFullDuplexCallMethod = TestServiceGrpc.getFullDuplexCallMethod) == null) {
           TestServiceGrpc.getFullDuplexCallMethod = getFullDuplexCallMethod =
               io.grpc.MethodDescriptor.<Messages.StreamingOutputCallRequest, Messages.StreamingOutputCallResponse>newBuilder()
-              .setType(MethodType.BIDI_STREAMING)
+              .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "FullDuplexCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -218,7 +212,7 @@ public final class TestServiceGrpc {
       fullMethodName = SERVICE_NAME + '/' + "HalfDuplexCall",
       requestType = Messages.StreamingOutputCallRequest.class,
       responseType = Messages.StreamingOutputCallResponse.class,
-      methodType = MethodType.BIDI_STREAMING)
+      methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
   public static io.grpc.MethodDescriptor<Messages.StreamingOutputCallRequest,
       Messages.StreamingOutputCallResponse> getHalfDuplexCallMethod() {
     io.grpc.MethodDescriptor<Messages.StreamingOutputCallRequest, Messages.StreamingOutputCallResponse> getHalfDuplexCallMethod;
@@ -227,7 +221,7 @@ public final class TestServiceGrpc {
         if ((getHalfDuplexCallMethod = TestServiceGrpc.getHalfDuplexCallMethod) == null) {
           TestServiceGrpc.getHalfDuplexCallMethod = getHalfDuplexCallMethod =
               io.grpc.MethodDescriptor.<Messages.StreamingOutputCallRequest, Messages.StreamingOutputCallResponse>newBuilder()
-              .setType(MethodType.BIDI_STREAMING)
+              .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "HalfDuplexCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -249,7 +243,7 @@ public final class TestServiceGrpc {
       fullMethodName = SERVICE_NAME + '/' + "UnimplementedCall",
       requestType = EmptyProtos.Empty.class,
       responseType = EmptyProtos.Empty.class,
-      methodType = MethodType.UNARY)
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<EmptyProtos.Empty,
       EmptyProtos.Empty> getUnimplementedCallMethod() {
     io.grpc.MethodDescriptor<EmptyProtos.Empty, EmptyProtos.Empty> getUnimplementedCallMethod;
@@ -258,7 +252,7 @@ public final class TestServiceGrpc {
         if ((getUnimplementedCallMethod = TestServiceGrpc.getUnimplementedCallMethod) == null) {
           TestServiceGrpc.getUnimplementedCallMethod = getUnimplementedCallMethod =
               io.grpc.MethodDescriptor.<EmptyProtos.Empty, EmptyProtos.Empty>newBuilder()
-              .setType(MethodType.UNARY)
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "UnimplementedCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
@@ -317,15 +311,15 @@ public final class TestServiceGrpc {
     return TestServiceFutureStub.newStub(factory, channel);
   }
 
-  public interface TestService {
+  public interface TestServiceAsync {
     /**
      * <pre>
      * One empty request followed by one empty response.
      * </pre>
      */
     default void emptyCall(EmptyProtos.Empty request,
-                           StreamObserver<EmptyProtos.Empty> responseObserver) {
-      throw new NotImplementedException();
+                           io.grpc.stub.StreamObserver<EmptyProtos.Empty> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getEmptyCallMethod(), responseObserver);
     }
 
     /**
@@ -334,8 +328,8 @@ public final class TestServiceGrpc {
      * </pre>
      */
     default void unaryCall(Messages.SimpleRequest request,
-                           StreamObserver<Messages.SimpleResponse> responseObserver) {
-      throw new NotImplementedException();
+                           io.grpc.stub.StreamObserver<Messages.SimpleResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnaryCallMethod(), responseObserver);
     }
 
     /**
@@ -346,8 +340,8 @@ public final class TestServiceGrpc {
      * </pre>
      */
     default void cacheableUnaryCall(Messages.SimpleRequest request,
-                                    StreamObserver<Messages.SimpleResponse> responseObserver) {
-      throw new NotImplementedException();
+                                    io.grpc.stub.StreamObserver<Messages.SimpleResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getCacheableUnaryCallMethod(), responseObserver);
     }
 
     /**
@@ -357,8 +351,8 @@ public final class TestServiceGrpc {
      * </pre>
      */
     default void streamingOutputCall(Messages.StreamingOutputCallRequest request,
-                                     StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
-      throw new NotImplementedException();
+                                     io.grpc.stub.StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStreamingOutputCallMethod(), responseObserver);
     }
 
     /**
@@ -367,9 +361,9 @@ public final class TestServiceGrpc {
      * The server returns the aggregated size of client payload as the result.
      * </pre>
      */
-    default StreamObserver<Messages.StreamingInputCallRequest> streamingInputCall(
-        StreamObserver<Messages.StreamingInputCallResponse> responseObserver) {
-      throw new NotImplementedException();
+    default io.grpc.stub.StreamObserver<Messages.StreamingInputCallRequest> streamingInputCall(
+        io.grpc.stub.StreamObserver<Messages.StreamingInputCallResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingInputCallMethod(), responseObserver);
     }
 
     /**
@@ -379,9 +373,9 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full duplexing.
      * </pre>
      */
-    default StreamObserver<Messages.StreamingOutputCallRequest> fullDuplexCall(
-        StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
-      throw new NotImplementedException();
+    default io.grpc.stub.StreamObserver<Messages.StreamingOutputCallRequest> fullDuplexCall(
+        io.grpc.stub.StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getFullDuplexCallMethod(), responseObserver);
     }
 
     /**
@@ -392,9 +386,9 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
-    default StreamObserver<Messages.StreamingOutputCallRequest> halfDuplexCall(
-        StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
-      throw new NotImplementedException();
+    default io.grpc.stub.StreamObserver<Messages.StreamingOutputCallRequest> halfDuplexCall(
+        io.grpc.stub.StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getHalfDuplexCallMethod(), responseObserver);
     }
 
     /**
@@ -404,8 +398,8 @@ public final class TestServiceGrpc {
      * </pre>
      */
     default void unimplementedCall(EmptyProtos.Empty request,
-                                   StreamObserver<EmptyProtos.Empty> responseObserver) {
-      throw new NotImplementedException();
+                                   io.grpc.stub.StreamObserver<EmptyProtos.Empty> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnimplementedCallMethod(), responseObserver);
     }
   }
 
@@ -415,7 +409,8 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
-  public static abstract class TestServiceImplBase implements io.grpc.BindableService, TestService {
+  public static abstract class TestServiceImplBase
+      implements io.grpc.BindableService, TestServiceAsync {
 
     /**
      * <pre>
@@ -584,7 +579,7 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static final class TestServiceStub extends io.grpc.stub.AbstractAsyncStub<TestServiceStub>
-      implements TestService {
+      implements TestServiceAsync {
     private TestServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -702,7 +697,7 @@ public final class TestServiceGrpc {
      * </pre>
      */
     default EmptyProtos.Empty emptyCall(EmptyProtos.Empty request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     /**
@@ -711,7 +706,7 @@ public final class TestServiceGrpc {
      * </pre>
      */
     default Messages.SimpleResponse unaryCall(Messages.SimpleRequest request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     /**
@@ -722,7 +717,7 @@ public final class TestServiceGrpc {
      * </pre>
      */
     default Messages.SimpleResponse cacheableUnaryCall(Messages.SimpleRequest request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     /**
@@ -733,7 +728,7 @@ public final class TestServiceGrpc {
      */
     default java.util.Iterator<Messages.StreamingOutputCallResponse> streamingOutputCall(
         Messages.StreamingOutputCallRequest request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     /**
@@ -743,7 +738,7 @@ public final class TestServiceGrpc {
      * </pre>
      */
     default EmptyProtos.Empty unimplementedCall(EmptyProtos.Empty request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
   }
 
@@ -834,9 +829,9 @@ public final class TestServiceGrpc {
      * One empty request followed by one empty response.
      * </pre>
      */
-    default ListenableFuture<EmptyProtos.Empty> emptyCall(
+    default com.google.common.util.concurrent.ListenableFuture<EmptyProtos.Empty> emptyCall(
         EmptyProtos.Empty request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     /**
@@ -844,9 +839,9 @@ public final class TestServiceGrpc {
      * One request followed by one response.
      * </pre>
      */
-    default ListenableFuture<Messages.SimpleResponse> unaryCall(
+    default com.google.common.util.concurrent.ListenableFuture<Messages.SimpleResponse> unaryCall(
         Messages.SimpleRequest request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     /**
@@ -856,9 +851,9 @@ public final class TestServiceGrpc {
      * satisfy subsequent requests.
      * </pre>
      */
-    default ListenableFuture<Messages.SimpleResponse> cacheableUnaryCall(
+    default com.google.common.util.concurrent.ListenableFuture<Messages.SimpleResponse> cacheableUnaryCall(
         Messages.SimpleRequest request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     /**
@@ -867,9 +862,9 @@ public final class TestServiceGrpc {
      * to test the behavior when clients call unimplemented methods.
      * </pre>
      */
-    default ListenableFuture<EmptyProtos.Empty> unimplementedCall(
+    default com.google.common.util.concurrent.ListenableFuture<EmptyProtos.Empty> unimplementedCall(
         EmptyProtos.Empty request) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
   }
 
