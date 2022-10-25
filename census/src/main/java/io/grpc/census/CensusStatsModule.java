@@ -751,10 +751,7 @@ final class CensusStatsModule {
 
     @Override
     public Context filterContext(Context context) {
-      if (!module.tagger.empty().equals(parentCtx)) {
-        return ContextUtils.withValue(context, parentCtx);
-      }
-      return context;
+      return ContextUtils.withValue(context, parentCtx);
     }
   }
 
