@@ -82,7 +82,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private final boolean usingExecutorResource;
   // It's not possible to use both PSM and DirectPath C2P in the same application.
   // Delegate to DNS if user-provided bootstrap is found.
-  private final String schemeOverride = !isOnGcp || (xdsBootstrapProvided && !enableFederation) ? "dns" : "xds";
+  private final String schemeOverride =
+      !isOnGcp
+      || (xdsBootstrapProvided && !enableFederation)
+      ? "dns" : "xds";
   private Executor executor;
   private Listener2 listener;
   private boolean succeeded;
