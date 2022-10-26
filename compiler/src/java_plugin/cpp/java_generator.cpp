@@ -534,73 +534,80 @@ static void PrintStub(
     Printer* p, StubType type) {
   const std::string service_name = service->name();
   (*vars)["service_name"] = service_name;
-  (*vars)["abstract_name"] = service_name + "ImplBase";
   std::string stub_name = service_name;
-  std::string client_name = service_name;
   std::string stub_base_class_name = "AbstractStub";
+  std::string interface_name = service_name;
   CallType call_type;
   bool impl_base = false;
   bool interface = false;
   switch (type) {
+    case ASYNC_INTERFACE:
+      call_type = ASYNC_CALL;
+      interface = true;
+      impl_base = true;
+      stub_name += "Async";
+      break;
     case ABSTRACT_CLASS:
       call_type = ASYNC_CALL;
       impl_base = true;
+      interface_name += "Async"
+      (*vars)["abstract_name"] = service_name + "ImplBase";
       break;
     case ASYNC_CLIENT_IMPL:
       call_type = ASYNC_CALL;
       stub_name += "Stub";
       stub_base_class_name = "AbstractAsyncStub";
+      interface_name += "Async"
       break;
     case BLOCKING_CLIENT_INTERFACE:
       interface = true;
-      FALLTHROUGH;
+      call_type = BLOCKING_CALL;
+      stub_name += "Blocking"
     case BLOCKING_CLIENT_IMPL:
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
-      client_name += "BlockingClient";
       stub_base_class_name = "AbstractBlockingStub";
+      interface_name += "Blocking"
       break;
     case FUTURE_CLIENT_INTERFACE:
       interface = true;
-      FALLTHROUGH;
+      call_type = FUTURE_CALL;
+      stub_name += "Future";
     case FUTURE_CLIENT_IMPL:
       call_type = FUTURE_CALL;
       stub_name += "FutureStub";
-      client_name += "FutureClient";
       stub_base_class_name = "AbstractFutureStub";
-      break;
-    case ASYNC_INTERFACE:
-      call_type = ASYNC_CALL;
-      interface = true;
-      stub_name += "Stub";
-      stub_base_class_name = "AbstractAsyncStub";
+      interface_name += "Future"
       break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot determine class name for StubType: " << type;
   }
   (*vars)["stub_name"] = stub_name;
-  (*vars)["client_name"] = client_name;
   (*vars)["stub_base_class_name"] = (*vars)[stub_base_class_name];
+  (*vars)["interface_name"] = interface_name;
 
   // Class head
-  if (!interface) {
     GrpcWriteServiceDocComment(p, service);
-  }
 
   if (service->options().deprecated()) {
     p->Print(*vars, "@$Deprecated$\n");
   }
 
-  if (impl_base) {
+  if (interface) {
+    p->Print(
+        *vars,
+        "public interface $stub_name$ {\n");
+  } else if (impl_base){
     p->Print(
         *vars,
         "public static abstract class $abstract_name$"
-        " implements $BindableService$ {\n");
+        " implements $BindableService$, $interface_name$ {\n");
   } else {
     p->Print(
         *vars,
         "public static final class $stub_name$"
-        " extends $stub_base_class_name$<$stub_name$> {\n");
+        " extends $stub_base_class_name$<$stub_name$>\n"
+        " implements $interface_name$ {\n");
   }
   p->Indent();
 
@@ -631,36 +638,38 @@ static void PrintStub(
 
   // RPC methods
   for (int i = 0; i < service->method_count(); ++i) {
-    const MethodDescriptor* method = service->method(i);
-    (*vars)["input_type"] = MessageFullJavaName(method->input_type());
-    (*vars)["output_type"] = MessageFullJavaName(method->output_type());
-    (*vars)["lower_method_name"] = LowerMethodName(method);
-    (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
-    bool client_streaming = method->client_streaming();
-    bool server_streaming = method->server_streaming();
+      const MethodDescriptor *method = service->method(i);
+      (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+      (*vars)["output_type"] = MessageFullJavaName(method->output_type());
+      (*vars)["lower_method_name"] = LowerMethodName(method);
+      (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
+      bool client_streaming = method->client_streaming();
+      bool server_streaming = method->server_streaming();
 
-    if (call_type == BLOCKING_CALL && client_streaming) {
-      // Blocking client interface with client streaming is not available
-      continue;
-    }
+      if (call_type == BLOCKING_CALL && client_streaming) {
+          // Blocking client interface with client streaming is not available
+          continue;
+      }
 
-    if (call_type == FUTURE_CALL && (client_streaming || server_streaming)) {
-      // Future interface doesn't support streaming.
-      continue;
-    }
+      if (call_type == FUTURE_CALL && (client_streaming || server_streaming)) {
+          // Future interface doesn't support streaming.
+          continue;
+      }
 
-    // Method signature
-    p->Print("\n");
-    // TODO(nmittler): Replace with WriteMethodDocComment once included by the protobuf distro.
-    if (!interface) {
+      // Method signature
+      p->Print("\n");
+      // TODO(nmittler): Replace with WriteMethodDocComment once included by the protobuf distro.
       GrpcWriteMethodDocComment(p, method);
-    }
 
-    if (method->options().deprecated()) {
-      p->Print(*vars, "@$Deprecated$\n");
-    }
+      if (method->options().deprecated()) {
+          p->Print(*vars, "@$Deprecated$\n");
+      }
 
-    p->Print("public ");
+      if (!interface) {
+          p->Print("public ");
+      } else {
+          p->Print("default ");
+      }
     switch (call_type) {
       case BLOCKING_CALL:
         GRPC_CODEGEN_CHECK(!client_streaming)
@@ -705,32 +714,22 @@ static void PrintStub(
         break;
     }
 
-    if (interface) {
-      p->Print(";\n");
-      continue;
-    }
     // Method body.
     p->Print(" {\n");
     p->Indent();
     if (impl_base) {
-      switch (call_type) {
         // NB: Skipping validation of service methods. If something is wrong, we wouldn't get to
         // this point as compiler would return errors when generating service interface.
-        case ASYNC_CALL:
-          if (client_streaming) {
-            p->Print(
-                *vars,
-                "return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall("
-                "$method_method_name$(), responseObserver);\n");
-          } else {
-            p->Print(
-                *vars,
-                "io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall("
-                "$method_method_name$(), responseObserver);\n");
-          }
-          break;
-        default:
-          break;
+      if (client_streaming) {
+        p->Print(
+            *vars,
+            "return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall("
+            "$method_method_name$(), responseObserver);\n");
+      } else {
+        p->Print(
+            *vars,
+            "io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall("
+            "$method_method_name$(), responseObserver);\n");
       }
     } else if (!interface) {
       switch (call_type) {
@@ -785,12 +784,14 @@ static void PrintStub(
               "    getChannel().newCall($method_method_name$(), getCallOptions()), request);\n");
           break;
       }
+    } else {
+        p->Print("throw new UnsupportedOperationException();\n")
     }
     p->Outdent();
     p->Print("}\n");
   }
 
-  if (impl_base) {
+  if (impl_base && !interface) {
     p->Print("\n");
     p->Print(
         *vars,
