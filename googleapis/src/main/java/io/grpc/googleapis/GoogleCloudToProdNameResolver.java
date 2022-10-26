@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.CharStreams;
@@ -81,7 +82,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private final boolean usingExecutorResource;
   // It's not possible to use both PSM and DirectPath C2P in the same application.
   // Delegate to DNS if user-provided bootstrap is found.
-  private final boolean useXds = isOnGcp && (enableFederation || !xdsBootstrapProvided);
+  private final String schemeOverride = !isOnGcp || (xdsBootstrapProvided && !enableFederation) ? "dns" : "xds";
   private Executor executor;
   private Listener2 listener;
   private boolean succeeded;
@@ -108,13 +109,9 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         targetUri);
     authority = GrpcUtil.checkAuthority(targetPath.substring(1));
     syncContext = checkNotNull(args, "args").getSynchronizationContext();
-    if (useXds) {
-      targetUri = overrideUriScheme(targetUri, "xds");
-      if (enableFederation) {
-        targetUri = overrideUriAuthority(targetUri, C2P_AUTHORITY);
-      }
-    } else {
-      targetUri = overrideUriScheme(targetUri, "dns");
+    targetUri = overrideUriScheme(targetUri, schemeOverride);
+    if (schemeOverride.equals("xds") && enableFederation) {
+      targetUri = overrideUriAuthority(targetUri, C2P_AUTHORITY);
     }
     delegate = checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(
         targetUri, args);
