@@ -54,6 +54,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   @VisibleForTesting
   static final String METADATA_URL_SUPPORT_IPV6 =
       "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ipv6s";
+  static final String C2P_AUTHORITY = "traffic-director-c2p.xds.googleapis.com";
   @VisibleForTesting
   static boolean isOnGcp = InternalCheckGcpEnvironment.isOnGcp();
   @VisibleForTesting
@@ -62,6 +63,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           || System.getProperty("io.grpc.xds.bootstrap") != null
           || System.getenv("GRPC_XDS_BOOTSTRAP_CONFIG") != null
           || System.getProperty("io.grpc.xds.bootstrapConfig") != null;
+  @VisibleForTesting
+  static boolean enableFederation =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
+          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
 
   private static final String serverUriOverride =
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
@@ -76,7 +81,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private final boolean usingExecutorResource;
   // It's not possible to use both PSM and DirectPath C2P in the same application.
   // Delegate to DNS if user-provided bootstrap is found.
-  private final String schemeOverride = !isOnGcp || xdsBootstrapProvided ? "dns" : "xds";
+  private final boolean useXds = isOnGcp && (enableFederation || !xdsBootstrapProvided);
   private Executor executor;
   private Listener2 listener;
   private boolean succeeded;
@@ -103,8 +108,16 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         targetUri);
     authority = GrpcUtil.checkAuthority(targetPath.substring(1));
     syncContext = checkNotNull(args, "args").getSynchronizationContext();
+    if (useXds) {
+      targetUri = overrideUriScheme(targetUri, "xds");
+      if (enableFederation) {
+        targetUri = overrideUriAuthority(targetUri, C2P_AUTHORITY);
+      }
+    } else {
+      targetUri = overrideUriScheme(targetUri, "dns");
+    }
     delegate = checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(
-        overrideUriScheme(targetUri, schemeOverride), args);
+        targetUri, args);
     executor = args.getOffloadExecutor();
     usingExecutorResource = executor == null;
   }
@@ -193,7 +206,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     serverBuilder.put("server_features", ImmutableList.of("xds_v3"));
     ImmutableMap.Builder<String, Object> authoritiesBuilder = ImmutableMap.builder();
     authoritiesBuilder.put(
-        "traffic-director-c2p.xds.googleapis.com",
+        C2P_AUTHORITY,
         ImmutableMap.of("xds_servers", ImmutableList.of(serverBuilder.buildOrThrow())));
     return ImmutableMap.of(
         "node", nodeBuilder.buildOrThrow(),
@@ -267,6 +280,16 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       res = new URI(scheme, uri.getAuthority(), uri.getPath(), uri.getQuery(), uri.getFragment());
     } catch (URISyntaxException ex) {
       throw new IllegalArgumentException("Invalid scheme: " + scheme, ex);
+    }
+    return res;
+  }
+
+  private static URI overrideUriAuthority(URI uri, String authority) {
+    URI res;
+    try {
+      res = new URI(uri.getScheme(), authority, uri.getPath(), uri.getQuery(), uri.getFragment());
+    } catch (URISyntaxException ex) {
+      throw new IllegalArgumentException("Invalid authority: " + authority, ex);
     }
     return res;
   }
