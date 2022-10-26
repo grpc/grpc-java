@@ -1159,9 +1159,12 @@ static void PrintService(const ServiceDescriptor* service,
   p->Outdent();
   p->Print("}\n\n");
 
+  PrintStub(service, vars, p, ASYNC_INTERFACE);
   PrintStub(service, vars, p, ABSTRACT_CLASS);
   PrintStub(service, vars, p, ASYNC_CLIENT_IMPL);
+  PrintStub(service, vars, p, BLOCKING_CLIENT_INTERFACE);
   PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL);
+  PrintStub(service, vars, p, FUTURE_CLIENT_INTERFACE);
   PrintStub(service, vars, p, FUTURE_CLIENT_IMPL);
 
   PrintMethodHandlerClass(service, vars, p);
