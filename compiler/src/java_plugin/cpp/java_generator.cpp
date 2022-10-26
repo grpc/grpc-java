@@ -562,7 +562,8 @@ static void PrintStub(
     case BLOCKING_CLIENT_INTERFACE:
       interface = true;
       call_type = BLOCKING_CALL;
-      stub_name += "Blocking"
+      stub_name += "Blocking";
+      break;
     case BLOCKING_CLIENT_IMPL:
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
@@ -573,6 +574,7 @@ static void PrintStub(
       interface = true;
       call_type = FUTURE_CALL;
       stub_name += "Future";
+      break;
     case FUTURE_CLIENT_IMPL:
       call_type = FUTURE_CALL;
       stub_name += "FutureStub";
@@ -785,7 +787,7 @@ static void PrintStub(
           break;
       }
     } else {
-        p->Print("throw new UnsupportedOperationException();\n")
+        p->Print("throw new UnsupportedOperationException();\n");
     }
     p->Outdent();
     p->Print("}\n");
