@@ -550,14 +550,14 @@ static void PrintStub(
     case ABSTRACT_CLASS:
       call_type = ASYNC_CALL;
       impl_base = true;
-      interface_name += "Async"
+      interface_name += "Async";
       (*vars)["abstract_name"] = service_name + "ImplBase";
       break;
     case ASYNC_CLIENT_IMPL:
       call_type = ASYNC_CALL;
       stub_name += "Stub";
       stub_base_class_name = "AbstractAsyncStub";
-      interface_name += "Async"
+      interface_name += "Async";
       break;
     case BLOCKING_CLIENT_INTERFACE:
       interface = true;
@@ -567,7 +567,7 @@ static void PrintStub(
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
       stub_base_class_name = "AbstractBlockingStub";
-      interface_name += "Blocking"
+      interface_name += "Blocking";
       break;
     case FUTURE_CLIENT_INTERFACE:
       interface = true;
@@ -577,7 +577,7 @@ static void PrintStub(
       call_type = FUTURE_CALL;
       stub_name += "FutureStub";
       stub_base_class_name = "AbstractFutureStub";
-      interface_name += "Future"
+      interface_name += "Future";
       break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot determine class name for StubType: " << type;
