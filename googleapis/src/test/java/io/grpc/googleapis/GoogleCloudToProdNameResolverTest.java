@@ -66,7 +66,7 @@ public class GoogleCloudToProdNameResolverTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private static final URI TARGET_URI = URI.create("google-c2p-experimental:///googleapis.com");
+  private static final URI TARGET_URI = URI.create("google-c2p:///googleapis.com");
   private static final String ZONE = "us-central1-a";
   private static final int DEFAULT_PORT = 887;
 
@@ -187,6 +187,39 @@ public class GoogleCloudToProdNameResolverTest {
         "server_uri", "directpath-pa.googleapis.com",
         "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
         "server_features", ImmutableList.of("xds_v3"));
+    Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
+    assertThat(authorities).containsExactly(
+        "traffic-director-c2p.xds.googleapis.com",
+        ImmutableMap.of("xds_servers", ImmutableList.of(server)));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void onGcpAndProvidedBootstrapAndFederationEnabledDelegateToXds() {
+    GoogleCloudToProdNameResolver.isOnGcp = true;
+    GoogleCloudToProdNameResolver.xdsBootstrapProvided = true;
+    GoogleCloudToProdNameResolver.enableFederation = true;
+    createResolver();
+    resolver.start(mockListener);
+    assertThat(delegatedResolver.keySet()).containsExactly("xds");
+    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
+    // check bootstrap
+    Map<String, ?> bootstrap = fakeBootstrapSetter.bootstrapRef.get();
+    Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
+    assertThat(node).containsExactly(
+        "id", "C2P-991614323",
+        "locality", ImmutableMap.of("zone", ZONE),
+        "metadata", ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
+    Map<String, ?> server = Iterables.getOnlyElement(
+        (List<Map<String, ?>>) bootstrap.get("xds_servers"));
+    assertThat(server).containsExactly(
+        "server_uri", "directpath-pa.googleapis.com",
+        "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
+        "server_features", ImmutableList.of("xds_v3"));
+    Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
+    assertThat(authorities).containsExactly(
+        "traffic-director-c2p.xds.googleapis.com",
+        ImmutableMap.of("xds_servers", ImmutableList.of(server)));
   }
 
   @Test
