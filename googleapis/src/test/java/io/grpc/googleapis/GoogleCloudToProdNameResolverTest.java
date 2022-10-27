@@ -201,6 +201,7 @@ public class GoogleCloudToProdNameResolverTest {
     GoogleCloudToProdNameResolver.enableFederation = true;
     createResolver();
     resolver.start(mockListener);
+    fakeExecutor.runDueTasks();
     assertThat(delegatedResolver.keySet()).containsExactly("xds");
     verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
     // check bootstrap
