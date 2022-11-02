@@ -17,11 +17,9 @@
 package io.grpc.binder;
 
 import android.os.IBinder;
-import io.grpc.ExperimentalApi;
 import javax.annotation.Nullable;
 
 /** A container for at most one instance of {@link IBinder}, useful as an "out parameter". */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class IBinderReceiver {
   @Nullable private IBinder value;
 

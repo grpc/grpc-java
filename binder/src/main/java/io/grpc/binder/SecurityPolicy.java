@@ -16,7 +16,6 @@
 
 package io.grpc.binder;
 
-import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import javax.annotation.CheckReturnValue;
 
@@ -37,7 +36,6 @@ import javax.annotation.CheckReturnValue;
  * re-installation of the applications involved.
  */
 @CheckReturnValue
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public abstract class SecurityPolicy {
 
   protected SecurityPolicy() {}
