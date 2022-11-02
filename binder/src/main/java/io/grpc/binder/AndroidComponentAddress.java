@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import io.grpc.ExperimentalApi;
 import java.net.SocketAddress;
 
 /**
@@ -41,7 +40,6 @@ import java.net.SocketAddress;
  * fields, namely, an action of {@link ApiConstants#ACTION_BIND}, an empty category set and null
  * type and data URI.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public class AndroidComponentAddress extends SocketAddress { // NOTE: Only temporarily non-final.
   private static final long serialVersionUID = 0L;
 
