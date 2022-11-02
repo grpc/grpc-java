@@ -25,7 +25,6 @@ import com.google.common.base.Supplier;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
-import io.grpc.ExperimentalApi;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
@@ -48,7 +47,6 @@ import javax.annotation.Nullable;
 /**
  * Builder for a server that services requests from an Android Service.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class BinderServerBuilder
     extends ForwardingServerBuilder<BinderServerBuilder> {
 
