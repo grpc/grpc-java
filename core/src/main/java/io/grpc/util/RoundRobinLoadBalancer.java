@@ -134,7 +134,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       shutdownSubchannel(removedSubchannel);
     }
 
-    return !resolvedAddresses.getAddresses().isEmpty();
+    return true;
   }
 
   @Override
