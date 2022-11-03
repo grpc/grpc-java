@@ -25,6 +25,7 @@ import com.google.common.base.Supplier;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
@@ -115,12 +116,14 @@ public final class BinderServerBuilder
   }
 
   /** Enable stats collection using census. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder enableStats() {
     serverImplBuilder.setStatsEnabled(true);
     return this;
   }
 
   /** Enable tracing using census. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder enableTracing() {
     serverImplBuilder.setTracingEnabled(true);
     return this;
