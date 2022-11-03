@@ -300,7 +300,7 @@ subprojects {
             // depends on core; core's testCompile depends on testing)
             includeTests = false
             if (project.hasProperty('jmhIncludeSingleClass')) {
-                include = [
+                includes = [
                     project.property('jmhIncludeSingleClass')
                 ]
             }
