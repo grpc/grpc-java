@@ -32,6 +32,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.Hashing;
 import com.google.errorprone.annotations.CheckReturnValue;
+import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,6 +49,7 @@ public final class SecurityPolicies {
 
   private SecurityPolicies() {}
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static ServerSecurityPolicy serverInternalOnly() {
     return new ServerSecurityPolicy();
   }
@@ -64,6 +66,7 @@ public final class SecurityPolicies {
     };
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy permissionDenied(String description) {
     Status denied = Status.PERMISSION_DENIED.withDescription(description);
     return new SecurityPolicy() {
@@ -82,6 +85,7 @@ public final class SecurityPolicies {
    * @param requiredSignature the allowed signature of the allowed package.
    * @throws NullPointerException if any of the inputs are {@code null}.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy hasSignature(
       PackageManager packageManager, String packageName, Signature requiredSignature) {
     return oneOfSignatures(
@@ -97,6 +101,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code requiredSignatureSha256Hash} is not of length 32.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy hasSignatureSha256Hash(
       PackageManager packageManager, String packageName, byte[] requiredSignatureSha256Hash) {
     return oneOfSignatureSha256Hash(
@@ -112,6 +117,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code requiredSignatures} is empty.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy oneOfSignatures(
       PackageManager packageManager,
       String packageName,
@@ -147,6 +153,7 @@ public final class SecurityPolicies {
    * @throws IllegalArgumentException if {@code requiredSignatureSha256Hashes} is empty, or if any
    *     of the {@code requiredSignatureSha256Hashes} are not of length 32.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy oneOfSignatureSha256Hash(
       PackageManager packageManager,
       String packageName,
@@ -178,6 +185,7 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a device owner app. See
    * {@link DevicePolicyManager}.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy isDeviceOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -192,6 +200,7 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a profile owner app. See
    * {@link DevicePolicyManager}.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy isProfileOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -206,6 +215,7 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a profile owner app on an
    * organization-owned device. See {@link DevicePolicyManager}.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy isProfileOwnerOnOrganizationOwnedDevice(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -331,6 +341,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code securityPolicies} is empty.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy allOf(SecurityPolicy... securityPolicies) {
     Preconditions.checkNotNull(securityPolicies, "securityPolicies");
     Preconditions.checkArgument(securityPolicies.length > 0, "securityPolicies must not be empty");
@@ -370,6 +381,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code securityPolicies} is empty.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy anyOf(SecurityPolicy... securityPolicies) {
     Preconditions.checkNotNull(securityPolicies, "securityPolicies");
     Preconditions.checkArgument(securityPolicies.length > 0, "securityPolicies must not be empty");
@@ -416,6 +428,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}
    * @throws IllegalArgumentException if {@code permissions} is empty
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy hasPermissions(
       PackageManager packageManager, ImmutableSet<String> permissions) {
     Preconditions.checkNotNull(packageManager, "packageManager");
