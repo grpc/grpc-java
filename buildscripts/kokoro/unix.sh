@@ -38,8 +38,6 @@ GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
 GRADLE_FLAGS+=" -PskipAndroid=true"
-GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
-export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 
 # Make protobuf discoverable by :grpc-compiler
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
@@ -89,7 +87,7 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
 fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)
-# Note that this disables parallel=true from GRADLE_FLAGS
+# Note that this disables parallel=true from gradle.properties
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" ]]; then
     GRADLE_FLAGS+=" -x grpc-compiler:generateTestProto -x grpc-compiler:generateTestLiteProto"

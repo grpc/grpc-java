@@ -15,20 +15,10 @@ export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
-cat <<EOF >> gradle.properties
-# defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
-# https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
-# Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
-# space is exhausted", and to increase build speed
-org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
-EOF
-
 echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 
 # Proto deps
 buildscripts/make_dependencies.sh
-
-GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 
 ./gradlew \
     :grpc-android-interop-testing:build \
@@ -36,8 +26,7 @@ GRADLE_FLAGS="-Pandroid.useAndroidX=true"
     :grpc-cronet:build \
     :grpc-binder:build \
     assembleAndroidTest \
-    publishToMavenLocal \
-    $GRADLE_FLAGS
+    publishToMavenLocal
 
 if [[ ! -z $(git status --porcelain) ]]; then
   git status
@@ -92,7 +81,7 @@ cd $BASE_DIR/github/grpc-java
 ./gradlew clean
 git checkout HEAD^
 ./gradlew --stop  # use a new daemon to build the previous commit
-./gradlew publishToMavenLocal $GRADLE_FLAGS
+./gradlew publishToMavenLocal
 cd examples/android/helloworld/
 ../../gradlew build
 

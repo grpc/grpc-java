@@ -23,7 +23,6 @@ readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
 build_java_test_app() {
   echo "Building Java test app"
   cd "${SRC_DIR}"
-  GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'" \
   ./gradlew --no-daemon grpc-interop-testing:installDist -x test \
     -PskipCodegen=true -PskipAndroid=true --console=plain
 

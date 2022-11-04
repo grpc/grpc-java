@@ -9,13 +9,12 @@ Building requires JDK 8, as our tests use TLS.
 grpc-java has a C++ code generation plugin for protoc. Since many Java
 developers don't have C compilers installed and don't need to run or modify the
 codegen, the build can skip it. To skip, create the file
-`<project-root>/gradle.properties` and add `skipCodegen=true`.
+`<user-home>/.gradle/gradle.properties` and add `skipCodegen=true`.
 
 Some parts of grpc-java depend on Android. Since many Java developers don't have
 the Android SDK installed and don't need to run or modify the Android
 components, the build can skip it. To skip, create the file
-`<project-root>/gradle.properties` and add `skipAndroid=true`.
-Otherwise, create the file `<project-root>/gradle.properties` and add `android.useAndroidX=true`.
+`<user-home>/.gradle/gradle.properties` and add `skipAndroid=true`.
 
 Then, to build, run:
 ```
@@ -87,7 +86,7 @@ Gradle to find protobuf:
 ```
 
 Since specifying those properties every build is bothersome, you can instead
-create ``<project-root>\gradle.properties`` with contents like:
+create ``%USERPROFILE%\.gradle\gradle.properties`` with contents like:
 ```
 vcProtobufInclude=C:\\path\\to\\protobuf\\src
 vcProtobufLibs=C:\\path\\to\\protobuf\\vsprojects\\Release
@@ -103,14 +102,14 @@ default, the `targetArch=x86_32` is necessary.
 If you have both MinGW and VC++ installed on Windows, VC++ will be used by
 default. To override this default and use MinGW, add ``-PvcDisable=true``
 to your Gradle command line or add ``vcDisable=true`` to your
-``<project-root>\gradle.properties``.
+``%USERPROFILE%\.gradle\gradle.properties``.
 
 ### Notes for Unsupported Operating Systems
 The build script pulls pre-compiled ``protoc`` from Maven Central by default.
 We have built ``protoc`` binaries for popular systems, but they may not work
 for your system. If ``protoc`` cannot be downloaded or would not run, you can
 use the one that has been built by your own, by adding this property to
-``<project-root>/gradle.properties``:
+``<user-home>/.gradle/gradle.properties``:
 ```
 protoc=/path/to/protoc
 ```
