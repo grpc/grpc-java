@@ -158,6 +158,7 @@ public final class BinderServerBuilder
   }
 
   /** Sets the policy for inbound parcelable objects. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
     this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");

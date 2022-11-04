@@ -21,7 +21,7 @@ import javax.annotation.Nullable;
 
 /** A container for at most one instance of {@link IBinder}, useful as an "out parameter". */
 public final class IBinderReceiver {
-  @Nullable private IBinder value;
+  @Nullable private volatile IBinder value;
 
   /** Constructs a new, initially empty, container. */
   public IBinderReceiver() {}
