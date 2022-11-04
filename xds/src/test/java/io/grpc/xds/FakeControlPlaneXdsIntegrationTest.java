@@ -24,6 +24,7 @@ import com.github.xds.type.v3.TypedStruct;
 import com.google.protobuf.Any;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
 import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
@@ -150,5 +151,25 @@ public class FakeControlPlaneXdsIntegrationTest {
         }
       };
     }
+  }
+
+  /**
+   * Basic test to make sure RING_HASH configuration works.
+   */
+  @Test
+  public void pingPong_ringHash() {
+    controlPlane.setCdsConfig(
+        ControlPlaneRule.buildCluster().toBuilder()
+            .setLbPolicy(LbPolicy.RING_HASH).build());
+
+    ManagedChannel channel = dataPlane.getManagedChannel();
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
+        channel);
+    SimpleRequest request = SimpleRequest.newBuilder()
+        .build();
+    SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setResponseMessage("Hi, xDS!")
+        .build();
+    assertEquals(goldenResponse, blockingStub.unaryRpc(request));
   }
 }
