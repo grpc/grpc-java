@@ -23,8 +23,6 @@ import android.app.Service;
 import android.os.IBinder;
 import com.google.common.base.Supplier;
 import com.google.errorprone.annotations.DoNotCall;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -97,11 +95,6 @@ public final class BinderServerBuilder
       binderReceiver.set(server.getHostBinder());
       return server;
     });
-
-    // Disable compression by default, since there's little benefit when all communication is
-    // on-device, and it means sending supported-encoding headers with every call.
-    decompressorRegistry(DecompressorRegistry.emptyInstance());
-    compressorRegistry(CompressorRegistry.newEmptyInstance());
 
     // Disable stats and tracing by default.
     serverImplBuilder.setStatsEnabled(false);
