@@ -28,11 +28,11 @@ public final class IBinderReceiver {
 
   /** Returns the contents of this container or null if it is empty. */
   @Nullable
-  public synchronized IBinder get() {
+  public IBinder get() {
     return value;
   }
 
-  public synchronized void set(IBinder value) {
+  public void set(IBinder value) {
     this.value = value;
   }
 }
