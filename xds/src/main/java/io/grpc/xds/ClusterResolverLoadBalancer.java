@@ -216,7 +216,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> addresses = new ArrayList<>();
       Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
       List<String> priorities = new ArrayList<>();  // totally ordered priority list
-      Map<Locality, Integer> localityWeights = new HashMap<>();
 
       Status endpointNotFound = Status.OK;
       for (String cluster : clusters) {
@@ -229,7 +228,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           addresses.addAll(state.result.addresses);
           priorityChildConfigs.putAll(state.result.priorityChildConfigs);
           priorities.addAll(state.result.priorities);
-          localityWeights.putAll(state.result.localityWeights);
         } else {
           endpointNotFound = state.status;
         }
@@ -260,9 +258,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           resolvedAddresses.toBuilder()
               .setLoadBalancingPolicyConfig(childConfig)
               .setAddresses(Collections.unmodifiableList(addresses))
-              .setAttributes(resolvedAddresses.getAttributes().toBuilder()
-                  .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS,
-                      Collections.unmodifiableMap(localityWeights)).build())
               .build());
     }
 
@@ -396,7 +391,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             }
             Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
                 update.localityLbEndpointsMap;
-            Map<Locality, Integer> localityWeights = new HashMap<>();
             List<DropOverload> dropOverloads = update.dropPolicies;
             List<EquivalentAddressGroup> addresses = new ArrayList<>();
             Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
@@ -415,6 +409,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   Attributes attr =
                       endpoint.eag().getAttributes().toBuilder()
                           .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
+                          .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT,
+                              localityLbInfo.localityWeight())
                           .set(InternalXdsAttributes.ATTR_SERVER_WEIGHT, weight)
                           .build();
                   EquivalentAddressGroup eag = new EquivalentAddressGroup(
@@ -429,7 +425,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                     "Discard locality {0} with 0 healthy endpoints", locality);
                 continue;
               }
-              localityWeights.put(locality, localityLbInfo.localityWeight());
               if (!prioritizedLocalityWeights.containsKey(priorityName)) {
                 prioritizedLocalityWeights.put(priorityName, new HashMap<Locality, Integer>());
               }
@@ -450,7 +445,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityChildConfigs,
-                sortedPriorityNames, localityWeights);
+                sortedPriorityNames);
             handleEndpointResourceUpdate();
           }
         }
@@ -690,23 +685,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private final Map<String, PriorityChildConfig> priorityChildConfigs;
     // List of priority names ordered in descending priorities.
     private final List<String> priorities;
-    // Most recent view on how localities in the cluster should be wighted. Only set for EDS
-    // clusters that support the concept.
-    private final Map<Locality, Integer> localityWeights;
 
     ClusterResolutionResult(List<EquivalentAddressGroup> addresses, String priority,
         PriorityChildConfig config) {
       this(addresses, Collections.singletonMap(priority, config),
-          Collections.singletonList(priority), Collections.emptyMap());
+          Collections.singletonList(priority));
     }
 
     ClusterResolutionResult(List<EquivalentAddressGroup> addresses,
-        Map<String, PriorityChildConfig> configs, List<String> priorities,
-        Map<Locality, Integer> localityWeights) {
+        Map<String, PriorityChildConfig> configs, List<String> priorities) {
       this.addresses = addresses;
       this.priorityChildConfigs = configs;
       this.priorities = priorities;
-      this.localityWeights = localityWeights;
     }
   }
 
