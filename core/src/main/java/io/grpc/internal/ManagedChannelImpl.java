@@ -1943,7 +1943,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
       checkNotNull(args, "args");
-      this.helper = checkNotNull(helper, "helper");
       addressGroups = args.getAddresses();
       if (authorityOverride != null) {
         List<EquivalentAddressGroup> eagsWithoutOverrideAttr =
@@ -1951,6 +1950,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
       }
       this.args = args;
+      this.helper = checkNotNull(helper, "helper");
       subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ authority());
       subchannelTracer = new ChannelTracer(
           subchannelLogId, maxTraceEvents, timeProvider.currentTimeNanos(),
