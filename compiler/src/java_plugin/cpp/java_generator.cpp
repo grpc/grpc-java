@@ -322,6 +322,24 @@ static std::vector<std::string> GrpcGetDocLinesForDescriptor(const DescriptorTyp
   return GrpcGetDocLines(GrpcGetCommentsForDescriptor(descriptor));
 }
 
+enum StubType {
+  ASYNC_INTERFACE = 0,
+  BLOCKING_CLIENT_INTERFACE = 1,
+  FUTURE_CLIENT_INTERFACE = 2,
+  BLOCKING_SERVER_INTERFACE = 3,
+  ASYNC_CLIENT_IMPL = 4,
+  BLOCKING_CLIENT_IMPL = 5,
+  FUTURE_CLIENT_IMPL = 6,
+  ABSTRACT_CLASS = 7,
+  NONE = 8,
+};
+
+enum CallType {
+  ASYNC_CALL = 0,
+  BLOCKING_CALL = 1,
+  FUTURE_CALL = 2
+};
+
 // TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
 static void GrpcWriteDocCommentBody(Printer* printer,
                                     const std::vector<std::string>& lines,
@@ -504,24 +522,6 @@ static void PrintMethodFields(
 static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
                                    std::map<std::string, std::string>* vars,
                                    Printer* p);
-
-enum StubType {
-  ASYNC_INTERFACE = 0,
-  BLOCKING_CLIENT_INTERFACE = 1,
-  FUTURE_CLIENT_INTERFACE = 2,
-  BLOCKING_SERVER_INTERFACE = 3,
-  ASYNC_CLIENT_IMPL = 4,
-  BLOCKING_CLIENT_IMPL = 5,
-  FUTURE_CLIENT_IMPL = 6,
-  ABSTRACT_CLASS = 7,
-  NONE = 8,
-};
-
-enum CallType {
-  ASYNC_CALL = 0,
-  BLOCKING_CALL = 1,
-  FUTURE_CALL = 2
-};
 
 // Prints a StubFactory for given service / stub type.
 static void PrintStubFactory(
