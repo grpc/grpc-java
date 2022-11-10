@@ -359,30 +359,33 @@ static void GrpcWriteDocComment(Printer* printer, const std::string& comments) {
 // For the non-interface classes add a description of use before the description from proto
 static void GrpcWriteServiceDocComment(Printer* printer,
                                        const ServiceDescriptor* service,
-                                       StubType* type) {
+                                       StubType type) {
   printer->Print("/**\n");
 
-  if (type != nullptr) {
-    switch (*type) {
-      case ASYNC_CLIENT_IMPL:
-        printer->Print(" * A stub to allow clients to do asynchronous rpc calls to service ");
-        printer->Print(service->name() + "\n");
-        break;
-      case BLOCKING_CLIENT_IMPL:
-        printer->Print(" * A stub to allow clients to do synchronous rpc calls to service ");
-        printer->Print(service->name() + "\n");
-        break;
-      case FUTURE_CLIENT_IMPL:
-        printer->Print(" * A stub to allow clients to do ListenableFuture-style rpc calls to service ");
-        printer->Print(service->name() + "\n");
-        break;
-      case ABSTRACT_CLASS:
-        printer->Print(" * Base class for the server implementation of the service ");
-        printer->Print(service->name() + "\n")
-        break;
-      default:
-        // No extra description
-    }
+  bool add_service_name = false;
+  switch (type) {
+    case ASYNC_CLIENT_IMPL:
+      printer->Print(" * A stub to allow clients to do asynchronous rpc calls to service ");
+      add_service_name = true;
+      break;
+    case BLOCKING_CLIENT_IMPL:
+      printer->Print(" * A stub to allow clients to do synchronous rpc calls to service ");
+      add_service_name = true;
+      break;
+    case FUTURE_CLIENT_IMPL:
+      printer->Print(" * A stub to allow clients to do ListenableFuture-style rpc calls to service ");
+      add_service_name = true;
+      break;
+    case ABSTRACT_CLASS:
+      printer->Print(" * Base class for the server implementation of the service ");
+      add_service_name = true;
+      break;
+    default:
+      // No extra description
+  }
+  if (add_service_name) {
+    printer->Print(service->name());
+    printer->Print("\n");
   }
 
   std::vector<std::string> lines = GrpcGetDocLinesForDescriptor(service);
@@ -507,6 +510,7 @@ enum StubType {
   BLOCKING_CLIENT_IMPL = 5,
   FUTURE_CLIENT_IMPL = 6,
   ABSTRACT_CLASS = 7,
+  NONE = 8,
 };
 
 enum CallType {
@@ -612,7 +616,7 @@ static void PrintStub(
   (*vars)["interface_name"] = interface_name;
 
   // Class head
-    GrpcWriteServiceDocComment(p, service, &type);
+    GrpcWriteServiceDocComment(p, service, type);
 
   if (service->options().deprecated()) {
     p->Print(*vars, "@$Deprecated$\n");
@@ -1114,7 +1118,7 @@ static void PrintService(const ServiceDescriptor* service,
   }
   #endif
   // TODO(nmittler): Replace with WriteServiceDocComment once included by protobuf distro.
-  GrpcWriteServiceDocComment(p, service, nullptr);
+  GrpcWriteServiceDocComment(p, service, NONE);
   p->Print(
       *vars,
       "@$Generated$(\n"
