@@ -501,6 +501,10 @@ static void PrintMethodFields(
   }
 }
 
+static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
+                                   std::map<std::string, std::string>* vars,
+                                   Printer* p);
+
 enum StubType {
   ASYNC_INTERFACE = 0,
   BLOCKING_CLIENT_INTERFACE = 1,
@@ -518,10 +522,6 @@ enum CallType {
   BLOCKING_CALL = 1,
   FUTURE_CALL = 2
 };
-
-static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
-                                   std::map<std::string, std::string>* vars,
-                                   Printer* p);
 
 // Prints a StubFactory for given service / stub type.
 static void PrintStubFactory(
@@ -564,46 +564,38 @@ static void PrintStub(
   std::string stub_name = service_name;
   std::string stub_base_class_name = "AbstractStub";
   std::string interface_name = service_name;
-  CallType call_type;
   bool impl_base = false;
   bool interface = false;
   switch (type) {
     case ASYNC_INTERFACE:
-      call_type = ASYNC_CALL;
       interface = true;
       impl_base = true;
       stub_name += "Async";
       break;
     case ABSTRACT_CLASS:
-      call_type = ASYNC_CALL;
       impl_base = true;
       interface_name += "Async";
       (*vars)["abstract_name"] = service_name + "ImplBase";
       break;
     case ASYNC_CLIENT_IMPL:
-      call_type = ASYNC_CALL;
       stub_name += "Stub";
       stub_base_class_name = "AbstractAsyncStub";
       interface_name += "Async";
       break;
     case BLOCKING_CLIENT_INTERFACE:
       interface = true;
-      call_type = BLOCKING_CALL;
       stub_name += "Blocking";
       break;
     case BLOCKING_CLIENT_IMPL:
-      call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
       stub_base_class_name = "AbstractBlockingStub";
       interface_name += "Blocking";
       break;
     case FUTURE_CLIENT_INTERFACE:
       interface = true;
-      call_type = FUTURE_CALL;
       stub_name += "Future";
       break;
     case FUTURE_CLIENT_IMPL:
-      call_type = FUTURE_CALL;
       stub_name += "FutureStub";
       stub_base_class_name = "AbstractFutureStub";
       interface_name += "Future";
@@ -629,7 +621,7 @@ static void PrintStub(
   } else if (impl_base) {
     p->Print(
         *vars,
-        "public static abstract class $abstract_name$\m"
+        "public static abstract class $abstract_name$\n"
         " implements $BindableService$, $interface_name$ {\n");
   } else {
     p->Print(
