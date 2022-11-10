@@ -356,12 +356,35 @@ static void GrpcWriteDocComment(Printer* printer, const std::string& comments) {
   printer->Print(" */\n");
 }
 
-// TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
+// For the non-interface classes add a description of use before the description from proto
 static void GrpcWriteServiceDocComment(Printer* printer,
-                                       const ServiceDescriptor* service) {
-  // Deviating from protobuf to avoid extraneous docs
-  // (see https://github.com/google/protobuf/issues/1406);
+                                       const ServiceDescriptor* service,
+                                       StubType* type) {
   printer->Print("/**\n");
+
+  if (type != nullptr) {
+    switch (*type) {
+      case ASYNC_CLIENT_IMPL:
+        printer->Print(" * A stub to allow clients to do asynchronous rpc calls to service ");
+        printer->Print(service->name() + "\n");
+        break;
+      case BLOCKING_CLIENT_IMPL:
+        printer->Print(" * A stub to allow clients to do synchronous rpc calls to service ");
+        printer->Print(service->name() + "\n");
+        break;
+      case FUTURE_CLIENT_IMPL:
+        printer->Print(" * A stub to allow clients to do ListenableFuture-style rpc calls to service ");
+        printer->Print(service->name() + "\n");
+        break;
+      case ABSTRACT_CLASS:
+        printer->Print(" * Base class for the server implementation of the service ");
+        printer->Print(service->name() + "\n")
+        break;
+      default:
+        // No extra description
+    }
+  }
+
   std::vector<std::string> lines = GrpcGetDocLinesForDescriptor(service);
   GrpcWriteDocCommentBody(printer, lines, true);
   printer->Print(" */\n");
@@ -589,7 +612,7 @@ static void PrintStub(
   (*vars)["interface_name"] = interface_name;
 
   // Class head
-    GrpcWriteServiceDocComment(p, service);
+    GrpcWriteServiceDocComment(p, service, &type);
 
   if (service->options().deprecated()) {
     p->Print(*vars, "@$Deprecated$\n");
@@ -599,15 +622,15 @@ static void PrintStub(
     p->Print(
         *vars,
         "public interface $stub_name$ {\n");
-  } else if (impl_base){
+  } else if (impl_base) {
     p->Print(
         *vars,
-        "public static abstract class $abstract_name$"
+        "public static abstract class $abstract_name$\m"
         " implements $BindableService$, $interface_name$ {\n");
   } else {
     p->Print(
         *vars,
-        "public static final class $stub_name$"
+        "public static final class $stub_name$\n"
         " extends $stub_base_class_name$<$stub_name$>\n"
         " implements $interface_name$ {\n");
   }
@@ -640,38 +663,38 @@ static void PrintStub(
 
   // RPC methods
   for (int i = 0; i < service->method_count(); ++i) {
-      const MethodDescriptor *method = service->method(i);
-      (*vars)["input_type"] = MessageFullJavaName(method->input_type());
-      (*vars)["output_type"] = MessageFullJavaName(method->output_type());
-      (*vars)["lower_method_name"] = LowerMethodName(method);
-      (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
-      bool client_streaming = method->client_streaming();
-      bool server_streaming = method->server_streaming();
+    const MethodDescriptor* method = service->method(i);
+    (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+    (*vars)["output_type"] = MessageFullJavaName(method->output_type());
+    (*vars)["lower_method_name"] = LowerMethodName(method);
+    (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
+    bool client_streaming = method->client_streaming();
+    bool server_streaming = method->server_streaming();
 
-      if (call_type == BLOCKING_CALL && client_streaming) {
-          // Blocking client interface with client streaming is not available
-          continue;
-      }
+    if (call_type == BLOCKING_CALL && client_streaming) {
+      // Blocking client interface with client streaming is not available
+      continue;
+    }
 
-      if (call_type == FUTURE_CALL && (client_streaming || server_streaming)) {
-          // Future interface doesn't support streaming.
-          continue;
-      }
+    if (call_type == FUTURE_CALL && (client_streaming || server_streaming)) {
+      // Future interface doesn't support streaming.
+      continue;
+    }
 
-      // Method signature
-      p->Print("\n");
-      // TODO(nmittler): Replace with WriteMethodDocComment once included by the protobuf distro.
-      GrpcWriteMethodDocComment(p, method);
+    // Method signature
+    p->Print("\n");
+    // TODO(nmittler): Replace with WriteMethodDocComment once included by the protobuf distro.
+    GrpcWriteMethodDocComment(p, method);
 
-      if (method->options().deprecated()) {
-          p->Print(*vars, "@$Deprecated$\n");
-      }
+    if (method->options().deprecated()) {
+      p->Print(*vars, "@$Deprecated$\n");
+    }
 
-      if (!interface) {
-          p->Print("public ");
-      } else {
-          p->Print("default ");
-      }
+    if (!interface) {
+      p->Print("public ");
+    } else {
+      p->Print("default ");
+    }
     switch (call_type) {
       case BLOCKING_CALL:
         GRPC_CODEGEN_CHECK(!client_streaming)
@@ -720,8 +743,8 @@ static void PrintStub(
     p->Print(" {\n");
     p->Indent();
     if (impl_base) {
-        // NB: Skipping validation of service methods. If something is wrong, we wouldn't get to
-        // this point as compiler would return errors when generating service interface.
+      // NB: Skipping validation of service methods. If something is wrong, we wouldn't get to
+      // this point as compiler would return errors when generating service interface.
       if (client_streaming) {
         p->Print(
             *vars,
@@ -787,7 +810,7 @@ static void PrintStub(
           break;
       }
     } else {
-        p->Print("throw new UnsupportedOperationException();\n");
+      p->Print("throw new UnsupportedOperationException();\n");
     }
     p->Outdent();
     p->Print("}\n");
@@ -1091,7 +1114,7 @@ static void PrintService(const ServiceDescriptor* service,
   }
   #endif
   // TODO(nmittler): Replace with WriteServiceDocComment once included by protobuf distro.
-  GrpcWriteServiceDocComment(p, service);
+  GrpcWriteServiceDocComment(p, service, nullptr);
   p->Print(
       *vars,
       "@$Generated$(\n"
