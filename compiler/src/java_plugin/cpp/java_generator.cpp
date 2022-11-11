@@ -402,7 +402,7 @@ static void GrpcWriteServiceDocComment(Printer* printer,
       // No extra description
   }
   if (add_service_name) {
-    printer->Print(service->name());
+    printer->Print(service->name().c_str());
     printer->Print("\n");
   }
 
@@ -695,7 +695,9 @@ static void PrintStub(
     }
 
     if (!interface) {
-      p->Print("public ");
+      p->Print(*vars,
+               "@$Override$\n"
+               "public ");
     } else {
       p->Print("default ");
     }
