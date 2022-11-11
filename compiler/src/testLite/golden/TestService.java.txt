@@ -309,7 +309,7 @@ public final class TestServiceGrpc {
    * Test service that supports all call types.
    * </pre>
    */
-  public static abstract class TestServiceImplBase implements io.grpc.BindableService {
+  public interface TestServiceAsync {
 
     /**
      * <pre>
@@ -317,6 +317,106 @@ public final class TestServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
+    default void unaryCall(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnaryCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * One request followed by a sequence of responses (streamed download).
+     * The server returns the payload with client desired type and sizes.
+     * </pre>
+     */
+    default void streamingOutputCall(io.grpc.testing.compiler.Test.StreamingOutputCallRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStreamingOutputCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * A sequence of requests followed by one response (streamed upload).
+     * The server returns the aggregated size of client payload as the result.
+     * </pre>
+     */
+    default io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallRequest> streamingInputCall(
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingInputCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * A sequence of requests with each request served by the server immediately.
+     * As one request could lead to multiple responses, this interface
+     * demonstrates the idea of full bidirectionality.
+     * </pre>
+     */
+    default io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallRequest> fullBidiCall(
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getFullBidiCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * A sequence of requests followed by a sequence of responses.
+     * The server buffers all the client requests and then serves them in order. A
+     * stream of responses are returned to the client when the server starts with
+     * first request.
+     * </pre>
+     */
+    default io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallRequest> halfBidiCall(
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getHalfBidiCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * An RPC method whose Java name collides with a keyword, and whose generated
+     * method should have a '_' appended.
+     * </pre>
+     */
+    default io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallRequest> import_(
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getImportMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Safe.
+     * </pre>
+     */
+    default void safeCall(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getSafeCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Idempotent.
+     * </pre>
+     */
+    default void idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getIdempotentCallMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service TestService
+   * <pre>
+   * Test service that supports all call types.
+   * </pre>
+   */
+  public static abstract class TestServiceImplBase
+   implements io.grpc.BindableService, TestServiceAsync {
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
+    @java.lang.Override
     public void unaryCall(io.grpc.testing.compiler.Test.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnaryCallMethod(), responseObserver);
@@ -328,6 +428,7 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
+    @java.lang.Override
     public void streamingOutputCall(io.grpc.testing.compiler.Test.StreamingOutputCallRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStreamingOutputCallMethod(), responseObserver);
@@ -339,6 +440,7 @@ public final class TestServiceGrpc {
      * The server returns the aggregated size of client payload as the result.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallRequest> streamingInputCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingInputCallMethod(), responseObserver);
@@ -351,6 +453,7 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full bidirectionality.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallRequest> fullBidiCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getFullBidiCallMethod(), responseObserver);
@@ -364,6 +467,7 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallRequest> halfBidiCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getHalfBidiCallMethod(), responseObserver);
@@ -375,6 +479,7 @@ public final class TestServiceGrpc {
      * method should have a '_' appended.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallRequest> import_(
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getImportMethod(), responseObserver);
@@ -385,6 +490,7 @@ public final class TestServiceGrpc {
      * A unary call that is Safe.
      * </pre>
      */
+    @java.lang.Override
     public void safeCall(io.grpc.testing.compiler.Test.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getSafeCallMethod(), responseObserver);
@@ -395,6 +501,7 @@ public final class TestServiceGrpc {
      * A unary call that is Idempotent.
      * </pre>
      */
+    @java.lang.Override
     public void idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getIdempotentCallMethod(), responseObserver);
@@ -463,11 +570,14 @@ public final class TestServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service TestService
    * <pre>
    * Test service that supports all call types.
    * </pre>
    */
-  public static final class TestServiceStub extends io.grpc.stub.AbstractAsyncStub<TestServiceStub> {
+  public static final class TestServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<TestServiceStub>
+   implements TestServiceAsync {
     private TestServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -485,6 +595,7 @@ public final class TestServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
+    @java.lang.Override
     public void unaryCall(io.grpc.testing.compiler.Test.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -497,6 +608,7 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
+    @java.lang.Override
     public void streamingOutputCall(io.grpc.testing.compiler.Test.StreamingOutputCallRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncServerStreamingCall(
@@ -509,6 +621,7 @@ public final class TestServiceGrpc {
      * The server returns the aggregated size of client payload as the result.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallRequest> streamingInputCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncClientStreamingCall(
@@ -522,6 +635,7 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full bidirectionality.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallRequest> fullBidiCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -536,6 +650,7 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallRequest> halfBidiCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -548,6 +663,7 @@ public final class TestServiceGrpc {
      * method should have a '_' appended.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallRequest> import_(
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingInputCallResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -559,6 +675,7 @@ public final class TestServiceGrpc {
      * A unary call that is Safe.
      * </pre>
      */
+    @java.lang.Override
     public void safeCall(io.grpc.testing.compiler.Test.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -570,6 +687,7 @@ public final class TestServiceGrpc {
      * A unary call that is Idempotent.
      * </pre>
      */
+    @java.lang.Override
     public void idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -582,7 +700,57 @@ public final class TestServiceGrpc {
    * Test service that supports all call types.
    * </pre>
    */
-  public static final class TestServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub> {
+  public interface TestServiceBlocking {
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
+    default io.grpc.testing.compiler.Test.SimpleResponse unaryCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * <pre>
+     * One request followed by a sequence of responses (streamed download).
+     * The server returns the payload with client desired type and sizes.
+     * </pre>
+     */
+    default java.util.Iterator<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> streamingOutputCall(
+        io.grpc.testing.compiler.Test.StreamingOutputCallRequest request) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Safe.
+     * </pre>
+     */
+    default io.grpc.testing.compiler.Test.SimpleResponse safeCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Idempotent.
+     * </pre>
+     */
+    default io.grpc.testing.compiler.Test.SimpleResponse idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service TestService
+   * <pre>
+   * Test service that supports all call types.
+   * </pre>
+   */
+  public static final class TestServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub>
+   implements TestServiceBlocking {
     private TestServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -600,6 +768,7 @@ public final class TestServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.testing.compiler.Test.SimpleResponse unaryCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getUnaryCallMethod(), getCallOptions(), request);
@@ -611,6 +780,7 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
+    @java.lang.Override
     public java.util.Iterator<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> streamingOutputCall(
         io.grpc.testing.compiler.Test.StreamingOutputCallRequest request) {
       return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
@@ -622,6 +792,7 @@ public final class TestServiceGrpc {
      * A unary call that is Safe.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.testing.compiler.Test.SimpleResponse safeCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getSafeCallMethod(), getCallOptions(), request);
@@ -632,6 +803,7 @@ public final class TestServiceGrpc {
      * A unary call that is Idempotent.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.testing.compiler.Test.SimpleResponse idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getIdempotentCallMethod(), getCallOptions(), request);
@@ -643,7 +815,49 @@ public final class TestServiceGrpc {
    * Test service that supports all call types.
    * </pre>
    */
-  public static final class TestServiceFutureStub extends io.grpc.stub.AbstractFutureStub<TestServiceFutureStub> {
+  public interface TestServiceFuture {
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> unaryCall(
+        io.grpc.testing.compiler.Test.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Safe.
+     * </pre>
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> safeCall(
+        io.grpc.testing.compiler.Test.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Idempotent.
+     * </pre>
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> idempotentCall(
+        io.grpc.testing.compiler.Test.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service TestService
+   * <pre>
+   * Test service that supports all call types.
+   * </pre>
+   */
+  public static final class TestServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<TestServiceFutureStub>
+   implements TestServiceFuture {
     private TestServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -661,6 +875,7 @@ public final class TestServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> unaryCall(
         io.grpc.testing.compiler.Test.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -672,6 +887,7 @@ public final class TestServiceGrpc {
      * A unary call that is Safe.
      * </pre>
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> safeCall(
         io.grpc.testing.compiler.Test.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -683,6 +899,7 @@ public final class TestServiceGrpc {
      * A unary call that is Idempotent.
      * </pre>
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> idempotentCall(
         io.grpc.testing.compiler.Test.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
