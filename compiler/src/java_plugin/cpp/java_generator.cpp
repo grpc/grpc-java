@@ -398,7 +398,7 @@ static void GrpcWriteServiceDocComment(Printer* printer,
       printer->Print(" * Base class for the server implementation of the service ");
       add_service_name = true;
       break;
-    default:
+    default: ;
       // No extra description
   }
   if (add_service_name) {
