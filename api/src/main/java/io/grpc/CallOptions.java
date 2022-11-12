@@ -35,48 +35,123 @@ import javax.annotation.concurrent.Immutable;
  *
  * <p>A field that is not set is {@code null}.
  */
-@Immutable
 @CheckReturnValue
 public final class CallOptions {
   /**
    * A blank {@code CallOptions} that all fields are not set.
    */
-  public static final CallOptions DEFAULT = new CallOptions();
-
-  // Although {@code CallOptions} is immutable, its fields are not final, so that we can initialize
-  // them outside of constructor. Otherwise the constructor will have a potentially long list of
-  // unnamed arguments, which is undesirable.
-  @Nullable
-  private Deadline deadline;
-  
-  @Nullable
-  private Executor executor;
+  public static final CallOptions DEFAULT = new Builder().build();
 
   @Nullable
-  private String authority;
+  private final Deadline deadline;
 
   @Nullable
-  private CallCredentials credentials;
+  private final Executor executor;
 
   @Nullable
-  private String compressorName;
+  private final String authority;
 
-  private Object[][] customOptions;
+  @Nullable
+  private final CallCredentials credentials;
 
-  // Unmodifiable list
-  private List<ClientStreamTracer.Factory> streamTracerFactories = Collections.emptyList();
+  @Nullable
+  private final String compressorName;
+
+  private final Object[][] customOptions;
+
+  private final List<ClientStreamTracer.Factory> streamTracerFactories;
 
   /**
    * Opposite to fail fast.
    */
   @Nullable
-  private Boolean waitForReady;
+  private final Boolean waitForReady;
 
   @Nullable
-  private Integer maxInboundMessageSize;
+  private final Integer maxInboundMessageSize;
   @Nullable
-  private Integer maxOutboundMessageSize;
+  private final Integer maxOutboundMessageSize;
 
+  private CallOptions(Builder builder) {
+    this.deadline = builder.deadline;
+    this.executor = builder.executor;
+    this.authority = builder.authority;
+    this.credentials = builder.credentials;
+    this.compressorName = builder.compressorName;
+    this.customOptions = builder.customOptions;
+    this.streamTracerFactories = builder.streamTracerFactories;
+    this.waitForReady = builder.waitForReady;
+    this.maxInboundMessageSize = builder.maxInboundMessageSize;
+    this.maxOutboundMessageSize = builder.maxOutboundMessageSize;
+  }
+
+  private static class Builder {
+    private Deadline deadline;
+    private Executor executor;
+    private String authority;
+    private CallCredentials credentials;
+    private String compressorName;
+    private Object[][] customOptions = new Object[0][2];
+    // Unmodifiable list
+    private List<ClientStreamTracer.Factory> streamTracerFactories = Collections.emptyList();
+    private Boolean waitForReady;
+    private Integer maxInboundMessageSize;
+    private Integer maxOutboundMessageSize;
+
+    private Builder deadline(Deadline deadline) {
+      this.deadline = deadline;
+      return this;
+    }
+
+    private Builder executor(Executor executor) {
+      this.executor = executor;
+      return this;
+    }
+
+    private Builder authority(String authority) {
+      this.authority = authority;
+      return this;
+    }
+
+    private Builder credentials(CallCredentials credentials) {
+      this.credentials = credentials;
+      return this;
+    }
+
+    private Builder compressorName(String compressorName) {
+      this.compressorName = compressorName;
+      return this;
+    }
+
+    private Builder customOptions(Object[][] customOptions) {
+      this.customOptions = customOptions;
+      return this;
+    }
+
+    private Builder waitForReady(Boolean waitForReady) {
+      this.waitForReady = waitForReady;
+      return this;
+    }
+
+    private Builder maxInboundMessageSize(Integer maxInboundMessageSize) {
+      this.maxInboundMessageSize = maxInboundMessageSize;
+      return this;
+    }
+
+    private Builder maxOutboundMessageSize(Integer maxOutboundMessageSize) {
+      this.maxOutboundMessageSize = maxOutboundMessageSize;
+      return this;
+    }
+
+    private Builder streamTracerFactories(List<ClientStreamTracer.Factory> streamTracerFactories) {
+      this.streamTracerFactories = streamTracerFactories;
+      return this;
+    }
+
+    private CallOptions build() {
+      return new CallOptions(this);
+    }
+  }
 
   /**
    * Override the HTTP/2 authority the channel claims to be connecting to. <em>This is not
@@ -89,8 +164,7 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1767")
   public CallOptions withAuthority(@Nullable String authority) {
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.authority = authority;
+    CallOptions newOptions = fullBuild(this).authority(authority).build();
     return newOptions;
   }
 
@@ -98,8 +172,7 @@ public final class CallOptions {
    * Returns a new {@code CallOptions} with the given call credentials.
    */
   public CallOptions withCallCredentials(@Nullable CallCredentials credentials) {
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.credentials = credentials;
+    CallOptions newOptions = fullBuild(this).credentials(credentials).build();
     return newOptions;
   }
 
@@ -113,8 +186,7 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public CallOptions withCompression(@Nullable String compressorName) {
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.compressorName = compressorName;
+    CallOptions newOptions = fullBuild(this).compressorName(compressorName).build();
     return newOptions;
   }
 
@@ -127,8 +199,7 @@ public final class CallOptions {
    * @param deadline the deadline or {@code null} for unsetting the deadline.
    */
   public CallOptions withDeadline(@Nullable Deadline deadline) {
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.deadline = deadline;
+    CallOptions newOptions = fullBuild(this).deadline(deadline).build();
     return newOptions;
   }
 
@@ -156,8 +227,7 @@ public final class CallOptions {
    * fails RPCs without sending them if unable to connect.
    */
   public CallOptions withWaitForReady() {
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.waitForReady = Boolean.TRUE;
+    CallOptions newOptions = fullBuild(this).waitForReady(Boolean.TRUE).build();
     return newOptions;
   }
 
@@ -166,8 +236,7 @@ public final class CallOptions {
    * This method should be rarely used because the default is without 'wait for ready'.
    */
   public CallOptions withoutWaitForReady() {
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.waitForReady = Boolean.FALSE;
+    CallOptions newOptions = new Builder().waitForReady(Boolean.FALSE).build();
     return newOptions;
   }
 
@@ -208,8 +277,7 @@ public final class CallOptions {
    * executor specified with {@link ManagedChannelBuilder#executor}.
    */
   public CallOptions withExecutor(@Nullable Executor executor) {
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.executor = executor;
+    CallOptions newOptions = fullBuild(this).executor(executor).build();
     return newOptions;
   }
 
@@ -221,12 +289,13 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
   public CallOptions withStreamTracerFactory(ClientStreamTracer.Factory factory) {
-    CallOptions newOptions = new CallOptions(this);
     ArrayList<ClientStreamTracer.Factory> newList =
-        new ArrayList<>(streamTracerFactories.size() + 1);
+            new ArrayList<>(streamTracerFactories.size() + 1);
     newList.addAll(streamTracerFactories);
     newList.add(factory);
-    newOptions.streamTracerFactories = Collections.unmodifiableList(newList);
+    CallOptions newOptions = fullBuild(this)
+            .streamTracerFactories(Collections.unmodifiableList(newList))
+            .build();
     return newOptions;
   }
 
@@ -319,7 +388,7 @@ public final class CallOptions {
     Preconditions.checkNotNull(key, "key");
     Preconditions.checkNotNull(value, "value");
 
-    CallOptions newOptions = new CallOptions(this);
+    Builder builder = fullBuild(this);
     int existingIdx = -1;
     for (int i = 0; i < customOptions.length; i++) {
       if (key.equals(customOptions[i][0])) {
@@ -328,7 +397,9 @@ public final class CallOptions {
       }
     }
 
-    newOptions.customOptions = new Object[customOptions.length + (existingIdx == -1 ? 1 : 0)][2];
+    CallOptions newOptions = builder
+            .customOptions(new Object[customOptions.length + (existingIdx == -1 ? 1 : 0)][2])
+            .build();
     System.arraycopy(customOptions, 0, newOptions.customOptions, 0, customOptions.length);
 
     if (existingIdx == -1) {
@@ -368,10 +439,6 @@ public final class CallOptions {
     return executor;
   }
 
-  private CallOptions() {
-    customOptions = new Object[0][2];
-  }
-
   /**
    * Returns whether <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">
    * 'wait for ready'</a> option is enabled for the call. 'Fail fast' is the default option for gRPC
@@ -392,8 +459,9 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withMaxInboundMessageSize(int maxSize) {
     checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.maxInboundMessageSize = maxSize;
+    CallOptions newOptions = fullBuild(this)
+            .maxInboundMessageSize(maxSize)
+            .build();
     return newOptions;
   }
 
@@ -403,8 +471,9 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withMaxOutboundMessageSize(int maxSize) {
     checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
-    CallOptions newOptions = new CallOptions(this);
-    newOptions.maxOutboundMessageSize = maxSize;
+    CallOptions newOptions = fullBuild(this)
+            .maxOutboundMessageSize(maxSize)
+            .build();
     return newOptions;
   }
 
@@ -427,34 +496,35 @@ public final class CallOptions {
   }
 
   /**
-   * Copy constructor.
+   * Copy CallOptions.
    */
-  private CallOptions(CallOptions other) {
-    deadline = other.deadline;
-    authority = other.authority;
-    credentials = other.credentials;
-    executor = other.executor;
-    compressorName = other.compressorName;
-    customOptions = other.customOptions;
-    waitForReady = other.waitForReady;
-    maxInboundMessageSize = other.maxInboundMessageSize;
-    maxOutboundMessageSize = other.maxOutboundMessageSize;
-    streamTracerFactories = other.streamTracerFactories;
+  private Builder fullBuild(CallOptions other) {
+    return new Builder()
+            .deadline(other.deadline)
+            .executor(other.executor)
+            .authority(other.authority)
+            .credentials(other.credentials)
+            .compressorName(other.compressorName)
+            .customOptions(other.customOptions)
+            .streamTracerFactories(other.streamTracerFactories)
+            .waitForReady(other.waitForReady)
+            .maxInboundMessageSize(other.maxInboundMessageSize)
+            .maxOutboundMessageSize(other.maxOutboundMessageSize);
   }
 
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
-        .add("deadline", deadline)
-        .add("authority", authority)
-        .add("callCredentials", credentials)
-        .add("executor", executor != null ? executor.getClass() : null)
-        .add("compressorName", compressorName)
-        .add("customOptions", Arrays.deepToString(customOptions))
-        .add("waitForReady", isWaitForReady())
-        .add("maxInboundMessageSize", maxInboundMessageSize)
-        .add("maxOutboundMessageSize", maxOutboundMessageSize)
-        .add("streamTracerFactories", streamTracerFactories)
-        .toString();
+            .add("deadline", deadline)
+            .add("authority", authority)
+            .add("callCredentials", credentials)
+            .add("executor", executor != null ? executor.getClass() : null)
+            .add("compressorName", compressorName)
+            .add("customOptions", Arrays.deepToString(customOptions))
+            .add("waitForReady", isWaitForReady())
+            .add("maxInboundMessageSize", maxInboundMessageSize)
+            .add("maxOutboundMessageSize", maxOutboundMessageSize)
+            .add("streamTracerFactories", streamTracerFactories)
+            .toString();
   }
 }
