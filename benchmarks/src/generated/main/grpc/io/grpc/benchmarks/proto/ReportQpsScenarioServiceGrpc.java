@@ -92,13 +92,31 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static abstract class ReportQpsScenarioServiceImplBase implements io.grpc.BindableService {
+  public interface ReportQpsScenarioServiceAsync {
 
     /**
      * <pre>
      * Report results of a QPS test benchmark scenario.
      * </pre>
      */
+    default void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request,
+        io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.Void> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getReportScenarioMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service ReportQpsScenarioService
+   */
+  public static abstract class ReportQpsScenarioServiceImplBase
+   implements io.grpc.BindableService, ReportQpsScenarioServiceAsync {
+
+    /**
+     * <pre>
+     * Report results of a QPS test benchmark scenario.
+     * </pre>
+     */
+    @java.lang.Override
     public void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.Void> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getReportScenarioMethod(), responseObserver);
@@ -118,8 +136,11 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service ReportQpsScenarioService
    */
-  public static final class ReportQpsScenarioServiceStub extends io.grpc.stub.AbstractAsyncStub<ReportQpsScenarioServiceStub> {
+  public static final class ReportQpsScenarioServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<ReportQpsScenarioServiceStub>
+   implements ReportQpsScenarioServiceAsync {
     private ReportQpsScenarioServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -136,6 +157,7 @@ public final class ReportQpsScenarioServiceGrpc {
      * Report results of a QPS test benchmark scenario.
      * </pre>
      */
+    @java.lang.Override
     public void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.Void> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -145,7 +167,24 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static final class ReportQpsScenarioServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub> {
+  public interface ReportQpsScenarioServiceBlocking {
+
+    /**
+     * <pre>
+     * Report results of a QPS test benchmark scenario.
+     * </pre>
+     */
+    default io.grpc.benchmarks.proto.Control.Void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service ReportQpsScenarioService
+   */
+  public static final class ReportQpsScenarioServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub>
+   implements ReportQpsScenarioServiceBlocking {
     private ReportQpsScenarioServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -162,6 +201,7 @@ public final class ReportQpsScenarioServiceGrpc {
      * Report results of a QPS test benchmark scenario.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.benchmarks.proto.Control.Void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getReportScenarioMethod(), getCallOptions(), request);
@@ -170,7 +210,25 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static final class ReportQpsScenarioServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ReportQpsScenarioServiceFutureStub> {
+  public interface ReportQpsScenarioServiceFuture {
+
+    /**
+     * <pre>
+     * Report results of a QPS test benchmark scenario.
+     * </pre>
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Control.Void> reportScenario(
+        io.grpc.benchmarks.proto.Control.ScenarioResult request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ReportQpsScenarioService
+   */
+  public static final class ReportQpsScenarioServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<ReportQpsScenarioServiceFutureStub>
+   implements ReportQpsScenarioServiceFuture {
     private ReportQpsScenarioServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -187,6 +245,7 @@ public final class ReportQpsScenarioServiceGrpc {
      * Report results of a QPS test benchmark scenario.
      * </pre>
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Control.Void> reportScenario(
         io.grpc.benchmarks.proto.Control.ScenarioResult request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

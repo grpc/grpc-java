@@ -216,7 +216,7 @@ public final class BenchmarkServiceGrpc {
 
   /**
    */
-  public static abstract class BenchmarkServiceImplBase implements io.grpc.BindableService {
+  public interface BenchmarkServiceAsync {
 
     /**
      * <pre>
@@ -224,6 +224,70 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
+    default void unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnaryCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * Repeated sequence of one request followed by one response.
+     * Should be called streaming ping-pong
+     * The server returns the client payload as-is on each response
+     * </pre>
+     */
+    default io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingCall(
+        io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * Single-sided unbounded streaming from client to server
+     * The server returns the client payload as-is once the client does WritesDone
+     * </pre>
+     */
+    default io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingFromClient(
+        io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingFromClientMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * Single-sided unbounded streaming from server to client
+     * The server repeatedly returns the client payload as-is
+     * </pre>
+     */
+    default void streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStreamingFromServerMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * Two-sided unbounded streaming between server to client
+     * Both sides send the content of their own choice to the other
+     * </pre>
+     */
+    default io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingBothWays(
+        io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingBothWaysMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service BenchmarkService
+   */
+  public static abstract class BenchmarkServiceImplBase
+   implements io.grpc.BindableService, BenchmarkServiceAsync {
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
+    @java.lang.Override
     public void unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnaryCallMethod(), responseObserver);
@@ -236,6 +300,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is on each response
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingCall(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingCallMethod(), responseObserver);
@@ -247,6 +312,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is once the client does WritesDone
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingFromClient(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingFromClientMethod(), responseObserver);
@@ -258,6 +324,7 @@ public final class BenchmarkServiceGrpc {
      * The server repeatedly returns the client payload as-is
      * </pre>
      */
+    @java.lang.Override
     public void streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStreamingFromServerMethod(), responseObserver);
@@ -269,6 +336,7 @@ public final class BenchmarkServiceGrpc {
      * Both sides send the content of their own choice to the other
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingBothWays(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamingBothWaysMethod(), responseObserver);
@@ -316,8 +384,11 @@ public final class BenchmarkServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service BenchmarkService
    */
-  public static final class BenchmarkServiceStub extends io.grpc.stub.AbstractAsyncStub<BenchmarkServiceStub> {
+  public static final class BenchmarkServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<BenchmarkServiceStub>
+   implements BenchmarkServiceAsync {
     private BenchmarkServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -335,6 +406,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
+    @java.lang.Override
     public void unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -348,6 +420,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is on each response
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingCall(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -360,6 +433,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is once the client does WritesDone
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingFromClient(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncClientStreamingCall(
@@ -372,6 +446,7 @@ public final class BenchmarkServiceGrpc {
      * The server repeatedly returns the client payload as-is
      * </pre>
      */
+    @java.lang.Override
     public void streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncServerStreamingCall(
@@ -384,6 +459,7 @@ public final class BenchmarkServiceGrpc {
      * Both sides send the content of their own choice to the other
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleRequest> streamingBothWays(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Messages.SimpleResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -393,7 +469,36 @@ public final class BenchmarkServiceGrpc {
 
   /**
    */
-  public static final class BenchmarkServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingStub> {
+  public interface BenchmarkServiceBlocking {
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
+    default io.grpc.benchmarks.proto.Messages.SimpleResponse unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * <pre>
+     * Single-sided unbounded streaming from server to client
+     * The server repeatedly returns the client payload as-is
+     * </pre>
+     */
+    default java.util.Iterator<io.grpc.benchmarks.proto.Messages.SimpleResponse> streamingFromServer(
+        io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service BenchmarkService
+   */
+  public static final class BenchmarkServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingStub>
+   implements BenchmarkServiceBlocking {
     private BenchmarkServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -411,6 +516,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.benchmarks.proto.Messages.SimpleResponse unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getUnaryCallMethod(), getCallOptions(), request);
@@ -422,6 +528,7 @@ public final class BenchmarkServiceGrpc {
      * The server repeatedly returns the client payload as-is
      * </pre>
      */
+    @java.lang.Override
     public java.util.Iterator<io.grpc.benchmarks.proto.Messages.SimpleResponse> streamingFromServer(
         io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
@@ -431,7 +538,26 @@ public final class BenchmarkServiceGrpc {
 
   /**
    */
-  public static final class BenchmarkServiceFutureStub extends io.grpc.stub.AbstractFutureStub<BenchmarkServiceFutureStub> {
+  public interface BenchmarkServiceFuture {
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Messages.SimpleResponse> unaryCall(
+        io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service BenchmarkService
+   */
+  public static final class BenchmarkServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<BenchmarkServiceFutureStub>
+   implements BenchmarkServiceFuture {
     private BenchmarkServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -449,6 +575,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is.
      * </pre>
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Messages.SimpleResponse> unaryCall(
         io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
