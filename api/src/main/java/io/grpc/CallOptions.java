@@ -16,19 +16,19 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 
-import javax.annotation.CheckReturnValue;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-
-import static com.google.common.base.Preconditions.checkArgument;
+import javax.annotation.CheckReturnValue;
+import javax.annotation.Nullable;
 
 /**
  * The collection of runtime options for a new RPC call.
@@ -290,7 +290,7 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
   public CallOptions withStreamTracerFactory(ClientStreamTracer.Factory factory) {
     ArrayList<ClientStreamTracer.Factory> newList =
-          new ArrayList<>(streamTracerFactories.size() + 1);
+        new ArrayList<>(streamTracerFactories.size() + 1);
     newList.addAll(streamTracerFactories);
     newList.add(factory);
     CallOptions newOptions = fullBuild(this)
@@ -515,16 +515,16 @@ public final class CallOptions {
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
-          .add("deadline", deadline)
-          .add("authority", authority)
-          .add("callCredentials", credentials)
-          .add("executor", executor != null ? executor.getClass() : null)
-          .add("compressorName", compressorName)
-          .add("customOptions", Arrays.deepToString(customOptions))
-          .add("waitForReady", isWaitForReady())
-          .add("maxInboundMessageSize", maxInboundMessageSize)
-          .add("maxOutboundMessageSize", maxOutboundMessageSize)
-          .add("streamTracerFactories", streamTracerFactories)
-          .toString();
+        .add("deadline", deadline)
+        .add("authority", authority)
+        .add("callCredentials", credentials)
+        .add("executor", executor != null ? executor.getClass() : null)
+        .add("compressorName", compressorName)
+        .add("customOptions", Arrays.deepToString(customOptions))
+        .add("waitForReady", isWaitForReady())
+        .add("maxInboundMessageSize", maxInboundMessageSize)
+        .add("maxOutboundMessageSize", maxOutboundMessageSize)
+        .add("streamTracerFactories", streamTracerFactories)
+        .toString();
   }
 }
