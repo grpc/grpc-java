@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2015, 2022 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -290,7 +290,7 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
   public CallOptions withStreamTracerFactory(ClientStreamTracer.Factory factory) {
     ArrayList<ClientStreamTracer.Factory> newList =
-            new ArrayList<>(streamTracerFactories.size() + 1);
+          new ArrayList<>(streamTracerFactories.size() + 1);
     newList.addAll(streamTracerFactories);
     newList.add(factory);
     CallOptions newOptions = fullBuild(this)
@@ -515,16 +515,16 @@ public final class CallOptions {
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
-            .add("deadline", deadline)
-            .add("authority", authority)
-            .add("callCredentials", credentials)
-            .add("executor", executor != null ? executor.getClass() : null)
-            .add("compressorName", compressorName)
-            .add("customOptions", Arrays.deepToString(customOptions))
-            .add("waitForReady", isWaitForReady())
-            .add("maxInboundMessageSize", maxInboundMessageSize)
-            .add("maxOutboundMessageSize", maxOutboundMessageSize)
-            .add("streamTracerFactories", streamTracerFactories)
-            .toString();
+          .add("deadline", deadline)
+          .add("authority", authority)
+          .add("callCredentials", credentials)
+          .add("executor", executor != null ? executor.getClass() : null)
+          .add("compressorName", compressorName)
+          .add("customOptions", Arrays.deepToString(customOptions))
+          .add("waitForReady", isWaitForReady())
+          .add("maxInboundMessageSize", maxInboundMessageSize)
+          .add("maxOutboundMessageSize", maxOutboundMessageSize)
+          .add("streamTracerFactories", streamTracerFactories)
+          .toString();
   }
 }
