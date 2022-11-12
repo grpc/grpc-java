@@ -16,19 +16,19 @@
 
 package io.grpc;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+
+import javax.annotation.CheckReturnValue;
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.CheckReturnValue;
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.Immutable;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 /**
  * The collection of runtime options for a new RPC call.
