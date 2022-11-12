@@ -160,10 +160,42 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static abstract class ClusterDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface ClusterDiscoveryServiceAsync {
 
     /**
      */
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamClusters(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamClustersMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaClustersMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default void fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchClustersMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service ClusterDiscoveryService
+   * <pre>
+   * Return list of all clusters this proxy will load balance to.
+   * </pre>
+   */
+  public static abstract class ClusterDiscoveryServiceImplBase
+   implements io.grpc.BindableService, ClusterDiscoveryServiceAsync {
+
+    /**
+     */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamClusters(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamClustersMethod(), responseObserver);
@@ -171,6 +203,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaClustersMethod(), responseObserver);
@@ -178,6 +211,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchClustersMethod(), responseObserver);
@@ -211,11 +245,14 @@ public final class ClusterDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service ClusterDiscoveryService
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
+  public static final class ClusterDiscoveryServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub>
+   implements ClusterDiscoveryServiceAsync {
     private ClusterDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -229,6 +266,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamClusters(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -237,6 +275,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -245,6 +284,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -257,7 +297,24 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
+  public interface ClusterDiscoveryServiceBlocking {
+
+    /**
+     */
+    default io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service ClusterDiscoveryService
+   * <pre>
+   * Return list of all clusters this proxy will load balance to.
+   * </pre>
+   */
+  public static final class ClusterDiscoveryServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub>
+   implements ClusterDiscoveryServiceBlocking {
     private ClusterDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -271,6 +328,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchClustersMethod(), getCallOptions(), request);
@@ -282,7 +340,25 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
+  public interface ClusterDiscoveryServiceFuture {
+
+    /**
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchClusters(
+        io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ClusterDiscoveryService
+   * <pre>
+   * Return list of all clusters this proxy will load balance to.
+   * </pre>
+   */
+  public static final class ClusterDiscoveryServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub>
+   implements ClusterDiscoveryServiceFuture {
     private ClusterDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -296,6 +372,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchClusters(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

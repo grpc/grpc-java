@@ -92,10 +92,25 @@ public final class AnotherReflectableServiceGrpc {
 
   /**
    */
-  public static abstract class AnotherReflectableServiceImplBase implements io.grpc.BindableService {
+  public interface AnotherReflectableServiceAsync {
 
     /**
      */
+    default void method(io.grpc.reflection.testing.Request request,
+        io.grpc.stub.StreamObserver<io.grpc.reflection.testing.Reply> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getMethodMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service AnotherReflectableService
+   */
+  public static abstract class AnotherReflectableServiceImplBase
+   implements io.grpc.BindableService, AnotherReflectableServiceAsync {
+
+    /**
+     */
+    @java.lang.Override
     public void method(io.grpc.reflection.testing.Request request,
         io.grpc.stub.StreamObserver<io.grpc.reflection.testing.Reply> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getMethodMethod(), responseObserver);
@@ -115,8 +130,11 @@ public final class AnotherReflectableServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service AnotherReflectableService
    */
-  public static final class AnotherReflectableServiceStub extends io.grpc.stub.AbstractAsyncStub<AnotherReflectableServiceStub> {
+  public static final class AnotherReflectableServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<AnotherReflectableServiceStub>
+   implements AnotherReflectableServiceAsync {
     private AnotherReflectableServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -130,6 +148,7 @@ public final class AnotherReflectableServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void method(io.grpc.reflection.testing.Request request,
         io.grpc.stub.StreamObserver<io.grpc.reflection.testing.Reply> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -139,7 +158,21 @@ public final class AnotherReflectableServiceGrpc {
 
   /**
    */
-  public static final class AnotherReflectableServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub> {
+  public interface AnotherReflectableServiceBlocking {
+
+    /**
+     */
+    default io.grpc.reflection.testing.Reply method(io.grpc.reflection.testing.Request request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service AnotherReflectableService
+   */
+  public static final class AnotherReflectableServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub>
+   implements AnotherReflectableServiceBlocking {
     private AnotherReflectableServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -153,6 +186,7 @@ public final class AnotherReflectableServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.reflection.testing.Reply method(io.grpc.reflection.testing.Request request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getMethodMethod(), getCallOptions(), request);
@@ -161,7 +195,22 @@ public final class AnotherReflectableServiceGrpc {
 
   /**
    */
-  public static final class AnotherReflectableServiceFutureStub extends io.grpc.stub.AbstractFutureStub<AnotherReflectableServiceFutureStub> {
+  public interface AnotherReflectableServiceFuture {
+
+    /**
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.grpc.reflection.testing.Reply> method(
+        io.grpc.reflection.testing.Request request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service AnotherReflectableService
+   */
+  public static final class AnotherReflectableServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<AnotherReflectableServiceFutureStub>
+   implements AnotherReflectableServiceFuture {
     private AnotherReflectableServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -175,6 +224,7 @@ public final class AnotherReflectableServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.reflection.testing.Reply> method(
         io.grpc.reflection.testing.Request request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

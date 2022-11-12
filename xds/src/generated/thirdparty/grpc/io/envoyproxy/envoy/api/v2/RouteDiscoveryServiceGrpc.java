@@ -168,10 +168,46 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static abstract class RouteDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface RouteDiscoveryServiceAsync {
 
     /**
      */
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamRoutes(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamRoutesMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaRoutes(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaRoutesMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default void fetchRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchRoutesMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service RouteDiscoveryService
+   * <pre>
+   * The resource_names field in DiscoveryRequest specifies a route configuration.
+   * This allows an Envoy configuration with multiple HTTP listeners (and
+   * associated HTTP connection manager filters) to use different route
+   * configurations. Each listener will bind its HTTP connection manager filter to
+   * a route table via this identifier.
+   * </pre>
+   */
+  public static abstract class RouteDiscoveryServiceImplBase
+   implements io.grpc.BindableService, RouteDiscoveryServiceAsync {
+
+    /**
+     */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamRoutesMethod(), responseObserver);
@@ -179,6 +215,7 @@ public final class RouteDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaRoutesMethod(), responseObserver);
@@ -186,6 +223,7 @@ public final class RouteDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void fetchRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchRoutesMethod(), responseObserver);
@@ -219,6 +257,7 @@ public final class RouteDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service RouteDiscoveryService
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and
@@ -227,7 +266,9 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<RouteDiscoveryServiceStub> {
+  public static final class RouteDiscoveryServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<RouteDiscoveryServiceStub>
+   implements RouteDiscoveryServiceAsync {
     private RouteDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -241,6 +282,7 @@ public final class RouteDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -249,6 +291,7 @@ public final class RouteDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -257,6 +300,7 @@ public final class RouteDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void fetchRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -273,7 +317,28 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<RouteDiscoveryServiceBlockingStub> {
+  public interface RouteDiscoveryServiceBlocking {
+
+    /**
+     */
+    default io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service RouteDiscoveryService
+   * <pre>
+   * The resource_names field in DiscoveryRequest specifies a route configuration.
+   * This allows an Envoy configuration with multiple HTTP listeners (and
+   * associated HTTP connection manager filters) to use different route
+   * configurations. Each listener will bind its HTTP connection manager filter to
+   * a route table via this identifier.
+   * </pre>
+   */
+  public static final class RouteDiscoveryServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<RouteDiscoveryServiceBlockingStub>
+   implements RouteDiscoveryServiceBlocking {
     private RouteDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -287,6 +352,7 @@ public final class RouteDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchRoutesMethod(), getCallOptions(), request);
@@ -302,7 +368,29 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<RouteDiscoveryServiceFutureStub> {
+  public interface RouteDiscoveryServiceFuture {
+
+    /**
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchRoutes(
+        io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteDiscoveryService
+   * <pre>
+   * The resource_names field in DiscoveryRequest specifies a route configuration.
+   * This allows an Envoy configuration with multiple HTTP listeners (and
+   * associated HTTP connection manager filters) to use different route
+   * configurations. Each listener will bind its HTTP connection manager filter to
+   * a route table via this identifier.
+   * </pre>
+   */
+  public static final class RouteDiscoveryServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<RouteDiscoveryServiceFutureStub>
+   implements RouteDiscoveryServiceFuture {
     private RouteDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -316,6 +404,7 @@ public final class RouteDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchRoutes(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

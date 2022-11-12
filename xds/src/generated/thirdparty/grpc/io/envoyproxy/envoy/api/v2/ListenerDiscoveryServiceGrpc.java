@@ -166,10 +166,45 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public static abstract class ListenerDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface ListenerDiscoveryServiceAsync {
 
     /**
      */
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaListeners(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaListenersMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamListeners(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamListenersMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default void fetchListeners(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchListenersMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service ListenerDiscoveryService
+   * <pre>
+   * The Envoy instance initiates an RPC at startup to discover a list of
+   * listeners. Updates are delivered via streaming from the LDS server and
+   * consist of a complete update of all listeners. Existing connections will be
+   * allowed to drain from listeners that are no longer present.
+   * </pre>
+   */
+  public static abstract class ListenerDiscoveryServiceImplBase
+   implements io.grpc.BindableService, ListenerDiscoveryServiceAsync {
+
+    /**
+     */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaListeners(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaListenersMethod(), responseObserver);
@@ -177,6 +212,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamListeners(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamListenersMethod(), responseObserver);
@@ -184,6 +220,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void fetchListeners(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchListenersMethod(), responseObserver);
@@ -217,6 +254,7 @@ public final class ListenerDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service ListenerDiscoveryService
    * <pre>
    * The Envoy instance initiates an RPC at startup to discover a list of
    * listeners. Updates are delivered via streaming from the LDS server and
@@ -224,7 +262,9 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public static final class ListenerDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ListenerDiscoveryServiceStub> {
+  public static final class ListenerDiscoveryServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<ListenerDiscoveryServiceStub>
+   implements ListenerDiscoveryServiceAsync {
     private ListenerDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -238,6 +278,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaListeners(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -246,6 +287,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamListeners(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -254,6 +296,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void fetchListeners(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -269,7 +312,27 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public static final class ListenerDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub> {
+  public interface ListenerDiscoveryServiceBlocking {
+
+    /**
+     */
+    default io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchListeners(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service ListenerDiscoveryService
+   * <pre>
+   * The Envoy instance initiates an RPC at startup to discover a list of
+   * listeners. Updates are delivered via streaming from the LDS server and
+   * consist of a complete update of all listeners. Existing connections will be
+   * allowed to drain from listeners that are no longer present.
+   * </pre>
+   */
+  public static final class ListenerDiscoveryServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub>
+   implements ListenerDiscoveryServiceBlocking {
     private ListenerDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -283,6 +346,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchListeners(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchListenersMethod(), getCallOptions(), request);
@@ -297,7 +361,28 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public static final class ListenerDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ListenerDiscoveryServiceFutureStub> {
+  public interface ListenerDiscoveryServiceFuture {
+
+    /**
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchListeners(
+        io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ListenerDiscoveryService
+   * <pre>
+   * The Envoy instance initiates an RPC at startup to discover a list of
+   * listeners. Updates are delivered via streaming from the LDS server and
+   * consist of a complete update of all listeners. Existing connections will be
+   * allowed to drain from listeners that are no longer present.
+   * </pre>
+   */
+  public static final class ListenerDiscoveryServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<ListenerDiscoveryServiceFutureStub>
+   implements ListenerDiscoveryServiceFuture {
     private ListenerDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -311,6 +396,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchListeners(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

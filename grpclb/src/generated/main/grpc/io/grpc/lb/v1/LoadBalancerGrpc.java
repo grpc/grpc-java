@@ -92,13 +92,31 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static abstract class LoadBalancerImplBase implements io.grpc.BindableService {
+  public interface LoadBalancerAsync {
 
     /**
      * <pre>
      * Bidirectional rpc to get a list of servers.
      * </pre>
      */
+    default io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceRequest> balanceLoad(
+        io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getBalanceLoadMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service LoadBalancer
+   */
+  public static abstract class LoadBalancerImplBase
+   implements io.grpc.BindableService, LoadBalancerAsync {
+
+    /**
+     * <pre>
+     * Bidirectional rpc to get a list of servers.
+     * </pre>
+     */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceRequest> balanceLoad(
         io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getBalanceLoadMethod(), responseObserver);
@@ -118,8 +136,11 @@ public final class LoadBalancerGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service LoadBalancer
    */
-  public static final class LoadBalancerStub extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub> {
+  public static final class LoadBalancerStub
+   extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub>
+   implements LoadBalancerAsync {
     private LoadBalancerStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -136,6 +157,7 @@ public final class LoadBalancerGrpc {
      * Bidirectional rpc to get a list of servers.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceRequest> balanceLoad(
         io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -145,7 +167,15 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static final class LoadBalancerBlockingStub extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {
+  public interface LoadBalancerBlocking {
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service LoadBalancer
+   */
+  public static final class LoadBalancerBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub>
+   implements LoadBalancerBlocking {
     private LoadBalancerBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -160,7 +190,15 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static final class LoadBalancerFutureStub extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub> {
+  public interface LoadBalancerFuture {
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadBalancer
+   */
+  public static final class LoadBalancerFutureStub
+   extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub>
+   implements LoadBalancerFuture {
     private LoadBalancerFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

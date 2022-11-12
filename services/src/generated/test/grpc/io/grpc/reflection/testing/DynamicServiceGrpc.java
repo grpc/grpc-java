@@ -98,13 +98,34 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static abstract class DynamicServiceImplBase implements io.grpc.BindableService {
+  public interface DynamicServiceAsync {
 
     /**
      * <pre>
      * A method
      * </pre>
      */
+    default void method(io.grpc.reflection.testing.DynamicRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.reflection.testing.DynamicReply> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getMethodMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service DynamicService
+   * <pre>
+   * A DynamicService
+   * </pre>
+   */
+  public static abstract class DynamicServiceImplBase
+   implements io.grpc.BindableService, DynamicServiceAsync {
+
+    /**
+     * <pre>
+     * A method
+     * </pre>
+     */
+    @java.lang.Override
     public void method(io.grpc.reflection.testing.DynamicRequest request,
         io.grpc.stub.StreamObserver<io.grpc.reflection.testing.DynamicReply> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getMethodMethod(), responseObserver);
@@ -124,11 +145,14 @@ public final class DynamicServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service DynamicService
    * <pre>
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceStub extends io.grpc.stub.AbstractAsyncStub<DynamicServiceStub> {
+  public static final class DynamicServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<DynamicServiceStub>
+   implements DynamicServiceAsync {
     private DynamicServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -145,6 +169,7 @@ public final class DynamicServiceGrpc {
      * A method
      * </pre>
      */
+    @java.lang.Override
     public void method(io.grpc.reflection.testing.DynamicRequest request,
         io.grpc.stub.StreamObserver<io.grpc.reflection.testing.DynamicReply> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -157,7 +182,27 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<DynamicServiceBlockingStub> {
+  public interface DynamicServiceBlocking {
+
+    /**
+     * <pre>
+     * A method
+     * </pre>
+     */
+    default io.grpc.reflection.testing.DynamicReply method(io.grpc.reflection.testing.DynamicRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service DynamicService
+   * <pre>
+   * A DynamicService
+   * </pre>
+   */
+  public static final class DynamicServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<DynamicServiceBlockingStub>
+   implements DynamicServiceBlocking {
     private DynamicServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -174,6 +219,7 @@ public final class DynamicServiceGrpc {
      * A method
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.reflection.testing.DynamicReply method(io.grpc.reflection.testing.DynamicRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getMethodMethod(), getCallOptions(), request);
@@ -185,7 +231,28 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceFutureStub extends io.grpc.stub.AbstractFutureStub<DynamicServiceFutureStub> {
+  public interface DynamicServiceFuture {
+
+    /**
+     * <pre>
+     * A method
+     * </pre>
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.grpc.reflection.testing.DynamicReply> method(
+        io.grpc.reflection.testing.DynamicRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service DynamicService
+   * <pre>
+   * A DynamicService
+   * </pre>
+   */
+  public static final class DynamicServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<DynamicServiceFutureStub>
+   implements DynamicServiceFuture {
     private DynamicServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -202,6 +269,7 @@ public final class DynamicServiceGrpc {
      * A method
      * </pre>
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.reflection.testing.DynamicReply> method(
         io.grpc.reflection.testing.DynamicRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

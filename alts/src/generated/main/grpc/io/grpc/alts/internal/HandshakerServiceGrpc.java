@@ -92,7 +92,7 @@ public final class HandshakerServiceGrpc {
 
   /**
    */
-  public static abstract class HandshakerServiceImplBase implements io.grpc.BindableService {
+  public interface HandshakerServiceAsync {
 
     /**
      * <pre>
@@ -104,6 +104,29 @@ public final class HandshakerServiceGrpc {
      * response before sending next request.
      * </pre>
      */
+    default io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerReq> doHandshake(
+        io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerResp> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDoHandshakeMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service HandshakerService
+   */
+  public static abstract class HandshakerServiceImplBase
+   implements io.grpc.BindableService, HandshakerServiceAsync {
+
+    /**
+     * <pre>
+     * Handshaker service accepts a stream of handshaker request, returning a
+     * stream of handshaker response. Client is expected to send exactly one
+     * message with either client_start or server_start followed by one or more
+     * messages with next. Each time client sends a request, the handshaker
+     * service expects to respond. Client does not have to wait for service's
+     * response before sending next request.
+     * </pre>
+     */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerReq> doHandshake(
         io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerResp> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDoHandshakeMethod(), responseObserver);
@@ -123,8 +146,11 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service HandshakerService
    */
-  public static final class HandshakerServiceStub extends io.grpc.stub.AbstractAsyncStub<HandshakerServiceStub> {
+  public static final class HandshakerServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<HandshakerServiceStub>
+   implements HandshakerServiceAsync {
     private HandshakerServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -146,6 +172,7 @@ public final class HandshakerServiceGrpc {
      * response before sending next request.
      * </pre>
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerReq> doHandshake(
         io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerResp> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -155,7 +182,15 @@ public final class HandshakerServiceGrpc {
 
   /**
    */
-  public static final class HandshakerServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
+  public interface HandshakerServiceBlocking {
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service HandshakerService
+   */
+  public static final class HandshakerServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub>
+   implements HandshakerServiceBlocking {
     private HandshakerServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -170,7 +205,15 @@ public final class HandshakerServiceGrpc {
 
   /**
    */
-  public static final class HandshakerServiceFutureStub extends io.grpc.stub.AbstractFutureStub<HandshakerServiceFutureStub> {
+  public interface HandshakerServiceFuture {
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service HandshakerService
+   */
+  public static final class HandshakerServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<HandshakerServiceFutureStub>
+   implements HandshakerServiceFuture {
     private HandshakerServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

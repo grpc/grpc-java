@@ -172,10 +172,48 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * HTTP request.
    * </pre>
    */
-  public static abstract class ScopedRoutesDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface ScopedRoutesDiscoveryServiceAsync {
 
     /**
      */
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamScopedRoutes(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamScopedRoutesMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaScopedRoutes(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaScopedRoutesMethod(), responseObserver);
+    }
+
+    /**
+     */
+    default void fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchScopedRoutesMethod(), responseObserver);
+    }
+  }
+
+  /**
+   * Base class for the server implementation of the service ScopedRoutesDiscoveryService
+   * <pre>
+   * The Scoped Routes Discovery Service (SRDS) API distributes
+   * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
+   * resources. Each ScopedRouteConfiguration resource represents a "routing
+   * scope" containing a mapping that allows the HTTP connection manager to
+   * dynamically assign a routing table (specified via a
+   * :ref:`RouteConfiguration&lt;envoy_api_msg_RouteConfiguration&gt;` message) to each
+   * HTTP request.
+   * </pre>
+   */
+  public static abstract class ScopedRoutesDiscoveryServiceImplBase
+   implements io.grpc.BindableService, ScopedRoutesDiscoveryServiceAsync {
+
+    /**
+     */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamScopedRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamScopedRoutesMethod(), responseObserver);
@@ -183,6 +221,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaScopedRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaScopedRoutesMethod(), responseObserver);
@@ -190,6 +229,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchScopedRoutesMethod(), responseObserver);
@@ -223,6 +263,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do asynchronous rpc calls to service ScopedRoutesDiscoveryService
    * <pre>
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
@@ -233,7 +274,9 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * HTTP request.
    * </pre>
    */
-  public static final class ScopedRoutesDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ScopedRoutesDiscoveryServiceStub> {
+  public static final class ScopedRoutesDiscoveryServiceStub
+   extends io.grpc.stub.AbstractAsyncStub<ScopedRoutesDiscoveryServiceStub>
+   implements ScopedRoutesDiscoveryServiceAsync {
     private ScopedRoutesDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -247,6 +290,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamScopedRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -255,6 +299,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaScopedRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -263,6 +308,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public void fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -281,7 +327,30 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * HTTP request.
    * </pre>
    */
-  public static final class ScopedRoutesDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ScopedRoutesDiscoveryServiceBlockingStub> {
+  public interface ScopedRoutesDiscoveryServiceBlocking {
+
+    /**
+     */
+    default io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do synchronous rpc calls to service ScopedRoutesDiscoveryService
+   * <pre>
+   * The Scoped Routes Discovery Service (SRDS) API distributes
+   * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
+   * resources. Each ScopedRouteConfiguration resource represents a "routing
+   * scope" containing a mapping that allows the HTTP connection manager to
+   * dynamically assign a routing table (specified via a
+   * :ref:`RouteConfiguration&lt;envoy_api_msg_RouteConfiguration&gt;` message) to each
+   * HTTP request.
+   * </pre>
+   */
+  public static final class ScopedRoutesDiscoveryServiceBlockingStub
+   extends io.grpc.stub.AbstractBlockingStub<ScopedRoutesDiscoveryServiceBlockingStub>
+   implements ScopedRoutesDiscoveryServiceBlocking {
     private ScopedRoutesDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -295,6 +364,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchScopedRoutesMethod(), getCallOptions(), request);
@@ -312,7 +382,31 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * HTTP request.
    * </pre>
    */
-  public static final class ScopedRoutesDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ScopedRoutesDiscoveryServiceFutureStub> {
+  public interface ScopedRoutesDiscoveryServiceFuture {
+
+    /**
+     */
+    default com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchScopedRoutes(
+        io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ScopedRoutesDiscoveryService
+   * <pre>
+   * The Scoped Routes Discovery Service (SRDS) API distributes
+   * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
+   * resources. Each ScopedRouteConfiguration resource represents a "routing
+   * scope" containing a mapping that allows the HTTP connection manager to
+   * dynamically assign a routing table (specified via a
+   * :ref:`RouteConfiguration&lt;envoy_api_msg_RouteConfiguration&gt;` message) to each
+   * HTTP request.
+   * </pre>
+   */
+  public static final class ScopedRoutesDiscoveryServiceFutureStub
+   extends io.grpc.stub.AbstractFutureStub<ScopedRoutesDiscoveryServiceFutureStub>
+   implements ScopedRoutesDiscoveryServiceFuture {
     private ScopedRoutesDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -326,6 +420,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
     /**
      */
+    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchScopedRoutes(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
