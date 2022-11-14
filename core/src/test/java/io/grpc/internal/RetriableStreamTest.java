@@ -283,6 +283,7 @@ public class RetriableStreamTest {
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
     sublistenerCaptor1.getValue().closed(
         Status.fromCode(RETRIABLE_STATUS_CODE_2), PROCESSED, new Metadata());
+    inOrder.verify(retriableStreamRecorder).newSubstream(1);
     assertEquals(1, fakeClock.numPendingTasks());
 
     // send more messages during backoff
@@ -294,7 +295,6 @@ public class RetriableStreamTest {
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(1L, TimeUnit.SECONDS);
     assertEquals(0, fakeClock.numPendingTasks());
-    inOrder.verify(retriableStreamRecorder).newSubstream(1);
     inOrder.verify(mockStream2).setAuthority(AUTHORITY);
     inOrder.verify(mockStream2).setCompressor(COMPRESSOR);
     inOrder.verify(mockStream2).setDecompressorRegistry(DECOMPRESSOR_REGISTRY);
@@ -339,6 +339,7 @@ public class RetriableStreamTest {
     doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(2);
     sublistenerCaptor2.getValue().closed(
         Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
+    inOrder.verify(retriableStreamRecorder).newSubstream(2);
     assertEquals(1, fakeClock.numPendingTasks());
 
     // send more messages during backoff
@@ -353,7 +354,6 @@ public class RetriableStreamTest {
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(1L, TimeUnit.SECONDS);
     assertEquals(0, fakeClock.numPendingTasks());
-    inOrder.verify(retriableStreamRecorder).newSubstream(2);
     inOrder.verify(mockStream3).setAuthority(AUTHORITY);
     inOrder.verify(mockStream3).setCompressor(COMPRESSOR);
     inOrder.verify(mockStream3).setDecompressorRegistry(DECOMPRESSOR_REGISTRY);
@@ -1127,7 +1127,6 @@ public class RetriableStreamTest {
     sublistenerCaptor1.getValue().closed(
         Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
 
-    // bufferSizeTracer.outboundWireSize() quits immediately while backoff b/c substream1 is closed
     assertEquals(1, fakeClock.numPendingTasks());
     bufferSizeTracer.outboundWireSize(2);
     verify(retriableStreamRecorder, never()).postCommit();
@@ -1138,8 +1137,6 @@ public class RetriableStreamTest {
 
     // bufferLimitExceeded
     bufferSizeTracer.outboundWireSize(PER_RPC_BUFFER_LIMIT - 1);
-    verify(retriableStreamRecorder, never()).postCommit();
-    bufferSizeTracer.outboundWireSize(2);
     verify(retriableStreamRecorder).postCommit();
 
     verifyNoMoreInteractions(mockStream1);
