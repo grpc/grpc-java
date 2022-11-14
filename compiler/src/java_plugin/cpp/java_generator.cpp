@@ -586,21 +586,11 @@ static void PrintStub(
       stub_base_class_name = "AbstractAsyncStub";
       interface_name += "Async";
       break;
-    case BLOCKING_CLIENT_INTERFACE:
-      interface = true;
-      call_type = BLOCKING_CALL;
-      stub_name += "Blocking";
-      break;
     case BLOCKING_CLIENT_IMPL:
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
       stub_base_class_name = "AbstractBlockingStub";
       interface_name += "Blocking";
-      break;
-    case FUTURE_CLIENT_INTERFACE:
-      interface = true;
-      call_type = FUTURE_CALL;
-      stub_name += "Future";
       break;
     case FUTURE_CLIENT_IMPL:
       call_type = FUTURE_CALL;
@@ -608,6 +598,9 @@ static void PrintStub(
       stub_base_class_name = "AbstractFutureStub";
       interface_name += "Future";
       break;
+    case BLOCKING_CLIENT_INTERFACE:
+    case FUTURE_CLIENT_INTERFACE:
+      GRPC_CODEGEN_FAIL << "Intentionally not creating StubType: " << type
     default:
       GRPC_CODEGEN_FAIL << "Cannot determine class name for StubType: " << type;
   }
@@ -635,8 +628,7 @@ static void PrintStub(
     p->Print(
         *vars,
         "public static final class $stub_name$\n"
-        " extends $stub_base_class_name$<$stub_name$>\n"
-        " implements $interface_name$ {\n");
+        " extends $stub_base_class_name$<$stub_name$> {\n");
   }
   p->Indent();
 
@@ -695,9 +687,10 @@ static void PrintStub(
     }
 
     if (!interface) {
-      p->Print(*vars,
-               "@$Override$\n"
-               "public ");
+      if (impl_base) {
+        p->Print(*vars, "@$Override$\n");
+      }
+      p->Print("public ");
     } else {
       p->Print("default ");
     }
@@ -816,7 +809,7 @@ static void PrintStub(
           break;
       }
     } else {
-      p->Print("throw new UnsupportedOperationException();\n");
+      GRPC_CODEGEN_FAIL << "Do not create Stub interfaces";
     }
     p->Outdent();
     p->Print("}\n");
@@ -1191,9 +1184,7 @@ static void PrintService(const ServiceDescriptor* service,
   PrintStub(service, vars, p, ASYNC_INTERFACE);
   PrintStub(service, vars, p, ABSTRACT_CLASS);
   PrintStub(service, vars, p, ASYNC_CLIENT_IMPL);
-  PrintStub(service, vars, p, BLOCKING_CLIENT_INTERFACE);
   PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL);
-  PrintStub(service, vars, p, FUTURE_CLIENT_INTERFACE);
   PrintStub(service, vars, p, FUTURE_CLIENT_IMPL);
 
   PrintMethodHandlerClass(service, vars, p);
