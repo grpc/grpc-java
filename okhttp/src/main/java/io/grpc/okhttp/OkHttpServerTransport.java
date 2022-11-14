@@ -16,6 +16,7 @@
 
 package io.grpc.okhttp;
 
+import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 
 import com.google.common.base.Preconditions;
@@ -31,6 +32,7 @@ import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.LogExceptionRunnable;
 import io.grpc.internal.MaxConnectionIdleManager;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SerializingExecutor;
@@ -96,6 +98,7 @@ final class OkHttpServerTransport implements ServerTransport,
   private Attributes attributes;
   private KeepAliveManager keepAliveManager;
   private MaxConnectionIdleManager maxConnectionIdleManager;
+  private ScheduledFuture<?> maxConnectionAgeMonitor;
   private final KeepAliveEnforcer keepAliveEnforcer;
 
   private final Object lock = new Object();
@@ -223,6 +226,15 @@ final class OkHttpServerTransport implements ServerTransport,
         maxConnectionIdleManager.start(this::shutdown, scheduledExecutorService);
       }
 
+      if (config.maxConnectionAgeInNanos != MAX_CONNECTION_AGE_NANOS_DISABLED) {
+        long maxConnectionAgeInNanos =
+            (long) ((.9D + Math.random() * .2D) * config.maxConnectionAgeInNanos);
+        maxConnectionAgeMonitor = scheduledExecutorService.schedule(
+            new LogExceptionRunnable(() -> shutdown(config.maxConnectionAgeGraceInNanos)),
+            maxConnectionAgeInNanos,
+            TimeUnit.NANOSECONDS);
+      }
+
       transportExecutor.execute(
           new FrameHandler(variant.newReader(Okio.buffer(Okio.source(socket)), false)));
     } catch (Error | IOException | RuntimeException ex) {
@@ -238,6 +250,10 @@ final class OkHttpServerTransport implements ServerTransport,
 
   @Override
   public void shutdown() {
+    shutdown(TimeUnit.SECONDS.toNanos(1L));
+  }
+
+  private void shutdown(Long graceTimeInNanos) {
     synchronized (lock) {
       if (gracefulShutdown || abruptShutdown) {
         return;
@@ -251,7 +267,7 @@ final class OkHttpServerTransport implements ServerTransport,
         // we also set a timer to limit the upper bound in case the PING is excessively stalled or
         // the client is malicious.
         secondGoawayTimer = scheduledExecutorService.schedule(
-            this::triggerGracefulSecondGoaway, 1, TimeUnit.SECONDS);
+            this::triggerGracefulSecondGoaway, graceTimeInNanos, TimeUnit.NANOSECONDS);
         frameWriter.goAway(Integer.MAX_VALUE, ErrorCode.NO_ERROR, new byte[0]);
         frameWriter.ping(false, 0, GRACEFUL_SHUTDOWN_PING);
         frameWriter.flush();
@@ -347,6 +363,10 @@ final class OkHttpServerTransport implements ServerTransport,
     }
     if (maxConnectionIdleManager != null) {
       maxConnectionIdleManager.onTransportTermination();
+    }
+
+    if (maxConnectionAgeMonitor != null) {
+      maxConnectionAgeMonitor.cancel(false);
     }
     transportExecutor = config.transportExecutorPool.returnObject(transportExecutor);
     scheduledExecutorService =
@@ -479,6 +499,8 @@ final class OkHttpServerTransport implements ServerTransport,
     final long maxConnectionIdleNanos;
     final boolean permitKeepAliveWithoutCalls;
     final long permitKeepAliveTimeInNanos;
+    final long maxConnectionAgeInNanos;
+    final long maxConnectionAgeGraceInNanos;
 
     public Config(
         OkHttpServerBuilder builder,
@@ -501,6 +523,8 @@ final class OkHttpServerTransport implements ServerTransport,
       maxConnectionIdleNanos = builder.maxConnectionIdleInNanos;
       permitKeepAliveWithoutCalls = builder.permitKeepAliveWithoutCalls;
       permitKeepAliveTimeInNanos = builder.permitKeepAliveTimeInNanos;
+      maxConnectionAgeInNanos = builder.maxConnectionAgeInNanos;
+      maxConnectionAgeGraceInNanos = builder.maxConnectionAgeGraceInNanos;
     }
   }
 

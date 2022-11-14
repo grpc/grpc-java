@@ -84,7 +84,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
       Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     final AtomicLong seq = new AtomicLong(1);
-    final String rpcId = UUID.randomUUID().toString();
+    final String callId = UUID.randomUUID().toString();
     final String authority = call.getAuthority();
     final String serviceName = call.getMethodDescriptor().getServiceName();
     final String methodName = call.getMethodDescriptor().getBareMethodName();
@@ -93,7 +93,8 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     final Duration timeout = deadline == null ? null
         : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
 
-    FilterParams filterParams = filterHelper.isMethodToBeLogged(call.getMethodDescriptor());
+    FilterParams filterParams =
+        filterHelper.logRpcMethod(call.getMethodDescriptor().getFullMethodName(), false);
     if (!filterParams.log()) {
       return next.startCall(call, headers);
     }
@@ -101,94 +102,89 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     final int maxHeaderBytes = filterParams.headerBytes();
     final int maxMessageBytes = filterParams.messageBytes();
 
-    // Event: EventType.GRPC_CALL_REQUEST_HEADER
-    if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_HEADER)) {
-      try {
-        helper.logRequestHeader(
-            seq.getAndIncrement(),
-            serviceName,
-            methodName,
-            authority,
-            timeout,
-            headers,
-            maxHeaderBytes,
-            EventLogger.LOGGER_SERVER,
-            rpcId,
-            peerAddress);
-      } catch (Exception e) {
-        // Catching generic exceptions instead of specific ones for all the events.
-        // This way we can catch both expected and unexpected exceptions instead of re-throwing
-        // exceptions to callers which will lead to RPC getting aborted.
-        // Expected exceptions to be caught:
-        // 1. IllegalArgumentException
-        // 2. NullPointerException
-        logger.log(Level.SEVERE, "Unable to log request header", e);
-      }
+    // Event: EventType.CLIENT_HEADER
+    try {
+      helper.logClientHeader(
+          seq.getAndIncrement(),
+          serviceName,
+          methodName,
+          authority,
+          timeout,
+          headers,
+          maxHeaderBytes,
+          EventLogger.SERVER,
+          callId,
+          peerAddress);
+    } catch (Exception e) {
+      // Catching generic exceptions instead of specific ones for all the events.
+      // This way we can catch both expected and unexpected exceptions instead of re-throwing
+      // exceptions to callers which will lead to RPC getting aborted.
+      // Expected exceptions to be caught:
+      // 1. IllegalArgumentException
+      // 2. NullPointerException
+      logger.log(Level.SEVERE, "Unable to log request header", e);
     }
 
     ServerCall<ReqT, RespT> wrapperCall =
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void sendHeaders(Metadata headers) {
-            // Event: EventType.GRPC_CALL_RESPONSE_HEADER
-            if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_HEADER)) {
-              try {
-                helper.logResponseHeader(
-                    seq.getAndIncrement(),
-                    serviceName,
-                    methodName,
-                    headers,
-                    maxHeaderBytes,
-                    EventLogger.LOGGER_SERVER,
-                    rpcId,
-                    null);
-              } catch (Exception e) {
-                logger.log(Level.SEVERE, "Unable to log response header", e);
-              }
+            // Event: EventType.SERVER_HEADER
+            try {
+              helper.logServerHeader(
+                  seq.getAndIncrement(),
+                  serviceName,
+                  methodName,
+                  authority,
+                  headers,
+                  maxHeaderBytes,
+                  EventLogger.SERVER,
+                  callId,
+                  null);
+            } catch (Exception e) {
+              logger.log(Level.SEVERE, "Unable to log response header", e);
             }
             super.sendHeaders(headers);
           }
 
           @Override
           public void sendMessage(RespT message) {
-            // Event: EventType.GRPC_CALL_RESPONSE_MESSAGE
-            EventType responseMessageType = EventType.GRPC_CALL_RESPONSE_MESSAGE;
-            if (filterHelper.isEventToBeLogged(responseMessageType)) {
-              try {
-                helper.logRpcMessage(
-                    seq.getAndIncrement(),
-                    serviceName,
-                    methodName,
-                    responseMessageType,
-                    message,
-                    maxMessageBytes,
-                    EventLogger.LOGGER_SERVER,
-                    rpcId);
-              } catch (Exception e) {
-                logger.log(Level.SEVERE, "Unable to log response message", e);
-              }
+            // Event: EventType.SERVER_MESSAGE
+            EventType responseMessageType = EventType.SERVER_MESSAGE;
+            try {
+              helper.logRpcMessage(
+                  seq.getAndIncrement(),
+                  serviceName,
+                  methodName,
+                  authority,
+                  responseMessageType,
+                  message,
+                  maxMessageBytes,
+                  EventLogger.SERVER,
+                  callId);
+            } catch (Exception e) {
+              logger.log(Level.SEVERE, "Unable to log response message", e);
             }
             super.sendMessage(message);
           }
 
           @Override
           public void close(Status status, Metadata trailers) {
-            // Event: EventType.GRPC_CALL_TRAILER
-            if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_TRAILER)) {
-              try {
-                helper.logTrailer(
-                    seq.getAndIncrement(),
-                    serviceName,
-                    methodName,
-                    status,
-                    trailers,
-                    maxHeaderBytes,
-                    EventLogger.LOGGER_SERVER,
-                    rpcId,
-                    null);
-              } catch (Exception e) {
-                logger.log(Level.SEVERE, "Unable to log trailer", e);
-              }
+            // Event: EventType.SERVER_TRAILER
+            try {
+              helper.logTrailer(
+                  seq.getAndIncrement(),
+                  serviceName,
+                  methodName,
+                  authority,
+                  status,
+                  trailers,
+                  maxHeaderBytes,
+                  EventLogger.SERVER,
+                  callId,
+                  null);
+            } catch (Exception e) {
+              logger.log(Level.SEVERE, "Unable to log trailer", e);
             }
             super.close(status, trailers);
           }
@@ -198,58 +194,56 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     return new SimpleForwardingServerCallListener<ReqT>(listener) {
       @Override
       public void onMessage(ReqT message) {
-        // Event: EventType.GRPC_CALL_REQUEST_MESSAGE
-        EventType requestMessageType = EventType.GRPC_CALL_REQUEST_MESSAGE;
-        if (filterHelper.isEventToBeLogged(requestMessageType)) {
-          try {
-            helper.logRpcMessage(
-                seq.getAndIncrement(),
-                serviceName,
-                methodName,
-                requestMessageType,
-                message,
-                maxMessageBytes,
-                EventLogger.LOGGER_SERVER,
-                rpcId);
-          } catch (Exception e) {
-            logger.log(Level.SEVERE, "Unable to log request message", e);
-          }
+
+        // Event: EventType.CLIENT_MESSAGE
+        EventType requestMessageType = EventType.CLIENT_MESSAGE;
+        try {
+          helper.logRpcMessage(
+              seq.getAndIncrement(),
+              serviceName,
+              methodName,
+              authority,
+              requestMessageType,
+              message,
+              maxMessageBytes,
+              EventLogger.SERVER,
+              callId);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log request message", e);
         }
         super.onMessage(message);
       }
 
       @Override
       public void onHalfClose() {
-        // Event: EventType.GRPC_CALL_HALF_CLOSE
-        if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_HALF_CLOSE)) {
-          try {
-            helper.logHalfClose(
-                seq.getAndIncrement(),
-                serviceName,
-                methodName,
-                EventLogger.LOGGER_SERVER,
-                rpcId);
-          } catch (Exception e) {
-            logger.log(Level.SEVERE, "Unable to log half close", e);
-          }
+        // Event: EventType.CLIENT_HALF_CLOSE
+        try {
+          helper.logHalfClose(
+              seq.getAndIncrement(),
+              serviceName,
+              methodName,
+              authority,
+              EventLogger.SERVER,
+              callId);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log half close", e);
         }
         super.onHalfClose();
       }
 
       @Override
       public void onCancel() {
-        // Event: EventType.GRPC_CALL_CANCEL
-        if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_CANCEL)) {
-          try {
-            helper.logCancel(
-                seq.getAndIncrement(),
-                serviceName,
-                methodName,
-                EventLogger.LOGGER_SERVER,
-                rpcId);
-          } catch (Exception e) {
-            logger.log(Level.SEVERE, "Unable to log cancel", e);
-          }
+        // Event: EventType.CANCEL
+        try {
+          helper.logCancel(
+              seq.getAndIncrement(),
+              serviceName,
+              methodName,
+              authority,
+              EventLogger.SERVER,
+              callId);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log cancel", e);
         }
         super.onCancel();
       }

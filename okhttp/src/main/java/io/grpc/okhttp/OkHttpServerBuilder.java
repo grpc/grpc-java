@@ -68,6 +68,9 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
 
   static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
   private static final long MIN_MAX_CONNECTION_IDLE_NANO = TimeUnit.SECONDS.toNanos(1L);
+  static final long MAX_CONNECTION_AGE_NANOS_DISABLED = Long.MAX_VALUE;
+  static final long MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE = Long.MAX_VALUE;
+  private static final long MIN_MAX_CONNECTION_AGE_NANO = TimeUnit.SECONDS.toNanos(1L);
 
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
   private static final ObjectPool<Executor> DEFAULT_TRANSPORT_EXECUTOR_POOL =
@@ -120,6 +123,8 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
   boolean permitKeepAliveWithoutCalls;
   long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
+  long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 
   @VisibleForTesting
   OkHttpServerBuilder(
@@ -205,6 +210,45 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     }
     if (maxConnectionIdleInNanos < MIN_MAX_CONNECTION_IDLE_NANO) {
       maxConnectionIdleInNanos = MIN_MAX_CONNECTION_IDLE_NANO;
+    }
+    return this;
+  }
+
+  /**
+   * Sets a custom max connection age, connection lasting longer than which will be gracefully
+   * terminated. An unreasonably small value might be increased.  A random jitter of +/-10% will be
+   * added to it. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
+   * max connection age.
+   */
+  @Override
+  public OkHttpServerBuilder maxConnectionAge(long maxConnectionAge, TimeUnit timeUnit) {
+    checkArgument(maxConnectionAge > 0L, "max connection age must be positive: %s",
+        maxConnectionAge);
+    maxConnectionAgeInNanos = timeUnit.toNanos(maxConnectionAge);
+    if (maxConnectionAgeInNanos >= AS_LARGE_AS_INFINITE) {
+      maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
+    }
+    if (maxConnectionAgeInNanos < MIN_MAX_CONNECTION_AGE_NANO) {
+      maxConnectionAgeInNanos = MIN_MAX_CONNECTION_AGE_NANO;
+    }
+    return this;
+  }
+
+  /**
+   * Sets a custom grace time for the graceful connection termination. Once the max connection age
+   * is reached, RPCs have the grace time to complete. RPCs that do not complete in time will be
+   * cancelled, allowing the connection to terminate. {@code Long.MAX_VALUE} nano seconds or an
+   * unreasonably large value are considered infinite.
+   *
+   * @see #maxConnectionAge(long, TimeUnit)
+   */
+  @Override
+  public OkHttpServerBuilder maxConnectionAgeGrace(long maxConnectionAgeGrace, TimeUnit timeUnit) {
+    checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative: %s",
+        maxConnectionAgeGrace);
+    maxConnectionAgeGraceInNanos = timeUnit.toNanos(maxConnectionAgeGrace);
+    if (maxConnectionAgeGraceInNanos >= AS_LARGE_AS_INFINITE) {
+      maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
     }
     return this;
   }

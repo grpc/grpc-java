@@ -153,6 +153,27 @@ public class OkHttpServerTransportTest {
   }
 
   @Test
+  public void maxConnectionAge() throws Exception {
+    serverBuilder.maxConnectionAge(5, TimeUnit.SECONDS)
+        .maxConnectionAgeGrace(1, TimeUnit.SECONDS);
+    initTransport();
+    handshake();
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER));
+    clientFrameWriter.synStream(true, false, 1, -1, Arrays.asList(
+        new Header("some-client-sent-trailer", "trailer-value")));
+    pingPong();
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(6)); // > 1.1 * 5
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1));
+    verifyGracefulShutdown(1);
+  }
+
+  @Test
   public void maxConnectionIdleTimer() throws Exception {
     initTransport();
     handshake();

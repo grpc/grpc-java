@@ -124,9 +124,7 @@ public final class NameResolverRegistry {
       instance = new NameResolverRegistry();
       for (NameResolverProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
+        instance.addProvider(provider);
       }
       instance.refreshProviders();
     }

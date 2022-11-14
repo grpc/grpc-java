@@ -100,7 +100,7 @@ public class TracesTest {
 
       when(mockConfig.isEnableCloudTracing()).thenReturn(true);
       when(mockConfig.getSampler()).thenReturn(Samplers.alwaysSample());
-      when(mockConfig.getDestinationProjectId()).thenReturn(PROJECT_ID);
+      when(mockConfig.getProjectId()).thenReturn(PROJECT_ID);
 
       try {
         GcpObservability observability =
@@ -110,7 +110,7 @@ public class TracesTest {
 
         Server server =
             ServerBuilder.forPort(0)
-                .addService(new LoggingTestHelper.SimpleServiceImpl())
+                .addService(new ObservabilityTestHelper.SimpleServiceImpl())
                 .build()
                 .start();
         int port = cleanupRule.register(server).getPort();
@@ -118,7 +118,7 @@ public class TracesTest {
             SimpleServiceGrpc.newBlockingStub(
                 cleanupRule.register(
                     ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
-        assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+        assertThat(ObservabilityTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
             .isEqualTo("Hello buddy");
         // Adding sleep to ensure traces are exported before querying cloud tracing backend
         TimeUnit.SECONDS.sleep(10);
