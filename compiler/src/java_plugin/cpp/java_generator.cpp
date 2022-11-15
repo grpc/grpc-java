@@ -624,12 +624,12 @@ static void PrintStub(
     p->Print(
         *vars,
         "public static abstract class $abstract_name$\n"
-        " implements $BindableService$, $interface_name$ {\n");
+        "  implements $BindableService$, $interface_name$ {\n");
   } else {
     p->Print(
         *vars,
         "public static final class $stub_name$\n"
-        " extends $stub_base_class_name$<$stub_name$> {\n");
+        "  extends $stub_base_class_name$<$stub_name$> {\n");
   }
   p->Indent();
 
@@ -660,6 +660,9 @@ static void PrintStub(
 
   // RPC methods
   for (int i = 0; i < service->method_count(); ++i) {
+    if (impl_base && !interface) {
+      break; // Interface defines these as defaults, so not needed in abstract
+    }
     const MethodDescriptor* method = service->method(i);
     (*vars)["input_type"] = MessageFullJavaName(method->input_type());
     (*vars)["output_type"] = MessageFullJavaName(method->output_type());
@@ -688,9 +691,6 @@ static void PrintStub(
     }
 
     if (!interface) {
-      if (impl_base) {
-        p->Print(*vars, "@$Override$\n");
-      }
       p->Print("public ");
     } else {
       p->Print("default ");
@@ -821,8 +821,9 @@ static void PrintStub(
     p->Print(
         *vars,
         "@$Override$ public final $ServerServiceDefinition$ bindService() {\n");
-    (*vars)["instance"] = "this";
-    PrintBindServiceMethodBody(service, vars, p);
+    p->InDent();
+    p->Print(*vars, "return $service_class_name$.bindService(this);\n");
+    p->OutDent();
     p->Print("}\n");
   }
 
@@ -1045,10 +1046,17 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
   p->Print("}\n");
 }
 
-static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
+    (*vars)["instance"] = "this";
+    PrintBindServiceMethodBody(service, vars, p);
+
+static void PrintBindServiceMethod(const ServiceDescriptor* service,
                                    std::map<std::string, std::string>* vars,
                                    Printer* p) {
   (*vars)["service_name"] = service->name();
+  p->Print(*vars,
+           "public static final io.grpc.ServerServiceDefinition "
+           "bindService($service_name$Async service) {\n");
+
   p->Indent();
   p->Print(*vars,
            "return "
@@ -1089,7 +1097,7 @@ static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
         "new MethodHandlers<\n"
         "  $input_type$,\n"
         "  $output_type$>(\n"
-        "    $instance$, $method_id_name$)))\n");
+        "    service, $method_id_name$)))\n");
     p->Outdent();
     p->Outdent();
   }
