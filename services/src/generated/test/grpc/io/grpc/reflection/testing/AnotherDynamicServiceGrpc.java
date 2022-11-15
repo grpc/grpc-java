@@ -118,29 +118,10 @@ public final class AnotherDynamicServiceGrpc {
    * </pre>
    */
   public static abstract class AnotherDynamicServiceImplBase
-   implements io.grpc.BindableService, AnotherDynamicServiceAsync {
-
-    /**
-     * <pre>
-     * A method
-     * </pre>
-     */
-    @java.lang.Override
-    public void method(io.grpc.reflection.testing.DynamicRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.reflection.testing.DynamicReply> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getMethodMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, AnotherDynamicServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getMethodMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.reflection.testing.DynamicRequest,
-                io.grpc.reflection.testing.DynamicReply>(
-                  this, METHODID_METHOD)))
-          .build();
+      return AnotherDynamicServiceGrpc.bindService(this);
     }
   }
 
@@ -151,7 +132,7 @@ public final class AnotherDynamicServiceGrpc {
    * </pre>
    */
   public static final class AnotherDynamicServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<AnotherDynamicServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<AnotherDynamicServiceStub> {
     private AnotherDynamicServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -182,7 +163,7 @@ public final class AnotherDynamicServiceGrpc {
    * </pre>
    */
   public static final class AnotherDynamicServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<AnotherDynamicServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<AnotherDynamicServiceBlockingStub> {
     private AnotherDynamicServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -212,7 +193,7 @@ public final class AnotherDynamicServiceGrpc {
    * </pre>
    */
   public static final class AnotherDynamicServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<AnotherDynamicServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<AnotherDynamicServiceFutureStub> {
     private AnotherDynamicServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -243,10 +224,10 @@ public final class AnotherDynamicServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final AnotherDynamicServiceImplBase serviceImpl;
+    private final AnotherDynamicServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(AnotherDynamicServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AnotherDynamicServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -273,6 +254,18 @@ public final class AnotherDynamicServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(AnotherDynamicServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getMethodMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.reflection.testing.DynamicRequest,
+              io.grpc.reflection.testing.DynamicReply>(
+                service, METHODID_METHOD)))
+        .build();
   }
 
   private static abstract class AnotherDynamicServiceBaseDescriptorSupplier

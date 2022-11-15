@@ -159,47 +159,10 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static abstract class LoadBalancerStatsServiceImplBase
-   implements io.grpc.BindableService, LoadBalancerStatsServiceAsync {
-
-    /**
-     * <pre>
-     * Gets the backend distribution for RPCs sent by a test client.
-     * </pre>
-     */
-    @java.lang.Override
-    public void getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetClientStatsMethod(), responseObserver);
-    }
-
-    /**
-     * <pre>
-     * Gets the accumulated stats for RPCs sent by a test client.
-     * </pre>
-     */
-    @java.lang.Override
-    public void getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetClientAccumulatedStatsMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, LoadBalancerStatsServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getGetClientStatsMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Messages.LoadBalancerStatsRequest,
-                io.grpc.testing.integration.Messages.LoadBalancerStatsResponse>(
-                  this, METHODID_GET_CLIENT_STATS)))
-          .addMethod(
-            getGetClientAccumulatedStatsMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest,
-                io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse>(
-                  this, METHODID_GET_CLIENT_ACCUMULATED_STATS)))
-          .build();
+      return LoadBalancerStatsServiceGrpc.bindService(this);
     }
   }
 
@@ -210,7 +173,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStatsServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStatsServiceStub> {
     private LoadBalancerStatsServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -252,7 +215,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingStub> {
     private LoadBalancerStatsServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -292,7 +255,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<LoadBalancerStatsServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<LoadBalancerStatsServiceFutureStub> {
     private LoadBalancerStatsServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -335,10 +298,10 @@ public final class LoadBalancerStatsServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final LoadBalancerStatsServiceImplBase serviceImpl;
+    private final LoadBalancerStatsServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(LoadBalancerStatsServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(LoadBalancerStatsServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -369,6 +332,25 @@ public final class LoadBalancerStatsServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(LoadBalancerStatsServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getGetClientStatsMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Messages.LoadBalancerStatsRequest,
+              io.grpc.testing.integration.Messages.LoadBalancerStatsResponse>(
+                service, METHODID_GET_CLIENT_STATS)))
+        .addMethod(
+          getGetClientAccumulatedStatsMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest,
+              io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse>(
+                service, METHODID_GET_CLIENT_ACCUMULATED_STATS)))
+        .build();
   }
 
   private static abstract class LoadBalancerStatsServiceBaseDescriptorSupplier

@@ -106,26 +106,10 @@ public final class AnotherReflectableServiceGrpc {
    * Base class for the server implementation of the service AnotherReflectableService
    */
   public static abstract class AnotherReflectableServiceImplBase
-   implements io.grpc.BindableService, AnotherReflectableServiceAsync {
-
-    /**
-     */
-    @java.lang.Override
-    public void method(io.grpc.reflection.testing.Request request,
-        io.grpc.stub.StreamObserver<io.grpc.reflection.testing.Reply> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getMethodMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, AnotherReflectableServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getMethodMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.reflection.testing.Request,
-                io.grpc.reflection.testing.Reply>(
-                  this, METHODID_METHOD)))
-          .build();
+      return AnotherReflectableServiceGrpc.bindService(this);
     }
   }
 
@@ -133,7 +117,7 @@ public final class AnotherReflectableServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service AnotherReflectableService
    */
   public static final class AnotherReflectableServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<AnotherReflectableServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<AnotherReflectableServiceStub> {
     private AnotherReflectableServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -158,7 +142,7 @@ public final class AnotherReflectableServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service AnotherReflectableService
    */
   public static final class AnotherReflectableServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub> {
     private AnotherReflectableServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -182,7 +166,7 @@ public final class AnotherReflectableServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service AnotherReflectableService
    */
   public static final class AnotherReflectableServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<AnotherReflectableServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<AnotherReflectableServiceFutureStub> {
     private AnotherReflectableServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -210,10 +194,10 @@ public final class AnotherReflectableServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final AnotherReflectableServiceImplBase serviceImpl;
+    private final AnotherReflectableServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(AnotherReflectableServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AnotherReflectableServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -240,6 +224,18 @@ public final class AnotherReflectableServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(AnotherReflectableServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getMethodMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.reflection.testing.Request,
+              io.grpc.reflection.testing.Reply>(
+                service, METHODID_METHOD)))
+        .build();
   }
 
   private static abstract class AnotherReflectableServiceBaseDescriptorSupplier

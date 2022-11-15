@@ -191,56 +191,10 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ClusterDiscoveryServiceImplBase
-   implements io.grpc.BindableService, ClusterDiscoveryServiceAsync {
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamClusters(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamClustersMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaClustersMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public void fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchClustersMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, ClusterDiscoveryServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamClustersMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_STREAM_CLUSTERS)))
-          .addMethod(
-            getDeltaClustersMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_CLUSTERS)))
-          .addMethod(
-            getFetchClustersMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_FETCH_CLUSTERS)))
-          .build();
+      return ClusterDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -251,7 +205,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
     private ClusterDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -295,7 +249,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
     private ClusterDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -322,7 +276,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
     private ClusterDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -352,10 +306,10 @@ public final class ClusterDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ClusterDiscoveryServiceImplBase serviceImpl;
+    private final ClusterDiscoveryServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ClusterDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(ClusterDiscoveryServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -388,6 +342,32 @@ public final class ClusterDiscoveryServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(ClusterDiscoveryServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamClustersMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_STREAM_CLUSTERS)))
+        .addMethod(
+          getDeltaClustersMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_CLUSTERS)))
+        .addMethod(
+          getFetchClustersMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_FETCH_CLUSTERS)))
+        .build();
   }
 
   private static abstract class ClusterDiscoveryServiceBaseDescriptorSupplier

@@ -171,44 +171,10 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class AggregatedDiscoveryServiceImplBase
-   implements io.grpc.BindableService, AggregatedDiscoveryServiceAsync {
-
-    /**
-     * <pre>
-     * This is a gRPC-only API.
-     * </pre>
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamAggregatedResources(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamAggregatedResourcesMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaAggregatedResources(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaAggregatedResourcesMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, AggregatedDiscoveryServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamAggregatedResourcesMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_STREAM_AGGREGATED_RESOURCES)))
-          .addMethod(
-            getDeltaAggregatedResourcesMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_AGGREGATED_RESOURCES)))
-          .build();
+      return AggregatedDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -224,7 +190,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub> {
     private AggregatedDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -268,7 +234,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
     private AggregatedDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -293,7 +259,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub> {
     private AggregatedDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -314,10 +280,10 @@ public final class AggregatedDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final AggregatedDiscoveryServiceImplBase serviceImpl;
+    private final AggregatedDiscoveryServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(AggregatedDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AggregatedDiscoveryServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -346,6 +312,25 @@ public final class AggregatedDiscoveryServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(AggregatedDiscoveryServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamAggregatedResourcesMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_STREAM_AGGREGATED_RESOURCES)))
+        .addMethod(
+          getDeltaAggregatedResourcesMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_AGGREGATED_RESOURCES)))
+        .build();
   }
 
   private static abstract class AggregatedDiscoveryServiceBaseDescriptorSupplier

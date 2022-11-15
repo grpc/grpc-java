@@ -142,26 +142,10 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class VirtualHostDiscoveryServiceImplBase
-   implements io.grpc.BindableService, VirtualHostDiscoveryServiceAsync {
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaVirtualHosts(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaVirtualHostsMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, VirtualHostDiscoveryServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getDeltaVirtualHostsMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_VIRTUAL_HOSTS)))
-          .build();
+      return VirtualHostDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -181,7 +165,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<VirtualHostDiscoveryServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<VirtualHostDiscoveryServiceStub> {
     private VirtualHostDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -218,7 +202,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
     private VirtualHostDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -247,7 +231,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<VirtualHostDiscoveryServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<VirtualHostDiscoveryServiceFutureStub> {
     private VirtualHostDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -267,10 +251,10 @@ public final class VirtualHostDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final VirtualHostDiscoveryServiceImplBase serviceImpl;
+    private final VirtualHostDiscoveryServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(VirtualHostDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(VirtualHostDiscoveryServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -296,6 +280,18 @@ public final class VirtualHostDiscoveryServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(VirtualHostDiscoveryServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getDeltaVirtualHostsMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_VIRTUAL_HOSTS)))
+        .build();
   }
 
   private static abstract class VirtualHostDiscoveryServiceBaseDescriptorSupplier

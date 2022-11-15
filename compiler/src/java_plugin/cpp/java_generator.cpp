@@ -519,7 +519,7 @@ static void PrintMethodFields(
   }
 }
 
-static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
+static void PrintBindServiceMethod(const ServiceDescriptor* service,
                                    std::map<std::string, std::string>* vars,
                                    Printer* p);
 
@@ -821,9 +821,9 @@ static void PrintStub(
     p->Print(
         *vars,
         "@$Override$ public final $ServerServiceDefinition$ bindService() {\n");
-    p->InDent();
+    p->Indent();
     p->Print(*vars, "return $service_class_name$.bindService(this);\n");
-    p->OutDent();
+    p->Outdent();
     p->Print("}\n");
   }
 
@@ -858,7 +858,7 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
         "private static final int $method_id_name$ = $method_id$;\n");
   }
   p->Print("\n");
-  (*vars)["service_name"] = service->name() + "ImplBase";
+  (*vars)["service_name"] = service->name() + "Async";
   p->Print(
       *vars,
       "private static final class MethodHandlers<Req, Resp> implements\n"
@@ -1046,9 +1046,6 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
   p->Print("}\n");
 }
 
-    (*vars)["instance"] = "this";
-    PrintBindServiceMethodBody(service, vars, p);
-
 static void PrintBindServiceMethod(const ServiceDescriptor* service,
                                    std::map<std::string, std::string>* vars,
                                    Printer* p) {
@@ -1105,6 +1102,7 @@ static void PrintBindServiceMethod(const ServiceDescriptor* service,
   p->Outdent();
   p->Outdent();
   p->Outdent();
+  p->Print("}\n\n");
 }
 
 static void PrintService(const ServiceDescriptor* service,
@@ -1197,6 +1195,7 @@ static void PrintService(const ServiceDescriptor* service,
   PrintStub(service, vars, p, FUTURE_CLIENT_IMPL);
 
   PrintMethodHandlerClass(service, vars, p);
+  PrintBindServiceMethod(service, vars, p);
   PrintGetServiceDescriptorMethod(service, vars, p, flavor);
   p->Outdent();
   p->Print("}\n");

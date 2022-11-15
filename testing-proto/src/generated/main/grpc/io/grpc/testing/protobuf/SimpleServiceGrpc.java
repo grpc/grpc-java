@@ -241,83 +241,10 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static abstract class SimpleServiceImplBase
-   implements io.grpc.BindableService, SimpleServiceAsync {
-
-    /**
-     * <pre>
-     * Simple unary RPC.
-     * </pre>
-     */
-    @java.lang.Override
-    public void unaryRpc(io.grpc.testing.protobuf.SimpleRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.protobuf.SimpleResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnaryRpcMethod(), responseObserver);
-    }
-
-    /**
-     * <pre>
-     * Simple client-to-server streaming RPC.
-     * </pre>
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.grpc.testing.protobuf.SimpleRequest> clientStreamingRpc(
-        io.grpc.stub.StreamObserver<io.grpc.testing.protobuf.SimpleResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getClientStreamingRpcMethod(), responseObserver);
-    }
-
-    /**
-     * <pre>
-     * Simple server-to-client streaming RPC.
-     * </pre>
-     */
-    @java.lang.Override
-    public void serverStreamingRpc(io.grpc.testing.protobuf.SimpleRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.protobuf.SimpleResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getServerStreamingRpcMethod(), responseObserver);
-    }
-
-    /**
-     * <pre>
-     * Simple bidirectional streaming RPC.
-     * </pre>
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.grpc.testing.protobuf.SimpleRequest> bidiStreamingRpc(
-        io.grpc.stub.StreamObserver<io.grpc.testing.protobuf.SimpleResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getBidiStreamingRpcMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, SimpleServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getUnaryRpcMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.protobuf.SimpleRequest,
-                io.grpc.testing.protobuf.SimpleResponse>(
-                  this, METHODID_UNARY_RPC)))
-          .addMethod(
-            getClientStreamingRpcMethod(),
-            io.grpc.stub.ServerCalls.asyncClientStreamingCall(
-              new MethodHandlers<
-                io.grpc.testing.protobuf.SimpleRequest,
-                io.grpc.testing.protobuf.SimpleResponse>(
-                  this, METHODID_CLIENT_STREAMING_RPC)))
-          .addMethod(
-            getServerStreamingRpcMethod(),
-            io.grpc.stub.ServerCalls.asyncServerStreamingCall(
-              new MethodHandlers<
-                io.grpc.testing.protobuf.SimpleRequest,
-                io.grpc.testing.protobuf.SimpleResponse>(
-                  this, METHODID_SERVER_STREAMING_RPC)))
-          .addMethod(
-            getBidiStreamingRpcMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.grpc.testing.protobuf.SimpleRequest,
-                io.grpc.testing.protobuf.SimpleResponse>(
-                  this, METHODID_BIDI_STREAMING_RPC)))
-          .build();
+      return SimpleServiceGrpc.bindService(this);
     }
   }
 
@@ -328,7 +255,7 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static final class SimpleServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<SimpleServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<SimpleServiceStub> {
     private SimpleServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -392,7 +319,7 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static final class SimpleServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<SimpleServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<SimpleServiceBlockingStub> {
     private SimpleServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -433,7 +360,7 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static final class SimpleServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<SimpleServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<SimpleServiceFutureStub> {
     private SimpleServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -467,10 +394,10 @@ public final class SimpleServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final SimpleServiceImplBase serviceImpl;
+    private final SimpleServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(SimpleServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(SimpleServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -507,6 +434,39 @@ public final class SimpleServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(SimpleServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getUnaryRpcMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.protobuf.SimpleRequest,
+              io.grpc.testing.protobuf.SimpleResponse>(
+                service, METHODID_UNARY_RPC)))
+        .addMethod(
+          getClientStreamingRpcMethod(),
+          io.grpc.stub.ServerCalls.asyncClientStreamingCall(
+            new MethodHandlers<
+              io.grpc.testing.protobuf.SimpleRequest,
+              io.grpc.testing.protobuf.SimpleResponse>(
+                service, METHODID_CLIENT_STREAMING_RPC)))
+        .addMethod(
+          getServerStreamingRpcMethod(),
+          io.grpc.stub.ServerCalls.asyncServerStreamingCall(
+            new MethodHandlers<
+              io.grpc.testing.protobuf.SimpleRequest,
+              io.grpc.testing.protobuf.SimpleResponse>(
+                service, METHODID_SERVER_STREAMING_RPC)))
+        .addMethod(
+          getBidiStreamingRpcMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.grpc.testing.protobuf.SimpleRequest,
+              io.grpc.testing.protobuf.SimpleResponse>(
+                service, METHODID_BIDI_STREAMING_RPC)))
+        .build();
   }
 
   private static abstract class SimpleServiceBaseDescriptorSupplier

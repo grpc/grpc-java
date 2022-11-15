@@ -186,60 +186,10 @@ public final class EndpointDiscoveryServiceGrpc {
    * Base class for the server implementation of the service EndpointDiscoveryService
    */
   public static abstract class EndpointDiscoveryServiceImplBase
-   implements io.grpc.BindableService, EndpointDiscoveryServiceAsync {
-
-    /**
-     * <pre>
-     * The resource_names field in DiscoveryRequest specifies a list of clusters
-     * to subscribe to updates for.
-     * </pre>
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamEndpoints(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamEndpointsMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaEndpoints(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaEndpointsMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public void fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchEndpointsMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, EndpointDiscoveryServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamEndpointsMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_STREAM_ENDPOINTS)))
-          .addMethod(
-            getDeltaEndpointsMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_ENDPOINTS)))
-          .addMethod(
-            getFetchEndpointsMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_FETCH_ENDPOINTS)))
-          .build();
+      return EndpointDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -247,7 +197,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
     private EndpointDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -292,7 +242,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
     private EndpointDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -316,7 +266,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
     private EndpointDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -346,10 +296,10 @@ public final class EndpointDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final EndpointDiscoveryServiceImplBase serviceImpl;
+    private final EndpointDiscoveryServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(EndpointDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(EndpointDiscoveryServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -382,6 +332,32 @@ public final class EndpointDiscoveryServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(EndpointDiscoveryServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamEndpointsMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_STREAM_ENDPOINTS)))
+        .addMethod(
+          getDeltaEndpointsMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_ENDPOINTS)))
+        .addMethod(
+          getFetchEndpointsMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_FETCH_ENDPOINTS)))
+        .build();
   }
 
   private static abstract class EndpointDiscoveryServiceBaseDescriptorSupplier

@@ -182,56 +182,10 @@ public final class SecretDiscoveryServiceGrpc {
    * Base class for the server implementation of the service SecretDiscoveryService
    */
   public static abstract class SecretDiscoveryServiceImplBase
-   implements io.grpc.BindableService, SecretDiscoveryServiceAsync {
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaSecrets(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaSecretsMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamSecrets(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamSecretsMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public void fetchSecrets(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchSecretsMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, SecretDiscoveryServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getDeltaSecretsMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_SECRETS)))
-          .addMethod(
-            getStreamSecretsMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_STREAM_SECRETS)))
-          .addMethod(
-            getFetchSecretsMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_FETCH_SECRETS)))
-          .build();
+      return SecretDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -239,7 +193,7 @@ public final class SecretDiscoveryServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<SecretDiscoveryServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<SecretDiscoveryServiceStub> {
     private SecretDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -280,7 +234,7 @@ public final class SecretDiscoveryServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
     private SecretDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -304,7 +258,7 @@ public final class SecretDiscoveryServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<SecretDiscoveryServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<SecretDiscoveryServiceFutureStub> {
     private SecretDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -334,10 +288,10 @@ public final class SecretDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final SecretDiscoveryServiceImplBase serviceImpl;
+    private final SecretDiscoveryServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(SecretDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(SecretDiscoveryServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -370,6 +324,32 @@ public final class SecretDiscoveryServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(SecretDiscoveryServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getDeltaSecretsMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_SECRETS)))
+        .addMethod(
+          getStreamSecretsMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_STREAM_SECRETS)))
+        .addMethod(
+          getFetchSecretsMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_FETCH_SECRETS)))
+        .build();
   }
 
   private static abstract class SecretDiscoveryServiceBaseDescriptorSupplier

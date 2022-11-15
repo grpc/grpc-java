@@ -144,41 +144,10 @@ public final class EchoTestServiceGrpc {
    * Base class for the server implementation of the service EchoTestService
    */
   public static abstract class EchoTestServiceImplBase
-   implements io.grpc.BindableService, EchoTestServiceAsync {
-
-    /**
-     */
-    @java.lang.Override
-    public void echo(io.istio.test.Echo.EchoRequest request,
-        io.grpc.stub.StreamObserver<io.istio.test.Echo.EchoResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getEchoMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public void forwardEcho(io.istio.test.Echo.ForwardEchoRequest request,
-        io.grpc.stub.StreamObserver<io.istio.test.Echo.ForwardEchoResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getForwardEchoMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, EchoTestServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getEchoMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.istio.test.Echo.EchoRequest,
-                io.istio.test.Echo.EchoResponse>(
-                  this, METHODID_ECHO)))
-          .addMethod(
-            getForwardEchoMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.istio.test.Echo.ForwardEchoRequest,
-                io.istio.test.Echo.ForwardEchoResponse>(
-                  this, METHODID_FORWARD_ECHO)))
-          .build();
+      return EchoTestServiceGrpc.bindService(this);
     }
   }
 
@@ -186,7 +155,7 @@ public final class EchoTestServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub> {
     private EchoTestServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -219,7 +188,7 @@ public final class EchoTestServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {
     private EchoTestServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -250,7 +219,7 @@ public final class EchoTestServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub> {
     private EchoTestServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -287,10 +256,10 @@ public final class EchoTestServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final EchoTestServiceImplBase serviceImpl;
+    private final EchoTestServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(EchoTestServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(EchoTestServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -321,6 +290,25 @@ public final class EchoTestServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(EchoTestServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getEchoMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.istio.test.Echo.EchoRequest,
+              io.istio.test.Echo.EchoResponse>(
+                service, METHODID_ECHO)))
+        .addMethod(
+          getForwardEchoMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.istio.test.Echo.ForwardEchoRequest,
+              io.istio.test.Echo.ForwardEchoResponse>(
+                service, METHODID_FORWARD_ECHO)))
+        .build();
   }
 
   private static abstract class EchoTestServiceBaseDescriptorSupplier

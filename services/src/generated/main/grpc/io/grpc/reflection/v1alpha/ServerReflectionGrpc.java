@@ -110,30 +110,10 @@ public final class ServerReflectionGrpc {
    * Base class for the server implementation of the service ServerReflection
    */
   public static abstract class ServerReflectionImplBase
-   implements io.grpc.BindableService, ServerReflectionAsync {
-
-    /**
-     * <pre>
-     * The reflection service is structured as a bidirectional stream, ensuring
-     * all related requests go to a single server.
-     * </pre>
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.grpc.reflection.v1alpha.ServerReflectionRequest> serverReflectionInfo(
-        io.grpc.stub.StreamObserver<io.grpc.reflection.v1alpha.ServerReflectionResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getServerReflectionInfoMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, ServerReflectionAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getServerReflectionInfoMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.grpc.reflection.v1alpha.ServerReflectionRequest,
-                io.grpc.reflection.v1alpha.ServerReflectionResponse>(
-                  this, METHODID_SERVER_REFLECTION_INFO)))
-          .build();
+      return ServerReflectionGrpc.bindService(this);
     }
   }
 
@@ -141,7 +121,7 @@ public final class ServerReflectionGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service ServerReflection
    */
   public static final class ServerReflectionStub
-   extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
+    extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
     private ServerReflectionStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -170,7 +150,7 @@ public final class ServerReflectionGrpc {
    * A stub to allow clients to do synchronous rpc calls to service ServerReflection
    */
   public static final class ServerReflectionBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
     private ServerReflectionBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -187,7 +167,7 @@ public final class ServerReflectionGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service ServerReflection
    */
   public static final class ServerReflectionFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {
     private ServerReflectionFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -207,10 +187,10 @@ public final class ServerReflectionGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ServerReflectionImplBase serviceImpl;
+    private final ServerReflectionAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ServerReflectionImplBase serviceImpl, int methodId) {
+    MethodHandlers(ServerReflectionAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -236,6 +216,18 @@ public final class ServerReflectionGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(ServerReflectionAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getServerReflectionInfoMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.grpc.reflection.v1alpha.ServerReflectionRequest,
+              io.grpc.reflection.v1alpha.ServerReflectionResponse>(
+                service, METHODID_SERVER_REFLECTION_INFO)))
+        .build();
   }
 
   private static abstract class ServerReflectionBaseDescriptorSupplier

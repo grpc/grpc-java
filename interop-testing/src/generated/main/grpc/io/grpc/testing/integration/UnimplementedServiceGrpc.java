@@ -121,29 +121,10 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static abstract class UnimplementedServiceImplBase
-   implements io.grpc.BindableService, UnimplementedServiceAsync {
-
-    /**
-     * <pre>
-     * A call that no server should implement
-     * </pre>
-     */
-    @java.lang.Override
-    public void unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnimplementedCallMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, UnimplementedServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getUnimplementedCallMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.EmptyProtos.Empty,
-                io.grpc.testing.integration.EmptyProtos.Empty>(
-                  this, METHODID_UNIMPLEMENTED_CALL)))
-          .build();
+      return UnimplementedServiceGrpc.bindService(this);
     }
   }
 
@@ -155,7 +136,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub> {
     private UnimplementedServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -187,7 +168,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub> {
     private UnimplementedServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -218,7 +199,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub> {
     private UnimplementedServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -249,10 +230,10 @@ public final class UnimplementedServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final UnimplementedServiceImplBase serviceImpl;
+    private final UnimplementedServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(UnimplementedServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(UnimplementedServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -279,6 +260,18 @@ public final class UnimplementedServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(UnimplementedServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getUnimplementedCallMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.EmptyProtos.Empty,
+              io.grpc.testing.integration.EmptyProtos.Empty>(
+                service, METHODID_UNIMPLEMENTED_CALL)))
+        .build();
   }
 
   private static abstract class UnimplementedServiceBaseDescriptorSupplier

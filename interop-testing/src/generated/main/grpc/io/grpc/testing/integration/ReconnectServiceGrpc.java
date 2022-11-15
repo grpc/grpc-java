@@ -153,41 +153,10 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static abstract class ReconnectServiceImplBase
-   implements io.grpc.BindableService, ReconnectServiceAsync {
-
-    /**
-     */
-    @java.lang.Override
-    public void start(io.grpc.testing.integration.Messages.ReconnectParams request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStartMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public void stop(io.grpc.testing.integration.EmptyProtos.Empty request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.ReconnectInfo> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStopMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, ReconnectServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStartMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Messages.ReconnectParams,
-                io.grpc.testing.integration.EmptyProtos.Empty>(
-                  this, METHODID_START)))
-          .addMethod(
-            getStopMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.EmptyProtos.Empty,
-                io.grpc.testing.integration.Messages.ReconnectInfo>(
-                  this, METHODID_STOP)))
-          .build();
+      return ReconnectServiceGrpc.bindService(this);
     }
   }
 
@@ -198,7 +167,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub> {
     private ReconnectServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -234,7 +203,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub> {
     private ReconnectServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -268,7 +237,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub> {
     private ReconnectServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -305,10 +274,10 @@ public final class ReconnectServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ReconnectServiceImplBase serviceImpl;
+    private final ReconnectServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ReconnectServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(ReconnectServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -339,6 +308,25 @@ public final class ReconnectServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(ReconnectServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStartMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Messages.ReconnectParams,
+              io.grpc.testing.integration.EmptyProtos.Empty>(
+                service, METHODID_START)))
+        .addMethod(
+          getStopMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.EmptyProtos.Empty,
+              io.grpc.testing.integration.Messages.ReconnectInfo>(
+                service, METHODID_STOP)))
+        .build();
   }
 
   private static abstract class ReconnectServiceBaseDescriptorSupplier

@@ -118,29 +118,10 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static abstract class XdsUpdateClientConfigureServiceImplBase
-   implements io.grpc.BindableService, XdsUpdateClientConfigureServiceAsync {
-
-    /**
-     * <pre>
-     * Update the tes client's configuration.
-     * </pre>
-     */
-    @java.lang.Override
-    public void configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request,
-        io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.ClientConfigureResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getConfigureMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, XdsUpdateClientConfigureServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getConfigureMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Messages.ClientConfigureRequest,
-                io.grpc.testing.integration.Messages.ClientConfigureResponse>(
-                  this, METHODID_CONFIGURE)))
-          .build();
+      return XdsUpdateClientConfigureServiceGrpc.bindService(this);
     }
   }
 
@@ -151,7 +132,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<XdsUpdateClientConfigureServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<XdsUpdateClientConfigureServiceStub> {
     private XdsUpdateClientConfigureServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -182,7 +163,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingStub> {
     private XdsUpdateClientConfigureServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -212,7 +193,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<XdsUpdateClientConfigureServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<XdsUpdateClientConfigureServiceFutureStub> {
     private XdsUpdateClientConfigureServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -243,10 +224,10 @@ public final class XdsUpdateClientConfigureServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final XdsUpdateClientConfigureServiceImplBase serviceImpl;
+    private final XdsUpdateClientConfigureServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(XdsUpdateClientConfigureServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(XdsUpdateClientConfigureServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -273,6 +254,18 @@ public final class XdsUpdateClientConfigureServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(XdsUpdateClientConfigureServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getConfigureMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Messages.ClientConfigureRequest,
+              io.grpc.testing.integration.Messages.ClientConfigureResponse>(
+                service, METHODID_CONFIGURE)))
+        .build();
   }
 
   private static abstract class XdsUpdateClientConfigureServiceBaseDescriptorSupplier

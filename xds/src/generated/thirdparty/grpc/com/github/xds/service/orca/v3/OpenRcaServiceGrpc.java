@@ -136,26 +136,10 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static abstract class OpenRcaServiceImplBase
-   implements io.grpc.BindableService, OpenRcaServiceAsync {
-
-    /**
-     */
-    @java.lang.Override
-    public void streamCoreMetrics(com.github.xds.service.orca.v3.OrcaLoadReportRequest request,
-        io.grpc.stub.StreamObserver<com.github.xds.data.orca.v3.OrcaLoadReport> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStreamCoreMetricsMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, OpenRcaServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamCoreMetricsMethod(),
-            io.grpc.stub.ServerCalls.asyncServerStreamingCall(
-              new MethodHandlers<
-                com.github.xds.service.orca.v3.OrcaLoadReportRequest,
-                com.github.xds.data.orca.v3.OrcaLoadReport>(
-                  this, METHODID_STREAM_CORE_METRICS)))
-          .build();
+      return OpenRcaServiceGrpc.bindService(this);
     }
   }
 
@@ -173,7 +157,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
     private OpenRcaServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -208,7 +192,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
     private OpenRcaServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -243,7 +227,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
     private OpenRcaServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -263,10 +247,10 @@ public final class OpenRcaServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final OpenRcaServiceImplBase serviceImpl;
+    private final OpenRcaServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(OpenRcaServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(OpenRcaServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -293,6 +277,18 @@ public final class OpenRcaServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(OpenRcaServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamCoreMetricsMethod(),
+          io.grpc.stub.ServerCalls.asyncServerStreamingCall(
+            new MethodHandlers<
+              com.github.xds.service.orca.v3.OrcaLoadReportRequest,
+              com.github.xds.data.orca.v3.OrcaLoadReport>(
+                service, METHODID_STREAM_CORE_METRICS)))
+        .build();
   }
 
   private static abstract class OpenRcaServiceBaseDescriptorSupplier

@@ -200,56 +200,10 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ListenerDiscoveryServiceImplBase
-   implements io.grpc.BindableService, ListenerDiscoveryServiceAsync {
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaListeners(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaListenersMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamListeners(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamListenersMethod(), responseObserver);
-    }
-
-    /**
-     */
-    @java.lang.Override
-    public void fetchListeners(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchListenersMethod(), responseObserver);
-    }
+    implements io.grpc.BindableService, ListenerDiscoveryServiceAsync {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getDeltaListenersMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_LISTENERS)))
-          .addMethod(
-            getStreamListenersMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_STREAM_LISTENERS)))
-          .addMethod(
-            getFetchListenersMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_FETCH_LISTENERS)))
-          .build();
+      return ListenerDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -263,7 +217,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ListenerDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<ListenerDiscoveryServiceStub> {
+    extends io.grpc.stub.AbstractAsyncStub<ListenerDiscoveryServiceStub> {
     private ListenerDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -310,7 +264,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ListenerDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub> {
+    extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub> {
     private ListenerDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -340,7 +294,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ListenerDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ListenerDiscoveryServiceFutureStub> {
+    extends io.grpc.stub.AbstractFutureStub<ListenerDiscoveryServiceFutureStub> {
     private ListenerDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -370,10 +324,10 @@ public final class ListenerDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ListenerDiscoveryServiceImplBase serviceImpl;
+    private final ListenerDiscoveryServiceAsync serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ListenerDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(ListenerDiscoveryServiceAsync serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -406,6 +360,32 @@ public final class ListenerDiscoveryServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(ListenerDiscoveryServiceAsync service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getDeltaListenersMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_LISTENERS)))
+        .addMethod(
+          getStreamListenersMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_STREAM_LISTENERS)))
+        .addMethod(
+          getFetchListenersMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_FETCH_LISTENERS)))
+        .build();
   }
 
   private static abstract class ListenerDiscoveryServiceBaseDescriptorSupplier
