@@ -251,8 +251,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub>
-   implements ClusterDiscoveryServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
     private ClusterDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -266,7 +265,6 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamClusters(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -275,7 +273,6 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -284,25 +281,10 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getFetchClustersMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * Return list of all clusters this proxy will load balance to.
-   * </pre>
-   */
-  public interface ClusterDiscoveryServiceBlocking {
-
-    /**
-     */
-    default io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -313,8 +295,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub>
-   implements ClusterDiscoveryServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
     private ClusterDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -328,25 +309,9 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchClustersMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * Return list of all clusters this proxy will load balance to.
-   * </pre>
-   */
-  public interface ClusterDiscoveryServiceFuture {
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchClusters(
-        io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -357,8 +322,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub>
-   implements ClusterDiscoveryServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
     private ClusterDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -372,7 +336,6 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchClusters(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

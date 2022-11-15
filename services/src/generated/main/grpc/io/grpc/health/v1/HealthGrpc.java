@@ -224,8 +224,7 @@ public final class HealthGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service Health
    */
   public static final class HealthStub
-   extends io.grpc.stub.AbstractAsyncStub<HealthStub>
-   implements HealthAsync {
+   extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
     private HealthStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -243,7 +242,6 @@ public final class HealthGrpc {
      * NOT_FOUND.
      * </pre>
      */
-    @java.lang.Override
     public void check(io.grpc.health.v1.HealthCheckRequest request,
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -267,7 +265,6 @@ public final class HealthGrpc {
      * clients should retry the call with appropriate exponential backoff.
      * </pre>
      */
-    @java.lang.Override
     public void watch(io.grpc.health.v1.HealthCheckRequest request,
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncServerStreamingCall(
@@ -276,48 +273,10 @@ public final class HealthGrpc {
   }
 
   /**
-   */
-  public interface HealthBlocking {
-
-    /**
-     * <pre>
-     * If the requested service is unknown, the call will fail with status
-     * NOT_FOUND.
-     * </pre>
-     */
-    default io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Performs a watch for the serving status of the requested service.
-     * The server will immediately send back a message indicating the current
-     * serving status.  It will then subsequently send a new message whenever
-     * the service's serving status changes.
-     * If the requested service is unknown when the call is received, the
-     * server will send a message setting the serving status to
-     * SERVICE_UNKNOWN but will *not* terminate the call.  If at some
-     * future point, the serving status of the service becomes known, the
-     * server will send a new message with the service's serving status.
-     * If the call terminates with status UNIMPLEMENTED, then clients
-     * should assume this method is not supported and should not retry the
-     * call.  If the call terminates with any other status (including OK),
-     * clients should retry the call with appropriate exponential backoff.
-     * </pre>
-     */
-    default java.util.Iterator<io.grpc.health.v1.HealthCheckResponse> watch(
-        io.grpc.health.v1.HealthCheckRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service Health
    */
   public static final class HealthBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub>
-   implements HealthBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
     private HealthBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -335,7 +294,6 @@ public final class HealthGrpc {
      * NOT_FOUND.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getCheckMethod(), getCallOptions(), request);
@@ -358,7 +316,6 @@ public final class HealthGrpc {
      * clients should retry the call with appropriate exponential backoff.
      * </pre>
      */
-    @java.lang.Override
     public java.util.Iterator<io.grpc.health.v1.HealthCheckResponse> watch(
         io.grpc.health.v1.HealthCheckRequest request) {
       return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
@@ -367,27 +324,10 @@ public final class HealthGrpc {
   }
 
   /**
-   */
-  public interface HealthFuture {
-
-    /**
-     * <pre>
-     * If the requested service is unknown, the call will fail with status
-     * NOT_FOUND.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.health.v1.HealthCheckResponse> check(
-        io.grpc.health.v1.HealthCheckRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service Health
    */
   public static final class HealthFutureStub
-   extends io.grpc.stub.AbstractFutureStub<HealthFutureStub>
-   implements HealthFuture {
+   extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {
     private HealthFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -405,7 +345,6 @@ public final class HealthGrpc {
      * NOT_FOUND.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.health.v1.HealthCheckResponse> check(
         io.grpc.health.v1.HealthCheckRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

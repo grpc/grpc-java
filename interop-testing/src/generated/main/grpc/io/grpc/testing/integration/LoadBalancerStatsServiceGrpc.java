@@ -210,8 +210,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStatsServiceStub>
-   implements LoadBalancerStatsServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStatsServiceStub> {
     private LoadBalancerStatsServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -228,7 +227,6 @@ public final class LoadBalancerStatsServiceGrpc {
      * Gets the backend distribution for RPCs sent by a test client.
      * </pre>
      */
-    @java.lang.Override
     public void getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -240,37 +238,10 @@ public final class LoadBalancerStatsServiceGrpc {
      * Gets the accumulated stats for RPCs sent by a test client.
      * </pre>
      */
-    @java.lang.Override
     public void getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getGetClientAccumulatedStatsMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * A service used to obtain stats for verifying LB behavior.
-   * </pre>
-   */
-  public interface LoadBalancerStatsServiceBlocking {
-
-    /**
-     * <pre>
-     * Gets the backend distribution for RPCs sent by a test client.
-     * </pre>
-     */
-    default io.grpc.testing.integration.Messages.LoadBalancerStatsResponse getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Gets the accumulated stats for RPCs sent by a test client.
-     * </pre>
-     */
-    default io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -281,8 +252,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingStub>
-   implements LoadBalancerStatsServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingStub> {
     private LoadBalancerStatsServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -299,7 +269,6 @@ public final class LoadBalancerStatsServiceGrpc {
      * Gets the backend distribution for RPCs sent by a test client.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.Messages.LoadBalancerStatsResponse getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetClientStatsMethod(), getCallOptions(), request);
@@ -310,38 +279,9 @@ public final class LoadBalancerStatsServiceGrpc {
      * Gets the accumulated stats for RPCs sent by a test client.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetClientAccumulatedStatsMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * A service used to obtain stats for verifying LB behavior.
-   * </pre>
-   */
-  public interface LoadBalancerStatsServiceFuture {
-
-    /**
-     * <pre>
-     * Gets the backend distribution for RPCs sent by a test client.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> getClientStats(
-        io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Gets the accumulated stats for RPCs sent by a test client.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> getClientAccumulatedStats(
-        io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -352,8 +292,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<LoadBalancerStatsServiceFutureStub>
-   implements LoadBalancerStatsServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<LoadBalancerStatsServiceFutureStub> {
     private LoadBalancerStatsServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -370,7 +309,6 @@ public final class LoadBalancerStatsServiceGrpc {
      * Gets the backend distribution for RPCs sent by a test client.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> getClientStats(
         io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -382,7 +320,6 @@ public final class LoadBalancerStatsServiceGrpc {
      * Gets the accumulated stats for RPCs sent by a test client.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> getClientAccumulatedStats(
         io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

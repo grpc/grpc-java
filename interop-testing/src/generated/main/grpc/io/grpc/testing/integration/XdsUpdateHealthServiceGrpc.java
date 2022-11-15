@@ -198,8 +198,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateHealthServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<XdsUpdateHealthServiceStub>
-   implements XdsUpdateHealthServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<XdsUpdateHealthServiceStub> {
     private XdsUpdateHealthServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -213,7 +212,6 @@ public final class XdsUpdateHealthServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void setServing(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -222,31 +220,10 @@ public final class XdsUpdateHealthServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void setNotServing(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getSetNotServingMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * A service to remotely control health status of an xDS test server.
-   * </pre>
-   */
-  public interface XdsUpdateHealthServiceBlocking {
-
-    /**
-     */
-    default io.grpc.testing.integration.EmptyProtos.Empty setServing(io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     */
-    default io.grpc.testing.integration.EmptyProtos.Empty setNotServing(io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -257,8 +234,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateHealthServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<XdsUpdateHealthServiceBlockingStub>
-   implements XdsUpdateHealthServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<XdsUpdateHealthServiceBlockingStub> {
     private XdsUpdateHealthServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -272,7 +248,6 @@ public final class XdsUpdateHealthServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.testing.integration.EmptyProtos.Empty setServing(io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getSetServingMethod(), getCallOptions(), request);
@@ -280,32 +255,9 @@ public final class XdsUpdateHealthServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.testing.integration.EmptyProtos.Empty setNotServing(io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getSetNotServingMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * A service to remotely control health status of an xDS test server.
-   * </pre>
-   */
-  public interface XdsUpdateHealthServiceFuture {
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> setServing(
-        io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> setNotServing(
-        io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -316,8 +268,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateHealthServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<XdsUpdateHealthServiceFutureStub>
-   implements XdsUpdateHealthServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<XdsUpdateHealthServiceFutureStub> {
     private XdsUpdateHealthServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -331,7 +282,6 @@ public final class XdsUpdateHealthServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> setServing(
         io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -340,7 +290,6 @@ public final class XdsUpdateHealthServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> setNotServing(
         io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

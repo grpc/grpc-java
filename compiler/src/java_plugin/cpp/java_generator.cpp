@@ -600,7 +600,8 @@ static void PrintStub(
       break;
     case BLOCKING_CLIENT_INTERFACE:
     case FUTURE_CLIENT_INTERFACE:
-      GRPC_CODEGEN_FAIL << "Intentionally not creating StubType: " << type
+      GRPC_CODEGEN_FAIL << "Intentionally not creating StubType: " << type;
+      break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot determine class name for StubType: " << type;
   }

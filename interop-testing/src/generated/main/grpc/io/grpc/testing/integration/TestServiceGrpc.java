@@ -588,8 +588,7 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static final class TestServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<TestServiceStub>
-   implements TestServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<TestServiceStub> {
     private TestServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -606,7 +605,6 @@ public final class TestServiceGrpc {
      * One empty request followed by one empty response.
      * </pre>
      */
-    @java.lang.Override
     public void emptyCall(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -618,7 +616,6 @@ public final class TestServiceGrpc {
      * One request followed by one response.
      * </pre>
      */
-    @java.lang.Override
     public void unaryCall(io.grpc.testing.integration.Messages.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.SimpleResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -632,7 +629,6 @@ public final class TestServiceGrpc {
      * satisfy subsequent requests.
      * </pre>
      */
-    @java.lang.Override
     public void cacheableUnaryCall(io.grpc.testing.integration.Messages.SimpleRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.SimpleResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -645,7 +641,6 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
-    @java.lang.Override
     public void streamingOutputCall(io.grpc.testing.integration.Messages.StreamingOutputCallRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.StreamingOutputCallResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncServerStreamingCall(
@@ -658,7 +653,6 @@ public final class TestServiceGrpc {
      * The server returns the aggregated size of client payload as the result.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.StreamingInputCallRequest> streamingInputCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.StreamingInputCallResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncClientStreamingCall(
@@ -672,7 +666,6 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full duplexing.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.StreamingOutputCallRequest> fullDuplexCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.StreamingOutputCallResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -687,7 +680,6 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.StreamingOutputCallRequest> halfDuplexCall(
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.StreamingOutputCallResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -700,70 +692,10 @@ public final class TestServiceGrpc {
      * to test the behavior when clients call unimplemented methods.
      * </pre>
      */
-    @java.lang.Override
     public void unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getUnimplementedCallMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * A simple service to test the various types of RPCs and experiment with
-   * performance with various types of payload.
-   * </pre>
-   */
-  public interface TestServiceBlocking {
-
-    /**
-     * <pre>
-     * One empty request followed by one empty response.
-     * </pre>
-     */
-    default io.grpc.testing.integration.EmptyProtos.Empty emptyCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * One request followed by one response.
-     * </pre>
-     */
-    default io.grpc.testing.integration.Messages.SimpleResponse unaryCall(io.grpc.testing.integration.Messages.SimpleRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * One request followed by one response. Response has cache control
-     * headers set such that a caching HTTP proxy (such as GFE) can
-     * satisfy subsequent requests.
-     * </pre>
-     */
-    default io.grpc.testing.integration.Messages.SimpleResponse cacheableUnaryCall(io.grpc.testing.integration.Messages.SimpleRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * One request followed by a sequence of responses (streamed download).
-     * The server returns the payload with client desired type and sizes.
-     * </pre>
-     */
-    default java.util.Iterator<io.grpc.testing.integration.Messages.StreamingOutputCallResponse> streamingOutputCall(
-        io.grpc.testing.integration.Messages.StreamingOutputCallRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * The test server will not implement this method. It will be used
-     * to test the behavior when clients call unimplemented methods.
-     * </pre>
-     */
-    default io.grpc.testing.integration.EmptyProtos.Empty unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -775,8 +707,7 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static final class TestServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub>
-   implements TestServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub> {
     private TestServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -793,7 +724,6 @@ public final class TestServiceGrpc {
      * One empty request followed by one empty response.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.EmptyProtos.Empty emptyCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getEmptyCallMethod(), getCallOptions(), request);
@@ -804,7 +734,6 @@ public final class TestServiceGrpc {
      * One request followed by one response.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.Messages.SimpleResponse unaryCall(io.grpc.testing.integration.Messages.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getUnaryCallMethod(), getCallOptions(), request);
@@ -817,7 +746,6 @@ public final class TestServiceGrpc {
      * satisfy subsequent requests.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.Messages.SimpleResponse cacheableUnaryCall(io.grpc.testing.integration.Messages.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getCacheableUnaryCallMethod(), getCallOptions(), request);
@@ -829,7 +757,6 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
-    @java.lang.Override
     public java.util.Iterator<io.grpc.testing.integration.Messages.StreamingOutputCallResponse> streamingOutputCall(
         io.grpc.testing.integration.Messages.StreamingOutputCallRequest request) {
       return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
@@ -842,62 +769,9 @@ public final class TestServiceGrpc {
      * to test the behavior when clients call unimplemented methods.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.EmptyProtos.Empty unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getUnimplementedCallMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * A simple service to test the various types of RPCs and experiment with
-   * performance with various types of payload.
-   * </pre>
-   */
-  public interface TestServiceFuture {
-
-    /**
-     * <pre>
-     * One empty request followed by one empty response.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> emptyCall(
-        io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * One request followed by one response.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.SimpleResponse> unaryCall(
-        io.grpc.testing.integration.Messages.SimpleRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * One request followed by one response. Response has cache control
-     * headers set such that a caching HTTP proxy (such as GFE) can
-     * satisfy subsequent requests.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.SimpleResponse> cacheableUnaryCall(
-        io.grpc.testing.integration.Messages.SimpleRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * The test server will not implement this method. It will be used
-     * to test the behavior when clients call unimplemented methods.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> unimplementedCall(
-        io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -909,8 +783,7 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static final class TestServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<TestServiceFutureStub>
-   implements TestServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<TestServiceFutureStub> {
     private TestServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -927,7 +800,6 @@ public final class TestServiceGrpc {
      * One empty request followed by one empty response.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> emptyCall(
         io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -939,7 +811,6 @@ public final class TestServiceGrpc {
      * One request followed by one response.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.SimpleResponse> unaryCall(
         io.grpc.testing.integration.Messages.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -953,7 +824,6 @@ public final class TestServiceGrpc {
      * satisfy subsequent requests.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.SimpleResponse> cacheableUnaryCall(
         io.grpc.testing.integration.Messages.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -966,7 +836,6 @@ public final class TestServiceGrpc {
      * to test the behavior when clients call unimplemented methods.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> unimplementedCall(
         io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

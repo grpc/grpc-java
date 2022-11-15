@@ -206,8 +206,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClientStatusDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<ClientStatusDiscoveryServiceStub>
-   implements ClientStatusDiscoveryServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<ClientStatusDiscoveryServiceStub> {
     private ClientStatusDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -221,7 +220,6 @@ public final class ClientStatusDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.status.v3.ClientStatusRequest> streamClientStatus(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.status.v3.ClientStatusResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -230,27 +228,10 @@ public final class ClientStatusDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void fetchClientStatus(io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.status.v3.ClientStatusResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getFetchClientStatusMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * CSDS is Client Status Discovery Service. It can be used to get the status of
-   * an xDS-compliant client from the management server's point of view. It can
-   * also be used to get the current xDS states directly from the client.
-   * </pre>
-   */
-  public interface ClientStatusDiscoveryServiceBlocking {
-
-    /**
-     */
-    default io.envoyproxy.envoy.service.status.v3.ClientStatusResponse fetchClientStatus(io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -263,8 +244,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClientStatusDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ClientStatusDiscoveryServiceBlockingStub>
-   implements ClientStatusDiscoveryServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<ClientStatusDiscoveryServiceBlockingStub> {
     private ClientStatusDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -278,27 +258,9 @@ public final class ClientStatusDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.envoyproxy.envoy.service.status.v3.ClientStatusResponse fetchClientStatus(io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchClientStatusMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * CSDS is Client Status Discovery Service. It can be used to get the status of
-   * an xDS-compliant client from the management server's point of view. It can
-   * also be used to get the current xDS states directly from the client.
-   * </pre>
-   */
-  public interface ClientStatusDiscoveryServiceFuture {
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.service.status.v3.ClientStatusResponse> fetchClientStatus(
-        io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -311,8 +273,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClientStatusDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ClientStatusDiscoveryServiceFutureStub>
-   implements ClientStatusDiscoveryServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<ClientStatusDiscoveryServiceFutureStub> {
     private ClientStatusDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -326,7 +287,6 @@ public final class ClientStatusDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.service.status.v3.ClientStatusResponse> fetchClientStatus(
         io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

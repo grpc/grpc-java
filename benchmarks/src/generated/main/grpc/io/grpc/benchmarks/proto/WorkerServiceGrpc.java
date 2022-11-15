@@ -336,8 +336,7 @@ public final class WorkerServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service WorkerService
    */
   public static final class WorkerServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<WorkerServiceStub>
-   implements WorkerServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<WorkerServiceStub> {
     private WorkerServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -359,7 +358,6 @@ public final class WorkerServiceGrpc {
      * this RPC.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.ServerArgs> runServer(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.ServerStatus> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -376,7 +374,6 @@ public final class WorkerServiceGrpc {
      * this RPC.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.ClientArgs> runClient(
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.ClientStatus> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -388,7 +385,6 @@ public final class WorkerServiceGrpc {
      * Just return the core count - unary call
      * </pre>
      */
-    @java.lang.Override
     public void coreCount(io.grpc.benchmarks.proto.Control.CoreRequest request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.CoreResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -400,7 +396,6 @@ public final class WorkerServiceGrpc {
      * Quit this worker
      * </pre>
      */
-    @java.lang.Override
     public void quitWorker(io.grpc.benchmarks.proto.Control.Void request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.Void> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -409,34 +404,10 @@ public final class WorkerServiceGrpc {
   }
 
   /**
-   */
-  public interface WorkerServiceBlocking {
-
-    /**
-     * <pre>
-     * Just return the core count - unary call
-     * </pre>
-     */
-    default io.grpc.benchmarks.proto.Control.CoreResponse coreCount(io.grpc.benchmarks.proto.Control.CoreRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Quit this worker
-     * </pre>
-     */
-    default io.grpc.benchmarks.proto.Control.Void quitWorker(io.grpc.benchmarks.proto.Control.Void request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service WorkerService
    */
   public static final class WorkerServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub>
-   implements WorkerServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub> {
     private WorkerServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -453,7 +424,6 @@ public final class WorkerServiceGrpc {
      * Just return the core count - unary call
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.benchmarks.proto.Control.CoreResponse coreCount(io.grpc.benchmarks.proto.Control.CoreRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getCoreCountMethod(), getCallOptions(), request);
@@ -464,7 +434,6 @@ public final class WorkerServiceGrpc {
      * Quit this worker
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.benchmarks.proto.Control.Void quitWorker(io.grpc.benchmarks.proto.Control.Void request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getQuitWorkerMethod(), getCallOptions(), request);
@@ -472,36 +441,10 @@ public final class WorkerServiceGrpc {
   }
 
   /**
-   */
-  public interface WorkerServiceFuture {
-
-    /**
-     * <pre>
-     * Just return the core count - unary call
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Control.CoreResponse> coreCount(
-        io.grpc.benchmarks.proto.Control.CoreRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Quit this worker
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Control.Void> quitWorker(
-        io.grpc.benchmarks.proto.Control.Void request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service WorkerService
    */
   public static final class WorkerServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<WorkerServiceFutureStub>
-   implements WorkerServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<WorkerServiceFutureStub> {
     private WorkerServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -518,7 +461,6 @@ public final class WorkerServiceGrpc {
      * Just return the core count - unary call
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Control.CoreResponse> coreCount(
         io.grpc.benchmarks.proto.Control.CoreRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -530,7 +472,6 @@ public final class WorkerServiceGrpc {
      * Quit this worker
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.benchmarks.proto.Control.Void> quitWorker(
         io.grpc.benchmarks.proto.Control.Void request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

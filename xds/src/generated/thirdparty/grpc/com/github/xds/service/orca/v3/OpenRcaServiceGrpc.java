@@ -173,8 +173,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub>
-   implements OpenRcaServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
     private OpenRcaServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -188,33 +187,10 @@ public final class OpenRcaServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void streamCoreMetrics(com.github.xds.service.orca.v3.OrcaLoadReportRequest request,
         io.grpc.stub.StreamObserver<com.github.xds.data.orca.v3.OrcaLoadReport> responseObserver) {
       io.grpc.stub.ClientCalls.asyncServerStreamingCall(
           getChannel().newCall(getStreamCoreMetricsMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * Out-of-band (OOB) load reporting service for the additional load reporting
-   * agent that does not sit in the request path. Reports are periodically sampled
-   * with sufficient frequency to provide temporal association with requests.
-   * OOB reporting compensates the limitation of in-band reporting in revealing
-   * costs for backends that do not provide a steady stream of telemetry such as
-   * long running stream operations and zero QPS services. This is a server
-   * streaming service, client needs to terminate current RPC and initiate
-   * a new call to change backend reporting frequency.
-   * </pre>
-   */
-  public interface OpenRcaServiceBlocking {
-
-    /**
-     */
-    default java.util.Iterator<com.github.xds.data.orca.v3.OrcaLoadReport> streamCoreMetrics(
-        com.github.xds.service.orca.v3.OrcaLoadReportRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -232,8 +208,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub>
-   implements OpenRcaServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
     private OpenRcaServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -247,27 +222,11 @@ public final class OpenRcaServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public java.util.Iterator<com.github.xds.data.orca.v3.OrcaLoadReport> streamCoreMetrics(
         com.github.xds.service.orca.v3.OrcaLoadReportRequest request) {
       return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
           getChannel(), getStreamCoreMetricsMethod(), getCallOptions(), request);
     }
-  }
-
-  /**
-   * <pre>
-   * Out-of-band (OOB) load reporting service for the additional load reporting
-   * agent that does not sit in the request path. Reports are periodically sampled
-   * with sufficient frequency to provide temporal association with requests.
-   * OOB reporting compensates the limitation of in-band reporting in revealing
-   * costs for backends that do not provide a steady stream of telemetry such as
-   * long running stream operations and zero QPS services. This is a server
-   * streaming service, client needs to terminate current RPC and initiate
-   * a new call to change backend reporting frequency.
-   * </pre>
-   */
-  public interface OpenRcaServiceFuture {
   }
 
   /**
@@ -284,8 +243,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub>
-   implements OpenRcaServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
     private OpenRcaServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

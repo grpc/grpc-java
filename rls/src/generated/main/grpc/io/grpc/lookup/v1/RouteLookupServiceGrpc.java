@@ -139,8 +139,7 @@ public final class RouteLookupServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service RouteLookupService
    */
   public static final class RouteLookupServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<RouteLookupServiceStub>
-   implements RouteLookupServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<RouteLookupServiceStub> {
     private RouteLookupServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -157,7 +156,6 @@ public final class RouteLookupServiceGrpc {
      * Lookup returns a target for a single key.
      * </pre>
      */
-    @java.lang.Override
     public void routeLookup(io.grpc.lookup.v1.RouteLookupRequest request,
         io.grpc.stub.StreamObserver<io.grpc.lookup.v1.RouteLookupResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -166,25 +164,10 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
-   */
-  public interface RouteLookupServiceBlocking {
-
-    /**
-     * <pre>
-     * Lookup returns a target for a single key.
-     * </pre>
-     */
-    default io.grpc.lookup.v1.RouteLookupResponse routeLookup(io.grpc.lookup.v1.RouteLookupRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service RouteLookupService
    */
   public static final class RouteLookupServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub>
-   implements RouteLookupServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub> {
     private RouteLookupServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -201,7 +184,6 @@ public final class RouteLookupServiceGrpc {
      * Lookup returns a target for a single key.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.lookup.v1.RouteLookupResponse routeLookup(io.grpc.lookup.v1.RouteLookupRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getRouteLookupMethod(), getCallOptions(), request);
@@ -209,26 +191,10 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
-   */
-  public interface RouteLookupServiceFuture {
-
-    /**
-     * <pre>
-     * Lookup returns a target for a single key.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.lookup.v1.RouteLookupResponse> routeLookup(
-        io.grpc.lookup.v1.RouteLookupRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteLookupService
    */
   public static final class RouteLookupServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<RouteLookupServiceFutureStub>
-   implements RouteLookupServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<RouteLookupServiceFutureStub> {
     private RouteLookupServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -245,7 +211,6 @@ public final class RouteLookupServiceGrpc {
      * Lookup returns a target for a single key.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.lookup.v1.RouteLookupResponse> routeLookup(
         io.grpc.lookup.v1.RouteLookupRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

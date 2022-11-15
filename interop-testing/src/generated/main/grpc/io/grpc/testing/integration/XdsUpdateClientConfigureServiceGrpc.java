@@ -151,8 +151,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<XdsUpdateClientConfigureServiceStub>
-   implements XdsUpdateClientConfigureServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<XdsUpdateClientConfigureServiceStub> {
     private XdsUpdateClientConfigureServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -169,28 +168,10 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      * Update the tes client's configuration.
      * </pre>
      */
-    @java.lang.Override
     public void configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.ClientConfigureResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getConfigureMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * A service to dynamically update the configuration of an xDS test client.
-   * </pre>
-   */
-  public interface XdsUpdateClientConfigureServiceBlocking {
-
-    /**
-     * <pre>
-     * Update the tes client's configuration.
-     * </pre>
-     */
-    default io.grpc.testing.integration.Messages.ClientConfigureResponse configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -201,8 +182,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingStub>
-   implements XdsUpdateClientConfigureServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingStub> {
     private XdsUpdateClientConfigureServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -219,28 +199,9 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      * Update the tes client's configuration.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.Messages.ClientConfigureResponse configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getConfigureMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * A service to dynamically update the configuration of an xDS test client.
-   * </pre>
-   */
-  public interface XdsUpdateClientConfigureServiceFuture {
-
-    /**
-     * <pre>
-     * Update the tes client's configuration.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.ClientConfigureResponse> configure(
-        io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -251,8 +212,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<XdsUpdateClientConfigureServiceFutureStub>
-   implements XdsUpdateClientConfigureServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<XdsUpdateClientConfigureServiceFutureStub> {
     private XdsUpdateClientConfigureServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -269,7 +229,6 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      * Update the tes client's configuration.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.ClientConfigureResponse> configure(
         io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

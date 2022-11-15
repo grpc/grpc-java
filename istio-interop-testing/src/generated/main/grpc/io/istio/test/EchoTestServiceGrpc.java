@@ -186,8 +186,7 @@ public final class EchoTestServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub>
-   implements EchoTestServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub> {
     private EchoTestServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -201,7 +200,6 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void echo(io.istio.test.Echo.EchoRequest request,
         io.grpc.stub.StreamObserver<io.istio.test.Echo.EchoResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -210,7 +208,6 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void forwardEcho(io.istio.test.Echo.ForwardEchoRequest request,
         io.grpc.stub.StreamObserver<io.istio.test.Echo.ForwardEchoResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -219,28 +216,10 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
-   */
-  public interface EchoTestServiceBlocking {
-
-    /**
-     */
-    default io.istio.test.Echo.EchoResponse echo(io.istio.test.Echo.EchoRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     */
-    default io.istio.test.Echo.ForwardEchoResponse forwardEcho(io.istio.test.Echo.ForwardEchoRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub>
-   implements EchoTestServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {
     private EchoTestServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -254,7 +233,6 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.istio.test.Echo.EchoResponse echo(io.istio.test.Echo.EchoRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getEchoMethod(), getCallOptions(), request);
@@ -262,7 +240,6 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.istio.test.Echo.ForwardEchoResponse forwardEcho(io.istio.test.Echo.ForwardEchoRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getForwardEchoMethod(), getCallOptions(), request);
@@ -270,30 +247,10 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
-   */
-  public interface EchoTestServiceFuture {
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.istio.test.Echo.EchoResponse> echo(
-        io.istio.test.Echo.EchoRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.istio.test.Echo.ForwardEchoResponse> forwardEcho(
-        io.istio.test.Echo.ForwardEchoRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub>
-   implements EchoTestServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub> {
     private EchoTestServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -307,7 +264,6 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.istio.test.Echo.EchoResponse> echo(
         io.istio.test.Echo.EchoRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -316,7 +272,6 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.istio.test.Echo.ForwardEchoResponse> forwardEcho(
         io.istio.test.Echo.ForwardEchoRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

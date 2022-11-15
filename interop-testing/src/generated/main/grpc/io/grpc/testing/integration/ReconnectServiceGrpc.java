@@ -198,8 +198,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub>
-   implements ReconnectServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub> {
     private ReconnectServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -213,7 +212,6 @@ public final class ReconnectServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void start(io.grpc.testing.integration.Messages.ReconnectParams request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -222,31 +220,10 @@ public final class ReconnectServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void stop(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.ReconnectInfo> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getStopMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * A service used to control reconnect server.
-   * </pre>
-   */
-  public interface ReconnectServiceBlocking {
-
-    /**
-     */
-    default io.grpc.testing.integration.EmptyProtos.Empty start(io.grpc.testing.integration.Messages.ReconnectParams request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     */
-    default io.grpc.testing.integration.Messages.ReconnectInfo stop(io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -257,8 +234,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub>
-   implements ReconnectServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub> {
     private ReconnectServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -272,7 +248,6 @@ public final class ReconnectServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.testing.integration.EmptyProtos.Empty start(io.grpc.testing.integration.Messages.ReconnectParams request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getStartMethod(), getCallOptions(), request);
@@ -280,32 +255,9 @@ public final class ReconnectServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.testing.integration.Messages.ReconnectInfo stop(io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getStopMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * A service used to control reconnect server.
-   * </pre>
-   */
-  public interface ReconnectServiceFuture {
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> start(
-        io.grpc.testing.integration.Messages.ReconnectParams request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.ReconnectInfo> stop(
-        io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -316,8 +268,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub>
-   implements ReconnectServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub> {
     private ReconnectServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -331,7 +282,6 @@ public final class ReconnectServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> start(
         io.grpc.testing.integration.Messages.ReconnectParams request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -340,7 +290,6 @@ public final class ReconnectServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.ReconnectInfo> stop(
         io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

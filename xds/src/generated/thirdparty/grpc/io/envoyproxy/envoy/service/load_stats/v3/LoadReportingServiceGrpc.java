@@ -191,8 +191,7 @@ public final class LoadReportingServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service LoadReportingService
    */
   public static final class LoadReportingServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub>
-   implements LoadReportingServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub> {
     private LoadReportingServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -235,7 +234,6 @@ public final class LoadReportingServiceGrpc {
      *    assignment destined for each zone Envoys are located in. Goto 2.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest> streamLoadStats(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -244,16 +242,10 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
-   */
-  public interface LoadReportingServiceBlocking {
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service LoadReportingService
    */
   public static final class LoadReportingServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub>
-   implements LoadReportingServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
     private LoadReportingServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -267,16 +259,10 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
-   */
-  public interface LoadReportingServiceFuture {
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadReportingService
    */
   public static final class LoadReportingServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub>
-   implements LoadReportingServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub> {
     private LoadReportingServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

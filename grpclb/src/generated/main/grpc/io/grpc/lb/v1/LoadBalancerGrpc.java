@@ -139,8 +139,7 @@ public final class LoadBalancerGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service LoadBalancer
    */
   public static final class LoadBalancerStub
-   extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub>
-   implements LoadBalancerAsync {
+   extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub> {
     private LoadBalancerStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -157,7 +156,6 @@ public final class LoadBalancerGrpc {
      * Bidirectional rpc to get a list of servers.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceRequest> balanceLoad(
         io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -166,16 +164,10 @@ public final class LoadBalancerGrpc {
   }
 
   /**
-   */
-  public interface LoadBalancerBlocking {
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service LoadBalancer
    */
   public static final class LoadBalancerBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub>
-   implements LoadBalancerBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {
     private LoadBalancerBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -189,16 +181,10 @@ public final class LoadBalancerGrpc {
   }
 
   /**
-   */
-  public interface LoadBalancerFuture {
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadBalancer
    */
   public static final class LoadBalancerFutureStub
-   extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub>
-   implements LoadBalancerFuture {
+   extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub> {
     private LoadBalancerFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

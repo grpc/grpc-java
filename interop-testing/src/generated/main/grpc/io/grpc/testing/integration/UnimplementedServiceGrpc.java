@@ -155,8 +155,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub>
-   implements UnimplementedServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub> {
     private UnimplementedServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -173,29 +172,10 @@ public final class UnimplementedServiceGrpc {
      * A call that no server should implement
      * </pre>
      */
-    @java.lang.Override
     public void unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getUnimplementedCallMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * A simple service NOT implemented at servers so clients can test for
-   * that case.
-   * </pre>
-   */
-  public interface UnimplementedServiceBlocking {
-
-    /**
-     * <pre>
-     * A call that no server should implement
-     * </pre>
-     */
-    default io.grpc.testing.integration.EmptyProtos.Empty unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -207,8 +187,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub>
-   implements UnimplementedServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub> {
     private UnimplementedServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -225,29 +204,9 @@ public final class UnimplementedServiceGrpc {
      * A call that no server should implement
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.EmptyProtos.Empty unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getUnimplementedCallMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * A simple service NOT implemented at servers so clients can test for
-   * that case.
-   * </pre>
-   */
-  public interface UnimplementedServiceFuture {
-
-    /**
-     * <pre>
-     * A call that no server should implement
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> unimplementedCall(
-        io.grpc.testing.integration.EmptyProtos.Empty request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -259,8 +218,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub>
-   implements UnimplementedServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub> {
     private UnimplementedServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -277,7 +235,6 @@ public final class UnimplementedServiceGrpc {
      * A call that no server should implement
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.EmptyProtos.Empty> unimplementedCall(
         io.grpc.testing.integration.EmptyProtos.Empty request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

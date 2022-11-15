@@ -511,8 +511,7 @@ public final class ChannelzGrpc {
    * </pre>
    */
   public static final class ChannelzStub
-   extends io.grpc.stub.AbstractAsyncStub<ChannelzStub>
-   implements ChannelzAsync {
+   extends io.grpc.stub.AbstractAsyncStub<ChannelzStub> {
     private ChannelzStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -530,7 +529,6 @@ public final class ChannelzGrpc {
      * created). This does not include subchannels nor non-top level channels.
      * </pre>
      */
-    @java.lang.Override
     public void getTopChannels(io.grpc.channelz.v1.GetTopChannelsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.channelz.v1.GetTopChannelsResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -542,7 +540,6 @@ public final class ChannelzGrpc {
      * Gets all servers that exist in the process.
      * </pre>
      */
-    @java.lang.Override
     public void getServers(io.grpc.channelz.v1.GetServersRequest request,
         io.grpc.stub.StreamObserver<io.grpc.channelz.v1.GetServersResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -554,7 +551,6 @@ public final class ChannelzGrpc {
      * Returns a single Server, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public void getServer(io.grpc.channelz.v1.GetServerRequest request,
         io.grpc.stub.StreamObserver<io.grpc.channelz.v1.GetServerResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -566,7 +562,6 @@ public final class ChannelzGrpc {
      * Gets all server sockets that exist in the process.
      * </pre>
      */
-    @java.lang.Override
     public void getServerSockets(io.grpc.channelz.v1.GetServerSocketsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.channelz.v1.GetServerSocketsResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -578,7 +573,6 @@ public final class ChannelzGrpc {
      * Returns a single Channel, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public void getChannel(io.grpc.channelz.v1.GetChannelRequest request,
         io.grpc.stub.StreamObserver<io.grpc.channelz.v1.GetChannelResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -590,7 +584,6 @@ public final class ChannelzGrpc {
      * Returns a single Subchannel, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public void getSubchannel(io.grpc.channelz.v1.GetSubchannelRequest request,
         io.grpc.stub.StreamObserver<io.grpc.channelz.v1.GetSubchannelResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -602,84 +595,10 @@ public final class ChannelzGrpc {
      * Returns a single Socket or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public void getSocket(io.grpc.channelz.v1.GetSocketRequest request,
         io.grpc.stub.StreamObserver<io.grpc.channelz.v1.GetSocketResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getGetSocketMethod(), getCallOptions()), request, responseObserver);
-    }
-  }
-
-  /**
-   * <pre>
-   * Channelz is a service exposed by gRPC servers that provides detailed debug
-   * information.
-   * </pre>
-   */
-  public interface ChannelzBlocking {
-
-    /**
-     * <pre>
-     * Gets all root channels (i.e. channels the application has directly
-     * created). This does not include subchannels nor non-top level channels.
-     * </pre>
-     */
-    default io.grpc.channelz.v1.GetTopChannelsResponse getTopChannels(io.grpc.channelz.v1.GetTopChannelsRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Gets all servers that exist in the process.
-     * </pre>
-     */
-    default io.grpc.channelz.v1.GetServersResponse getServers(io.grpc.channelz.v1.GetServersRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns a single Server, or else a NOT_FOUND code.
-     * </pre>
-     */
-    default io.grpc.channelz.v1.GetServerResponse getServer(io.grpc.channelz.v1.GetServerRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Gets all server sockets that exist in the process.
-     * </pre>
-     */
-    default io.grpc.channelz.v1.GetServerSocketsResponse getServerSockets(io.grpc.channelz.v1.GetServerSocketsRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns a single Channel, or else a NOT_FOUND code.
-     * </pre>
-     */
-    default io.grpc.channelz.v1.GetChannelResponse getChannel(io.grpc.channelz.v1.GetChannelRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns a single Subchannel, or else a NOT_FOUND code.
-     * </pre>
-     */
-    default io.grpc.channelz.v1.GetSubchannelResponse getSubchannel(io.grpc.channelz.v1.GetSubchannelRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns a single Socket or else a NOT_FOUND code.
-     * </pre>
-     */
-    default io.grpc.channelz.v1.GetSocketResponse getSocket(io.grpc.channelz.v1.GetSocketRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -691,8 +610,7 @@ public final class ChannelzGrpc {
    * </pre>
    */
   public static final class ChannelzBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ChannelzBlockingStub>
-   implements ChannelzBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<ChannelzBlockingStub> {
     private ChannelzBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -710,7 +628,6 @@ public final class ChannelzGrpc {
      * created). This does not include subchannels nor non-top level channels.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.channelz.v1.GetTopChannelsResponse getTopChannels(io.grpc.channelz.v1.GetTopChannelsRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetTopChannelsMethod(), getCallOptions(), request);
@@ -721,7 +638,6 @@ public final class ChannelzGrpc {
      * Gets all servers that exist in the process.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.channelz.v1.GetServersResponse getServers(io.grpc.channelz.v1.GetServersRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetServersMethod(), getCallOptions(), request);
@@ -732,7 +648,6 @@ public final class ChannelzGrpc {
      * Returns a single Server, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.channelz.v1.GetServerResponse getServer(io.grpc.channelz.v1.GetServerRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetServerMethod(), getCallOptions(), request);
@@ -743,7 +658,6 @@ public final class ChannelzGrpc {
      * Gets all server sockets that exist in the process.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.channelz.v1.GetServerSocketsResponse getServerSockets(io.grpc.channelz.v1.GetServerSocketsRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetServerSocketsMethod(), getCallOptions(), request);
@@ -754,7 +668,6 @@ public final class ChannelzGrpc {
      * Returns a single Channel, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.channelz.v1.GetChannelResponse getChannel(io.grpc.channelz.v1.GetChannelRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetChannelMethod(), getCallOptions(), request);
@@ -765,7 +678,6 @@ public final class ChannelzGrpc {
      * Returns a single Subchannel, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.channelz.v1.GetSubchannelResponse getSubchannel(io.grpc.channelz.v1.GetSubchannelRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetSubchannelMethod(), getCallOptions(), request);
@@ -776,90 +688,9 @@ public final class ChannelzGrpc {
      * Returns a single Socket or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.channelz.v1.GetSocketResponse getSocket(io.grpc.channelz.v1.GetSocketRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetSocketMethod(), getCallOptions(), request);
-    }
-  }
-
-  /**
-   * <pre>
-   * Channelz is a service exposed by gRPC servers that provides detailed debug
-   * information.
-   * </pre>
-   */
-  public interface ChannelzFuture {
-
-    /**
-     * <pre>
-     * Gets all root channels (i.e. channels the application has directly
-     * created). This does not include subchannels nor non-top level channels.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetTopChannelsResponse> getTopChannels(
-        io.grpc.channelz.v1.GetTopChannelsRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Gets all servers that exist in the process.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetServersResponse> getServers(
-        io.grpc.channelz.v1.GetServersRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns a single Server, or else a NOT_FOUND code.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetServerResponse> getServer(
-        io.grpc.channelz.v1.GetServerRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Gets all server sockets that exist in the process.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetServerSocketsResponse> getServerSockets(
-        io.grpc.channelz.v1.GetServerSocketsRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns a single Channel, or else a NOT_FOUND code.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetChannelResponse> getChannel(
-        io.grpc.channelz.v1.GetChannelRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns a single Subchannel, or else a NOT_FOUND code.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetSubchannelResponse> getSubchannel(
-        io.grpc.channelz.v1.GetSubchannelRequest request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns a single Socket or else a NOT_FOUND code.
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetSocketResponse> getSocket(
-        io.grpc.channelz.v1.GetSocketRequest request) {
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -871,8 +702,7 @@ public final class ChannelzGrpc {
    * </pre>
    */
   public static final class ChannelzFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ChannelzFutureStub>
-   implements ChannelzFuture {
+   extends io.grpc.stub.AbstractFutureStub<ChannelzFutureStub> {
     private ChannelzFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -890,7 +720,6 @@ public final class ChannelzGrpc {
      * created). This does not include subchannels nor non-top level channels.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetTopChannelsResponse> getTopChannels(
         io.grpc.channelz.v1.GetTopChannelsRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -902,7 +731,6 @@ public final class ChannelzGrpc {
      * Gets all servers that exist in the process.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetServersResponse> getServers(
         io.grpc.channelz.v1.GetServersRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -914,7 +742,6 @@ public final class ChannelzGrpc {
      * Returns a single Server, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetServerResponse> getServer(
         io.grpc.channelz.v1.GetServerRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -926,7 +753,6 @@ public final class ChannelzGrpc {
      * Gets all server sockets that exist in the process.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetServerSocketsResponse> getServerSockets(
         io.grpc.channelz.v1.GetServerSocketsRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -938,7 +764,6 @@ public final class ChannelzGrpc {
      * Returns a single Channel, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetChannelResponse> getChannel(
         io.grpc.channelz.v1.GetChannelRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -950,7 +775,6 @@ public final class ChannelzGrpc {
      * Returns a single Subchannel, or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetSubchannelResponse> getSubchannel(
         io.grpc.channelz.v1.GetSubchannelRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
@@ -962,7 +786,6 @@ public final class ChannelzGrpc {
      * Returns a single Socket or else a NOT_FOUND code.
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.channelz.v1.GetSocketResponse> getSocket(
         io.grpc.channelz.v1.GetSocketRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

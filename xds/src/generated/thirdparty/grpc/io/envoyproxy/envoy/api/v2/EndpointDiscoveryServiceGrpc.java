@@ -247,8 +247,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub>
-   implements EndpointDiscoveryServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
     private EndpointDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -266,7 +265,6 @@ public final class EndpointDiscoveryServiceGrpc {
      * to subscribe to updates for.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamEndpoints(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -275,7 +273,6 @@ public final class EndpointDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaEndpoints(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -284,7 +281,6 @@ public final class EndpointDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -293,22 +289,10 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
-   */
-  public interface EndpointDiscoveryServiceBlocking {
-
-    /**
-     */
-    default io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub>
-   implements EndpointDiscoveryServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
     private EndpointDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -322,7 +306,6 @@ public final class EndpointDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchEndpointsMethod(), getCallOptions(), request);
@@ -330,23 +313,10 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
-   */
-  public interface EndpointDiscoveryServiceFuture {
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchEndpoints(
-        io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub>
-   implements EndpointDiscoveryServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
     private EndpointDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -360,7 +330,6 @@ public final class EndpointDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchEndpoints(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

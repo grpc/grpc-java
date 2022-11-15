@@ -200,8 +200,7 @@ public final class MetricsServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service MetricsService
    */
   public static final class MetricsServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub>
-   implements MetricsServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
     private MetricsServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -219,7 +218,6 @@ public final class MetricsServiceGrpc {
      * the service
      * </pre>
      */
-    @java.lang.Override
     public void getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncServerStreamingCall(
@@ -231,7 +229,6 @@ public final class MetricsServiceGrpc {
      * Returns the value of one gauge
      * </pre>
      */
-    @java.lang.Override
     public void getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -240,36 +237,10 @@ public final class MetricsServiceGrpc {
   }
 
   /**
-   */
-  public interface MetricsServiceBlocking {
-
-    /**
-     * <pre>
-     * Returns the values of all the gauges that are currently being maintained by
-     * the service
-     * </pre>
-     */
-    default java.util.Iterator<io.grpc.testing.integration.Metrics.GaugeResponse> getAllGauges(
-        io.grpc.testing.integration.Metrics.EmptyMessage request) {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * <pre>
-     * Returns the value of one gauge
-     * </pre>
-     */
-    default io.grpc.testing.integration.Metrics.GaugeResponse getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service MetricsService
    */
   public static final class MetricsServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub>
-   implements MetricsServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
     private MetricsServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -287,7 +258,6 @@ public final class MetricsServiceGrpc {
      * the service
      * </pre>
      */
-    @java.lang.Override
     public java.util.Iterator<io.grpc.testing.integration.Metrics.GaugeResponse> getAllGauges(
         io.grpc.testing.integration.Metrics.EmptyMessage request) {
       return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
@@ -299,7 +269,6 @@ public final class MetricsServiceGrpc {
      * Returns the value of one gauge
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.testing.integration.Metrics.GaugeResponse getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetGaugeMethod(), getCallOptions(), request);
@@ -307,26 +276,10 @@ public final class MetricsServiceGrpc {
   }
 
   /**
-   */
-  public interface MetricsServiceFuture {
-
-    /**
-     * <pre>
-     * Returns the value of one gauge
-     * </pre>
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Metrics.GaugeResponse> getGauge(
-        io.grpc.testing.integration.Metrics.GaugeRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service MetricsService
    */
   public static final class MetricsServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub>
-   implements MetricsServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {
     private MetricsServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -343,7 +296,6 @@ public final class MetricsServiceGrpc {
      * Returns the value of one gauge
      * </pre>
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Metrics.GaugeResponse> getGauge(
         io.grpc.testing.integration.Metrics.GaugeRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

@@ -141,8 +141,7 @@ public final class ServerReflectionGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service ServerReflection
    */
   public static final class ServerReflectionStub
-   extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub>
-   implements ServerReflectionAsync {
+   extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
     private ServerReflectionStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -160,7 +159,6 @@ public final class ServerReflectionGrpc {
      * all related requests go to a single server.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.grpc.reflection.v1alpha.ServerReflectionRequest> serverReflectionInfo(
         io.grpc.stub.StreamObserver<io.grpc.reflection.v1alpha.ServerReflectionResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -169,16 +167,10 @@ public final class ServerReflectionGrpc {
   }
 
   /**
-   */
-  public interface ServerReflectionBlocking {
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service ServerReflection
    */
   public static final class ServerReflectionBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub>
-   implements ServerReflectionBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
     private ServerReflectionBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -192,16 +184,10 @@ public final class ServerReflectionGrpc {
   }
 
   /**
-   */
-  public interface ServerReflectionFuture {
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service ServerReflection
    */
   public static final class ServerReflectionFutureStub
-   extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub>
-   implements ServerReflectionFuture {
+   extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {
     private ServerReflectionFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

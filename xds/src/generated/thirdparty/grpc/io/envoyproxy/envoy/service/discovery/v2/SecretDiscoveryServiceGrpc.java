@@ -239,8 +239,7 @@ public final class SecretDiscoveryServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<SecretDiscoveryServiceStub>
-   implements SecretDiscoveryServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<SecretDiscoveryServiceStub> {
     private SecretDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -254,7 +253,6 @@ public final class SecretDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaSecrets(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -263,7 +261,6 @@ public final class SecretDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamSecrets(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -272,7 +269,6 @@ public final class SecretDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public void fetchSecrets(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
@@ -281,22 +277,10 @@ public final class SecretDiscoveryServiceGrpc {
   }
 
   /**
-   */
-  public interface SecretDiscoveryServiceBlocking {
-
-    /**
-     */
-    default io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchSecrets(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do synchronous rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub>
-   implements SecretDiscoveryServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
     private SecretDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -310,7 +294,6 @@ public final class SecretDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchSecrets(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getFetchSecretsMethod(), getCallOptions(), request);
@@ -318,23 +301,10 @@ public final class SecretDiscoveryServiceGrpc {
   }
 
   /**
-   */
-  public interface SecretDiscoveryServiceFuture {
-
-    /**
-     */
-    default com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchSecrets(
-        io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  /**
    * A stub to allow clients to do ListenableFuture-style rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<SecretDiscoveryServiceFutureStub>
-   implements SecretDiscoveryServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<SecretDiscoveryServiceFutureStub> {
     private SecretDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -348,7 +318,6 @@ public final class SecretDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public com.google.common.util.concurrent.ListenableFuture<io.envoyproxy.envoy.api.v2.DiscoveryResponse> fetchSecrets(
         io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
       return io.grpc.stub.ClientCalls.futureUnaryCall(

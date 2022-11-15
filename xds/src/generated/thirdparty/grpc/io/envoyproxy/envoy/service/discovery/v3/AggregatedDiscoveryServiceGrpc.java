@@ -224,8 +224,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceStub
-   extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub>
-   implements AggregatedDiscoveryServiceAsync {
+   extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub> {
     private AggregatedDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -242,7 +241,6 @@ public final class AggregatedDiscoveryServiceGrpc {
      * This is a gRPC-only API.
      * </pre>
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest> streamAggregatedResources(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
@@ -251,25 +249,11 @@ public final class AggregatedDiscoveryServiceGrpc {
 
     /**
      */
-    @java.lang.Override
     public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest> deltaAggregatedResources(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getDeltaAggregatedResourcesMethod(), getCallOptions()), responseObserver);
     }
-  }
-
-  /**
-   * <pre>
-   * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
-   * ADS and how it is intended to be used by a management server. ADS requests
-   * have the same structure as their singleton xDS counterparts, but can
-   * multiplex many resource types on a single stream. The type_url in the
-   * DiscoveryRequest/DiscoveryResponse provides sufficient information to recover
-   * the multiplexed singleton APIs at the Envoy instance and management server.
-   * </pre>
-   */
-  public interface AggregatedDiscoveryServiceBlocking {
   }
 
   /**
@@ -284,8 +268,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceBlockingStub
-   extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub>
-   implements AggregatedDiscoveryServiceBlocking {
+   extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
     private AggregatedDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -296,19 +279,6 @@ public final class AggregatedDiscoveryServiceGrpc {
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new AggregatedDiscoveryServiceBlockingStub(channel, callOptions);
     }
-  }
-
-  /**
-   * <pre>
-   * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
-   * ADS and how it is intended to be used by a management server. ADS requests
-   * have the same structure as their singleton xDS counterparts, but can
-   * multiplex many resource types on a single stream. The type_url in the
-   * DiscoveryRequest/DiscoveryResponse provides sufficient information to recover
-   * the multiplexed singleton APIs at the Envoy instance and management server.
-   * </pre>
-   */
-  public interface AggregatedDiscoveryServiceFuture {
   }
 
   /**
@@ -323,8 +293,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceFutureStub
-   extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub>
-   implements AggregatedDiscoveryServiceFuture {
+   extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub> {
     private AggregatedDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
