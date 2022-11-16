@@ -49,14 +49,14 @@ public final class SecurityPolicies {
 
   private SecurityPolicies() {}
 
-  /**
-   * Creates a default {@link SecurityPolicy}.
-   */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static ServerSecurityPolicy serverInternalOnly() {
     return new ServerSecurityPolicy();
   }
 
+  /**
+   * Creates a default {@link SecurityPolicy} that checks authorization based on UID.
+   */
   public static SecurityPolicy internalOnly() {
     return new SecurityPolicy() {
       @Override
