@@ -192,7 +192,7 @@ public final class CallOptions {
    * This method should be rarely used because the default is without 'wait for ready'.
    */
   public CallOptions withoutWaitForReady() {
-    Builder builder = new Builder();
+    Builder builder = toBuilder(this);
     builder.waitForReady = Boolean.FALSE;
     return builder.build();
   }
