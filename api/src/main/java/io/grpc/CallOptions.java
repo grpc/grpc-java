@@ -355,18 +355,17 @@ public final class CallOptions {
     }
 
     builder.customOptions = new Object[customOptions.length + (existingIdx == -1 ? 1 : 0)][2];
-    CallOptions newOptions = builder.build();
-    System.arraycopy(customOptions, 0, newOptions.customOptions, 0, customOptions.length);
+    System.arraycopy(customOptions, 0, builder.customOptions, 0, customOptions.length);
 
     if (existingIdx == -1) {
       // Add a new option
-      newOptions.customOptions[customOptions.length] = new Object[] {key, value};
+      builder.customOptions[customOptions.length] = new Object[] {key, value};
     } else {
       // Replace an existing option
-      newOptions.customOptions[existingIdx] = new Object[] {key, value};
+      builder.customOptions[existingIdx] = new Object[] {key, value};
     }
 
-    return newOptions;
+    return builder.build();
   }
 
   /**
