@@ -99,56 +99,6 @@ public final class CallOptions {
     Integer maxInboundMessageSize;
     Integer maxOutboundMessageSize;
 
-    private Builder deadline(Deadline deadline) {
-      this.deadline = deadline;
-      return this;
-    }
-
-    private Builder executor(Executor executor) {
-      this.executor = executor;
-      return this;
-    }
-
-    private Builder authority(String authority) {
-      this.authority = authority;
-      return this;
-    }
-
-    private Builder credentials(CallCredentials credentials) {
-      this.credentials = credentials;
-      return this;
-    }
-
-    private Builder compressorName(String compressorName) {
-      this.compressorName = compressorName;
-      return this;
-    }
-
-    private Builder customOptions(Object[][] customOptions) {
-      this.customOptions = customOptions;
-      return this;
-    }
-
-    private Builder waitForReady(Boolean waitForReady) {
-      this.waitForReady = waitForReady;
-      return this;
-    }
-
-    private Builder maxInboundMessageSize(Integer maxInboundMessageSize) {
-      this.maxInboundMessageSize = maxInboundMessageSize;
-      return this;
-    }
-
-    private Builder maxOutboundMessageSize(Integer maxOutboundMessageSize) {
-      this.maxOutboundMessageSize = maxOutboundMessageSize;
-      return this;
-    }
-
-    private Builder streamTracerFactories(List<ClientStreamTracer.Factory> streamTracerFactories) {
-      this.streamTracerFactories = Collections.unmodifiableList(streamTracerFactories);
-      return this;
-    }
-
     private CallOptions build() {
       return new CallOptions(this);
     }
@@ -165,14 +115,18 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1767")
   public CallOptions withAuthority(@Nullable String authority) {
-    return toBuilder(this).authority(authority).build();
+    Builder builder = toBuilder(this);
+    builder.authority = authority;
+    return builder.build();
   }
 
   /**
    * Returns a new {@code CallOptions} with the given call credentials.
    */
   public CallOptions withCallCredentials(@Nullable CallCredentials credentials) {
-    return toBuilder(this).credentials(credentials).build();
+    Builder builder = toBuilder(this);
+    builder.credentials = credentials;
+    return builder.build();
   }
 
   /**
@@ -185,7 +139,9 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public CallOptions withCompression(@Nullable String compressorName) {
-    return toBuilder(this).compressorName(compressorName).build();
+    Builder builder = toBuilder(this);
+    builder.compressorName = compressorName;
+    return builder.build();
   }
 
   /**
@@ -197,7 +153,9 @@ public final class CallOptions {
    * @param deadline the deadline or {@code null} for unsetting the deadline.
    */
   public CallOptions withDeadline(@Nullable Deadline deadline) {
-    return toBuilder(this).deadline(deadline).build();
+    Builder builder = toBuilder(this);
+    builder.deadline = deadline;
+    return builder.build();
   }
 
   /**
@@ -224,7 +182,9 @@ public final class CallOptions {
    * fails RPCs without sending them if unable to connect.
    */
   public CallOptions withWaitForReady() {
-    return toBuilder(this).waitForReady(Boolean.TRUE).build();
+    Builder builder = toBuilder(this);
+    builder.waitForReady = Boolean.TRUE;
+    return builder.build();
   }
 
   /**
@@ -232,7 +192,9 @@ public final class CallOptions {
    * This method should be rarely used because the default is without 'wait for ready'.
    */
   public CallOptions withoutWaitForReady() {
-    return new Builder().waitForReady(Boolean.FALSE).build();
+    Builder builder = new Builder();
+    builder.waitForReady = Boolean.FALSE;
+    return builder.build();
   }
 
   /**
@@ -272,7 +234,9 @@ public final class CallOptions {
    * executor specified with {@link ManagedChannelBuilder#executor}.
    */
   public CallOptions withExecutor(@Nullable Executor executor) {
-    return toBuilder(this).executor(executor).build();
+    Builder builder = toBuilder(this);
+    builder.executor = executor;
+    return builder.build();
   }
 
   /**
@@ -287,7 +251,9 @@ public final class CallOptions {
         new ArrayList<>(streamTracerFactories.size() + 1);
     newList.addAll(streamTracerFactories);
     newList.add(factory);
-    return toBuilder(this).streamTracerFactories(newList).build();
+    Builder builder = toBuilder(this);
+    builder.streamTracerFactories = Collections.unmodifiableList(newList);
+    return builder.build();
   }
 
   /**
@@ -388,9 +354,8 @@ public final class CallOptions {
       }
     }
 
-    CallOptions newOptions = builder
-            .customOptions(new Object[customOptions.length + (existingIdx == -1 ? 1 : 0)][2])
-            .build();
+    builder.customOptions = new Object[customOptions.length + (existingIdx == -1 ? 1 : 0)][2];
+    CallOptions newOptions = builder.build();
     System.arraycopy(customOptions, 0, newOptions.customOptions, 0, customOptions.length);
 
     if (existingIdx == -1) {
@@ -450,7 +415,9 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withMaxInboundMessageSize(int maxSize) {
     checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
-    return toBuilder(this).maxInboundMessageSize(maxSize).build();
+    Builder builder = toBuilder(this);
+    builder.maxInboundMessageSize = maxSize;
+    return builder.build();
   }
 
   /**
@@ -459,7 +426,9 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withMaxOutboundMessageSize(int maxSize) {
     checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
-    return toBuilder(this).maxOutboundMessageSize(maxSize).build();
+    Builder builder = toBuilder(this);
+    builder.maxOutboundMessageSize = maxSize;
+    return builder.build();
   }
 
   /**
@@ -484,17 +453,18 @@ public final class CallOptions {
    * Copy CallOptions.
    */
   private static Builder toBuilder(CallOptions other) {
-    return new Builder()
-            .deadline(other.deadline)
-            .executor(other.executor)
-            .authority(other.authority)
-            .credentials(other.credentials)
-            .compressorName(other.compressorName)
-            .customOptions(other.customOptions)
-            .streamTracerFactories(other.streamTracerFactories)
-            .waitForReady(other.waitForReady)
-            .maxInboundMessageSize(other.maxInboundMessageSize)
-            .maxOutboundMessageSize(other.maxOutboundMessageSize);
+    Builder builder = new Builder();
+    builder.deadline = other.deadline;
+    builder.executor = other.executor;
+    builder.authority = other.authority;
+    builder.credentials = other.credentials;
+    builder.compressorName = other.compressorName;
+    builder.customOptions = other.customOptions;
+    builder.streamTracerFactories = other.streamTracerFactories;
+    builder.waitForReady = other.waitForReady;
+    builder.maxInboundMessageSize = other.maxInboundMessageSize;
+    builder.maxOutboundMessageSize = other.maxOutboundMessageSize;
+    return builder;
   }
 
   @Override
