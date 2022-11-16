@@ -483,7 +483,7 @@ public final class CallOptions {
   /**
    * Copy CallOptions.
    */
-  private Builder toBuilder(CallOptions other) {
+  private static Builder toBuilder(CallOptions other) {
     return new Builder()
             .deadline(other.deadline)
             .executor(other.executor)
