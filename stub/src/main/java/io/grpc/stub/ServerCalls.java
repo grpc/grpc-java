@@ -38,6 +38,9 @@ public final class ServerCalls {
   @VisibleForTesting
   static final String MISSING_REQUEST = "Half-closed without a request";
 
+  static final Metadata.Key<String> GRPC_PREVIOUS_RPC_ATTEMPTS =
+          Metadata.Key.of("grpc-previous-rpc-attempts", Metadata.ASCII_STRING_MARSHALLER);
+
   private ServerCalls() {
   }
 
@@ -126,8 +129,12 @@ public final class ServerCalls {
       Preconditions.checkArgument(
           call.getMethodDescriptor().getType().clientSendsOneMessage(),
           "asyncUnaryRequestCall is only for clientSendsOneMessage methods");
+      String preRpcAttempts = null;
+      if(headers.containsKey(GRPC_PREVIOUS_RPC_ATTEMPTS)) {
+        preRpcAttempts = headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS);
+      }
       ServerCallStreamObserverImpl<ReqT, RespT> responseObserver =
-          new ServerCallStreamObserverImpl<>(call, serverStreaming);
+          new ServerCallStreamObserverImpl<>(call, serverStreaming, preRpcAttempts);
       // We expect only 1 request, but we ask for 2 requests here so that if a misbehaving client
       // sends more than 1 requests, ServerCall will catch it. Note that disabling auto
       // inbound flow control has no effect on unary calls.
@@ -230,8 +237,12 @@ public final class ServerCalls {
 
     @Override
     public ServerCall.Listener<ReqT> startCall(ServerCall<ReqT, RespT> call, Metadata headers) {
+      String preRpcAttempts = null;
+      if(headers.containsKey(GRPC_PREVIOUS_RPC_ATTEMPTS)) {
+        preRpcAttempts = headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS);
+      }
       ServerCallStreamObserverImpl<ReqT, RespT> responseObserver =
-          new ServerCallStreamObserverImpl<>(call, bidi);
+          new ServerCallStreamObserverImpl<>(call, bidi, preRpcAttempts);
       StreamObserver<ReqT> requestObserver = method.invoke(responseObserver);
       responseObserver.freeze();
       if (responseObserver.autoRequestEnabled) {
@@ -335,11 +346,13 @@ public final class ServerCalls {
     private boolean aborted = false;
     private boolean completed = false;
     private Runnable onCloseHandler;
+    private String preRpcAttempts;
 
     // Non private to avoid synthetic class
-    ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi) {
+    ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi, String preRpcAttempts) {
       this.call = call;
       this.serverStreamingOrBidi = serverStreamingOrBidi;
+      this.preRpcAttempts = preRpcAttempts;
     }
 
     private void freeze() {
@@ -374,7 +387,11 @@ public final class ServerCalls {
       checkState(!aborted, "Stream was terminated by error, no further calls are allowed");
       checkState(!completed, "Stream is already completed, no further calls are allowed");
       if (!sentHeaders) {
-        call.sendHeaders(new Metadata());
+        Metadata metadata = new Metadata();
+        if(preRpcAttempts != null) {
+          metadata.put(GRPC_PREVIOUS_RPC_ATTEMPTS, preRpcAttempts);
+        }
+        call.sendHeaders(metadata);
         sentHeaders = true;
       }
       call.sendMessage(response);
