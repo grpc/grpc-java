@@ -92,11 +92,14 @@ public final class BinderServerBuilder
           streamTracerFactories,
           securityPolicy,
           inboundParcelablePolicy);
-      // binderReceiver.set(server.getHostBinder());
       BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;
     });
 
+    // Disable stats and tracing by default.
+    serverImplBuilder.setStatsEnabled(false);
+    serverImplBuilder.setTracingEnabled(false);
+    
     BinderTransportSecurity.installAuthInterceptor(this);
   }
 
