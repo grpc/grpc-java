@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, 2022 The gRPC Authors
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,12 +28,14 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.Immutable;
 
 /**
  * The collection of runtime options for a new RPC call.
  *
  * <p>A field that is not set is {@code null}.
  */
+@Immutable
 @CheckReturnValue
 public final class CallOptions {
   /**
@@ -85,18 +86,18 @@ public final class CallOptions {
     this.maxOutboundMessageSize = builder.maxOutboundMessageSize;
   }
 
-  private static class Builder {
-    private Deadline deadline;
-    private Executor executor;
-    private String authority;
-    private CallCredentials credentials;
-    private String compressorName;
-    private Object[][] customOptions = new Object[0][2];
+  static class Builder {
+    Deadline deadline;
+    Executor executor;
+    String authority;
+    CallCredentials credentials;
+    String compressorName;
+    Object[][] customOptions = new Object[0][2];
     // Unmodifiable list
-    private List<ClientStreamTracer.Factory> streamTracerFactories = Collections.emptyList();
-    private Boolean waitForReady;
-    private Integer maxInboundMessageSize;
-    private Integer maxOutboundMessageSize;
+    List<ClientStreamTracer.Factory> streamTracerFactories = Collections.emptyList();
+    Boolean waitForReady;
+    Integer maxInboundMessageSize;
+    Integer maxOutboundMessageSize;
 
     private Builder deadline(Deadline deadline) {
       this.deadline = deadline;
@@ -144,7 +145,7 @@ public final class CallOptions {
     }
 
     private Builder streamTracerFactories(List<ClientStreamTracer.Factory> streamTracerFactories) {
-      this.streamTracerFactories = streamTracerFactories;
+      this.streamTracerFactories = Collections.unmodifiableList(streamTracerFactories);
       return this;
     }
 
@@ -164,16 +165,14 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1767")
   public CallOptions withAuthority(@Nullable String authority) {
-    CallOptions newOptions = fullBuild(this).authority(authority).build();
-    return newOptions;
+    return toBuilder(this).authority(authority).build();
   }
 
   /**
    * Returns a new {@code CallOptions} with the given call credentials.
    */
   public CallOptions withCallCredentials(@Nullable CallCredentials credentials) {
-    CallOptions newOptions = fullBuild(this).credentials(credentials).build();
-    return newOptions;
+    return toBuilder(this).credentials(credentials).build();
   }
 
   /**
@@ -186,8 +185,7 @@ public final class CallOptions {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public CallOptions withCompression(@Nullable String compressorName) {
-    CallOptions newOptions = fullBuild(this).compressorName(compressorName).build();
-    return newOptions;
+    return toBuilder(this).compressorName(compressorName).build();
   }
 
   /**
@@ -199,8 +197,7 @@ public final class CallOptions {
    * @param deadline the deadline or {@code null} for unsetting the deadline.
    */
   public CallOptions withDeadline(@Nullable Deadline deadline) {
-    CallOptions newOptions = fullBuild(this).deadline(deadline).build();
-    return newOptions;
+    return toBuilder(this).deadline(deadline).build();
   }
 
   /**
@@ -227,8 +224,7 @@ public final class CallOptions {
    * fails RPCs without sending them if unable to connect.
    */
   public CallOptions withWaitForReady() {
-    CallOptions newOptions = fullBuild(this).waitForReady(Boolean.TRUE).build();
-    return newOptions;
+    return toBuilder(this).waitForReady(Boolean.TRUE).build();
   }
 
   /**
@@ -236,8 +232,7 @@ public final class CallOptions {
    * This method should be rarely used because the default is without 'wait for ready'.
    */
   public CallOptions withoutWaitForReady() {
-    CallOptions newOptions = new Builder().waitForReady(Boolean.FALSE).build();
-    return newOptions;
+    return new Builder().waitForReady(Boolean.FALSE).build();
   }
 
   /**
@@ -277,8 +272,7 @@ public final class CallOptions {
    * executor specified with {@link ManagedChannelBuilder#executor}.
    */
   public CallOptions withExecutor(@Nullable Executor executor) {
-    CallOptions newOptions = fullBuild(this).executor(executor).build();
-    return newOptions;
+    return toBuilder(this).executor(executor).build();
   }
 
   /**
@@ -293,10 +287,7 @@ public final class CallOptions {
         new ArrayList<>(streamTracerFactories.size() + 1);
     newList.addAll(streamTracerFactories);
     newList.add(factory);
-    CallOptions newOptions = fullBuild(this)
-            .streamTracerFactories(Collections.unmodifiableList(newList))
-            .build();
-    return newOptions;
+    return toBuilder(this).streamTracerFactories(newList).build();
   }
 
   /**
@@ -388,7 +379,7 @@ public final class CallOptions {
     Preconditions.checkNotNull(key, "key");
     Preconditions.checkNotNull(value, "value");
 
-    Builder builder = fullBuild(this);
+    Builder builder = toBuilder(this);
     int existingIdx = -1;
     for (int i = 0; i < customOptions.length; i++) {
       if (key.equals(customOptions[i][0])) {
@@ -459,10 +450,7 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withMaxInboundMessageSize(int maxSize) {
     checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
-    CallOptions newOptions = fullBuild(this)
-            .maxInboundMessageSize(maxSize)
-            .build();
-    return newOptions;
+    return toBuilder(this).maxInboundMessageSize(maxSize).build();
   }
 
   /**
@@ -471,10 +459,7 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public CallOptions withMaxOutboundMessageSize(int maxSize) {
     checkArgument(maxSize >= 0, "invalid maxsize %s", maxSize);
-    CallOptions newOptions = fullBuild(this)
-            .maxOutboundMessageSize(maxSize)
-            .build();
-    return newOptions;
+    return toBuilder(this).maxOutboundMessageSize(maxSize).build();
   }
 
   /**
@@ -498,7 +483,7 @@ public final class CallOptions {
   /**
    * Copy CallOptions.
    */
-  private Builder fullBuild(CallOptions other) {
+  private Builder toBuilder(CallOptions other) {
     return new Builder()
             .deadline(other.deadline)
             .executor(other.executor)
