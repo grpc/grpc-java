@@ -92,13 +92,10 @@ public final class BinderServerBuilder
           streamTracerFactories,
           securityPolicy,
           inboundParcelablePolicy);
-      binderReceiver.set(server.getHostBinder());
+      // binderReceiver.set(server.getHostBinder());
+      BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;
     });
-
-    // Disable stats and tracing by default.
-    serverImplBuilder.setStatsEnabled(false);
-    serverImplBuilder.setTracingEnabled(false);
 
     BinderTransportSecurity.installAuthInterceptor(this);
   }
@@ -158,6 +155,9 @@ public final class BinderServerBuilder
     return this;
   }
 
+  /**
+   * Always fails. TLS is not supported in BinderServer.
+   */
   @Override
   public BinderServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in BinderServer");

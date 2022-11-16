@@ -47,6 +47,7 @@ public final class AndroidComponentAddress extends SocketAddress {
 
   protected AndroidComponentAddress(Intent bindIntent) {
     checkArgument(bindIntent.getComponent() != null, "Missing required component");
+    checkArgument(bindIntent.getPackage() != null, "Missing required package");
     this.bindIntent = bindIntent;
   }
 

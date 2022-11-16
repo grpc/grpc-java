@@ -32,7 +32,7 @@ public final class IBinderReceiver {
     return value;
   }
 
-  public void set(IBinder value) {
+  protected void set(IBinder value) {
     this.value = value;
   }
 }

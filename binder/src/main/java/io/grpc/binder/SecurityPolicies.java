@@ -49,6 +49,9 @@ public final class SecurityPolicies {
 
   private SecurityPolicies() {}
 
+  /**
+   * Creates a default {@link SecurityPolicy}.
+   */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static ServerSecurityPolicy serverInternalOnly() {
     return new ServerSecurityPolicy();
