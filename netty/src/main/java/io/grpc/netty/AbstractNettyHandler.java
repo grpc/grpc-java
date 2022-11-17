@@ -258,7 +258,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       dataSizeSincePing = dataSize;
     }
 
-    /** Only used in testing **/
+    // Only used in testing
     @VisibleForTesting
     void setDataSizeAndSincePing(int dataSize) {
       setDataSizeSincePing(dataSize);
