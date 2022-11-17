@@ -545,7 +545,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   }
 
   @Test
-  private void testPingBackoff() throws Exception {
+  public void testPingBackoff() throws Exception {
     AbstractNettyHandler localHandler = setupPingTest();
     long pingData = localHandler.flowControlPing().payload();
     ByteBuf data40KbBuf = initXkbBuffer(40);
