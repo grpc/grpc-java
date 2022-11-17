@@ -16,8 +16,9 @@
 
 package io.grpc.examples.experimental;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -42,8 +43,7 @@ public class CompressingHelloWorldClient {
 
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public CompressingHelloWorldClient(String host, int port) {
-    channel = ManagedChannelBuilder.forAddress(host, port)
-        .usePlaintext()
+    channel = Grpc.newChannelBuilderForAddress(host, port, InsecureChannelCredentials.create())
         .build();
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
