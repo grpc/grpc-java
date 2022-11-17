@@ -130,7 +130,7 @@ public final class ServerCalls {
           call.getMethodDescriptor().getType().clientSendsOneMessage(),
           "asyncUnaryRequestCall is only for clientSendsOneMessage methods");
       String preRpcAttempts = null;
-      if(headers.containsKey(GRPC_PREVIOUS_RPC_ATTEMPTS)) {
+      if (headers.containsKey(GRPC_PREVIOUS_RPC_ATTEMPTS)) {
         preRpcAttempts = headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS);
       }
       ServerCallStreamObserverImpl<ReqT, RespT> responseObserver =
@@ -238,7 +238,7 @@ public final class ServerCalls {
     @Override
     public ServerCall.Listener<ReqT> startCall(ServerCall<ReqT, RespT> call, Metadata headers) {
       String preRpcAttempts = null;
-      if(headers.containsKey(GRPC_PREVIOUS_RPC_ATTEMPTS)) {
+      if (headers.containsKey(GRPC_PREVIOUS_RPC_ATTEMPTS)) {
         preRpcAttempts = headers.get(GRPC_PREVIOUS_RPC_ATTEMPTS);
       }
       ServerCallStreamObserverImpl<ReqT, RespT> responseObserver =
@@ -349,7 +349,8 @@ public final class ServerCalls {
     private String preRpcAttempts;
 
     // Non private to avoid synthetic class
-    ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi, String preRpcAttempts) {
+    ServerCallStreamObserverImpl(
+            ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi, String preRpcAttempts) {
       this.call = call;
       this.serverStreamingOrBidi = serverStreamingOrBidi;
       this.preRpcAttempts = preRpcAttempts;
@@ -388,7 +389,7 @@ public final class ServerCalls {
       checkState(!completed, "Stream is already completed, no further calls are allowed");
       if (!sentHeaders) {
         Metadata metadata = new Metadata();
-        if(preRpcAttempts != null) {
+        if (preRpcAttempts != null) {
           metadata.put(GRPC_PREVIOUS_RPC_ATTEMPTS, preRpcAttempts);
         }
         call.sendHeaders(metadata);
