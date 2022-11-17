@@ -16,8 +16,9 @@
 
 package io.grpc.examples.helloworld;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -34,7 +35,7 @@ public class HelloWorldServer {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .build()
         .start();

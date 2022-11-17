@@ -16,8 +16,9 @@
 
 package io.grpc.examples.header;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptors;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -39,7 +40,7 @@ public class CustomHeaderServer {
   private Server server;
 
   private void start() throws IOException {
-    server = ServerBuilder.forPort(PORT)
+    server = Grpc.newServerBuilderForPort(PORT, InsecureServerCredentials.create())
         .addService(ServerInterceptors.intercept(new GreeterImpl(), new HeaderServerInterceptor()))
         .build()
         .start();
