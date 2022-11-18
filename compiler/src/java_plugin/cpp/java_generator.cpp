@@ -563,7 +563,6 @@ static void PrintStub(
   (*vars)["service_name"] = service_name;
   std::string stub_name = service_name;
   std::string stub_base_class_name = "AbstractStub";
-  std::string interface_name = service_name;
   CallType call_type;
   bool impl_base = false;
   bool interface = false;
@@ -572,31 +571,27 @@ static void PrintStub(
       call_type = ASYNC_CALL;
       interface = true;
       impl_base = true;
-      stub_name += "Async";
+      stub_name = (*vars)["interface_name"];
       break;
     case ABSTRACT_CLASS:
       call_type = ASYNC_CALL;
       impl_base = true;
-      interface_name += "Async";
       (*vars)["abstract_name"] = service_name + "ImplBase";
       break;
     case ASYNC_CLIENT_IMPL:
       call_type = ASYNC_CALL;
       stub_name += "Stub";
       stub_base_class_name = "AbstractAsyncStub";
-      interface_name += "Async";
       break;
     case BLOCKING_CLIENT_IMPL:
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
       stub_base_class_name = "AbstractBlockingStub";
-      interface_name += "Blocking";
       break;
     case FUTURE_CLIENT_IMPL:
       call_type = FUTURE_CALL;
       stub_name += "FutureStub";
       stub_base_class_name = "AbstractFutureStub";
-      interface_name += "Future";
       break;
     case BLOCKING_CLIENT_INTERFACE:
     case FUTURE_CLIENT_INTERFACE:
@@ -607,7 +602,6 @@ static void PrintStub(
   }
   (*vars)["stub_name"] = stub_name;
   (*vars)["stub_base_class_name"] = (*vars)[stub_base_class_name];
-  (*vars)["interface_name"] = interface_name;
 
   // Class head
     GrpcWriteServiceDocComment(p, service, type);
@@ -858,7 +852,6 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
         "private static final int $method_id_name$ = $method_id$;\n");
   }
   p->Print("\n");
-  (*vars)["service_name"] = service->name() + "Async";
   p->Print(
       *vars,
       "private static final class MethodHandlers<Req, Resp> implements\n"
@@ -866,10 +859,10 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
       "    io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,\n"
       "    io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,\n"
       "    io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {\n"
-      "  private final $service_name$ serviceImpl;\n"
+      "  private final $interface_name$ serviceImpl;\n"
       "  private final int methodId;\n"
       "\n"
-      "  MethodHandlers($service_name$ serviceImpl, int methodId) {\n"
+      "  MethodHandlers($interface_name$ serviceImpl, int methodId) {\n"
       "    this.serviceImpl = serviceImpl;\n"
       "    this.methodId = methodId;\n"
       "  }\n\n");
@@ -1052,7 +1045,7 @@ static void PrintBindServiceMethod(const ServiceDescriptor* service,
   (*vars)["service_name"] = service->name();
   p->Print(*vars,
            "public static final io.grpc.ServerServiceDefinition "
-           "bindService($service_name$Async service) {\n");
+           "bindService($interface_name$ service) {\n");
 
   p->Indent();
   p->Print(*vars,
@@ -1246,6 +1239,8 @@ void GenerateService(const ServiceDescriptor* service,
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
+
+  vars["interface_name"] = "AsyncService";
 
   Printer printer(out, '$');
   std::string package_name = ServiceJavaPackage(service->file());
