@@ -98,7 +98,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
    */
-  public interface XdsUpdateClientConfigureServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -118,7 +118,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static abstract class XdsUpdateClientConfigureServiceImplBase
-    implements io.grpc.BindableService, XdsUpdateClientConfigureServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return XdsUpdateClientConfigureServiceGrpc.bindService(this);
@@ -224,10 +224,10 @@ public final class XdsUpdateClientConfigureServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final XdsUpdateClientConfigureServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(XdsUpdateClientConfigureServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -256,7 +256,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(XdsUpdateClientConfigureServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getConfigureMethod(),

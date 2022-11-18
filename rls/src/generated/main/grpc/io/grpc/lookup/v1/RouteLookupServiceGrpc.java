@@ -92,7 +92,7 @@ public final class RouteLookupServiceGrpc {
 
   /**
    */
-  public interface RouteLookupServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -109,7 +109,7 @@ public final class RouteLookupServiceGrpc {
    * Base class for the server implementation of the service RouteLookupService
    */
   public static abstract class RouteLookupServiceImplBase
-    implements io.grpc.BindableService, RouteLookupServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return RouteLookupServiceGrpc.bindService(this);
@@ -206,10 +206,10 @@ public final class RouteLookupServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final RouteLookupServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(RouteLookupServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -238,7 +238,7 @@ public final class RouteLookupServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(RouteLookupServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getRouteLookupMethod(),

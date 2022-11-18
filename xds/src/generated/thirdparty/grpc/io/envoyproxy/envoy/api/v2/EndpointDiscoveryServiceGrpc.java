@@ -154,7 +154,7 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public interface EndpointDiscoveryServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -186,7 +186,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * Base class for the server implementation of the service EndpointDiscoveryService
    */
   public static abstract class EndpointDiscoveryServiceImplBase
-    implements io.grpc.BindableService, EndpointDiscoveryServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return EndpointDiscoveryServiceGrpc.bindService(this);
@@ -296,10 +296,10 @@ public final class EndpointDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final EndpointDiscoveryServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(EndpointDiscoveryServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -334,7 +334,7 @@ public final class EndpointDiscoveryServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(EndpointDiscoveryServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getStreamEndpointsMethod(),

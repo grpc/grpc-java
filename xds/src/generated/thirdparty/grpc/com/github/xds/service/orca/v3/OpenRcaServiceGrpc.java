@@ -112,7 +112,7 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public interface OpenRcaServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -136,7 +136,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static abstract class OpenRcaServiceImplBase
-    implements io.grpc.BindableService, OpenRcaServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return OpenRcaServiceGrpc.bindService(this);
@@ -247,10 +247,10 @@ public final class OpenRcaServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final OpenRcaServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(OpenRcaServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -279,7 +279,7 @@ public final class OpenRcaServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(OpenRcaServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getStreamCoreMetricsMethod(),

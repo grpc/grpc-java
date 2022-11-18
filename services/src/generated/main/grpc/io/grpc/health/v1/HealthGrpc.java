@@ -123,7 +123,7 @@ public final class HealthGrpc {
 
   /**
    */
-  public interface HealthAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -163,7 +163,7 @@ public final class HealthGrpc {
    * Base class for the server implementation of the service Health
    */
   public static abstract class HealthImplBase
-    implements io.grpc.BindableService, HealthAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return HealthGrpc.bindService(this);
@@ -310,10 +310,10 @@ public final class HealthGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final HealthAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(HealthAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -346,7 +346,7 @@ public final class HealthGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(HealthAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getCheckMethod(),

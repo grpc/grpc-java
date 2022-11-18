@@ -317,7 +317,7 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
-  public interface TestServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -418,7 +418,7 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static abstract class TestServiceImplBase
-    implements io.grpc.BindableService, TestServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return TestServiceGrpc.bindService(this);
@@ -702,10 +702,10 @@ public final class TestServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final TestServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(TestServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -759,7 +759,7 @@ public final class TestServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(TestServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getEmptyCallMethod(),

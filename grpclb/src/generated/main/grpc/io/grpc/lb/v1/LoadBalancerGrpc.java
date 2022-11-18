@@ -92,7 +92,7 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public interface LoadBalancerAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -109,7 +109,7 @@ public final class LoadBalancerGrpc {
    * Base class for the server implementation of the service LoadBalancer
    */
   public static abstract class LoadBalancerImplBase
-    implements io.grpc.BindableService, LoadBalancerAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return LoadBalancerGrpc.bindService(this);
@@ -185,10 +185,10 @@ public final class LoadBalancerGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final LoadBalancerAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(LoadBalancerAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -216,7 +216,7 @@ public final class LoadBalancerGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(LoadBalancerAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getBalanceLoadMethod(),

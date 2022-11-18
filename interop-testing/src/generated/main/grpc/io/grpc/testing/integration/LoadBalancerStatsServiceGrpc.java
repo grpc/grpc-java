@@ -129,7 +129,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
    */
-  public interface LoadBalancerStatsServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -159,7 +159,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static abstract class LoadBalancerStatsServiceImplBase
-    implements io.grpc.BindableService, LoadBalancerStatsServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return LoadBalancerStatsServiceGrpc.bindService(this);
@@ -298,10 +298,10 @@ public final class LoadBalancerStatsServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final LoadBalancerStatsServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(LoadBalancerStatsServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -334,7 +334,7 @@ public final class LoadBalancerStatsServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(LoadBalancerStatsServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getGetClientStatsMethod(),

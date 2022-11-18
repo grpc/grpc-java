@@ -168,7 +168,7 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public interface RouteDiscoveryServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -203,7 +203,7 @@ public final class RouteDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class RouteDiscoveryServiceImplBase
-    implements io.grpc.BindableService, RouteDiscoveryServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return RouteDiscoveryServiceGrpc.bindService(this);
@@ -330,10 +330,10 @@ public final class RouteDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final RouteDiscoveryServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(RouteDiscoveryServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -368,7 +368,7 @@ public final class RouteDiscoveryServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(RouteDiscoveryServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getStreamRoutesMethod(),

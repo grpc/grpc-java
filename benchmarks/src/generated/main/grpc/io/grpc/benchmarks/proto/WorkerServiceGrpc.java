@@ -185,7 +185,7 @@ public final class WorkerServiceGrpc {
 
   /**
    */
-  public interface WorkerServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -242,7 +242,7 @@ public final class WorkerServiceGrpc {
    * Base class for the server implementation of the service WorkerService
    */
   public static abstract class WorkerServiceImplBase
-    implements io.grpc.BindableService, WorkerServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return WorkerServiceGrpc.bindService(this);
@@ -406,10 +406,10 @@ public final class WorkerServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final WorkerServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(WorkerServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -448,7 +448,7 @@ public final class WorkerServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(WorkerServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getRunServerMethod(),

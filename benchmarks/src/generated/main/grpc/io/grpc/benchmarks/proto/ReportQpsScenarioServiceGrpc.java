@@ -92,7 +92,7 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public interface ReportQpsScenarioServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -109,7 +109,7 @@ public final class ReportQpsScenarioServiceGrpc {
    * Base class for the server implementation of the service ReportQpsScenarioService
    */
   public static abstract class ReportQpsScenarioServiceImplBase
-    implements io.grpc.BindableService, ReportQpsScenarioServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return ReportQpsScenarioServiceGrpc.bindService(this);
@@ -206,10 +206,10 @@ public final class ReportQpsScenarioServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ReportQpsScenarioServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ReportQpsScenarioServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -238,7 +238,7 @@ public final class ReportQpsScenarioServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(ReportQpsScenarioServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getReportScenarioMethod(),

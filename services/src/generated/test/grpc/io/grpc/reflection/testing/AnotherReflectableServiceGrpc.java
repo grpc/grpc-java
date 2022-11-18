@@ -92,7 +92,7 @@ public final class AnotherReflectableServiceGrpc {
 
   /**
    */
-  public interface AnotherReflectableServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -106,7 +106,7 @@ public final class AnotherReflectableServiceGrpc {
    * Base class for the server implementation of the service AnotherReflectableService
    */
   public static abstract class AnotherReflectableServiceImplBase
-    implements io.grpc.BindableService, AnotherReflectableServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return AnotherReflectableServiceGrpc.bindService(this);
@@ -194,10 +194,10 @@ public final class AnotherReflectableServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final AnotherReflectableServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(AnotherReflectableServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -226,7 +226,7 @@ public final class AnotherReflectableServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(AnotherReflectableServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getMethodMethod(),

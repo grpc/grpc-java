@@ -166,7 +166,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public interface ListenerDiscoveryServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -200,7 +200,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ListenerDiscoveryServiceImplBase
-    implements io.grpc.BindableService, ListenerDiscoveryServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return ListenerDiscoveryServiceGrpc.bindService(this);
@@ -324,10 +324,10 @@ public final class ListenerDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ListenerDiscoveryServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ListenerDiscoveryServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -362,7 +362,7 @@ public final class ListenerDiscoveryServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(ListenerDiscoveryServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getDeltaListenersMethod(),

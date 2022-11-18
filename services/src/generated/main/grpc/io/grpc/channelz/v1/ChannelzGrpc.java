@@ -286,7 +286,7 @@ public final class ChannelzGrpc {
    * information.
    * </pre>
    */
-  public interface ChannelzAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -368,7 +368,7 @@ public final class ChannelzGrpc {
    * </pre>
    */
   public static abstract class ChannelzImplBase
-    implements io.grpc.BindableService, ChannelzAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return ChannelzGrpc.bindService(this);
@@ -678,10 +678,10 @@ public final class ChannelzGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ChannelzAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ChannelzAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -734,7 +734,7 @@ public final class ChannelzGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(ChannelzAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getGetTopChannelsMethod(),

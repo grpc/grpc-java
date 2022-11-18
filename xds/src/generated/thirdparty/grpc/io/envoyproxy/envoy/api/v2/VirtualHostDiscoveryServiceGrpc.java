@@ -116,7 +116,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  public interface VirtualHostDiscoveryServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -142,7 +142,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class VirtualHostDiscoveryServiceImplBase
-    implements io.grpc.BindableService, VirtualHostDiscoveryServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return VirtualHostDiscoveryServiceGrpc.bindService(this);
@@ -251,10 +251,10 @@ public final class VirtualHostDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final VirtualHostDiscoveryServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(VirtualHostDiscoveryServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -282,7 +282,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(VirtualHostDiscoveryServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getDeltaVirtualHostsMethod(),

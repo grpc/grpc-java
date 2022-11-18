@@ -127,7 +127,7 @@ public final class ReconnectServiceGrpc {
    * A service used to control reconnect server.
    * </pre>
    */
-  public interface ReconnectServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -151,7 +151,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static abstract class ReconnectServiceImplBase
-    implements io.grpc.BindableService, ReconnectServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return ReconnectServiceGrpc.bindService(this);
@@ -272,10 +272,10 @@ public final class ReconnectServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ReconnectServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ReconnectServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -308,7 +308,7 @@ public final class ReconnectServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(ReconnectServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getStartMethod(),

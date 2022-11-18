@@ -160,7 +160,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public interface ClusterDiscoveryServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -191,7 +191,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ClusterDiscoveryServiceImplBase
-    implements io.grpc.BindableService, ClusterDiscoveryServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return ClusterDiscoveryServiceGrpc.bindService(this);
@@ -306,10 +306,10 @@ public final class ClusterDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ClusterDiscoveryServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ClusterDiscoveryServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -344,7 +344,7 @@ public final class ClusterDiscoveryServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(ClusterDiscoveryServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getStreamClustersMethod(),

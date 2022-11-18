@@ -92,7 +92,7 @@ public final class ServerReflectionGrpc {
 
   /**
    */
-  public interface ServerReflectionAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -110,7 +110,7 @@ public final class ServerReflectionGrpc {
    * Base class for the server implementation of the service ServerReflection
    */
   public static abstract class ServerReflectionImplBase
-    implements io.grpc.BindableService, ServerReflectionAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return ServerReflectionGrpc.bindService(this);
@@ -187,10 +187,10 @@ public final class ServerReflectionGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ServerReflectionAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ServerReflectionAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -218,7 +218,7 @@ public final class ServerReflectionGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(ServerReflectionAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getServerReflectionInfoMethod(),

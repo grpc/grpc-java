@@ -154,7 +154,7 @@ public final class SecretDiscoveryServiceGrpc {
 
   /**
    */
-  public interface SecretDiscoveryServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -182,7 +182,7 @@ public final class SecretDiscoveryServiceGrpc {
    * Base class for the server implementation of the service SecretDiscoveryService
    */
   public static abstract class SecretDiscoveryServiceImplBase
-    implements io.grpc.BindableService, SecretDiscoveryServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return SecretDiscoveryServiceGrpc.bindService(this);
@@ -288,10 +288,10 @@ public final class SecretDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final SecretDiscoveryServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(SecretDiscoveryServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -326,7 +326,7 @@ public final class SecretDiscoveryServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(SecretDiscoveryServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getDeltaSecretsMethod(),

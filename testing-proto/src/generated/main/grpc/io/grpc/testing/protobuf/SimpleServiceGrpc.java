@@ -191,7 +191,7 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public interface SimpleServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -241,7 +241,7 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static abstract class SimpleServiceImplBase
-    implements io.grpc.BindableService, SimpleServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return SimpleServiceGrpc.bindService(this);
@@ -394,10 +394,10 @@ public final class SimpleServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final SimpleServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(SimpleServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -436,7 +436,7 @@ public final class SimpleServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(SimpleServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getUnaryRpcMethod(),

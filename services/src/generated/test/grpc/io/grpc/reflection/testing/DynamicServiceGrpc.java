@@ -98,7 +98,7 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public interface DynamicServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -118,7 +118,7 @@ public final class DynamicServiceGrpc {
    * </pre>
    */
   public static abstract class DynamicServiceImplBase
-    implements io.grpc.BindableService, DynamicServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return DynamicServiceGrpc.bindService(this);
@@ -224,10 +224,10 @@ public final class DynamicServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final DynamicServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(DynamicServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -256,7 +256,7 @@ public final class DynamicServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(DynamicServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getMethodMethod(),

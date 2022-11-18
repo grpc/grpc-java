@@ -216,7 +216,7 @@ public final class BenchmarkServiceGrpc {
 
   /**
    */
-  public interface BenchmarkServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -279,7 +279,7 @@ public final class BenchmarkServiceGrpc {
    * Base class for the server implementation of the service BenchmarkService
    */
   public static abstract class BenchmarkServiceImplBase
-    implements io.grpc.BindableService, BenchmarkServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return BenchmarkServiceGrpc.bindService(this);
@@ -444,10 +444,10 @@ public final class BenchmarkServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final BenchmarkServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(BenchmarkServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -489,7 +489,7 @@ public final class BenchmarkServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(BenchmarkServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getUnaryCallMethod(),

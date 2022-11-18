@@ -133,7 +133,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * also be used to get the current xDS states directly from the client.
    * </pre>
    */
-  public interface ClientStatusDiscoveryServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -159,7 +159,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ClientStatusDiscoveryServiceImplBase
-    implements io.grpc.BindableService, ClientStatusDiscoveryServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return ClientStatusDiscoveryServiceGrpc.bindService(this);
@@ -271,10 +271,10 @@ public final class ClientStatusDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ClientStatusDiscoveryServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ClientStatusDiscoveryServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -306,7 +306,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(ClientStatusDiscoveryServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getStreamClientStatusMethod(),

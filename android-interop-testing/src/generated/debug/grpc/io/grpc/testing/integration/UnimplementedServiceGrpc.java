@@ -99,7 +99,7 @@ public final class UnimplementedServiceGrpc {
    * that case.
    * </pre>
    */
-  public interface UnimplementedServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -120,7 +120,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static abstract class UnimplementedServiceImplBase
-    implements io.grpc.BindableService, UnimplementedServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return UnimplementedServiceGrpc.bindService(this);
@@ -229,10 +229,10 @@ public final class UnimplementedServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final UnimplementedServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(UnimplementedServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -261,7 +261,7 @@ public final class UnimplementedServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(UnimplementedServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getUnimplementedCallMethod(),

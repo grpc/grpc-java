@@ -123,7 +123,7 @@ public final class EchoTestServiceGrpc {
 
   /**
    */
-  public interface EchoTestServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -144,7 +144,7 @@ public final class EchoTestServiceGrpc {
    * Base class for the server implementation of the service EchoTestService
    */
   public static abstract class EchoTestServiceImplBase
-    implements io.grpc.BindableService, EchoTestServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return EchoTestServiceGrpc.bindService(this);
@@ -256,10 +256,10 @@ public final class EchoTestServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final EchoTestServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(EchoTestServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -292,7 +292,7 @@ public final class EchoTestServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(EchoTestServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getEchoMethod(),

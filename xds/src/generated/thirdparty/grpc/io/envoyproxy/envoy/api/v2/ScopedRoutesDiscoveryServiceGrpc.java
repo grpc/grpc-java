@@ -172,7 +172,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * HTTP request.
    * </pre>
    */
-  public interface ScopedRoutesDiscoveryServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -209,7 +209,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ScopedRoutesDiscoveryServiceImplBase
-    implements io.grpc.BindableService, ScopedRoutesDiscoveryServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return ScopedRoutesDiscoveryServiceGrpc.bindService(this);
@@ -342,10 +342,10 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ScopedRoutesDiscoveryServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ScopedRoutesDiscoveryServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -380,7 +380,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(ScopedRoutesDiscoveryServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getStreamScopedRoutesMethod(),

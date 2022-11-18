@@ -92,7 +92,7 @@ public final class LoadReportingServiceGrpc {
 
   /**
    */
-  public interface LoadReportingServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -135,7 +135,7 @@ public final class LoadReportingServiceGrpc {
    * Base class for the server implementation of the service LoadReportingService
    */
   public static abstract class LoadReportingServiceImplBase
-    implements io.grpc.BindableService, LoadReportingServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return LoadReportingServiceGrpc.bindService(this);
@@ -237,10 +237,10 @@ public final class LoadReportingServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final LoadReportingServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(LoadReportingServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -268,7 +268,7 @@ public final class LoadReportingServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(LoadReportingServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getStreamLoadStatsMethod(),

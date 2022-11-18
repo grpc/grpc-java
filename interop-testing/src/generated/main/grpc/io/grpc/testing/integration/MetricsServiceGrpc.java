@@ -123,7 +123,7 @@ public final class MetricsServiceGrpc {
 
   /**
    */
-  public interface MetricsServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -151,7 +151,7 @@ public final class MetricsServiceGrpc {
    * Base class for the server implementation of the service MetricsService
    */
   public static abstract class MetricsServiceImplBase
-    implements io.grpc.BindableService, MetricsServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return MetricsServiceGrpc.bindService(this);
@@ -273,10 +273,10 @@ public final class MetricsServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final MetricsServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(MetricsServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -309,7 +309,7 @@ public final class MetricsServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(MetricsServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getGetAllGaugesMethod(),

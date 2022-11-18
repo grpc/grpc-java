@@ -127,7 +127,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * A service to remotely control health status of an xDS test server.
    * </pre>
    */
-  public interface XdsUpdateHealthServiceAsync {
+  public interface AsyncService {
 
     /**
      */
@@ -151,7 +151,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * </pre>
    */
   public static abstract class XdsUpdateHealthServiceImplBase
-    implements io.grpc.BindableService, XdsUpdateHealthServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return XdsUpdateHealthServiceGrpc.bindService(this);
@@ -272,10 +272,10 @@ public final class XdsUpdateHealthServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final XdsUpdateHealthServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(XdsUpdateHealthServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -308,7 +308,7 @@ public final class XdsUpdateHealthServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(XdsUpdateHealthServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getSetServingMethod(),

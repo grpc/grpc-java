@@ -92,7 +92,7 @@ public final class HandshakerServiceGrpc {
 
   /**
    */
-  public interface HandshakerServiceAsync {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -114,7 +114,7 @@ public final class HandshakerServiceGrpc {
    * Base class for the server implementation of the service HandshakerService
    */
   public static abstract class HandshakerServiceImplBase
-    implements io.grpc.BindableService, HandshakerServiceAsync {
+    implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return HandshakerServiceGrpc.bindService(this);
@@ -195,10 +195,10 @@ public final class HandshakerServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final HandshakerServiceAsync serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(HandshakerServiceAsync serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -226,7 +226,7 @@ public final class HandshakerServiceGrpc {
     }
   }
 
-  public static final io.grpc.ServerServiceDefinition bindService(HandshakerServiceAsync service) {
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
     return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
         .addMethod(
           getDoHandshakeMethod(),
