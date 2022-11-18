@@ -135,3 +135,22 @@ java_binary(
         ":examples",
     ],
 )
+
+java_binary(
+    name = "load-balance-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.loadbalance.LoadBalanceClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "load-balance-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.loadbalance.LoadBalanceServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+

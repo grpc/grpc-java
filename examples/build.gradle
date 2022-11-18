@@ -140,6 +140,20 @@ task manualFlowControlServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task loadBalanceServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.loadbalance.LoadBalanceServer'
+    applicationName = 'load-balance-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task loadBalanceClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.loadbalance.LoadBalanceClient'
+    applicationName = 'load-balance-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -152,5 +166,7 @@ applicationDistribution.into('bin') {
     from(compressingHelloWorldClient)
     from(manualFlowControlClient)
     from(manualFlowControlServer)
+    from(loadBalanceServer)
+    from(loadBalanceClient)
     fileMode = 0755
 }
