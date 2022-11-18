@@ -41,7 +41,14 @@ public final class CallOptions {
   /**
    * A blank {@code CallOptions} that all fields are not set.
    */
-  public static final CallOptions DEFAULT = new Builder().build();
+  public static final CallOptions DEFAULT;
+
+  static {
+    Builder b = new Builder();
+    b.customOptions = new Object[0][2];
+    b.streamTracerFactories = Collections.emptyList();
+    DEFAULT = b.build();
+  }
 
   @Nullable
   private final Deadline deadline;
@@ -92,9 +99,9 @@ public final class CallOptions {
     String authority;
     CallCredentials credentials;
     String compressorName;
-    Object[][] customOptions = new Object[0][2];
+    Object[][] customOptions;
     // Unmodifiable list
-    List<ClientStreamTracer.Factory> streamTracerFactories = Collections.emptyList();
+    List<ClientStreamTracer.Factory> streamTracerFactories;
     Boolean waitForReady;
     Integer maxInboundMessageSize;
     Integer maxOutboundMessageSize;
