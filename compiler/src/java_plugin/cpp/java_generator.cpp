@@ -570,7 +570,6 @@ static void PrintStub(
     case ASYNC_INTERFACE:
       call_type = ASYNC_CALL;
       interface = true;
-      impl_base = true;
       stub_name = (*vars)["interface_name"];
       break;
     case ABSTRACT_CLASS:
@@ -618,12 +617,12 @@ static void PrintStub(
     p->Print(
         *vars,
         "public static abstract class $abstract_name$\n"
-        "  implements $BindableService$, $interface_name$ {\n");
+        "    implements $BindableService$, $interface_name$ {\n");
   } else {
     p->Print(
         *vars,
         "public static final class $stub_name$\n"
-        "  extends $stub_base_class_name$<$stub_name$> {\n");
+        "    extends $stub_base_class_name$<$stub_name$> {\n");
   }
   p->Indent();
 
@@ -654,7 +653,7 @@ static void PrintStub(
 
   // RPC methods
   for (int i = 0; i < service->method_count(); ++i) {
-    if (impl_base && !interface) {
+    if (impl_base) {
       break; // Interface defines these as defaults, so not needed in abstract
     }
     const MethodDescriptor* method = service->method(i);
@@ -736,7 +735,7 @@ static void PrintStub(
     // Method body.
     p->Print(" {\n");
     p->Indent();
-    if (impl_base) {
+    if (call_type = ASYNC_CALL) {
       // NB: Skipping validation of service methods. If something is wrong, we wouldn't get to
       // this point as compiler would return errors when generating service interface.
       if (client_streaming) {
@@ -810,15 +809,13 @@ static void PrintStub(
     p->Print("}\n");
   }
 
-  if (impl_base && !interface) {
-    p->Print("\n");
+  if (impl_base) {
     p->Print(
         *vars,
-        "@$Override$ public final $ServerServiceDefinition$ bindService() {\n");
-    p->Indent();
-    p->Print(*vars, "return $service_class_name$.bindService(this);\n");
-    p->Outdent();
-    p->Print("}\n");
+        "\n"
+        "@$Override$ public final $ServerServiceDefinition$ bindService() {\n"
+        "    return $service_class_name$.bindService(this);\n"
+        "}\n");
   }
 
   p->Outdent();
