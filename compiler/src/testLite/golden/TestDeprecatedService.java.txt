@@ -121,10 +121,10 @@ public final class TestDeprecatedServiceGrpc {
    */
   @java.lang.Deprecated
   public static abstract class TestDeprecatedServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return TestDeprecatedServiceGrpc.bindService(this);
+        return TestDeprecatedServiceGrpc.bindService(this);
     }
   }
 
@@ -136,7 +136,7 @@ public final class TestDeprecatedServiceGrpc {
    */
   @java.lang.Deprecated
   public static final class TestDeprecatedServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<TestDeprecatedServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<TestDeprecatedServiceStub> {
     private TestDeprecatedServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -169,7 +169,7 @@ public final class TestDeprecatedServiceGrpc {
    */
   @java.lang.Deprecated
   public static final class TestDeprecatedServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<TestDeprecatedServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<TestDeprecatedServiceBlockingStub> {
     private TestDeprecatedServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -201,7 +201,7 @@ public final class TestDeprecatedServiceGrpc {
    */
   @java.lang.Deprecated
   public static final class TestDeprecatedServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<TestDeprecatedServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<TestDeprecatedServiceFutureStub> {
     private TestDeprecatedServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

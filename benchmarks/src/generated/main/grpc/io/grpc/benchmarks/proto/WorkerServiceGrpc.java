@@ -242,10 +242,10 @@ public final class WorkerServiceGrpc {
    * Base class for the server implementation of the service WorkerService
    */
   public static abstract class WorkerServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return WorkerServiceGrpc.bindService(this);
+        return WorkerServiceGrpc.bindService(this);
     }
   }
 
@@ -253,7 +253,7 @@ public final class WorkerServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service WorkerService
    */
   public static final class WorkerServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<WorkerServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<WorkerServiceStub> {
     private WorkerServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -324,7 +324,7 @@ public final class WorkerServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service WorkerService
    */
   public static final class WorkerServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub> {
     private WorkerServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -361,7 +361,7 @@ public final class WorkerServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service WorkerService
    */
   public static final class WorkerServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<WorkerServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<WorkerServiceFutureStub> {
     private WorkerServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

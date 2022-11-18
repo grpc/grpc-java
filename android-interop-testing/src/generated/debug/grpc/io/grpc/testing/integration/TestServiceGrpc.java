@@ -410,10 +410,10 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static abstract class TestServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return TestServiceGrpc.bindService(this);
+        return TestServiceGrpc.bindService(this);
     }
   }
 
@@ -425,7 +425,7 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static final class TestServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<TestServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<TestServiceStub> {
     private TestServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -544,7 +544,7 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static final class TestServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub> {
     private TestServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -620,7 +620,7 @@ public final class TestServiceGrpc {
    * </pre>
    */
   public static final class TestServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<TestServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<TestServiceFutureStub> {
     private TestServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

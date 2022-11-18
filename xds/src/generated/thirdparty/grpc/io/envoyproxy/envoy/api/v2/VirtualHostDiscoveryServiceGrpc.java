@@ -142,10 +142,10 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class VirtualHostDiscoveryServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return VirtualHostDiscoveryServiceGrpc.bindService(this);
+        return VirtualHostDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -165,7 +165,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<VirtualHostDiscoveryServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<VirtualHostDiscoveryServiceStub> {
     private VirtualHostDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -202,7 +202,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
     private VirtualHostDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -231,7 +231,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class VirtualHostDiscoveryServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<VirtualHostDiscoveryServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<VirtualHostDiscoveryServiceFutureStub> {
     private VirtualHostDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

@@ -106,10 +106,10 @@ public final class AnotherReflectableServiceGrpc {
    * Base class for the server implementation of the service AnotherReflectableService
    */
   public static abstract class AnotherReflectableServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return AnotherReflectableServiceGrpc.bindService(this);
+        return AnotherReflectableServiceGrpc.bindService(this);
     }
   }
 
@@ -117,7 +117,7 @@ public final class AnotherReflectableServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service AnotherReflectableService
    */
   public static final class AnotherReflectableServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<AnotherReflectableServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<AnotherReflectableServiceStub> {
     private AnotherReflectableServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -142,7 +142,7 @@ public final class AnotherReflectableServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service AnotherReflectableService
    */
   public static final class AnotherReflectableServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub> {
     private AnotherReflectableServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -166,7 +166,7 @@ public final class AnotherReflectableServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service AnotherReflectableService
    */
   public static final class AnotherReflectableServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<AnotherReflectableServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<AnotherReflectableServiceFutureStub> {
     private AnotherReflectableServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

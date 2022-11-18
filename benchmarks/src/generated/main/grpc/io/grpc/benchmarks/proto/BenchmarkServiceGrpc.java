@@ -279,10 +279,10 @@ public final class BenchmarkServiceGrpc {
    * Base class for the server implementation of the service BenchmarkService
    */
   public static abstract class BenchmarkServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return BenchmarkServiceGrpc.bindService(this);
+        return BenchmarkServiceGrpc.bindService(this);
     }
   }
 
@@ -290,7 +290,7 @@ public final class BenchmarkServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service BenchmarkService
    */
   public static final class BenchmarkServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<BenchmarkServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<BenchmarkServiceStub> {
     private BenchmarkServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -368,7 +368,7 @@ public final class BenchmarkServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service BenchmarkService
    */
   public static final class BenchmarkServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingStub> {
     private BenchmarkServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -408,7 +408,7 @@ public final class BenchmarkServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service BenchmarkService
    */
   public static final class BenchmarkServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<BenchmarkServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<BenchmarkServiceFutureStub> {
     private BenchmarkServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

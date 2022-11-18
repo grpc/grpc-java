@@ -144,10 +144,10 @@ public final class EchoTestServiceGrpc {
    * Base class for the server implementation of the service EchoTestService
    */
   public static abstract class EchoTestServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return EchoTestServiceGrpc.bindService(this);
+        return EchoTestServiceGrpc.bindService(this);
     }
   }
 
@@ -155,7 +155,7 @@ public final class EchoTestServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub> {
     private EchoTestServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -188,7 +188,7 @@ public final class EchoTestServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {
     private EchoTestServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -219,7 +219,7 @@ public final class EchoTestServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service EchoTestService
    */
   public static final class EchoTestServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub> {
     private EchoTestServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

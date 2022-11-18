@@ -120,10 +120,10 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static abstract class UnimplementedServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return UnimplementedServiceGrpc.bindService(this);
+        return UnimplementedServiceGrpc.bindService(this);
     }
   }
 
@@ -135,7 +135,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub> {
     private UnimplementedServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -167,7 +167,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub> {
     private UnimplementedServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -198,7 +198,7 @@ public final class UnimplementedServiceGrpc {
    * </pre>
    */
   public static final class UnimplementedServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub> {
     private UnimplementedServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

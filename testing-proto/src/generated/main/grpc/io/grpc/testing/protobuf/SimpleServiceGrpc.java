@@ -241,10 +241,10 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static abstract class SimpleServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return SimpleServiceGrpc.bindService(this);
+        return SimpleServiceGrpc.bindService(this);
     }
   }
 
@@ -255,7 +255,7 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static final class SimpleServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<SimpleServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<SimpleServiceStub> {
     private SimpleServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -319,7 +319,7 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static final class SimpleServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<SimpleServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<SimpleServiceBlockingStub> {
     private SimpleServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -360,7 +360,7 @@ public final class SimpleServiceGrpc {
    * </pre>
    */
   public static final class SimpleServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<SimpleServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<SimpleServiceFutureStub> {
     private SimpleServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

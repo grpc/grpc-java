@@ -368,10 +368,10 @@ public final class ChannelzGrpc {
    * </pre>
    */
   public static abstract class ChannelzImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return ChannelzGrpc.bindService(this);
+        return ChannelzGrpc.bindService(this);
     }
   }
 
@@ -383,7 +383,7 @@ public final class ChannelzGrpc {
    * </pre>
    */
   public static final class ChannelzStub
-    extends io.grpc.stub.AbstractAsyncStub<ChannelzStub> {
+      extends io.grpc.stub.AbstractAsyncStub<ChannelzStub> {
     private ChannelzStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -482,7 +482,7 @@ public final class ChannelzGrpc {
    * </pre>
    */
   public static final class ChannelzBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<ChannelzBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<ChannelzBlockingStub> {
     private ChannelzBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -574,7 +574,7 @@ public final class ChannelzGrpc {
    * </pre>
    */
   public static final class ChannelzFutureStub
-    extends io.grpc.stub.AbstractFutureStub<ChannelzFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<ChannelzFutureStub> {
     private ChannelzFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

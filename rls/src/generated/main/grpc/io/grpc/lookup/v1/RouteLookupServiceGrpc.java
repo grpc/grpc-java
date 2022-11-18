@@ -109,10 +109,10 @@ public final class RouteLookupServiceGrpc {
    * Base class for the server implementation of the service RouteLookupService
    */
   public static abstract class RouteLookupServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return RouteLookupServiceGrpc.bindService(this);
+        return RouteLookupServiceGrpc.bindService(this);
     }
   }
 
@@ -120,7 +120,7 @@ public final class RouteLookupServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service RouteLookupService
    */
   public static final class RouteLookupServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<RouteLookupServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<RouteLookupServiceStub> {
     private RouteLookupServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -148,7 +148,7 @@ public final class RouteLookupServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service RouteLookupService
    */
   public static final class RouteLookupServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub> {
     private RouteLookupServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -175,7 +175,7 @@ public final class RouteLookupServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteLookupService
    */
   public static final class RouteLookupServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<RouteLookupServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<RouteLookupServiceFutureStub> {
     private RouteLookupServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

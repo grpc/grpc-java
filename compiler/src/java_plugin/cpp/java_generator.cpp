@@ -735,7 +735,7 @@ static void PrintStub(
     // Method body.
     p->Print(" {\n");
     p->Indent();
-    if (call_type = ASYNC_CALL) {
+    if (interface && call_type == ASYNC_CALL) {
       // NB: Skipping validation of service methods. If something is wrong, we wouldn't get to
       // this point as compiler would return errors when generating service interface.
       if (client_streaming) {

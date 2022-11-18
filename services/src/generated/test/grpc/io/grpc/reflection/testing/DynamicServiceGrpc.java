@@ -118,10 +118,10 @@ public final class DynamicServiceGrpc {
    * </pre>
    */
   public static abstract class DynamicServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return DynamicServiceGrpc.bindService(this);
+        return DynamicServiceGrpc.bindService(this);
     }
   }
 
@@ -132,7 +132,7 @@ public final class DynamicServiceGrpc {
    * </pre>
    */
   public static final class DynamicServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<DynamicServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<DynamicServiceStub> {
     private DynamicServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -163,7 +163,7 @@ public final class DynamicServiceGrpc {
    * </pre>
    */
   public static final class DynamicServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<DynamicServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<DynamicServiceBlockingStub> {
     private DynamicServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -193,7 +193,7 @@ public final class DynamicServiceGrpc {
    * </pre>
    */
   public static final class DynamicServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<DynamicServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<DynamicServiceFutureStub> {
     private DynamicServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

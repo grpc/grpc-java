@@ -163,10 +163,10 @@ public final class HealthGrpc {
    * Base class for the server implementation of the service Health
    */
   public static abstract class HealthImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return HealthGrpc.bindService(this);
+        return HealthGrpc.bindService(this);
     }
   }
 
@@ -174,7 +174,7 @@ public final class HealthGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service Health
    */
   public static final class HealthStub
-    extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
+      extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
     private HealthStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -226,7 +226,7 @@ public final class HealthGrpc {
    * A stub to allow clients to do synchronous rpc calls to service Health
    */
   public static final class HealthBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
     private HealthBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -277,7 +277,7 @@ public final class HealthGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service Health
    */
   public static final class HealthFutureStub
-    extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {
     private HealthFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

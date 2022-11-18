@@ -114,10 +114,10 @@ public final class HandshakerServiceGrpc {
    * Base class for the server implementation of the service HandshakerService
    */
   public static abstract class HandshakerServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return HandshakerServiceGrpc.bindService(this);
+        return HandshakerServiceGrpc.bindService(this);
     }
   }
 
@@ -125,7 +125,7 @@ public final class HandshakerServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service HandshakerService
    */
   public static final class HandshakerServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<HandshakerServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<HandshakerServiceStub> {
     private HandshakerServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -158,7 +158,7 @@ public final class HandshakerServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service HandshakerService
    */
   public static final class HandshakerServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
     private HandshakerServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -175,7 +175,7 @@ public final class HandshakerServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service HandshakerService
    */
   public static final class HandshakerServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<HandshakerServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<HandshakerServiceFutureStub> {
     private HandshakerServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

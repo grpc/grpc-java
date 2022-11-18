@@ -153,10 +153,10 @@ public final class XdsUpdateHealthServiceGrpc {
    * </pre>
    */
   public static abstract class XdsUpdateHealthServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return XdsUpdateHealthServiceGrpc.bindService(this);
+        return XdsUpdateHealthServiceGrpc.bindService(this);
     }
   }
 
@@ -167,7 +167,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateHealthServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<XdsUpdateHealthServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<XdsUpdateHealthServiceStub> {
     private XdsUpdateHealthServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -203,7 +203,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateHealthServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<XdsUpdateHealthServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<XdsUpdateHealthServiceBlockingStub> {
     private XdsUpdateHealthServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -237,7 +237,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateHealthServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<XdsUpdateHealthServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<XdsUpdateHealthServiceFutureStub> {
     private XdsUpdateHealthServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

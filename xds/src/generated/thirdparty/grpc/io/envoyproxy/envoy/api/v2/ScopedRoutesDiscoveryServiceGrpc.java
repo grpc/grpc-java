@@ -209,10 +209,10 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ScopedRoutesDiscoveryServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return ScopedRoutesDiscoveryServiceGrpc.bindService(this);
+        return ScopedRoutesDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -229,7 +229,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ScopedRoutesDiscoveryServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<ScopedRoutesDiscoveryServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<ScopedRoutesDiscoveryServiceStub> {
     private ScopedRoutesDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -279,7 +279,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ScopedRoutesDiscoveryServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<ScopedRoutesDiscoveryServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<ScopedRoutesDiscoveryServiceBlockingStub> {
     private ScopedRoutesDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -312,7 +312,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ScopedRoutesDiscoveryServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<ScopedRoutesDiscoveryServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<ScopedRoutesDiscoveryServiceFutureStub> {
     private ScopedRoutesDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

@@ -135,10 +135,10 @@ public final class LoadReportingServiceGrpc {
    * Base class for the server implementation of the service LoadReportingService
    */
   public static abstract class LoadReportingServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return LoadReportingServiceGrpc.bindService(this);
+        return LoadReportingServiceGrpc.bindService(this);
     }
   }
 
@@ -146,7 +146,7 @@ public final class LoadReportingServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service LoadReportingService
    */
   public static final class LoadReportingServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub> {
     private LoadReportingServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -200,7 +200,7 @@ public final class LoadReportingServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service LoadReportingService
    */
   public static final class LoadReportingServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
     private LoadReportingServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -217,7 +217,7 @@ public final class LoadReportingServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadReportingService
    */
   public static final class LoadReportingServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub> {
     private LoadReportingServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

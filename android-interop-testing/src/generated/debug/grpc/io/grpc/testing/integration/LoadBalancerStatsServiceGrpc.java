@@ -157,10 +157,10 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static abstract class LoadBalancerStatsServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return LoadBalancerStatsServiceGrpc.bindService(this);
+        return LoadBalancerStatsServiceGrpc.bindService(this);
     }
   }
 
@@ -171,7 +171,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStatsServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStatsServiceStub> {
     private LoadBalancerStatsServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -213,7 +213,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingStub> {
     private LoadBalancerStatsServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -253,7 +253,7 @@ public final class LoadBalancerStatsServiceGrpc {
    * </pre>
    */
   public static final class LoadBalancerStatsServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<LoadBalancerStatsServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<LoadBalancerStatsServiceFutureStub> {
     private LoadBalancerStatsServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

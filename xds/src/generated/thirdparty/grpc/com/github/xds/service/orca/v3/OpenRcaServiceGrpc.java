@@ -136,10 +136,10 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static abstract class OpenRcaServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return OpenRcaServiceGrpc.bindService(this);
+        return OpenRcaServiceGrpc.bindService(this);
     }
   }
 
@@ -157,7 +157,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
     private OpenRcaServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -192,7 +192,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
     private OpenRcaServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -227,7 +227,7 @@ public final class OpenRcaServiceGrpc {
    * </pre>
    */
   public static final class OpenRcaServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
     private OpenRcaServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

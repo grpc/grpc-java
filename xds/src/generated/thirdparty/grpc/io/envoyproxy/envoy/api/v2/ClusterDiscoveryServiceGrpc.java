@@ -191,10 +191,10 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ClusterDiscoveryServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return ClusterDiscoveryServiceGrpc.bindService(this);
+        return ClusterDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -205,7 +205,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
     private ClusterDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -249,7 +249,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
     private ClusterDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -276,7 +276,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClusterDiscoveryServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
     private ClusterDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

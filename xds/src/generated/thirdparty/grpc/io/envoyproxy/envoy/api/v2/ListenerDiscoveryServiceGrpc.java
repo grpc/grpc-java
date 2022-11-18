@@ -200,10 +200,10 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ListenerDiscoveryServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return ListenerDiscoveryServiceGrpc.bindService(this);
+        return ListenerDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -217,7 +217,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ListenerDiscoveryServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<ListenerDiscoveryServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<ListenerDiscoveryServiceStub> {
     private ListenerDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -264,7 +264,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ListenerDiscoveryServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub> {
     private ListenerDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -294,7 +294,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ListenerDiscoveryServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<ListenerDiscoveryServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<ListenerDiscoveryServiceFutureStub> {
     private ListenerDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

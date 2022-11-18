@@ -186,10 +186,10 @@ public final class EndpointDiscoveryServiceGrpc {
    * Base class for the server implementation of the service EndpointDiscoveryService
    */
   public static abstract class EndpointDiscoveryServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return EndpointDiscoveryServiceGrpc.bindService(this);
+        return EndpointDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -197,7 +197,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
     private EndpointDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -242,7 +242,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
     private EndpointDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -266,7 +266,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service EndpointDiscoveryService
    */
   public static final class EndpointDiscoveryServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
     private EndpointDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

@@ -159,10 +159,10 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class ClientStatusDiscoveryServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return ClientStatusDiscoveryServiceGrpc.bindService(this);
+        return ClientStatusDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -175,7 +175,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClientStatusDiscoveryServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<ClientStatusDiscoveryServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<ClientStatusDiscoveryServiceStub> {
     private ClientStatusDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -213,7 +213,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClientStatusDiscoveryServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<ClientStatusDiscoveryServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<ClientStatusDiscoveryServiceBlockingStub> {
     private ClientStatusDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -242,7 +242,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class ClientStatusDiscoveryServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<ClientStatusDiscoveryServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<ClientStatusDiscoveryServiceFutureStub> {
     private ClientStatusDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

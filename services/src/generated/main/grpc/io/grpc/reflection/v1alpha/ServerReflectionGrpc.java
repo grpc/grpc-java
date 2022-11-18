@@ -110,10 +110,10 @@ public final class ServerReflectionGrpc {
    * Base class for the server implementation of the service ServerReflection
    */
   public static abstract class ServerReflectionImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return ServerReflectionGrpc.bindService(this);
+        return ServerReflectionGrpc.bindService(this);
     }
   }
 
@@ -121,7 +121,7 @@ public final class ServerReflectionGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service ServerReflection
    */
   public static final class ServerReflectionStub
-    extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
+      extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
     private ServerReflectionStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -150,7 +150,7 @@ public final class ServerReflectionGrpc {
    * A stub to allow clients to do synchronous rpc calls to service ServerReflection
    */
   public static final class ServerReflectionBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
     private ServerReflectionBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -167,7 +167,7 @@ public final class ServerReflectionGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service ServerReflection
    */
   public static final class ServerReflectionFutureStub
-    extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {
     private ServerReflectionFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

@@ -151,10 +151,10 @@ public final class MetricsServiceGrpc {
    * Base class for the server implementation of the service MetricsService
    */
   public static abstract class MetricsServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return MetricsServiceGrpc.bindService(this);
+        return MetricsServiceGrpc.bindService(this);
     }
   }
 
@@ -162,7 +162,7 @@ public final class MetricsServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service MetricsService
    */
   public static final class MetricsServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
     private MetricsServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -202,7 +202,7 @@ public final class MetricsServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service MetricsService
    */
   public static final class MetricsServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
     private MetricsServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -241,7 +241,7 @@ public final class MetricsServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service MetricsService
    */
   public static final class MetricsServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {
     private MetricsServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

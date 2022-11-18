@@ -151,10 +151,10 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static abstract class ReconnectServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return ReconnectServiceGrpc.bindService(this);
+        return ReconnectServiceGrpc.bindService(this);
     }
   }
 
@@ -165,7 +165,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub> {
     private ReconnectServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -201,7 +201,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub> {
     private ReconnectServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -235,7 +235,7 @@ public final class ReconnectServiceGrpc {
    * </pre>
    */
   public static final class ReconnectServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub> {
     private ReconnectServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

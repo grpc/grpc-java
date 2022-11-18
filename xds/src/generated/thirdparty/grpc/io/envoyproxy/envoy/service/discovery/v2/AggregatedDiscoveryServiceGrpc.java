@@ -171,10 +171,10 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static abstract class AggregatedDiscoveryServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return AggregatedDiscoveryServiceGrpc.bindService(this);
+        return AggregatedDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -190,7 +190,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub> {
     private AggregatedDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -234,7 +234,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
     private AggregatedDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -259,7 +259,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * </pre>
    */
   public static final class AggregatedDiscoveryServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub> {
     private AggregatedDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

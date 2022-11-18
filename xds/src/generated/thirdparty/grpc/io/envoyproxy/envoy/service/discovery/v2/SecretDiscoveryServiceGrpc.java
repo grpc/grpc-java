@@ -182,10 +182,10 @@ public final class SecretDiscoveryServiceGrpc {
    * Base class for the server implementation of the service SecretDiscoveryService
    */
   public static abstract class SecretDiscoveryServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return SecretDiscoveryServiceGrpc.bindService(this);
+        return SecretDiscoveryServiceGrpc.bindService(this);
     }
   }
 
@@ -193,7 +193,7 @@ public final class SecretDiscoveryServiceGrpc {
    * A stub to allow clients to do asynchronous rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<SecretDiscoveryServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<SecretDiscoveryServiceStub> {
     private SecretDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -234,7 +234,7 @@ public final class SecretDiscoveryServiceGrpc {
    * A stub to allow clients to do synchronous rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
     private SecretDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -258,7 +258,7 @@ public final class SecretDiscoveryServiceGrpc {
    * A stub to allow clients to do ListenableFuture-style rpc calls to service SecretDiscoveryService
    */
   public static final class SecretDiscoveryServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<SecretDiscoveryServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<SecretDiscoveryServiceFutureStub> {
     private SecretDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);

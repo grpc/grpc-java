@@ -117,10 +117,10 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static abstract class XdsUpdateClientConfigureServiceImplBase
-    implements io.grpc.BindableService, AsyncService {
+      implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return XdsUpdateClientConfigureServiceGrpc.bindService(this);
+        return XdsUpdateClientConfigureServiceGrpc.bindService(this);
     }
   }
 
@@ -131,7 +131,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceStub
-    extends io.grpc.stub.AbstractAsyncStub<XdsUpdateClientConfigureServiceStub> {
+      extends io.grpc.stub.AbstractAsyncStub<XdsUpdateClientConfigureServiceStub> {
     private XdsUpdateClientConfigureServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -162,7 +162,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceBlockingStub
-    extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingStub> {
+      extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingStub> {
     private XdsUpdateClientConfigureServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -192,7 +192,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * </pre>
    */
   public static final class XdsUpdateClientConfigureServiceFutureStub
-    extends io.grpc.stub.AbstractFutureStub<XdsUpdateClientConfigureServiceFutureStub> {
+      extends io.grpc.stub.AbstractFutureStub<XdsUpdateClientConfigureServiceFutureStub> {
     private XdsUpdateClientConfigureServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
