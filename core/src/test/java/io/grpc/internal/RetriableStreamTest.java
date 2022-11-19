@@ -992,6 +992,34 @@ public class RetriableStreamTest {
   }
 
   @Test
+  public void addPrevRetryAttemptsToRespHeaders() {
+    ClientStream mockStream1 = mock(ClientStream.class);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+
+    retriableStream.start(masterListener);
+
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+            ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream1).start(sublistenerCaptor1.capture());
+
+    // retry
+    ClientStream mockStream2 = mock(ClientStream.class);
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+    sublistenerCaptor1.getValue().closed(
+            Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
+            ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream2).start(sublistenerCaptor2.capture());
+    sublistenerCaptor2.getValue().headersRead(new Metadata());
+
+    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
+    verify(masterListener).headersRead(metadataCaptor.capture());
+    assertEquals("1", metadataCaptor.getValue().get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+  }
+
+  @Test
   public void closedWhileDraining() {
     ClientStream mockStream1 = mock(ClientStream.class);
     final ClientStream mockStream2 =
