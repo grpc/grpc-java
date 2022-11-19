@@ -112,7 +112,7 @@ public final class RouteLookupServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return RouteLookupServiceGrpc.bindService(this);
+      return RouteLookupServiceGrpc.bindService(this);
     }
   }
 

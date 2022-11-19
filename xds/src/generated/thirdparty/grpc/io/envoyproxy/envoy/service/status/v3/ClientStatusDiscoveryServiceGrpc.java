@@ -162,7 +162,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return ClientStatusDiscoveryServiceGrpc.bindService(this);
+      return ClientStatusDiscoveryServiceGrpc.bindService(this);
     }
   }
 

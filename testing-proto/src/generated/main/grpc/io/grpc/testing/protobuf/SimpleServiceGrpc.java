@@ -244,7 +244,7 @@ public final class SimpleServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return SimpleServiceGrpc.bindService(this);
+      return SimpleServiceGrpc.bindService(this);
     }
   }
 

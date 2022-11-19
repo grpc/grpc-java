@@ -212,7 +212,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return ScopedRoutesDiscoveryServiceGrpc.bindService(this);
+      return ScopedRoutesDiscoveryServiceGrpc.bindService(this);
     }
   }
 

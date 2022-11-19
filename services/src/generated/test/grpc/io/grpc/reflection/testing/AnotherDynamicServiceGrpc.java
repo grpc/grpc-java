@@ -121,7 +121,7 @@ public final class AnotherDynamicServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return AnotherDynamicServiceGrpc.bindService(this);
+      return AnotherDynamicServiceGrpc.bindService(this);
     }
   }
 

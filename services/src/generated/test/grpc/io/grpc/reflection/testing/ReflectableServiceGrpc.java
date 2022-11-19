@@ -109,7 +109,7 @@ public final class ReflectableServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return ReflectableServiceGrpc.bindService(this);
+      return ReflectableServiceGrpc.bindService(this);
     }
   }
 

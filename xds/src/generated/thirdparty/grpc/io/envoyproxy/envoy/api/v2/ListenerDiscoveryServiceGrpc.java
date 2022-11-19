@@ -203,7 +203,7 @@ public final class ListenerDiscoveryServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return ListenerDiscoveryServiceGrpc.bindService(this);
+      return ListenerDiscoveryServiceGrpc.bindService(this);
     }
   }
 

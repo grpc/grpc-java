@@ -189,7 +189,7 @@ public final class EndpointDiscoveryServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return EndpointDiscoveryServiceGrpc.bindService(this);
+      return EndpointDiscoveryServiceGrpc.bindService(this);
     }
   }
 

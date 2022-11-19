@@ -145,7 +145,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return VirtualHostDiscoveryServiceGrpc.bindService(this);
+      return VirtualHostDiscoveryServiceGrpc.bindService(this);
     }
   }
 

@@ -138,7 +138,7 @@ public final class LoadReportingServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return LoadReportingServiceGrpc.bindService(this);
+      return LoadReportingServiceGrpc.bindService(this);
     }
   }
 

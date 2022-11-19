@@ -371,7 +371,7 @@ public final class ChannelzGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return ChannelzGrpc.bindService(this);
+      return ChannelzGrpc.bindService(this);
     }
   }
 

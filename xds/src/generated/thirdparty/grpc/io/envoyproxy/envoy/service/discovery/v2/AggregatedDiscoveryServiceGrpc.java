@@ -174,7 +174,7 @@ public final class AggregatedDiscoveryServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return AggregatedDiscoveryServiceGrpc.bindService(this);
+      return AggregatedDiscoveryServiceGrpc.bindService(this);
     }
   }
 

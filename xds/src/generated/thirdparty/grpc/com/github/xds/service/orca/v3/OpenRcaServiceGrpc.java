@@ -139,7 +139,7 @@ public final class OpenRcaServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return OpenRcaServiceGrpc.bindService(this);
+      return OpenRcaServiceGrpc.bindService(this);
     }
   }
 

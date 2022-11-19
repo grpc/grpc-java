@@ -194,7 +194,7 @@ public final class ClusterDiscoveryServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return ClusterDiscoveryServiceGrpc.bindService(this);
+      return ClusterDiscoveryServiceGrpc.bindService(this);
     }
   }
 

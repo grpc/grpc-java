@@ -166,7 +166,7 @@ public final class HealthGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return HealthGrpc.bindService(this);
+      return HealthGrpc.bindService(this);
     }
   }
 

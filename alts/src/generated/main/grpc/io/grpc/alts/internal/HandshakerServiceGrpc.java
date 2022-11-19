@@ -117,7 +117,7 @@ public final class HandshakerServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return HandshakerServiceGrpc.bindService(this);
+      return HandshakerServiceGrpc.bindService(this);
     }
   }
 

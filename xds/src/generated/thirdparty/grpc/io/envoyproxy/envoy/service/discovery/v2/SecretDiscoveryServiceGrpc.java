@@ -185,7 +185,7 @@ public final class SecretDiscoveryServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return SecretDiscoveryServiceGrpc.bindService(this);
+      return SecretDiscoveryServiceGrpc.bindService(this);
     }
   }
 
