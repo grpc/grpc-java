@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Exception;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -81,7 +82,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     this.autoTuneFlowControlOn = autoFlowControl;
     PingLimiter activePingLimiter = (pingLimiter != null) ? pingLimiter :  new AllowPingLimiter();
     this.flowControlPing = new FlowControlPinger(activePingLimiter);
-    this.ticker = (ticker != null) ? ticker : Ticker.systemTicker();
+    this.ticker = checkNotNull(ticker, "ticker");
   }
 
   @Override
