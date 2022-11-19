@@ -85,7 +85,8 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
       }
       if (localityWeight == null) {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(
-            Status.UNAVAILABLE.withDescription("wrr_locality error: no locality weight provided")));
+            Status.UNAVAILABLE.withDescription(
+                "wrr_locality error: no weight provided for locality " + locality)));
         return false;
       }
 
@@ -107,10 +108,6 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
               wrrLocalityConfig.childPolicy));
     }
 
-    // Remove the locality weight attribute now that we have consumed it. This is done simply for
-    // ease of debugging for the unsupported (and unlikely) scenario where WrrLocalityConfig has
-    // another wrr_locality as the child policy. The missing locality weight attribute would make
-    // the child wrr_locality fail early.
     resolvedAddresses = resolvedAddresses.toBuilder()
         .setAttributes(resolvedAddresses.getAttributes().toBuilder()
             .discard(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT).build()).build();
