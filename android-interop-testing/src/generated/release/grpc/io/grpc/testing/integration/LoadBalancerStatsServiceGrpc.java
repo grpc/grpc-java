@@ -160,7 +160,7 @@ public final class LoadBalancerStatsServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return LoadBalancerStatsServiceGrpc.bindService(this);
+      return LoadBalancerStatsServiceGrpc.bindService(this);
     }
   }
 

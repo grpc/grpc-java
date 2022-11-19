@@ -154,7 +154,7 @@ public final class ReconnectServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return ReconnectServiceGrpc.bindService(this);
+      return ReconnectServiceGrpc.bindService(this);
     }
   }
 

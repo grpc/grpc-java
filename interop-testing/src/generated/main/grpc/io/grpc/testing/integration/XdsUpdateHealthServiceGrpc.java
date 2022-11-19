@@ -156,7 +156,7 @@ public final class XdsUpdateHealthServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return XdsUpdateHealthServiceGrpc.bindService(this);
+      return XdsUpdateHealthServiceGrpc.bindService(this);
     }
   }
 

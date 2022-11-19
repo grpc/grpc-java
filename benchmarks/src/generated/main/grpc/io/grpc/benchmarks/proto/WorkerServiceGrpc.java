@@ -245,7 +245,7 @@ public final class WorkerServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return WorkerServiceGrpc.bindService(this);
+      return WorkerServiceGrpc.bindService(this);
     }
   }
 

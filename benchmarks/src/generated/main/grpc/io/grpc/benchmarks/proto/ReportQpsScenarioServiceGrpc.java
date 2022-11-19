@@ -112,7 +112,7 @@ public final class ReportQpsScenarioServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return ReportQpsScenarioServiceGrpc.bindService(this);
+      return ReportQpsScenarioServiceGrpc.bindService(this);
     }
   }
 

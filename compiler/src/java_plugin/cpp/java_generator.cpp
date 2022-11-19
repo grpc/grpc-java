@@ -814,7 +814,7 @@ static void PrintStub(
         *vars,
         "\n"
         "@$Override$ public final $ServerServiceDefinition$ bindService() {\n"
-        "    return $service_class_name$.bindService(this);\n"
+        "  return $service_class_name$.bindService(this);\n"
         "}\n");
   }
 

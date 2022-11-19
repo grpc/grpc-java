@@ -121,7 +121,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return XdsUpdateClientConfigureServiceGrpc.bindService(this);
+      return XdsUpdateClientConfigureServiceGrpc.bindService(this);
     }
   }
 

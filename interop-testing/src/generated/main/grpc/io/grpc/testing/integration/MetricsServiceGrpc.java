@@ -154,7 +154,7 @@ public final class MetricsServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return MetricsServiceGrpc.bindService(this);
+      return MetricsServiceGrpc.bindService(this);
     }
   }
 

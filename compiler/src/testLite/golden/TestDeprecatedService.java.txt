@@ -124,7 +124,7 @@ public final class TestDeprecatedServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return TestDeprecatedServiceGrpc.bindService(this);
+      return TestDeprecatedServiceGrpc.bindService(this);
     }
   }
 

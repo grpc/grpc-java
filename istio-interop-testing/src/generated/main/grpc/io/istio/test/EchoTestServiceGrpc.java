@@ -147,7 +147,7 @@ public final class EchoTestServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return EchoTestServiceGrpc.bindService(this);
+      return EchoTestServiceGrpc.bindService(this);
     }
   }
 

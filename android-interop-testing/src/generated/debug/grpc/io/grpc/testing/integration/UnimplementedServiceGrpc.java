@@ -123,7 +123,7 @@ public final class UnimplementedServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return UnimplementedServiceGrpc.bindService(this);
+      return UnimplementedServiceGrpc.bindService(this);
     }
   }
 

@@ -282,7 +282,7 @@ public final class BenchmarkServiceGrpc {
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-        return BenchmarkServiceGrpc.bindService(this);
+      return BenchmarkServiceGrpc.bindService(this);
     }
   }
 
