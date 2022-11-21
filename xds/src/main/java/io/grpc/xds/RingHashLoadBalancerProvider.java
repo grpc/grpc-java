@@ -39,11 +39,11 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
   static final long DEFAULT_MIN_RING_SIZE = 1024L;
   // Same as ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE
   @VisibleForTesting
-  static final long DEFAULT_MAX_RING_SIZE = 8 * 1024 * 1024L;
-  // Maximum number of ring entries allowed. Setting this too large can result in slow
-  // ring construction and OOM error.
-  // Same as ClientXdsClient.MAX_RING_HASH_LB_POLICY_RING_SIZE
-  static final long MAX_RING_SIZE = 8 * 1024 * 1024L;
+  static final long DEFAULT_MAX_RING_SIZE = 4 * 1024L;
+  // An upper bound on max ring size to limit memory usage.
+  // TODO(apolcyn): make MAX_RING_SIZE_CAP configurable, ideally on a per-channel
+  // basis but possibly as a global.
+  static final long MAX_RING_SIZE_CAP = 4 * 1024L;
 
   private static final boolean enableRingHash =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"))
@@ -79,8 +79,13 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
     if (maxRingSize == null) {
       maxRingSize = DEFAULT_MAX_RING_SIZE;
     }
-    if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize
-        || maxRingSize > MAX_RING_SIZE) {
+    if (minRingSize > MAX_RING_SIZE_CAP) {
+      minRingSize = MAX_RING_SIZE_CAP;
+    }
+    if (maxRingSize > MAX_RING_SIZE_CAP) {
+      maxRingSize = MAX_RING_SIZE_CAP;
+    }
+    if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize) {
       return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
           "Invalid 'mingRingSize'/'maxRingSize'"));
     }

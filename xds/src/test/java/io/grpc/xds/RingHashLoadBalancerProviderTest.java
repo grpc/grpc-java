@@ -116,16 +116,29 @@ public class RingHashLoadBalancerProviderTest {
   }
 
   @Test
-  public void parseLoadBalancingConfig_invalid_ringTooLarge() throws IOException {
-    long ringSize = RingHashLoadBalancerProvider.MAX_RING_SIZE + 1;
+  public void parseLoadBalancingConfig_ringTooLargeUsesCap() throws IOException {
+    long ringSize = RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP + 1;
     String lbConfig =
         String.format(Locale.US, "{\"minRingSize\" : 10, \"maxRingSize\" : %d}", ringSize);
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
     assertThat(configOrError.getError()).isNotNull();
-    assertThat(configOrError.getError().getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(configOrError.getError().getDescription())
-        .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+    RingHashConfig config = (RingHashConfig) configOrError.getConfig();
+    assertThat(config.minRingSize).isEqualTo(10);
+    assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
+  }
+
+  @Test
+  public void parseLoadBalancingConfig_ringMinAndMaxTooLargeUsesCap() throws IOException {
+    long ringSize = RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP + 1;
+    String lbConfig =
+        String.format(Locale.US, "{\"minRingSize\" : %d, \"maxRingSize\" : %d}", ringSize, ringSize);
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+    assertThat(configOrError.getError()).isNotNull();
+    RingHashConfig config = (RingHashConfig) configOrError.getConfig();
+    assertThat(config.minRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
+    assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
   }
 
   @Test
