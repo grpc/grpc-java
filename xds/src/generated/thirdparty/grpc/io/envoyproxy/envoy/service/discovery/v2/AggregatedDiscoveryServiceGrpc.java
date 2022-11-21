@@ -139,6 +139,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

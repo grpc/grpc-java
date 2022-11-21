@@ -154,6 +154,7 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

@@ -112,6 +112,7 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

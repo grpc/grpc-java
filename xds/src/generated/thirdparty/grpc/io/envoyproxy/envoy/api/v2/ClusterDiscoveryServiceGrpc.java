@@ -160,6 +160,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

@@ -612,6 +612,7 @@ static void PrintStub(
   if (interface) {
     p->Print(
         *vars,
+        "@$ExperimentalApi$(\"https://github.com/grpc/grpc-java/issues/9702\")\n"
         "public interface $stub_name$ {\n");
   } else if (impl_base) {
     p->Print(
@@ -1208,6 +1209,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["Deprecated"] = "java.lang.Deprecated";
   vars["Override"] = "java.lang.Override";
   vars["Channel"] = "io.grpc.Channel";
+  vars["ExperimentalApi"] = "io.grpc.ExperimentalApi";
   vars["CallOptions"] = "io.grpc.CallOptions";
   vars["MethodType"] = "io.grpc.MethodDescriptor.MethodType";
   vars["ServerMethodDefinition"] =

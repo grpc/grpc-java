@@ -129,6 +129,7 @@ public final class XdsUpdateHealthServiceGrpc {
    * A service to remotely control health status of an xDS test server.
    * </pre>
    */
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**
