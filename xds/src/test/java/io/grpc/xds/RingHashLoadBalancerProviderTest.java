@@ -132,7 +132,8 @@ public class RingHashLoadBalancerProviderTest {
   public void parseLoadBalancingConfig_ringMinAndMaxTooLargeUsesCap() throws IOException {
     long ringSize = RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP + 1;
     String lbConfig =
-        String.format(Locale.US, "{\"minRingSize\" : %d, \"maxRingSize\" : %d}", ringSize, ringSize);
+        String.format(
+            Locale.US, "{\"minRingSize\" : %d, \"maxRingSize\" : %d}", ringSize, ringSize);
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
     assertThat(configOrError.getError()).isNotNull();
