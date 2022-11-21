@@ -122,7 +122,7 @@ public class RingHashLoadBalancerProviderTest {
         String.format(Locale.US, "{\"minRingSize\" : 10, \"maxRingSize\" : %d}", ringSize);
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
-    assertThat(configOrError.getError()).isNotNull();
+    assertThat(configOrError.getConfig()).isNotNull();
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(10);
     assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
@@ -136,7 +136,7 @@ public class RingHashLoadBalancerProviderTest {
             Locale.US, "{\"minRingSize\" : %d, \"maxRingSize\" : %d}", ringSize, ringSize);
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
-    assertThat(configOrError.getError()).isNotNull();
+    assertThat(configOrError.getConfig()).isNotNull();
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
     assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
