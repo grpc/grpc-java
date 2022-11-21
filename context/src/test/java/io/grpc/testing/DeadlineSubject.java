@@ -19,6 +19,7 @@ package io.grpc.testing;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Fact.fact;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.truth.ComparableSubject;
 import com.google.common.truth.FailureMetadata;
@@ -65,9 +66,9 @@ public final class DeadlineSubject extends ComparableSubject {
         BigInteger deltaNanos = BigInteger.valueOf(timeUnit.toNanos(delta));
         if (actualTimeRemaining.subtract(expectedTimeRemaining).abs().compareTo(deltaNanos) > 0) {
           failWithoutActual(
-              fact("expected", expected),
-              fact("but was", actual),
-              fact("outside tolerance in ns", deltaNanos));
+              fact("expected", expectedTimeRemaining.doubleValue() / SECONDS.toNanos(1)),
+              fact("but was", actualTimeRemaining.doubleValue() / SECONDS.toNanos(1)),
+              fact("outside tolerance in seconds", deltaNanos.doubleValue() / SECONDS.toNanos(1)));
         }
       }
     };
