@@ -25,7 +25,6 @@ import com.google.common.truth.ComparableSubject;
 import com.google.common.truth.FailureMetadata;
 import com.google.common.truth.Subject;
 import io.grpc.Deadline;
-import java.math.BigInteger;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -33,6 +32,7 @@ import javax.annotation.Nullable;
 /** Propositions for {@link Deadline} subjects. */
 @SuppressWarnings("rawtypes") // Generics in this class are going away in a subsequent Truth.
 public final class DeadlineSubject extends ComparableSubject {
+  public static final double NANOSECONDS_IN_A_SECOND = SECONDS.toNanos(1) * 1.0;
   private static final Subject.Factory<DeadlineSubject, Deadline> deadlineFactory =
       new Factory();
 
@@ -61,14 +61,14 @@ public final class DeadlineSubject extends ComparableSubject {
         checkNotNull(actual, "actual value cannot be null. expected=%s", expected);
 
         // This is probably overkill, but easier than thinking about overflow.
-        BigInteger actualTimeRemaining = BigInteger.valueOf(actual.timeRemaining(NANOSECONDS));
-        BigInteger expectedTimeRemaining = BigInteger.valueOf(expected.timeRemaining(NANOSECONDS));
-        BigInteger deltaNanos = BigInteger.valueOf(timeUnit.toNanos(delta));
-        if (actualTimeRemaining.subtract(expectedTimeRemaining).abs().compareTo(deltaNanos) > 0) {
+        long actualNanos = actual.timeRemaining(NANOSECONDS);
+        long expectedNanos = expected.timeRemaining(NANOSECONDS);
+        long deltaNanos = timeUnit.toNanos(delta) ;
+        if (Math.abs(actualNanos - expectedNanos) > deltaNanos) {
           failWithoutActual(
-              fact("expected", expectedTimeRemaining.doubleValue() / SECONDS.toNanos(1)),
-              fact("but was", actualTimeRemaining.doubleValue() / SECONDS.toNanos(1)),
-              fact("outside tolerance in seconds", deltaNanos.doubleValue() / SECONDS.toNanos(1)));
+              fact("expected", expectedNanos / NANOSECONDS_IN_A_SECOND),
+              fact("but was", expectedNanos  / NANOSECONDS_IN_A_SECOND),
+              fact("outside tolerance in seconds",  deltaNanos  / NANOSECONDS_IN_A_SECOND));
         }
       }
     };
