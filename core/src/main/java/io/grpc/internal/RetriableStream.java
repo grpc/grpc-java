@@ -811,11 +811,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  private interface BufferEntry {
-    /** Replays the buffer entry with the given stream. */
-    void runWith(Substream substream);
-  }
-
   private void safeCloseMasterListener(Status status, RpcProgress progress, Metadata metadata) {
     listenerSerializeExecutor.execute(
         new Runnable() {
@@ -825,6 +820,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             masterListener.closed(status, progress, metadata);
           }
         });
+  }
+
+  private interface BufferEntry {
+    /** Replays the buffer entry with the given stream. */
+    void runWith(Substream substream);
   }
 
   private final class Sublistener implements ClientStreamListener {
@@ -957,9 +957,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             RetryPlan retryPlan = makeRetryDecision(status, trailers);
             if (retryPlan.shouldRetry) {
               // retry
-              Substream newSubstream = createSubstream(
-                  substream.previousAttemptCount + 1,
-                  false);
+              Substream newSubstream = createSubstream(substream.previousAttemptCount + 1, false);
               if (newSubstream == null) {
                 return;
               }
