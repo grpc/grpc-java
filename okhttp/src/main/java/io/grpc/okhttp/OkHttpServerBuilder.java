@@ -40,7 +40,10 @@ import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.internal.Platform;
+import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
 import java.util.EnumSet;
@@ -54,6 +57,8 @@ import java.util.logging.Logger;
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 
 /**
@@ -422,9 +427,26 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
       } catch (GeneralSecurityException gse) {
         throw new RuntimeException("TLS Provider failure", gse);
       }
+      SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+      switch (tlsCreds.getClientAuth()) {
+        case OPTIONAL:
+          sslSocketFactory = new ClientCertRequestingSocketFactory(sslSocketFactory, false);
+          break;
+
+        case REQUIRE:
+          sslSocketFactory = new ClientCertRequestingSocketFactory(sslSocketFactory, true);
+          break;
+
+        case NONE:
+          // NOOP; this is the SSLContext default
+          break;
+
+        default:
+          return HandshakerSocketFactoryResult.error(
+              "Unknown TlsServerCredentials.ClientAuth value: " + tlsCreds.getClientAuth());
+      }
       return HandshakerSocketFactoryResult.factory(new TlsServerHandshakerSocketFactory(
-          new SslSocketFactoryServerCredentials.ServerCredentials(
-              sslContext.getSocketFactory())));
+          new SslSocketFactoryServerCredentials.ServerCredentials(sslSocketFactory)));
 
     } else if (creds instanceof InsecureServerCredentials) {
       return HandshakerSocketFactoryResult.factory(new PlaintextHandshakerSocketFactory());
@@ -471,6 +493,61 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     public static HandshakerSocketFactoryResult factory(HandshakerSocketFactory factory) {
       return new HandshakerSocketFactoryResult(
           Preconditions.checkNotNull(factory, "factory"), null);
+    }
+  }
+
+  static final class ClientCertRequestingSocketFactory extends SSLSocketFactory {
+    private final SSLSocketFactory socketFactory;
+    private final boolean required;
+
+    public ClientCertRequestingSocketFactory(SSLSocketFactory socketFactory, boolean required) {
+      this.socketFactory = Preconditions.checkNotNull(socketFactory, "socketFactory");
+      this.required = required;
+    }
+
+    private Socket apply(Socket s) throws IOException {
+      if (!(s instanceof SSLSocket)) {
+        throw new IOException(
+            "SocketFactory " + socketFactory + " did not produce an SSLSocket: " + s.getClass());
+      }
+      SSLSocket sslSocket = (SSLSocket) s;
+      if (required) {
+        sslSocket.setNeedClientAuth(true);
+      } else {
+        sslSocket.setWantClientAuth(true);
+      }
+      return sslSocket;
+    }
+
+    @Override public Socket createSocket(Socket s, String host, int port, boolean autoClose)
+        throws IOException {
+      return apply(socketFactory.createSocket(s, host, port, autoClose));
+    }
+
+    @Override public Socket createSocket(String host, int port) throws IOException {
+      return apply(socketFactory.createSocket(host, port));
+    }
+
+    @Override public Socket createSocket(
+        String host, int port, InetAddress localHost, int localPort) throws IOException {
+      return apply(socketFactory.createSocket(host, port, localHost, localPort));
+    }
+
+    @Override public Socket createSocket(InetAddress host, int port) throws IOException {
+      return apply(socketFactory.createSocket(host, port));
+    }
+
+    @Override public Socket createSocket(
+        InetAddress host, int port, InetAddress localAddress, int localPort) throws IOException {
+      return apply(socketFactory.createSocket(host, port, localAddress, localPort));
+    }
+
+    @Override public String[] getDefaultCipherSuites() {
+      return socketFactory.getDefaultCipherSuites();
+    }
+
+    @Override public String[] getSupportedCipherSuites() {
+      return socketFactory.getSupportedCipherSuites();
     }
   }
 }
