@@ -35,6 +35,21 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public final class HandshakerServiceChannelTest {
+
+  public static class SimpleServiceAltServer
+      implements io.grpc.BindableService, SimpleServiceGrpc.AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return SimpleServiceGrpc.bindService(this);
+    }
+
+    @Override
+    public void unaryRpc(SimpleRequest request, StreamObserver<SimpleResponse> so) {
+      so.onNext(SimpleResponse.getDefaultInstance());
+      so.onCompleted();
+    }
+  }
+
   @Rule
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
   private final Server server = grpcCleanup.register(
@@ -47,13 +62,21 @@ public final class HandshakerServiceChannelTest {
           }
         })
         .build());
+  private final Server altServer = grpcCleanup.register(
+      ServerBuilder.forPort(0)
+          .addService(new SimpleServiceAltServer())
+          .build());
   private Resource<Channel> resource;
+  private Resource<Channel> altResource;
 
   @Before
   public void setUp() throws Exception {
     server.start();
+    altServer.start();
     resource =
         HandshakerServiceChannel.getHandshakerChannelForTesting("localhost:" + server.getPort());
+    altResource =
+        HandshakerServiceChannel.getHandshakerChannelForTesting("localhost:" + altServer.getPort());
   }
 
   @Test
@@ -75,6 +98,17 @@ public final class HandshakerServiceChannelTest {
       doRpc(channel);
     } finally {
       resource.close(channel);
+    }
+  }
+
+  @Test
+  public void altServer_works() {
+    Channel channel = altResource.create();
+    try {
+      // Do an RPC to verify that the channel actually works
+      doRpc(channel);
+    } finally {
+      altResource.close(channel);
     }
   }
 
