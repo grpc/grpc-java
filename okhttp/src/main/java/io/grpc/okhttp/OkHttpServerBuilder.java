@@ -519,8 +519,7 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
       return sslSocket;
     }
 
-    @Override
-    public Socket createSocket(Socket s, String host, int port, boolean autoClose)
+    @Override public Socket createSocket(Socket s, String host, int port, boolean autoClose)
         throws IOException {
       return apply(socketFactory.createSocket(s, host, port, autoClose));
     }

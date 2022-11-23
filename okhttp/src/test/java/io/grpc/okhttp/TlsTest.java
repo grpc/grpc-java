@@ -39,6 +39,10 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.IOException;
 import java.io.InputStream;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import org.junit.Assume;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,6 +53,20 @@ import org.junit.runners.JUnit4;
 public class TlsTest {
   @Rule
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
+
+  @Before
+  public void checkForAlpnApi() throws Exception {
+    // This checks for the "Java 9 ALPN API" which was backported to Java 8u252. The Kokoro Windows
+    // CI is on too old of a JDK for us to assume this is available.
+    SSLContext context = SSLContext.getInstance("TLS");
+    context.init(null, null, null);
+    SSLEngine engine = context.createSSLEngine();
+    try {
+      SSLEngine.class.getMethod("getApplicationProtocol").invoke(engine);
+    } catch (NoSuchMethodException | UnsupportedOperationException ex) {
+      Assume.assumeNoException(ex);
+    }
+  }
 
   @Test
   public void mtls_succeeds() throws Exception {
