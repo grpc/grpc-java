@@ -16,31 +16,52 @@
 
 package io.grpc.examples.loadbalance;
 
+import com.google.common.collect.ImmutableMap;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+import jdk.nashorn.internal.ir.annotations.Immutable;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static io.grpc.examples.loadbalance.LoadBalanceClient.exampleServiceName;
 
 public class ExampleNameResolver extends NameResolver {
 
     private Listener2 listener;
 
-    private final String authority;
+    private final URI uri;
 
-    // authority is the string from the target URI passed to gRPC
-    public ExampleNameResolver(String authority) {
-        this.authority = authority;
+    private final Map<String,List<InetSocketAddress>> addrStore;
+
+    public ExampleNameResolver(URI targetUri) {
+        this.uri = targetUri;
+        // This is a fake name resolver, so we just hard code the address here.
+        addrStore = ImmutableMap.<String,List<InetSocketAddress>>builder()
+                .put(exampleServiceName,
+                Stream.iterate(LoadBalanceServer.startPort,p->p+1)
+                        .limit(LoadBalanceServer.serverCount)
+                        .map(port->new InetSocketAddress("localhost",port))
+                        .collect(Collectors.toList())
+                )
+                .build();
     }
 
     @Override
     public String getServiceAuthority() {
-        return authority;
+        // Be consistent with behavior in grpc-go, authority is saved in Host field of URI.
+        if (uri.getHost() != null) {
+            return uri.getHost();
+        }
+        return "no host";
     }
 
     @Override
@@ -59,10 +80,7 @@ public class ExampleNameResolver extends NameResolver {
     }
 
     private void resolve() {
-        List<InetSocketAddress> addresses = new ArrayList<>();
-        for (int i = 0; i < LoadBalanceServer.serverCount; i++) {
-            addresses.add(new InetSocketAddress("localhost", LoadBalanceServer.startPort + i));
-        }
+        List<InetSocketAddress> addresses = addrStore.get(uri.getPath().substring(1));
         try {
             List<EquivalentAddressGroup> equivalentAddressGroup = addresses.stream()
                     // convert to socket address

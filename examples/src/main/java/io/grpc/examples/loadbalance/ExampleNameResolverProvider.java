@@ -21,12 +21,12 @@ import io.grpc.NameResolverProvider;
 
 import java.net.URI;
 
-public class ExampleNameResolverProvider extends NameResolverProvider {
-    public static final String exampleScheme = "example";
+import static io.grpc.examples.loadbalance.LoadBalanceClient.exampleScheme;
 
+public class ExampleNameResolverProvider extends NameResolverProvider {
     @Override
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-        return new ExampleNameResolver(targetUri.toString());
+        return new ExampleNameResolver(targetUri);
     }
 
     @Override

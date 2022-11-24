@@ -26,10 +26,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static io.grpc.examples.loadbalance.ExampleNameResolverProvider.exampleScheme;
-
 public class LoadBalanceClient {
     private static final Logger logger = Logger.getLogger(LoadBalanceClient.class.getName());
+
+    public static final String exampleScheme = "example";
+    public static final String exampleServiceName = "lb.example.grpc.io";
 
     private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
@@ -70,9 +71,10 @@ public class LoadBalanceClient {
         logger.info("Change to use example name resolver");
         /**
          * Dial to "example:///resolver.example.grpc.io", use {@link ExampleNameResolver} to create connection
+         * "resolver.example.grpc.io" is converted to {@link java.net.URI.path}
          */
         channel = ManagedChannelBuilder.forTarget(
-                        String.format("%s:///%s", exampleScheme, "resolver.example.grpc.io"))
+                        String.format("%s:///%s", exampleScheme, exampleServiceName))
                 .defaultLoadBalancingPolicy("round_robin")
                 .usePlaintext()
                 .build();
