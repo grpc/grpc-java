@@ -59,6 +59,7 @@ public final class BinderSecurityTest {
   @Nullable ManagedChannel channel;
   Map<String, MethodDescriptor<Empty, Empty>> methods = new HashMap<>();
   List<MethodDescriptor<Empty, Empty>> calls = new ArrayList<>();
+  CountingServerInterceptor countingServerInterceptor;
 
   @Before
   public void setupServiceDefinitionsAndMethods() {
@@ -86,6 +87,7 @@ public final class BinderSecurityTest {
       }
       serviceDefinitions.add(builder.build());
     }
+    countingServerInterceptor = new CountingServerInterceptor();
   }
 
   @After
@@ -120,6 +122,7 @@ public final class BinderSecurityTest {
       ServerSecurityPolicy serverPolicy) {
     BinderServerBuilder serverBuilder = BinderServerBuilder.forAddress(listenAddr, receiver);
     serverBuilder.securityPolicy(serverPolicy);
+    serverBuilder.intercept(countingServerInterceptor);
 
     for (ServerServiceDefinition serviceDefinition : serviceDefinitions) {
       serverBuilder.addService(serviceDefinition);
@@ -195,6 +198,22 @@ public final class BinderSecurityTest {
     }
   }
 
+  @Test
+  public void testSecurityInterceptorIsClosestToTransport() throws Exception {
+    createChannel(
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy("foo", policy((uid) -> true))
+            .servicePolicy("bar", policy((uid) -> false))
+            .build(),
+        SecurityPolicies.internalOnly());
+    assertThat(countingServerInterceptor.numInterceptedCalls).isEqualTo(0);
+    for (MethodDescriptor<Empty, Empty> method : methods.values()) {
+      ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, null);
+    }
+    // Only the foo call should have made it to the user interceptor.
+    assertThat(countingServerInterceptor.numInterceptedCalls).isEqualTo(1);
+  }
+
   private static SecurityPolicy policy(Function<Integer, Boolean> func) {
     return new SecurityPolicy() {
       @Override
@@ -202,5 +221,18 @@ public final class BinderSecurityTest {
         return func.apply(uid) ? Status.OK : Status.PERMISSION_DENIED;
       }
     };
+  }
+
+  private final class CountingServerInterceptor implements ServerInterceptor {
+    int numInterceptedCalls;
+
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next) {
+      numInterceptedCalls += 1;
+      return next.startCall(call, headers);
+    }
   }
 }
