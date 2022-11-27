@@ -228,9 +228,11 @@ public final class BinderChannelBuilder
   }
 
   /** 
-    * Enables strict lifecycle management. This should be called by processes with elevated procrank, where
-    * reliance on idle timers is inappropriate for lifecycle management.
-    */
+   * Disables the channel idle timeout and prevents it from being enabled. This
+   * allows a centralized application method to configure the channel builder
+   * and return it, without worrying about another part of the application
+   * accidentally enabling the idle timeout.
+   */
   public BinderChannelBuilder strictLifecycleManagement() {
     strictLifecycleManagement = true;
     super.idleTimeout(1000, TimeUnit.DAYS); // >30 days disables timeouts entirely.
