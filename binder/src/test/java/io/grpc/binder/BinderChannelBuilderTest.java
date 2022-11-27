@@ -35,7 +35,7 @@ public final class BinderChannelBuilderTest {
     BinderChannelBuilder builder = BinderChannelBuilder.forAddress(addr, appContext);
     builder.strictLifecycleManagement();
     try {
-      builder.idleTimeout(10, TimeUnit.SECODNS);
+      builder.idleTimeout(10, TimeUnit.SECONDS);
       fail();
     } catch (IllegalStateException ise) {
       // Expected.
