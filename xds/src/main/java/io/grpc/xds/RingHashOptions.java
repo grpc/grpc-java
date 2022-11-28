@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
 
 /**
