@@ -207,14 +207,19 @@ public final class BinderSecurityTest {
         ServerSecurityPolicy.newBuilder()
             .servicePolicy("foo", policy((uid) -> true))
             .servicePolicy("bar", policy((uid) -> false))
+            .servicePolicy("baz", policy((uid) -> false))
             .build(),
         SecurityPolicies.internalOnly());
     assertThat(countingServerInterceptor.numInterceptedCalls).isEqualTo(0);
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
-      ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, null);
+      try {
+        ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, null);
+      } catch (StatusRuntimeException sre) {
+        // Ignore.
+      }
     }
-    // Only the foo call should have made it to the user interceptor.
-    assertThat(countingServerInterceptor.numInterceptedCalls).isEqualTo(1);
+    // Only the foo calls should have made it to the user interceptor.
+    assertThat(countingServerInterceptor.numInterceptedCalls).isEqualTo(2);
   }
 
   private static SecurityPolicy policy(Function<Integer, Boolean> func) {
