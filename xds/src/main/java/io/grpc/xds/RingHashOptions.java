@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.ExperimentalApi;
+
 /**
  * Utility class that provides a way to configure ring hash size limits. This is applicable
  * for clients that use the ring hash load balancing policy. Note that size limits involve
