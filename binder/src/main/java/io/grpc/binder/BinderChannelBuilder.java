@@ -136,7 +136,6 @@ public final class BinderChannelBuilder
     securityPolicy = SecurityPolicies.internalOnly();
     inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     bindServiceFlags = BindServiceFlags.DEFAULTS;
-    idleTimeout(60, TimeUnit.SECONDS);
 
     final class BinderChannelTransportFactoryBuilder
         implements ClientTransportFactoryBuilder {
@@ -167,6 +166,7 @@ public final class BinderChannelBuilder
               new BinderChannelTransportFactoryBuilder(),
               null);
     }
+    idleTimeout(60, TimeUnit.SECONDS);
   }
 
   @Override
