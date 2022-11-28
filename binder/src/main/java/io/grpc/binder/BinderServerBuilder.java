@@ -108,7 +108,6 @@ public final class BinderServerBuilder
     // Disable stats and tracing by default.
     serverImplBuilder.setStatsEnabled(false);
     serverImplBuilder.setTracingEnabled(false);
-
   }
 
   @Override
