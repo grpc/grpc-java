@@ -1,13 +1,6 @@
 gRPC-Java - An RPC library and framework
 ========================================
 
-gRPC-Java works with JDK 8. gRPC-Java clients are supported on Android API
-levels 19 and up (KitKat and later). Deploying gRPC servers on an Android
-device is not supported.
-
-TLS usage typically requires using Java 8, or Play Services Dynamic Security
-Provider on Android. Please see the [Security Readme](SECURITY.md).
-
 <table>
   <tr>
     <td><b>Homepage:</b></td>
@@ -23,6 +16,26 @@ Provider on Android. Please see the [Security Readme](SECURITY.md).
 [![Build Status](https://travis-ci.org/grpc/grpc-java.svg?branch=master)](https://travis-ci.org/grpc/grpc-java)
 [![Line Coverage Status](https://coveralls.io/repos/grpc/grpc-java/badge.svg?branch=master&service=github)](https://coveralls.io/github/grpc/grpc-java?branch=master)
 [![Branch-adjusted Line Coverage Status](https://codecov.io/gh/grpc/grpc-java/branch/master/graph/badge.svg)](https://codecov.io/gh/grpc/grpc-java)
+
+Supported Platforms
+-------------------
+
+gRPC-Java supports Java 8 and later. Android minSdkVersion 19 (KitKat) and
+later are supported with [Java 8 language desugaring][android-java-8].
+
+TLS usage on Android typically requires Play Services Dynamic Security Provider.
+Please see the [Security Readme](SECURITY.md).
+
+Older Java versions are not directly supported, but a branch remains available
+for fixes and releases. See [gRFC P5 JDK Version Support
+Policy][P5-jdk-version-support].
+
+Java version | gRPC Branch
+------------ | -----------
+7            | 1.41.x
+
+[android-java-8]: https://developer.android.com/studio/write/java8-support#supported_features
+[P5-jdk-version-support]: https://github.com/grpc/proposal/blob/master/P5-jdk-version-support.md#proposal
 
 Getting Started
 ---------------
@@ -243,12 +256,15 @@ wire. The interfaces to it are abstract just enough to allow plugging in of
 different implementations. Note the transport layer API is considered internal
 to gRPC and has weaker API guarantees than the core API under package `io.grpc`.
 
-gRPC comes with three Transport implementations:
+gRPC comes with multiple Transport implementations:
 
-1. The Netty-based transport is the main transport implementation based on
-   [Netty](https://netty.io). It is for both the client and the server.
-2. The OkHttp-based transport is a lightweight transport based on
-   [OkHttp](https://square.github.io/okhttp/). It is mainly for use on Android
-   and is for client only.
+1. The Netty-based HTTP/2 transport is the main transport implementation based
+   on [Netty](https://netty.io). It is not officially supported on Android.
+2. The OkHttp-based HTTP/2 transport is a lightweight transport based on
+   [Okio](https://square.github.io/okio/) and forked low-level parts of
+   [OkHttp](https://square.github.io/okhttp/). It is mainly for use on Android.
 3. The in-process transport is for when a server is in the same process as the
-   client. It is useful for testing, while also being safe for production use.
+   client. It is used frequently for testing, while also being safe for
+   production use.
+4. The Binder transport is for Android cross-process communication on a single
+   device.
