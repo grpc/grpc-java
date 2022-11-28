@@ -26,20 +26,20 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:1.17.5",
-    "io.netty:netty-buffer:4.1.77.Final",
-    "io.netty:netty-codec-http2:4.1.77.Final",
-    "io.netty:netty-codec-http:4.1.77.Final",
-    "io.netty:netty-codec-socks:4.1.77.Final",
-    "io.netty:netty-codec:4.1.77.Final",
-    "io.netty:netty-common:4.1.77.Final",
-    "io.netty:netty-handler-proxy:4.1.77.Final",
-    "io.netty:netty-handler:4.1.77.Final",
-    "io.netty:netty-resolver:4.1.77.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.53.Final",
-    "io.netty:netty-tcnative-classes:2.0.53.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.77.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.72.Final",
-    "io.netty:netty-transport:4.1.77.Final",
+    "io.netty:netty-buffer:4.1.79.Final",
+    "io.netty:netty-codec-http2:4.1.79.Final",
+    "io.netty:netty-codec-http:4.1.79.Final",
+    "io.netty:netty-codec-socks:4.1.79.Final",
+    "io.netty:netty-codec:4.1.79.Final",
+    "io.netty:netty-common:4.1.79.Final",
+    "io.netty:netty-handler-proxy:4.1.79.Final",
+    "io.netty:netty-handler:4.1.79.Final",
+    "io.netty:netty-resolver:4.1.79.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.54.Final",
+    "io.netty:netty-tcnative-classes:2.0.54.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.79.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.79.Final",
+    "io.netty:netty-transport:4.1.79.Final",
     "io.opencensus:opencensus-api:0.24.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
     "io.perfmark:perfmark-api:0.25.0",
@@ -150,18 +150,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "2d9084d3dd13b86ca2e811d2331f780eb86f6d7cb02b405426e3c80dcbfabf25",
-        strip_prefix = "protobuf-3.21.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.21.1.zip"],
+        sha256 = "c72840a5081484c4ac20789ea5bb5d5de6bc7c477ad76e7109fda2bc4e630fe6",
+        strip_prefix = "protobuf-3.21.7",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.21.7.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "2d9084d3dd13b86ca2e811d2331f780eb86f6d7cb02b405426e3c80dcbfabf25",
-        strip_prefix = "protobuf-3.21.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.21.1.zip"],
+        sha256 = "c72840a5081484c4ac20789ea5bb5d5de6bc7c477ad76e7109fda2bc4e630fe6",
+        strip_prefix = "protobuf-3.21.7",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.21.7.zip"],
     )
 
 def io_grpc_grpc_proto():

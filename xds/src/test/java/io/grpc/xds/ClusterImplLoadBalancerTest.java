@@ -57,9 +57,9 @@ import io.grpc.xds.Stats.UpstreamLocalityStats;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SslContextProvider;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.SslContextProvider;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -282,7 +282,7 @@ public class ClusterImplLoadBalancerTest {
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, null,
         Collections.singletonList(DropOverload.create("lb", 1_000_000)),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.singletonList(endpoint))
             .setAttributes(
@@ -571,7 +571,7 @@ public class ClusterImplLoadBalancerTest {
 
   private void deliverAddressesAndConfig(List<EquivalentAddressGroup> addresses,
       ClusterImplConfig config) {
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(addresses)
             .setAttributes(
@@ -677,10 +677,11 @@ public class ClusterImplLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
       attributes = resolvedAddresses.getAttributes();
+      return true;
     }
 
     @Override

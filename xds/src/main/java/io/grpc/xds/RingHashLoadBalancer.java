@@ -81,13 +81,13 @@ final class RingHashLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     List<EquivalentAddressGroup> addrList = resolvedAddresses.getAddresses();
     if (addrList.isEmpty()) {
       handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
           + "resolution was successful, but returned server addresses are empty."));
-      return;
+      return false;
     }
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
     Set<EquivalentAddressGroup> removedAddrs =
@@ -162,6 +162,8 @@ final class RingHashLoadBalancer extends LoadBalancer {
     for (Subchannel subchann : removedSubchannels) {
       shutdownSubchannel(subchann);
     }
+
+    return true;
   }
 
   private static List<RingEntry> buildRing(
@@ -248,7 +250,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       overallState = READY;
     } else if (numTransientFailure >= 2) {
       overallState = TRANSIENT_FAILURE;
-      startConnectionAttempt = true;
+      startConnectionAttempt = (numConnecting == 0);
     } else if (numConnecting > 0) {
       overallState = CONNECTING;
     } else if (numTransientFailure == 1 && subchannels.size() > 1) {

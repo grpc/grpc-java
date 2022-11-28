@@ -23,7 +23,7 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.util.Map;
 
 /**
@@ -37,7 +37,7 @@ public final class InternalXdsAttributes {
   @Grpc.TransportAttr
   public static final Attributes.Key<SslContextProviderSupplier>
       ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER =
-          Attributes.Key.create("io.grpc.xds.internal.sds.SslContextProviderSupplier");
+          Attributes.Key.create("io.grpc.xds.internal.security.SslContextProviderSupplier");
 
   /**
    * Attribute key for passing around the XdsClient object pool across NameResolver/LoadBalancers.

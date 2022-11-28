@@ -52,8 +52,8 @@ import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
-import io.grpc.xds.XdsClient.EdsResourceWatcher;
-import io.grpc.xds.XdsClient.EdsUpdate;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.URI;
@@ -113,7 +113,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL);
@@ -127,6 +127,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       this.config = config;
       delegate.handleResolvedAddresses(resolvedAddresses);
     }
+    return true;
   }
 
   @Override
@@ -170,7 +171,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       this.resolvedAddresses = resolvedAddresses;
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -189,6 +190,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         clusterStates.put(instance.cluster, state);
         state.start();
       }
+      return true;
     }
 
     @Override
@@ -350,7 +352,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       }
     }
 
-    private final class EdsClusterState extends ClusterState implements EdsResourceWatcher {
+    private final class EdsClusterState extends ClusterState implements ResourceWatcher<EdsUpdate> {
       @Nullable
       private final String edsServiceName;
       private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
@@ -367,7 +369,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       void start() {
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Start watching EDS resource {0}", resourceName);
-        xdsClient.watchEdsResource(resourceName, this);
+        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), resourceName, this);
       }
 
       @Override
@@ -375,7 +377,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         super.shutdown();
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Stop watching EDS resource {0}", resourceName);
-        xdsClient.cancelEdsResourceWatch(resourceName, this);
+        xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), resourceName, this);
       }
 
       @Override

@@ -19,8 +19,9 @@ package io.grpc.examples.header;
 import io.grpc.Channel;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -43,8 +44,8 @@ public class CustomHeaderClient {
    * A custom client.
    */
   private CustomHeaderClient(String host, int port) {
-    originChannel = ManagedChannelBuilder.forAddress(host, port)
-        .usePlaintext()
+    originChannel = Grpc
+        .newChannelBuilderForAddress(host, port, InsecureChannelCredentials.create())
         .build();
     ClientInterceptor interceptor = new HeaderClientInterceptor();
     Channel channel = ClientInterceptors.intercept(originChannel, interceptor);

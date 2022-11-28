@@ -130,7 +130,7 @@ public class ServerImplTest {
   private static final Context.Key<String> SERVER_TRACER_ADDED_KEY = Context.key("tracer-added");
   private static final Context.CancellableContext SERVER_CONTEXT =
       Context.ROOT.withValue(SERVER_ONLY, "yes").withCancellation();
-  private static final FakeClock.TaskFilter CONTEXT_CLOSER_TASK_FITLER =
+  private static final FakeClock.TaskFilter CONTEXT_CLOSER_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable runnable) {
@@ -1085,7 +1085,7 @@ public class ServerImplTest {
     assertTrue(onHalfCloseCalled.get());
 
     streamListener.closed(Status.CANCELLED);
-    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FILTER));
     assertEquals(2, executor.runDueTasks());
     assertTrue(onCancelCalled.get());
 
@@ -1179,10 +1179,11 @@ public class ServerImplTest {
     assertFalse(callReference.get().isCancelled());
     assertFalse(context.get().isCancelled());
     streamListener.closed(Status.CANCELLED);
-    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FILTER));
     assertEquals(2, executor.runDueTasks());
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
+    assertThat(context.get().cancellationCause()).isNotNull();
     assertTrue(contextCancelled.get());
   }
 
@@ -1208,6 +1209,7 @@ public class ServerImplTest {
     assertEquals(1, executor.runDueTasks());
     assertFalse(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
+    assertThat(context.get().cancellationCause()).isNull();
     assertTrue(contextCancelled.get());
   }
 
@@ -1228,6 +1230,7 @@ public class ServerImplTest {
     
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
+    assertThat(context.get().cancellationCause()).isNotNull();
     assertTrue(contextCancelled.get());
   }
 

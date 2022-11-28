@@ -33,7 +33,6 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ObjectPool;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
@@ -156,12 +155,12 @@ public final class CsdsService extends
     ClientConfig.Builder builder = ClientConfig.newBuilder()
         .setNode(xdsClient.getBootstrapInfo().node().toEnvoyProtoNode());
 
-    Map<ResourceType, Map<String, ResourceMetadata>> metadataByType =
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
         awaitSubscribedResourcesMetadata(xdsClient.getSubscribedResourcesMetadataSnapshot());
 
-    for (Map.Entry<ResourceType, Map<String, ResourceMetadata>> metadataByTypeEntry
+    for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry
         : metadataByType.entrySet()) {
-      ResourceType type = metadataByTypeEntry.getKey();
+      XdsResourceType<?> type = metadataByTypeEntry.getKey();
       Map<String, ResourceMetadata> metadataByResourceName = metadataByTypeEntry.getValue();
       for (Map.Entry<String, ResourceMetadata> metadataEntry : metadataByResourceName.entrySet()) {
         String resourceName = metadataEntry.getKey();
@@ -187,8 +186,9 @@ public final class CsdsService extends
     return builder.build();
   }
 
-  private static Map<ResourceType, Map<String, ResourceMetadata>> awaitSubscribedResourcesMetadata(
-      ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future)
+  private static Map<XdsResourceType<?>, Map<String, ResourceMetadata>>
+      awaitSubscribedResourcesMetadata(
+      ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>> future)
       throws InterruptedException {
     try {
       // Normally this shouldn't take long, but add some slack for cases like a cold JVM.

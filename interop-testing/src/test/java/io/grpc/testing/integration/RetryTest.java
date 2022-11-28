@@ -209,7 +209,7 @@ public class RetryTest {
 
   private void assertRpcStartedRecorded() throws Exception {
     MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
-    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT))
+    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS))
         .isEqualTo(1);
   }
 
@@ -249,9 +249,9 @@ public class RetryTest {
     assertThat(statusTag.asString()).isEqualTo(code.toString());
     assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
         .isEqualTo(1);
-    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY))
+    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY))
         .isEqualTo(roundtripLatencyMs);
-    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT))
+    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC))
         .isEqualTo(outboundMessages);
   }
 
@@ -351,8 +351,8 @@ public class RetryTest {
     call.request(1);
     assertInboundMessageRecorded();
     assertInboundWireSizeRecorded(1);
-    assertRpcStatusRecorded(Status.Code.OK, 2000, 2);
-    assertRetryStatsRecorded(1, 0, 10_000);
+    assertRpcStatusRecorded(Status.Code.OK, 12000, 2);
+    assertRetryStatsRecorded(1, 0, 0);
   }
 
   @Test
@@ -410,13 +410,14 @@ public class RetryTest {
     serverCall.request(2);
     assertOutboundWireSizeRecorded(message.length());
     fakeClock.forwardTime(7, SECONDS);
-    call.cancel("Cancelled before commit", null); // A noop substream will commit.
-    // The call listener is closed, but the netty substream listener is not yet closed.
-    verify(mockCallListener, timeout(5000)).onClose(any(Status.class), any(Metadata.class));
+    // A noop substream will commit. But call is not yet closed.
+    call.cancel("Cancelled before commit", null);
     // Let the netty substream listener be closed.
     streamClosedLatch.countDown();
-    assertRetryStatsRecorded(1, 0, 10_000);
-    assertRpcStatusRecorded(Code.CANCELLED, 7_000, 1);
+    // The call listener is closed.
+    verify(mockCallListener, timeout(5000)).onClose(any(Status.class), any(Metadata.class));
+    assertRpcStatusRecorded(Code.CANCELLED, 17_000, 1);
+    assertRetryStatsRecorded(1, 0, 0);
   }
 
   @Test

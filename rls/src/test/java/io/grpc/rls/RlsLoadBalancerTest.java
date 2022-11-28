@@ -445,7 +445,7 @@ public class RlsLoadBalancerTest {
     ConfigOrError parsedConfigOrError =
         provider.parseLoadBalancingPolicyConfig(getServiceConfig());
     assertThat(parsedConfigOrError.getConfig()).isNotNull();
-    rlsLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
+    rlsLb.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mock(SocketAddress.class))))
         .setLoadBalancingPolicyConfig(parsedConfigOrError.getConfig())
         .build());

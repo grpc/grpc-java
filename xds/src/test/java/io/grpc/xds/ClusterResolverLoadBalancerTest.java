@@ -76,7 +76,8 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -184,7 +185,6 @@ public class ClusterResolverLoadBalancerTest {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private int xdsClientRefs;
   private ClusterResolverLoadBalancer loadBalancer;
-
 
   @Before
   public void setUp() throws URISyntaxException {
@@ -1081,7 +1081,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private void deliverLbConfig(ClusterResolverConfig config) {
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(
@@ -1168,16 +1168,24 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private static final class FakeXdsClient extends XdsClient {
-    private final Map<String, EdsResourceWatcher> watchers = new HashMap<>();
+    private final Map<String, ResourceWatcher<EdsUpdate>> watchers = new HashMap<>();
+
 
     @Override
-    void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
+                          ResourceWatcher<T> watcher) {
+      assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).doesNotContainKey(resourceName);
-      watchers.put(resourceName, watcher);
+      watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);
     }
 
     @Override
-    void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                           String resourceName,
+                                                           ResourceWatcher<T> watcher) {
+      assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }
@@ -1192,7 +1200,7 @@ public class ClusterResolverLoadBalancerTest {
         Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap) {
       if (watchers.containsKey(resource)) {
         watchers.get(resource).onChanged(
-            new EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
+            new XdsEndpointResource.EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
       }
     }
 
@@ -1203,7 +1211,7 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     void deliverError(Status error) {
-      for (EdsResourceWatcher watcher : watchers.values()) {
+      for (ResourceWatcher<EdsUpdate> watcher : watchers.values()) {
         watcher.onError(error);
       }
     }
@@ -1317,10 +1325,11 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
       attributes = resolvedAddresses.getAttributes();
+      return true;
     }
 
     @Override

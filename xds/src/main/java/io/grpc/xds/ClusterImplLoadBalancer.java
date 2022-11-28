@@ -45,7 +45,7 @@ import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -102,7 +102,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
@@ -134,6 +134,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
             .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
             .build());
+    return true;
   }
 
   @Override
@@ -160,11 +161,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
-  }
-
-  @Override
-  public boolean canHandleEmptyAddressListFromNameResolution() {
-    return true;
   }
 
   /**
