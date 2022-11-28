@@ -50,9 +50,9 @@ import javax.annotation.Nullable;
 
 /**
  * Utility class that provides a way to configure ring hash size limits. This is applicable
- * for clients that use the ring hash load balancing policy. Note that ring
- * hash size limits involve a tradeoff between client memory consumption and accuracy of
- * backend weights used for load balancing. Also see https://github.com/grpc/proposal/pull/338.
+ * for clients that use the ring hash load balancing policy. Note that size limits involve
+ * a tradeoff between client memory consumption and accuracy of load balancing weight
+ * representations. Also see https://github.com/grpc/proposal/pull/338.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9718")
 public final class RingHashOptions {
@@ -61,11 +61,27 @@ public final class RingHashOptions {
   static final long MAX_RING_SIZE_CAP = 8 * 1024 * 1024L;
 
   // Same as RingHashLoadBalancerProvider.DEFAULT_MAX_RING_SIZE
-  private static volatile long maxRingSizeCap = 4 * 1024L;
+  private static volatile long ringSizeCap = 4 * 1024L;
 
-  public static setMaxRingSizeCap(long maxRingSizeCap) {
-    maxRingSizeCap = Math.max(1, maxRingSizeCap);
-    maxRingSizeCap = Math.min(MAX_RING_SIZE_CAP, maxRingSizeCap);
-    RingHashOptions.maxRingSizeCap = maxRingSizeCap;
+  /**
+   * Set the global limit for min and max ring hash sizes. Note that
+   * this limit is clamped between 1 and 8M, and attempts to set
+   * the limit lower or higher than that range will be silently
+   * moved to the nearest number within that range. Defaults initially
+   * to 4K.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9718")
+  public static void setRingSizeCap(long ringSizeCap) {
+    ringSizeCap = Math.max(1, ringSizeCap);
+    ringSizeCap = Math.min(MAX_RING_SIZE_CAP, ringSizeCap);
+    RingHashOptions.ringSizeCap = ringSizeCap;
+  }
+
+  /**
+   * Get the global limit for min and max ring hash sizes.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9718")
+  public static long getRingSizeCap() {
+    return RingHashOptions.ringSizeCap;
   }
 }
