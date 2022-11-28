@@ -56,9 +56,16 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9718")
 public final class RingHashOptions {
-  private static volatile maxRingSizeCap = 4096;
+  // Same as ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE
+  @VisibleForTesting
+  static final long MAX_RING_SIZE_CAP = 8 * 1024 * 1024L;
 
-  public static setMaxRingSizeCap(long cap) {
+  // Same as RingHashLoadBalancerProvider.DEFAULT_MAX_RING_SIZE
+  private static volatile long maxRingSizeCap = 4 * 1024L;
+
+  public static setMaxRingSizeCap(long maxRingSizeCap) {
+    maxRingSizeCap = Math.max(1, maxRingSizeCap);
+    maxRingSizeCap = Math.min(MAX_RING_SIZE_CAP, maxRingSizeCap);
     RingHashOptions.maxRingSizeCap = maxRingSizeCap;
   }
 }

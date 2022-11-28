@@ -26,6 +26,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
+import io.grpc.xds.RingHashOptions;
 import java.util.Map;
 
 /**
@@ -73,17 +74,18 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
     Long minRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "minRingSize");
     Long maxRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "maxRingSize");
+    long maxRingSizeCap = RingHashOptions.getMaxRingSizeCap();
     if (minRingSize == null) {
       minRingSize = DEFAULT_MIN_RING_SIZE;
     }
     if (maxRingSize == null) {
       maxRingSize = DEFAULT_MAX_RING_SIZE;
     }
-    if (minRingSize > MAX_RING_SIZE_CAP) {
-      minRingSize = MAX_RING_SIZE_CAP;
+    if (minRingSize > maxRingSizeCap) {
+      minRingSize = maxRingSizeCap;
     }
-    if (maxRingSize > MAX_RING_SIZE_CAP) {
-      maxRingSize = MAX_RING_SIZE_CAP;
+    if (maxRingSize > maxRingSizeCap) {
+      maxRingSize = maxRingSizeCap;
     }
     if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize) {
       return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
