@@ -37,12 +37,13 @@ public final class RingHashOptions {
   // Limits ring hash sizes to restrict client memory usage.
   private static volatile long ringSizeCap = DEFAULT_RING_SIZE_CAP;
 
+  private RingHashOptions() {} // Prevent instantiation
+
   /**
-   * Set the global limit for min and max ring hash sizes. Note that
-   * this limit is clamped between 1 and 8M, and attempts to set
-   * the limit lower or higher than that range will be silently
-   * moved to the nearest number within that range. Defaults initially
-   * to 4K.
+   * Set the global limit for the min and max number of ring hash entries per ring.
+   * Note that this limit is clamped between 1 entry and 8,388,608 entries, and new
+   * limits lying outside that range will be silently moved to the nearest number within
+   * that range. Defaults initially to 4096 entries.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9718")
   public static void setRingSizeCap(long ringSizeCap) {
