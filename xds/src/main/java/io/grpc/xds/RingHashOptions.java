@@ -30,9 +30,12 @@ public final class RingHashOptions {
   // Same as ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE
   @VisibleForTesting
   static final long MAX_RING_SIZE_CAP = 8 * 1024 * 1024L;
-
+  @VisibleForTesting
   // Same as RingHashLoadBalancerProvider.DEFAULT_MAX_RING_SIZE
-  private static volatile long ringSizeCap = 4 * 1024L;
+  static final long DEFAULT_RING_SIZE_CAP = 4 * 1024L;
+
+  // Limits ring hash sizes to restrict client memory usage.
+  private static volatile long ringSizeCap = DEFAULT_RING_SIZE_CAP;
 
   /**
    * Set the global limit for min and max ring hash sizes. Note that

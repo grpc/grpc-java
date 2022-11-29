@@ -41,10 +41,6 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
   // Same as ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE
   @VisibleForTesting
   static final long DEFAULT_MAX_RING_SIZE = 4 * 1024L;
-  // An upper bound on max ring size to limit memory usage.
-  // TODO(apolcyn): make MAX_RING_SIZE_CAP configurable, ideally on a per-channel
-  // basis but possibly as a global.
-  static final long MAX_RING_SIZE_CAP = 4 * 1024L;
 
   private static final boolean enableRingHash =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"))

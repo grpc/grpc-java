@@ -118,7 +118,7 @@ public class RingHashLoadBalancerProviderTest {
 
   @Test
   public void parseLoadBalancingConfig_ringTooLargeUsesCap() throws IOException {
-    long ringSize = RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP + 1;
+    long ringSize = RingHashOptions.MAX_RING_SIZE_CAP + 1;
     String lbConfig =
         String.format(Locale.US, "{\"minRingSize\" : 10, \"maxRingSize\" : %d}", ringSize);
     ConfigOrError configOrError =
@@ -126,12 +126,11 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(configOrError.getConfig()).isNotNull();
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(10);
-    assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
+    assertThat(config.maxRingSize).isEqualTo(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
 
   @Test
   public void parseLoadBalancingConfig_ringCapCanBeRaised() throws IOException {
-    long originalMaxRingSizeCap = RingHashOptions.getRingSizeCap();
     RingHashOptions.setRingSizeCap(RingHashOptions.MAX_RING_SIZE_CAP);
     long ringSize = RingHashOptions.MAX_RING_SIZE_CAP;
     String lbConfig =
@@ -141,15 +140,14 @@ public class RingHashLoadBalancerProviderTest {
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
     assertThat(configOrError.getConfig()).isNotNull();
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
-    assertThat(config.minRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
-    assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
+    assertThat(config.minRingSize).isEqualTo(RingHashOptions.MAX_RING_SIZE_CAP);
+    assertThat(config.maxRingSize).isEqualTo(RingHashOptions.MAX_RING_SIZE_CAP);
     // Reset to avoid affecting subsequent test cases
-    RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
+    RingHashOptions.setRingSizeCap(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
 
   @Test
   public void parseLoadBalancingConfig_ringCapIsClampedTo8M() throws IOException {
-    long originalMaxRingSizeCap = RingHashOptions.getRingSizeCap();
     RingHashOptions.setRingSizeCap(RingHashOptions.MAX_RING_SIZE_CAP + 1);
     long ringSize = RingHashOptions.MAX_RING_SIZE_CAP + 1;
     String lbConfig =
@@ -159,17 +157,16 @@ public class RingHashLoadBalancerProviderTest {
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
     assertThat(configOrError.getConfig()).isNotNull();
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
-    assertThat(config.minRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
-    assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
+    assertThat(config.minRingSize).isEqualTo(RingHashOptions.MAX_RING_SIZE_CAP);
+    assertThat(config.maxRingSize).isEqualTo(RingHashOptions.MAX_RING_SIZE_CAP);
     // Reset to avoid affecting subsequent test cases
-    RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
+    RingHashOptions.setRingSizeCap(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
 
   @Test
   public void parseLoadBalancingConfig_ringCapCanBeLowered() throws IOException {
-    long originalMaxRingSizeCap = RingHashOptions.getRingSizeCap();
     RingHashOptions.setRingSizeCap(1);
-    long ringSize = RingHashOptions.MAX_RING_SIZE_CAP;
+    long ringSize = 2;
     String lbConfig =
         String.format(
             Locale.US, "{\"minRingSize\" : %d, \"maxRingSize\" : %d}", ringSize, ringSize);
@@ -180,14 +177,13 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(config.minRingSize).isEqualTo(1);
     assertThat(config.maxRingSize).isEqualTo(1);
     // Reset to avoid affecting subsequent test cases
-    RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
+    RingHashOptions.setRingSizeCap(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
 
   @Test
   public void parseLoadBalancingConfig_ringCapLowerLimitIs1() throws IOException {
-    long originalMaxRingSizeCap = RingHashOptions.getRingSizeCap();
     RingHashOptions.setRingSizeCap(0);
-    long ringSize = RingHashOptions.MAX_RING_SIZE_CAP;
+    long ringSize = 2;
     String lbConfig =
         String.format(
             Locale.US, "{\"minRingSize\" : %d, \"maxRingSize\" : %d}", ringSize, ringSize);
@@ -198,7 +194,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(config.minRingSize).isEqualTo(1);
     assertThat(config.maxRingSize).isEqualTo(1);
     // Reset to avoid affecting subsequent test cases
-    RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
+    RingHashOptions.setRingSizeCap(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
 
   @Test
