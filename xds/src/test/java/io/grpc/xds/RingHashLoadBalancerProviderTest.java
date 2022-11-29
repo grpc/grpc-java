@@ -144,7 +144,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(config.minRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
     assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
     // Reset to avoid affecting subsequent test cases
-    RingHashOptions.setMaxRingSizeCap(originalMaxRingSizeCap);
+    RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
   }
 
   @Test
@@ -162,7 +162,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(config.minRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
     assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.MAX_RING_SIZE_CAP);
     // Reset to avoid affecting subsequent test cases
-    RingHashOptions.setMaxRingSizeCap(originalMaxRingSizeCap);
+    RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
   }
 
   public void parseLoadBalancingConfig_ringCapCanBeLowered() throws IOException {
@@ -179,7 +179,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(config.minRingSize).isEqualTo(1);
     assertThat(config.maxRingSize).isEqualTo(1);
     // Reset to avoid affecting subsequent test cases
-    RingHashOptions.setMaxRingSizeCap(originalMaxRingSizeCap);
+    RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
   }
 
   public void parseLoadBalancingConfig_ringCapLowerLimitIs1() throws IOException {
@@ -196,7 +196,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(config.minRingSize).isEqualTo(1);
     assertThat(config.maxRingSize).isEqualTo(1);
     // Reset to avoid affecting subsequent test cases
-    RingHashOptions.setMaxRingSizeCap(originalMaxRingSizeCap);
+    RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
   }
 
   @Test
