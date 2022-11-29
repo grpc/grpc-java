@@ -108,10 +108,6 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
               wrrLocalityConfig.childPolicy));
     }
 
-    resolvedAddresses = resolvedAddresses.toBuilder()
-        .setAttributes(resolvedAddresses.getAttributes().toBuilder()
-            .discard(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT).build()).build();
-
     switchLb.switchTo(lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME));
     switchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
