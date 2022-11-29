@@ -165,6 +165,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
   }
 
+  @Test
   public void parseLoadBalancingConfig_ringCapCanBeLowered() throws IOException {
     long originalMaxRingSizeCap = RingHashOptions.getRingSizeCap();
     RingHashOptions.setRingSizeCap(1);
@@ -182,6 +183,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashOptions.setRingSizeCap(originalMaxRingSizeCap);
   }
 
+  @Test
   public void parseLoadBalancingConfig_ringCapLowerLimitIs1() throws IOException {
     long originalMaxRingSizeCap = RingHashOptions.getRingSizeCap();
     RingHashOptions.setRingSizeCap(0);
