@@ -156,7 +156,6 @@ public final class SecurityPolicies {
    * @throws IllegalArgumentException if {@code requiredSignatureSha256Hashes} is empty, or if any
    *     of the {@code requiredSignatureSha256Hashes} are not of length 32.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy oneOfSignatureSha256Hash(
       PackageManager packageManager,
       String packageName,
