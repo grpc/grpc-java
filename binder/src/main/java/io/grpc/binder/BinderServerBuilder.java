@@ -81,6 +81,7 @@ public final class BinderServerBuilder
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
   private ServerSecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
+  private boolean isBuilt;
 
   private BinderServerBuilder(
       AndroidComponentAddress listenAddress,
@@ -107,8 +108,6 @@ public final class BinderServerBuilder
     // Disable stats and tracing by default.
     serverImplBuilder.setStatsEnabled(false);
     serverImplBuilder.setTracingEnabled(false);
-
-    BinderTransportSecurity.installAuthInterceptor(this);
   }
 
   @Override
@@ -177,6 +176,11 @@ public final class BinderServerBuilder
    */
   @Override // For javadoc refinement only.
   public Server build() {
+    // Since we install a final interceptor here, we need to ensure we're only built once.
+    checkState(!isBuilt, "BinderServerBuilder can only be used to build one server instance.");
+    isBuilt = true;
+    // We install the security interceptor last, so it's closest to the transport.
+    BinderTransportSecurity.installAuthInterceptor(this);
     return super.build();
   }
 }
