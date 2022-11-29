@@ -74,7 +74,7 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
     Long minRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "minRingSize");
     Long maxRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "maxRingSize");
-    long maxRingSizeCap = RingHashOptions.getMaxRingSizeCap();
+    long maxRingSizeCap = RingHashOptions.getRingSizeCap();
     if (minRingSize == null) {
       minRingSize = DEFAULT_MIN_RING_SIZE;
     }
