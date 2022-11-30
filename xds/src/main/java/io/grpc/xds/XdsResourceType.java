@@ -85,9 +85,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   abstract String typeUrlV2();
 
-  // Non-null for  State of the World resources.
-  @Nullable
-  abstract XdsResourceType<?> dependentResource();
+  abstract boolean isStateOfTheWorld();
 
   static class Args {
     final ServerInfo serverInfo;
@@ -125,7 +123,6 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
-    Set<String> retainedResources = new HashSet<>();
 
     for (int i = 0; i < resources.size(); i++) {
       Any resource = resources.get(i);
@@ -156,7 +153,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
       T resourceUpdate;
       try {
-        resourceUpdate = doParse(args, unpackedMessage, retainedResources, isResourceV3);
+        resourceUpdate = doParse(args, unpackedMessage, isResourceV3);
       } catch (XdsClientImpl.ResourceInvalidException e) {
         errors.add(String.format("%s response %s '%s' validation error: %s",
                 typeName(), unpackedClassName().getSimpleName(), cname, e.getMessage()));
@@ -168,12 +165,11 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       parsedResources.put(cname, new ParsedResource<T>(resourceUpdate, resource));
     }
     return new ValidatedResourceUpdate<T>(parsedResources, unpackedResources, invalidResources,
-        errors, retainedResources);
+        errors);
 
   }
 
-  abstract T doParse(Args args, Message unpackedMessage, Set<String> retainedResources,
-                     boolean isResourceV3)
+  abstract T doParse(Args args, Message unpackedMessage, boolean isResourceV3)
       throws ResourceInvalidException;
 
   /**
@@ -231,19 +227,16 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
     Set<String> unpackedResources;
     Set<String> invalidResources;
     List<String> errors;
-    Set<String> retainedResources;
 
     // validated resource update
     public ValidatedResourceUpdate(Map<String, ParsedResource<T>> parsedResources,
                                    Set<String> unpackedResources,
                                    Set<String> invalidResources,
-                                   List<String> errors,
-                                   Set<String> retainedResources) {
+                                   List<String> errors) {
       this.parsedResources = parsedResources;
       this.unpackedResources = unpackedResources;
       this.invalidResources = invalidResources;
       this.errors = errors;
-      this.retainedResources = retainedResources;
     }
   }
 

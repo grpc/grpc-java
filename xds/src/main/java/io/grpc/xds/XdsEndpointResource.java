@@ -78,10 +78,9 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
     return ADS_TYPE_URL_EDS_V2;
   }
 
-  @Nullable
   @Override
-  XdsResourceType<?> dependentResource() {
-    return null;
+  boolean isStateOfTheWorld() {
+    return false;
   }
 
   @Override
@@ -90,8 +89,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  EdsUpdate doParse(Args args, Message unpackedMessage,
-                         Set<String> retainedResources, boolean isResourceV3)
+  EdsUpdate doParse(Args args, Message unpackedMessage, boolean isResourceV3)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof ClusterLoadAssignment)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
