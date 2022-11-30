@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2022 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,22 +17,18 @@
 package io.grpc.binder;
 
 import android.os.IBinder;
-import javax.annotation.Nullable;
+import io.grpc.Internal;
 
-/** A container for at most one instance of {@link IBinder}, useful as an "out parameter". */
-public final class IBinderReceiver {
-  @Nullable private volatile IBinder value;
+/**
+ * Helper class to expose IBinderReceiver methods for legacy internal builders.
+ */
+@Internal
+public class BinderInternal {
 
-  /** Constructs a new, initially empty, container. */
-  public IBinderReceiver() {}
-
-  /** Returns the contents of this container or null if it is empty. */
-  @Nullable
-  public IBinder get() {
-    return value;
-  }
-
-  protected void set(IBinder value) {
-    this.value = value;
+  /**
+   * Set the receiver's {@link IBinder} using {@link IBinderReceiver#set(IBinder)}.
+   */
+  static void setIBinder(IBinderReceiver receiver, IBinder binder) {
+    receiver.set(binder);
   }
 }

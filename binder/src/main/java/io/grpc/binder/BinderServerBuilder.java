@@ -23,8 +23,6 @@ import android.app.Service;
 import android.os.IBinder;
 import com.google.common.base.Supplier;
 import com.google.errorprone.annotations.DoNotCall;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -48,7 +46,6 @@ import javax.annotation.Nullable;
 /**
  * Builder for a server that services requests from an Android Service.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class BinderServerBuilder
     extends ForwardingServerBuilder<BinderServerBuilder> {
 
@@ -96,14 +93,9 @@ public final class BinderServerBuilder
           streamTracerFactories,
           securityPolicy,
           inboundParcelablePolicy);
-      binderReceiver.set(server.getHostBinder());
+      BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;
     });
-
-    // Disable compression by default, since there's little benefit when all communication is
-    // on-device, and it means sending supported-encoding headers with every call.
-    decompressorRegistry(DecompressorRegistry.emptyInstance());
-    compressorRegistry(CompressorRegistry.newEmptyInstance());
 
     // Disable stats and tracing by default.
     serverImplBuilder.setStatsEnabled(false);
@@ -116,12 +108,14 @@ public final class BinderServerBuilder
   }
 
   /** Enable stats collection using census. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder enableStats() {
     serverImplBuilder.setStatsEnabled(true);
     return this;
   }
 
   /** Enable tracing using census. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder enableTracing() {
     serverImplBuilder.setTracingEnabled(true);
     return this;
@@ -156,12 +150,16 @@ public final class BinderServerBuilder
   }
 
   /** Sets the policy for inbound parcelable objects. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
     this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
     return this;
   }
 
+  /**
+   * Always fails. TLS is not supported in BinderServer.
+   */
   @Override
   public BinderServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in BinderServer");

@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import io.grpc.ExperimentalApi;
 import java.net.SocketAddress;
 
 /**
@@ -41,8 +40,7 @@ import java.net.SocketAddress;
  * fields, namely, an action of {@link ApiConstants#ACTION_BIND}, an empty category set and null
  * type and data URI.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
-public class AndroidComponentAddress extends SocketAddress { // NOTE: Only temporarily non-final.
+public final class AndroidComponentAddress extends SocketAddress {
   private static final long serialVersionUID = 0L;
 
   private final Intent bindIntent; // An "explicit" Intent. In other words, getComponent() != null.
@@ -103,6 +101,10 @@ public class AndroidComponentAddress extends SocketAddress { // NOTE: Only tempo
         new Intent(ApiConstants.ACTION_BIND).setComponent(component));
   }
 
+  /**
+   * Returns the Authority which is the package name of the target app.
+   * See {@link android.content.ComponentName}.
+   */
   public String getAuthority() {
     return getComponent().getPackageName();
   }
