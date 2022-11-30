@@ -992,6 +992,25 @@ public class RetriableStreamTest {
   }
 
   @Test
+  public void notAdd0PrevRetryAttemptsToRespHeaders() {
+    ClientStream mockStream1 = mock(ClientStream.class);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+
+    retriableStream.start(masterListener);
+
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor =
+            ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream1).start(sublistenerCaptor.capture());
+
+    sublistenerCaptor.getValue().headersRead(new Metadata());
+
+    ArgumentCaptor<Metadata> metadataCaptor =
+            ArgumentCaptor.forClass(Metadata.class);
+    verify(masterListener).headersRead(metadataCaptor.capture());
+    assertEquals(null, metadataCaptor.getValue().get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+  }
+
+  @Test
   public void addPrevRetryAttemptsToRespHeaders() {
     ClientStream mockStream1 = mock(ClientStream.class);
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
