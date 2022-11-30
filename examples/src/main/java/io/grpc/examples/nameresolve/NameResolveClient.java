@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.loadbalance;
+package io.grpc.examples.nameresolve;
 
 import io.grpc.*;
 import io.grpc.examples.helloworld.GreeterGrpc;
@@ -25,16 +25,50 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class LoadBalanceClient {
-    private static final Logger logger = Logger.getLogger(LoadBalanceClient.class.getName());
-
+public class NameResolveClient {
     public static final String exampleScheme = "example";
     public static final String exampleServiceName = "lb.example.grpc.io";
-
+    private static final Logger logger = Logger.getLogger(NameResolveClient.class.getName());
     private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
-    public LoadBalanceClient(Channel channel) {
+    public NameResolveClient(Channel channel) {
         blockingStub = GreeterGrpc.newBlockingStub(channel);
+    }
+
+    public static void main(String[] args) throws Exception {
+        NameResolverRegistry.getDefaultRegistry().register(new ExampleNameResolverProvider());
+
+        logger.info("Use default DNS resolver");
+        ManagedChannel channel = ManagedChannelBuilder.forTarget("localhost:50051")
+                .usePlaintext()
+                .build();
+        try {
+            NameResolveClient client = new NameResolveClient(channel);
+            for (int i = 0; i < 5; i++) {
+                client.greet("request" + i);
+            }
+        } finally {
+            channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+        }
+
+        logger.info("Change to use example name resolver");
+        /*
+          Dial to "example:///resolver.example.grpc.io", use {@link ExampleNameResolver} to create connection
+          "resolver.example.grpc.io" is converted to {@link java.net.URI.path}
+         */
+        channel = ManagedChannelBuilder.forTarget(
+                        String.format("%s:///%s", exampleScheme, exampleServiceName))
+                .defaultLoadBalancingPolicy("round_robin")
+                .usePlaintext()
+                .build();
+        try {
+            NameResolveClient client = new NameResolveClient(channel);
+            for (int i = 0; i < 5; i++) {
+                client.greet("request" + i);
+            }
+        } finally {
+            channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+        }
     }
 
     public void greet(String name) {
@@ -47,39 +81,5 @@ public class LoadBalanceClient {
             return;
         }
         logger.info("Greeting: " + response.getMessage());
-    }
-
-
-    public static void main(String[] args) throws Exception {
-        NameResolverRegistry.getDefaultRegistry().register(new ExampleNameResolverProvider());
-
-        String target = String.format("%s:///%s", exampleScheme, exampleServiceName);
-
-        logger.info("Use default first_pick load balance policy");
-        ManagedChannel channel = ManagedChannelBuilder.forTarget(target)
-                .usePlaintext()
-                .build();
-        try {
-            LoadBalanceClient client = new LoadBalanceClient(channel);
-            for (int i = 0; i < 5; i++) {
-                client.greet("request" + i);
-            }
-        } finally {
-            channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
-        }
-
-        logger.info("Change to round_robin policy");
-        channel = ManagedChannelBuilder.forTarget(target)
-                .defaultLoadBalancingPolicy("round_robin")
-                .usePlaintext()
-                .build();
-        try {
-            LoadBalanceClient client = new LoadBalanceClient(channel);
-            for (int i = 0; i < 5; i++) {
-                client.greet("request" + i);
-            }
-        } finally {
-            channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
-        }
     }
 }

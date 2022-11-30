@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.loadbalance;
+package io.grpc.examples.nameresolve;
 
 import com.google.common.collect.ImmutableMap;
 import io.grpc.EquivalentAddressGroup;
@@ -34,21 +34,19 @@ import static io.grpc.examples.loadbalance.LoadBalanceClient.exampleServiceName;
 
 public class ExampleNameResolver extends NameResolver {
 
-    private Listener2 listener;
-
     private final URI uri;
-
-    private final Map<String,List<InetSocketAddress>> addrStore;
+    private final Map<String, List<InetSocketAddress>> addrStore;
+    private Listener2 listener;
 
     public ExampleNameResolver(URI targetUri) {
         this.uri = targetUri;
         // This is a fake name resolver, so we just hard code the address here.
-        addrStore = ImmutableMap.<String,List<InetSocketAddress>>builder()
+        addrStore = ImmutableMap.<String, List<InetSocketAddress>>builder()
                 .put(exampleServiceName,
-                Stream.iterate(LoadBalanceServer.startPort,p->p+1)
-                        .limit(LoadBalanceServer.serverCount)
-                        .map(port->new InetSocketAddress("localhost",port))
-                        .collect(Collectors.toList())
+                        Stream.iterate(NameResolveServer.startPort, p -> p + 1)
+                                .limit(NameResolveServer.serverCount)
+                                .map(port -> new InetSocketAddress("localhost", port))
+                                .collect(Collectors.toList())
                 )
                 .build();
     }
@@ -94,7 +92,7 @@ public class ExampleNameResolver extends NameResolver {
 
             this.listener.onResult(resolutionResult);
 
-        } catch (Exception e){
+        } catch (Exception e) {
             // when error occurs, notify listener
             this.listener.onError(Status.UNAVAILABLE.withDescription("Unable to resolve host ").withCause(e));
         }

@@ -154,3 +154,21 @@ java_binary(
     ],
 )
 
+java_binary(
+    name = "name-resolve-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.nameresolve.NameResolveClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "name-resolve-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.nameresolve.NameResolveServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
