@@ -19,10 +19,7 @@ package io.grpc.binder;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
-import android.app.Service;
 import android.content.Context;
-import android.content.Intent;
-import android.os.IBinder;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.base.Function;
@@ -41,7 +38,6 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
