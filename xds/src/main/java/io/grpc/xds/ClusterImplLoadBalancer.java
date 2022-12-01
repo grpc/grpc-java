@@ -194,17 +194,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      List<EquivalentAddressGroup> addresses = new ArrayList<>();
-      for (EquivalentAddressGroup eag : args.getAddresses()) {
-        Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
-            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
-        if (enableSecurity && sslContextProviderSupplier != null) {
-          attrBuilder.set(
-              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-              sslContextProviderSupplier);
-        }
-        addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
-      }
+      List<EquivalentAddressGroup> addresses = withAdditionalAttributes(args.getAddresses());
       Locality locality = args.getAddresses().get(0).getAttributes().get(
           InternalXdsAttributes.ATTR_LOCALITY);  // all addresses should be in the same locality
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
@@ -230,10 +220,31 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         }
 
         @Override
+        public void updateAddresses(List<EquivalentAddressGroup> addresses) {
+          delegate().updateAddresses(withAdditionalAttributes(addresses));
+        }
+
+        @Override
         protected Subchannel delegate() {
           return subchannel;
         }
       };
+    }
+
+    private List<EquivalentAddressGroup> withAdditionalAttributes(
+        List<EquivalentAddressGroup> addresses) {
+      List<EquivalentAddressGroup> newAddresses = new ArrayList<>();
+      for (EquivalentAddressGroup eag : addresses) {
+        Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
+            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
+        if (enableSecurity && sslContextProviderSupplier != null) {
+          attrBuilder.set(
+              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+              sslContextProviderSupplier);
+        }
+        newAddresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
+      }
+      return newAddresses;
     }
 
     @Override
