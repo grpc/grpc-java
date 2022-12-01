@@ -21,27 +21,20 @@ import static com.google.common.base.Preconditions.checkState;
 
 import android.app.Service;
 import android.os.IBinder;
-import com.google.common.base.Supplier;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ExperimentalApi;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.ServerStreamTracer;
 import io.grpc.binder.internal.BinderServer;
 import io.grpc.binder.internal.BinderTransportSecurity;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.InternalServer;
 import io.grpc.internal.ServerImplBuilder;
-import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import java.io.File;
-import java.io.IOException;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.Nullable;
 
 /**
  * Builder for a server that services requests from an Android Service.
