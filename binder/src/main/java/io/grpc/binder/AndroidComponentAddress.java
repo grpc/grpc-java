@@ -103,7 +103,8 @@ public final class AndroidComponentAddress extends SocketAddress {
 
   /**
    * Returns the Authority which is the package name of the target app.
-   * See {@link android.content.ComponentName}.
+   *
+   * <p>See {@link android.content.ComponentName}.
    */
   public String getAuthority() {
     return getComponent().getPackageName();
