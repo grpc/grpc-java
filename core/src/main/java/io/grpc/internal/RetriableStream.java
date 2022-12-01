@@ -225,9 +225,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @Nullable // returns null when cancelled
   private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry) {
     // increment only when >= 0, i.e. not cancelled
-    if (inFlightSubStreams.updateAndGet(value -> value < 0 ? value : value + 1) < 0) {
-      return null;
-    }
+    int inFlight;
+    do {
+      inFlight = inFlightSubStreams.get();
+      if (inFlight < 0) {
+        return null;
+      }
+    } while (!inFlightSubStreams.compareAndSet(inFlight, inFlight + 1));
     Substream sub = new Substream(previousAttemptCount);
     // one tracer per substream
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
