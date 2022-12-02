@@ -330,7 +330,12 @@ final class PriorityLoadBalancer extends LoadBalancer {
         // If we are currently handling newly resolved addresses, let's not try to reconfigure as
         // the address handling process will take care of that to provide an atomic config update.
         if (!handlingResolvedAddresses) {
-          tryNextPriority();
+          syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              tryNextPriority();
+            }
+          });
         }
       }
 
