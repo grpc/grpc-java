@@ -521,7 +521,6 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           }
           weightedClusters.add(clusterWeightOrError.getStruct());
         }
-        // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
         return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy));
       case CLUSTER_SPECIFIER_PLUGIN:
