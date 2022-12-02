@@ -79,7 +79,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  boolean isStateOfTheWorld() {
+  boolean isFullStateOfTheWorld() {
     return false;
   }
 

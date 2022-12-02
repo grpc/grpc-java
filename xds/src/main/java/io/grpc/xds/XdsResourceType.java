@@ -85,7 +85,12 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   abstract String typeUrlV2();
 
-  abstract boolean isStateOfTheWorld();
+  // Do not confuse with the SotW approach: it is the mechanism in which the client must specify all
+  // resource names it is interested in with each request. Different resource types may behave
+  // differently in this approach. For LDS and CDS resources, the server must return all resources
+  // that the client has subscribed to in each request. For RDS and EDS, the server may only return
+  // the resources that need an update.
+  abstract boolean isFullStateOfTheWorld();
 
   static class Args {
     final ServerInfo serverInfo;

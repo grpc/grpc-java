@@ -89,7 +89,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  boolean isStateOfTheWorld() {
+  boolean isFullStateOfTheWorld() {
     return true;
   }
 

@@ -108,7 +108,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  boolean isStateOfTheWorld() {
+  boolean isFullStateOfTheWorld() {
     return false;
   }
 

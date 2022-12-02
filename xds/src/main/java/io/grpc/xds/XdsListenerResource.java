@@ -98,7 +98,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   }
 
   @Override
-  boolean isStateOfTheWorld() {
+  boolean isFullStateOfTheWorld() {
     return true;
   }
 

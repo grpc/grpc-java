@@ -428,7 +428,7 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
       }
 
       // Nothing else to do for incremental ADS resources.
-      if (!xdsResourceType.isStateOfTheWorld()) {
+      if (!xdsResourceType.isFullStateOfTheWorld()) {
         continue;
       }
 
@@ -608,7 +608,7 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
       // and the resource is reusable.
       boolean ignoreResourceDeletionEnabled =
           serverInfo != null && serverInfo.ignoreResourceDeletion();
-      if (ignoreResourceDeletionEnabled && type.isStateOfTheWorld() && data != null) {
+      if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.FORCE_WARNING,
               "xds server {0}: ignoring deletion for resource type {1} name {2}}",
