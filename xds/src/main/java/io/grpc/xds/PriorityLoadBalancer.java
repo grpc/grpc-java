@@ -61,8 +61,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
   // Includes all active and deactivated children. Mutable. New entries are only added from priority
   // 0 up to the selected priority. An entry is only deleted 15 minutes after its deactivation.
-  // Note that because all configuration updates should be atomic, updates to children can happen
-  // outside of the synchronization context.  Therefore copy values before looping over them.
+  // Note that calling into a child can cause the child to call back into the LB policy and modify
+  // the map.  Therefore copy values before looping over them.
   private final Map<String, ChildLbState> children = new HashMap<>();
 
   // Following fields are only null initially.
