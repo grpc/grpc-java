@@ -43,6 +43,8 @@ import java.net.URL;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * CloudToProd version of {@link NameResolver}.
@@ -71,6 +73,9 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
 
   private static final String serverUriOverride =
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
+
+  static boolean logXdsNodeId = Boolean.parseBoolean(System.getenv("GRPC_LOG_XDS_NODE_ID"));
+  static final Logger logger = Logger.getLogger(GoogleCloudToProdNameResolver.class.getName());
 
   private HttpConnectionProvider httpConnectionProvider = HttpConnectionFactory.INSTANCE;
   private final String authority;
@@ -187,7 +192,11 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
 
   private ImmutableMap<String, ?> generateBootstrap(String zone, boolean supportIpv6) {
     ImmutableMap.Builder<String, Object> nodeBuilder = ImmutableMap.builder();
-    nodeBuilder.put("id", "C2P-" + (rand.nextInt() & Integer.MAX_VALUE));
+    int nodeId = rand.nextInt() & Integer.MAX_VALUE;
+    if (logXdsNodeId) {
+      logger.log(Level.INFO, "Create xDS node with ID: {0}", nodeId);
+    }
+    nodeBuilder.put("id", "C2P-" + nodeId);
     if (!zone.isEmpty()) {
       nodeBuilder.put("locality", ImmutableMap.of("zone", zone));
     }
