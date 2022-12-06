@@ -69,8 +69,9 @@ import javax.annotation.Nullable;
  */
 final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
 
-  static boolean logXdsNodeId = Boolean.parseBoolean(System.getenv("GRPC_LOG_XDS_NODE_ID"));
-  static final Logger classLogger = Logger.getLogger(XdsClientImpl.class.getName());
+  private static boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
+      System.getenv("GRPC_LOG_XDS_NODE_ID"));
+  private static final Logger classLogger = Logger.getLogger(XdsClientImpl.class.getName());
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -131,7 +132,7 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
-    if (logXdsNodeId) {
+    if (LOG_XDS_NODE_ID) {
       classLogger.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
     }
   }
