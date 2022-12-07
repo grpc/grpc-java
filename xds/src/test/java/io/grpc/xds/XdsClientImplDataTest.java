@@ -522,6 +522,28 @@ public class XdsClientImplDataTest {
   }
 
   @Test
+  public void parseRouteAction_weightedClusterSum() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setWeightedClusters(
+                WeightedCluster.newBuilder()
+                    .addClusters(
+                        WeightedCluster.ClusterWeight
+                            .newBuilder()
+                            .setName("cluster-foo")
+                            .setWeight(UInt32Value.newBuilder().setValue(0)))
+                    .addClusters(WeightedCluster.ClusterWeight
+                        .newBuilder()
+                        .setName("cluster-bar")
+                        .setWeight(UInt32Value.newBuilder().setValue(0))))
+            .build();
+    StructOrError<RouteAction> struct =
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+            ImmutableMap.of(), ImmutableSet.of());
+    assertThat(struct.getErrorDetail()).isEqualTo("Sum of cluster weights should be above 0.");
+  }
+
+  @Test
   public void parseRouteAction_withTimeoutByGrpcTimeoutHeaderMax() {
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()

@@ -40,6 +40,7 @@ import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.OutlierDetection;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
+import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
@@ -1361,6 +1362,51 @@ public abstract class XdsClientImplTestBase {
     // The response is NACKed with the same error message.
     call.verifyRequestNack(RDS, RDS_RESOURCE, "", "0000", NODE, errors);
     verify(rdsResourceWatcher).onChanged(any(RdsUpdate.class));
+  }
+
+  @Test
+  public void rdsResponseErrorHandling_nackWeightedSumZero() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
+        RDS_RESOURCE, rdsResourceWatcher);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+
+    io.envoyproxy.envoy.config.route.v3.RouteAction routeAction =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setWeightedClusters(
+                WeightedCluster.newBuilder()
+                    .addClusters(
+                        WeightedCluster.ClusterWeight
+                            .newBuilder()
+                            .setName("cluster-foo")
+                            .setWeight(UInt32Value.newBuilder().setValue(0)))
+                    .addClusters(WeightedCluster.ClusterWeight
+                        .newBuilder()
+                        .setName("cluster-bar")
+                        .setWeight(UInt32Value.newBuilder().setValue(0))))
+            .build();
+    io.envoyproxy.envoy.config.route.v3.Route route =
+        io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
+            .setName("route-blade")
+            .setMatch(
+                io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
+                    .setPath("/service/method"))
+            .setRoute(routeAction)
+            .build();
+
+    Any zeroWeightSum = Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE,
+        Arrays.asList(mf.buildVirtualHost(Arrays.asList(route), ImmutableMap.of()))));
+    List<Any> resources = ImmutableList.of(zeroWeightSum);
+    call.sendResponse(RDS, resources, VERSION_1, "0000");
+
+    List<String> errors = ImmutableList.of(
+        "RDS response RouteConfiguration \'route-configuration.googleapis.com\' validation error: "
+            + "RouteConfiguration contains invalid virtual host: Virtual host [do not care] "
+            + "contains invalid route : Route [route-blade] contains invalid RouteAction: "
+            + "Sum of cluster weights should be above 0.");
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
+    // The response is NACKed with the same error message.
+    call.verifyRequestNack(RDS, RDS_RESOURCE, "", "0000", NODE, errors);
+    verify(rdsResourceWatcher, never()).onChanged(any(RdsUpdate.class));
   }
 
   /**
