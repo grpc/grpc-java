@@ -38,12 +38,12 @@ import java.util.logging.Logger;
  * It accepts xDS config injection through a method call {@link #setXdsConfig}. Handling AdsStream
  * response or updating xds config are run in syncContext.
  *
- * The service maintains lookup tables:
+ * <p>The service maintains lookup tables:
  * Subscriber table: map from each resource type, to a map from each client to subscribed resource
  * names set.
  * Resources table: store the resources in raw proto message.
  *
- * xDS protocol requires version/nonce to avoid various race conditions. In this impl:
+ * <p>xDS protocol requires version/nonce to avoid various race conditions. In this impl:
  * Version stores the latest version number per each resource type. It is simply bumped up on each
  * xds config set.
  * Nonce stores the nonce number for each resource type and for each client. Incoming xDS requests
@@ -52,7 +52,7 @@ import java.util.logging.Logger;
  * 2) NACK an xDS response.
  * 3) ACK an xDS response.
  * The service is capable of distinguish these cases when handling the request.
- * */
+ */
 final class XdsTestControlPlaneService extends
     AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase {
   private static final Logger logger = Logger.getLogger(XdsTestControlPlaneService.class.getName());

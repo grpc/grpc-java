@@ -52,14 +52,14 @@ import org.junit.runners.JUnit4;
  * Xds integration tests using a local control plane, implemented in {@link
  * XdsTestControlPlaneService}. Test cases can inject xds configs to the control plane for testing.
  *
- * Test components:
+ * <p>Test components:
  * 1) A Control Plane {@link XdsTestControlPlaneService} accepts xds requests from multiple clients
  * from the Data Plane, see {@link ControlPlaneRule}.
  * 2) A test xDS server {@link XdsServerWrapper}, see {@link DataPlaneRule}.
  * 3) A test xDS client that uses a testing scheme {@link XdsNameResolverProvider#createForTest},
  * see {@link DataPlaneRule}.
  *
- * The configuration dependency and ephemeral port allocation requires the components to
+ * <p>The configuration dependency and ephemeral port allocation requires the components to
  * be initialized in a certain order:
  * 1) Start the Control Plane server {@link XdsTestControlPlaneService}. After start the bootstrap
  * information (w/ Control Plane's address) can be constructed for the Data Plane to initialize.
@@ -67,7 +67,6 @@ import org.junit.runners.JUnit4;
  * Plane from 1). And then start the test xDS server (requires LDS/RDS and bootstrap file to start).
  * 3) Construct EDS config w/ test server address from 2). Set CDS and EDS Config at the Control
  * Plane. Then start the test xDS client (requires EDS to do xDS name resolution).
- *
  */
 @RunWith(JUnit4.class)
 public class FakeControlPlaneXdsIntegrationTest {
