@@ -1942,13 +1942,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ScheduledHandle delayedShutdownTask;
 
     SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
+      checkNotNull(args, "args");
       addressGroups = args.getAddresses();
       if (authorityOverride != null) {
         List<EquivalentAddressGroup> eagsWithoutOverrideAttr =
             stripOverrideAuthorityAttributes(args.getAddresses());
         args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
       }
-      this.args = checkNotNull(args, "args");
+      this.args = args;
       this.helper = checkNotNull(helper, "helper");
       subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ authority());
       subchannelTracer = new ChannelTracer(

@@ -97,7 +97,7 @@ public class MetricsTest {
           mock(InternalLoggingServerInterceptor.Factory.class);
 
       when(mockConfig.isEnableCloudMonitoring()).thenReturn(true);
-      when(mockConfig.getDestinationProjectId()).thenReturn(PROJECT_ID);
+      when(mockConfig.getProjectId()).thenReturn(PROJECT_ID);
 
       try {
         GcpObservability observability =
@@ -107,7 +107,7 @@ public class MetricsTest {
 
         Server server =
             ServerBuilder.forPort(0)
-                .addService(new LoggingTestHelper.SimpleServiceImpl())
+                .addService(new ObservabilityTestHelper.SimpleServiceImpl())
                 .build()
                 .start();
         int port = cleanupRule.register(server).getPort();
@@ -115,7 +115,7 @@ public class MetricsTest {
             SimpleServiceGrpc.newBlockingStub(
                 cleanupRule.register(
                     ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()));
-        assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
+        assertThat(ObservabilityTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
             .isEqualTo("Hello buddy");
         // Adding sleep to ensure metrics are exported before querying cloud monitoring backend
         TimeUnit.SECONDS.sleep(40);

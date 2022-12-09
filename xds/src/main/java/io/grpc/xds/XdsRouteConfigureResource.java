@@ -17,9 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
-import static io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
@@ -40,7 +37,6 @@ import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.Status;
-import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Filter.FilterConfig;
@@ -52,9 +48,11 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
+import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
-import io.grpc.xds.internal.Matchers;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -95,8 +93,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  ResourceType typeName() {
-    return RDS;
+  String typeName() {
+    return "RDS";
   }
 
   @Override
@@ -109,10 +107,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
     return ADS_TYPE_URL_RDS_V2;
   }
 
-  @Nullable
   @Override
-  ResourceType dependentResource() {
-    return null;
+  boolean isFullStateOfTheWorld() {
+    return false;
   }
 
   @Override
@@ -121,8 +118,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage,
-                         Set<String> retainedResources, boolean isResourceV3)
+  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage, boolean isResourceV3)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
@@ -515,6 +511,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           return StructOrError.fromError("No cluster found in weighted cluster list");
         }
         List<ClusterWeight> weightedClusters = new ArrayList<>();
+        int clusterWeightSum = 0;
         for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
             : clusterWeights) {
           StructOrError<ClusterWeight> clusterWeightOrError =
@@ -523,9 +520,12 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
             return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
                 + clusterWeightOrError.getErrorDetail());
           }
+          clusterWeightSum += clusterWeight.getWeight().getValue();
           weightedClusters.add(clusterWeightOrError.getStruct());
         }
-        // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
+        if (clusterWeightSum <= 0) {
+          return StructOrError.fromError("Sum of cluster weights should be above 0.");
+        }
         return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy));
       case CLUSTER_SPECIFIER_PLUGIN:

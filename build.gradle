@@ -20,7 +20,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.51.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.52.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -300,7 +300,7 @@ subprojects {
             // depends on core; core's testCompile depends on testing)
             includeTests = false
             if (project.hasProperty('jmhIncludeSingleClass')) {
-                include = [
+                includes = [
                     project.property('jmhIncludeSingleClass')
                 ]
             }

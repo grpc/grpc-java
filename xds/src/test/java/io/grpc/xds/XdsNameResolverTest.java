@@ -1736,7 +1736,7 @@ public class XdsNameResolverTest {
     assertThat(testCall).isNull();
     verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
         "Deadline exceeded after up to 5000 ns of fault-injected delay:"
-            + " Deadline exceeded after 0.000004000s. "));
+            + " Deadline CallOptions will be exceeded in 0.000004000s. "));
   }
 
   @Test
@@ -2089,14 +2089,14 @@ public class XdsNameResolverTest {
                                                     ResourceWatcher<T> watcher) {
 
       switch (resourceType.typeName()) {
-        case LDS:
+        case "LDS":
           assertThat(ldsResource).isNull();
           assertThat(ldsWatcher).isNull();
           assertThat(resourceName).isEqualTo(expectedLdsResourceName);
           ldsResource = resourceName;
           ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
           break;
-        case RDS:
+        case "RDS":
           assertThat(rdsResource).isNull();
           assertThat(rdsWatcher).isNull();
           rdsResource = resourceName;
@@ -2111,14 +2111,14 @@ public class XdsNameResolverTest {
                                                            String resourceName,
                                                            ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
-        case LDS:
+        case "LDS":
           assertThat(ldsResource).isNotNull();
           assertThat(ldsWatcher).isNotNull();
           assertThat(resourceName).isEqualTo(expectedLdsResourceName);
           ldsResource = null;
           ldsWatcher = null;
           break;
-        case RDS:
+        case "RDS":
           assertThat(rdsResource).isNotNull();
           assertThat(rdsWatcher).isNotNull();
           rdsResource = null;

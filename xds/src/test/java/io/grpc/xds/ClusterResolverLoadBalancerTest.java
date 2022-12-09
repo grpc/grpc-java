@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
@@ -328,8 +327,8 @@ public class ClusterResolverLoadBalancerTest {
         "least_request_experimental");
 
     assertThat(
-        childBalancer.attributes.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).containsEntry(
-        locality1, 100);
+        childBalancer.addresses.get(0).getAttributes()
+            .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
   }
 
   @Test
@@ -411,8 +410,8 @@ public class ClusterResolverLoadBalancerTest {
         "least_request_experimental");
 
     assertThat(
-        childBalancer.attributes.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).containsEntry(
-        locality1, 100);
+        childBalancer.addresses.get(0).getAttributes()
+            .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
   }
 
 
@@ -508,11 +507,20 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(wrrLocalityConfig3.childPolicy.getProvider().getPolicyName()).isEqualTo(
         "round_robin");
 
-    Map<Locality, Integer> localityWeights = childBalancer.attributes.get(
-        InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
-    assertThat(localityWeights).containsEntry(locality1, 70);
-    assertThat(localityWeights).containsEntry(locality2, 10);
-    assertThat(localityWeights).containsEntry(locality3, 20);
+    for (EquivalentAddressGroup eag : childBalancer.addresses) {
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality1) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(70);
+      }
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality2) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(10);
+      }
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality3) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(20);
+      }
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -688,9 +696,9 @@ public class ClusterResolverLoadBalancerTest {
         ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
 
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    Map<Locality, Integer> localityWeights = childBalancer.attributes.get(
-        InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
-    assertThat(localityWeights.keySet()).containsExactly(locality2);
+    for (EquivalentAddressGroup eag : childBalancer.addresses) {
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
+    }
   }
 
   @Test
@@ -1082,7 +1090,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private void deliverLbConfig(ClusterResolverConfig config) {
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(
@@ -1176,7 +1184,7 @@ public class ClusterResolverLoadBalancerTest {
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                           ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo(EDS);
+      assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);
     }
@@ -1186,7 +1194,7 @@ public class ClusterResolverLoadBalancerTest {
     <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
                                                            String resourceName,
                                                            ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo(EDS);
+      assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }
@@ -1316,7 +1324,6 @@ public class ClusterResolverLoadBalancerTest {
     private final Helper helper;
     private List<EquivalentAddressGroup> addresses;
     private Object config;
-    private Attributes attributes;
     private Status upstreamError;
     private boolean shutdown;
 
@@ -1326,10 +1333,10 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
-      attributes = resolvedAddresses.getAttributes();
+      return true;
     }
 
     @Override

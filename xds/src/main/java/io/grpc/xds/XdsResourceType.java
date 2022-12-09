@@ -17,12 +17,11 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
 import static io.grpc.xds.Bootstrapper.ServerInfo;
-import static io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.canonifyResourceName;
 import static io.grpc.xds.XdsClient.isResourceNameValid;
+import static io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
@@ -80,15 +79,18 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   abstract Class<? extends com.google.protobuf.Message> unpackedClassName();
 
-  abstract ResourceType typeName();
+  abstract String typeName();
 
   abstract String typeUrl();
 
   abstract String typeUrlV2();
 
-  // Non-null for  State of the World resources.
-  @Nullable
-  abstract ResourceType dependentResource();
+  // Do not confuse with the SotW approach: it is the mechanism in which the client must specify all
+  // resource names it is interested in with each request. Different resource types may behave
+  // differently in this approach. For LDS and CDS resources, the server must return all resources
+  // that the client has subscribed to in each request. For RDS and EDS, the server may only return
+  // the resources that need an update.
+  abstract boolean isFullStateOfTheWorld();
 
   static class Args {
     final ServerInfo serverInfo;
@@ -126,7 +128,6 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
-    Set<String> retainedResources = new HashSet<>();
 
     for (int i = 0; i < resources.size(); i++) {
       Any resource = resources.get(i);
@@ -157,8 +158,8 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
       T resourceUpdate;
       try {
-        resourceUpdate = doParse(args, unpackedMessage, retainedResources, isResourceV3);
-      } catch (ClientXdsClient.ResourceInvalidException e) {
+        resourceUpdate = doParse(args, unpackedMessage, isResourceV3);
+      } catch (XdsClientImpl.ResourceInvalidException e) {
         errors.add(String.format("%s response %s '%s' validation error: %s",
                 typeName(), unpackedClassName().getSimpleName(), cname, e.getMessage()));
         invalidResources.add(cname);
@@ -169,12 +170,11 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       parsedResources.put(cname, new ParsedResource<T>(resourceUpdate, resource));
     }
     return new ValidatedResourceUpdate<T>(parsedResources, unpackedResources, invalidResources,
-        errors, retainedResources);
+        errors);
 
   }
 
-  abstract T doParse(Args args, Message unpackedMessage, Set<String> retainedResources,
-                     boolean isResourceV3)
+  abstract T doParse(Args args, Message unpackedMessage, boolean isResourceV3)
       throws ResourceInvalidException;
 
   /**
@@ -232,19 +232,16 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
     Set<String> unpackedResources;
     Set<String> invalidResources;
     List<String> errors;
-    Set<String> retainedResources;
 
     // validated resource update
     public ValidatedResourceUpdate(Map<String, ParsedResource<T>> parsedResources,
                                    Set<String> unpackedResources,
                                    Set<String> invalidResources,
-                                   List<String> errors,
-                                   Set<String> retainedResources) {
+                                   List<String> errors) {
       this.parsedResources = parsedResources;
       this.unpackedResources = unpackedResources;
       this.invalidResources = invalidResources;
       this.errors = errors;
-      this.retainedResources = retainedResources;
     }
   }
 

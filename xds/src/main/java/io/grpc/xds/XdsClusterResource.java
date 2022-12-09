@@ -17,9 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.AbstractXdsClient.ResourceType;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
-import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.Bootstrapper.ServerInfo;
 
 import com.google.auto.value.AutoValue;
@@ -42,10 +39,10 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import java.util.List;
 import java.util.Locale;
@@ -77,8 +74,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  ResourceType typeName() {
-    return CDS;
+  String typeName() {
+    return "CDS";
   }
 
   @Override
@@ -91,10 +88,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     return ADS_TYPE_URL_CDS_V2;
   }
 
-  @Nullable
   @Override
-  ResourceType dependentResource() {
-    return EDS;
+  boolean isFullStateOfTheWorld() {
+    return true;
   }
 
   @Override
@@ -104,8 +100,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  CdsUpdate doParse(Args args, Message unpackedMessage,
-                         Set<String> retainedResources, boolean isResourceV3)
+  CdsUpdate doParse(Args args, Message unpackedMessage, boolean isResourceV3)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof Cluster)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
@@ -114,12 +109,12 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     if (args.bootstrapInfo != null && args.bootstrapInfo.certProviders() != null) {
       certProviderInstances = args.bootstrapInfo.certProviders().keySet();
     }
-    return processCluster((Cluster) unpackedMessage, retainedResources, certProviderInstances,
+    return processCluster((Cluster) unpackedMessage, certProviderInstances,
         args.serverInfo, args.loadBalancerRegistry);
   }
 
   @VisibleForTesting
-  static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources,
+  static CdsUpdate processCluster(Cluster cluster,
                                   Set<String> certProviderInstances,
                                   Bootstrapper.ServerInfo serverInfo,
                                   LoadBalancerRegistry loadBalancerRegistry)
@@ -127,7 +122,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
       case TYPE:
-        structOrError = parseNonAggregateCluster(cluster, retainedEdsResources,
+        structOrError = parseNonAggregateCluster(cluster,
             certProviderInstances, serverInfo);
         break;
       case CLUSTER_TYPE:
@@ -181,8 +176,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   private static StructOrError<CdsUpdate.Builder> parseNonAggregateCluster(
-      Cluster cluster, Set<String> edsResources, Set<String> certProviderInstances,
-      Bootstrapper.ServerInfo serverInfo) {
+      Cluster cluster, Set<String> certProviderInstances, Bootstrapper.ServerInfo serverInfo) {
     String clusterName = cluster.getName();
     Bootstrapper.ServerInfo lrsServerInfo = null;
     Long maxConcurrentRequests = null;
@@ -252,9 +246,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       // If the service_name field is set, that value will be used for the EDS request.
       if (!edsClusterConfig.getServiceName().isEmpty()) {
         edsServiceName = edsClusterConfig.getServiceName();
-        edsResources.add(edsServiceName);
-      } else {
-        edsResources.add(clusterName);
       }
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext,

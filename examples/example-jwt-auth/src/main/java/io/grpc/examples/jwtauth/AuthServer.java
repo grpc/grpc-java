@@ -16,8 +16,9 @@
 
 package io.grpc.examples.jwtauth;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
@@ -41,7 +42,7 @@ public class AuthServer {
   }
 
   private void start() throws IOException {
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .intercept(new JwtServerInterceptor())  // add the JwtServerInterceptor
         .build()
