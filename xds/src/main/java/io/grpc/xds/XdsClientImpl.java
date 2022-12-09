@@ -66,7 +66,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * XdsClient implementation for client side usages.
+ * XdsClient implementation.
  */
 final class XdsClientImpl extends XdsClient
     implements XdsResponseHandler, ResourceStore, TimerLaunch {
