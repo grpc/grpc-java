@@ -96,6 +96,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
@@ -186,7 +188,8 @@ public abstract class XdsClientImplTestBase {
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
   private final FakeClock fakeClock = new FakeClock();
-  protected final Queue<DiscoveryRpcCall> resourceDiscoveryCalls = new ArrayDeque<>();
+  protected final BlockingDeque<DiscoveryRpcCall> resourceDiscoveryCalls =
+      new LinkedBlockingDeque<>(1);
   protected final Queue<LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   protected final AtomicBoolean adsEnded = new AtomicBoolean(true);
   protected final AtomicBoolean lrsEnded = new AtomicBoolean(true);
@@ -1050,10 +1053,10 @@ public abstract class XdsClientImplTestBase {
     assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
     assertThat(error.getDescription()).isEqualTo(
         "Wrong configuration: xds server does not exist for resource " + rdsResourceName);
-    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    assertThat(resourceDiscoveryCalls.size()).isEqualTo(0);
     xdsClient.cancelXdsResourceWatch(
         XdsRouteConfigureResource.getInstance(),rdsResourceName, rdsResourceWatcher);
-    assertThat(resourceDiscoveryCalls.poll()).isNull();
+    assertThat(resourceDiscoveryCalls.size()).isEqualTo(0);
   }
 
   @Test
@@ -3478,7 +3481,7 @@ public abstract class XdsClientImplTestBase {
       // Establish the adsStream object
       xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE,
           cdsResourceWatcher);
-      DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+      resourceDiscoveryCalls.take(); // clear this entry
 
       // Shutdown server and initiate a request
       xdsServer.shutdownNow();
@@ -3495,9 +3498,9 @@ public abstract class XdsClientImplTestBase {
               .directExecutor()
               .build();
       xdsServer.start();
-      Thread.sleep(2000); // Because channels use real time, need to use sleep
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
-      call = resourceDiscoveryCalls.poll();
+      DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      Thread.sleep(1); // For some reason the V2 test fails the verifyRequest without this
 
       // Send a response and do verifications
       verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
