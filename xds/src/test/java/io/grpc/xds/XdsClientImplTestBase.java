@@ -49,6 +49,7 @@ import io.grpc.Context;
 import io.grpc.Context.CancellableContext;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -90,6 +91,7 @@ import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -243,6 +245,7 @@ public abstract class XdsClientImplTestBase {
   private ArgumentCaptor<EdsUpdate> edsUpdateCaptor;
   @Captor
   private ArgumentCaptor<Status> errorCaptor;
+
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
@@ -268,6 +271,10 @@ public abstract class XdsClientImplTestBase {
   private boolean originalEnableRbac;
   private boolean originalEnableLeastRequest;
   private boolean originalEnableFederation;
+  private Server xdsServer;
+  private final String serverName = InProcessServerBuilder.generateName();
+  private BindableService adsService = createAdsService();
+  private BindableService lrsService = createLrsService();
 
   @Before
   public void setUp() throws IOException {
@@ -285,15 +292,14 @@ public abstract class XdsClientImplTestBase {
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     XdsResourceType.enableLeastRequest = true;
     originalEnableFederation = BootstrapperImpl.enableFederation;
-    final String serverName = InProcessServerBuilder.generateName();
-    cleanupRule.register(
-        InProcessServerBuilder
-            .forName(serverName)
-            .addService(createAdsService())
-            .addService(createLrsService())
-            .directExecutor()
-            .build()
-            .start());
+    xdsServer = InProcessServerBuilder
+        .forName(serverName)
+        .addService(adsService)
+        .addService(lrsService)
+        .directExecutor()
+        .build()
+        .start();
+    cleanupRule.register(xdsServer);
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
@@ -3472,6 +3478,48 @@ public abstract class XdsClientImplTestBase {
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
+  @Test
+  public void sendingToStoppedServer() throws Exception {
+    try {
+      // Establish the adsStream object
+      xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE,
+          cdsResourceWatcher);
+      DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+
+      // Shutdown server and initiate a request
+      xdsServer.shutdownNow();
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
+          ldsResourceWatcher);
+      fakeClock.forwardTime(14, TimeUnit.SECONDS);
+
+      // Restart the server
+      xdsServer =
+          InProcessServerBuilder
+              .forName(serverName)
+              .addService(adsService)
+              .addService(lrsService)
+              .directExecutor()
+              .build();
+      xdsServer.start();
+      Thread.sleep(2000); // Because channels use real time, need to use sleep
+      fakeClock.forwardTime(5, TimeUnit.SECONDS);
+      call = resourceDiscoveryCalls.poll();
+
+      // Send a response and do verifications
+      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+      call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
+      call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE);
+      verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+      verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+      assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+      verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+      verifySubscribedResourcesMetadataSizes(1, 1, 0, 0);
+    } catch (Throwable t) {
+      throw t; // This allows putting a breakpoint here for debugging
+    }
+  }
+
+
   private <T extends ResourceUpdate> DiscoveryRpcCall startResourceWatcher(
       XdsResourceType<T> type, String name, ResourceWatcher<T> watcher) {
     FakeClock.TaskFilter timeoutTaskFilter;
@@ -3495,10 +3543,11 @@ public abstract class XdsClientImplTestBase {
       default:
         throw new AssertionError("should never be here");
     }
+
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(type, Collections.singletonList(name), "", "", NODE);
-    ScheduledTask timeoutTask =
-        Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
+    Collection<ScheduledTask> pendingTasks = fakeClock.getPendingTasks(timeoutTaskFilter);
+    ScheduledTask timeoutTask = Iterables.getOnlyElement(pendingTasks);
     assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
         .isEqualTo(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
     return call;
