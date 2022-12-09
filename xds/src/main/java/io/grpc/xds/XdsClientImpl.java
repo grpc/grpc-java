@@ -185,7 +185,9 @@ final class XdsClientImpl extends XdsClient
     for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
         resourceSubscribers.values()) {
       for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-        subscriber.onError(error);
+        if (!subscriber.hasResult()) {
+          subscriber.onError(error);
+        }
       }
     }
   }
@@ -655,6 +657,10 @@ final class XdsClientImpl extends XdsClient
 
     boolean isWatched() {
       return !watchers.isEmpty();
+    }
+
+    boolean hasResult() {
+      return data != null || absent;
     }
 
     void onData(ParsedResource<T> parsedResource, String version, long updateTime) {

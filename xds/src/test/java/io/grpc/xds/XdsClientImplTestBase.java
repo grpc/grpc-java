@@ -3207,10 +3207,8 @@ public abstract class XdsClientImplTestBase {
     call.verifyRequest(RDS, RDS_RESOURCE, "5", "6764", NODE);
 
     call.sendError(Status.DEADLINE_EXCEEDED.asException());
-    verify(ldsResourceWatcher, times(3)).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
-    verify(rdsResourceWatcher, times(3)).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
+    verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
     verify(cdsResourceWatcher, times(3)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
     verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
@@ -3231,10 +3229,8 @@ public abstract class XdsClientImplTestBase {
 
     // Management server becomes unreachable again.
     call.sendError(Status.UNAVAILABLE.asException());
-    verify(ldsResourceWatcher, times(4)).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
-    verify(rdsResourceWatcher, times(4)).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
+    verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
     verify(cdsResourceWatcher, times(4)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     verify(edsResourceWatcher, times(4)).onError(errorCaptor.capture());
@@ -3318,10 +3314,8 @@ public abstract class XdsClientImplTestBase {
     call.sendError(Status.UNAVAILABLE.asException());
     assertThat(cdsResourceTimeout.isCancelled()).isTrue();
     assertThat(edsResourceTimeout.isCancelled()).isTrue();
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
-    verify(rdsResourceWatcher).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
+    verify(ldsResourceWatcher, never()).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     verify(edsResourceWatcher).onError(errorCaptor.capture());
