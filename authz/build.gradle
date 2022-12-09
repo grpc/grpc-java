@@ -46,6 +46,12 @@ tasks.named("shadowJar").configure {
     relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
 }
 
+tasks.named("compileJava").configure {
+    it.options.compilerArgs += [
+        "-Xlint:-processing",
+    ]
+}
+
 publishing {
     publications {
         maven(MavenPublication) {

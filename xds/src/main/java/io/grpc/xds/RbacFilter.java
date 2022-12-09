@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -63,7 +64,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /** RBAC Http filter implementation. */
-public final class RbacFilter implements Filter, ServerInterceptorBuilder {
+final class RbacFilter implements Filter, ServerInterceptorBuilder {
   private static final Logger logger = Logger.getLogger(RbacFilter.class.getName());
 
   static final RbacFilter INSTANCE = new RbacFilter();
@@ -74,7 +75,7 @@ public final class RbacFilter implements Filter, ServerInterceptorBuilder {
   private static final String TYPE_URL_OVERRIDE_CONFIG =
           "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute";
 
-  public RbacFilter() {}
+  RbacFilter() {}
 
   @Override
   public String[] typeUrls() {
@@ -96,11 +97,8 @@ public final class RbacFilter implements Filter, ServerInterceptorBuilder {
     return parseRbacConfig(rbacProto);
   }
 
-  /**
-   * Parses Rbac filter config and generates authorization config that is used in engine
-   * evaluation.
-   */
-  public static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
+  @VisibleForTesting
+  static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
     if (!rbac.hasRules()) {
       return ConfigOrError.fromConfig(RbacConfig.create(null));
     }

@@ -20,7 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 // TODO(zdapeng): Unify with ClientXdsClient.StructOrError, or just have parseFilterConfig() throw
 //     certain types of Exception.
-public final class ConfigOrError<T> {
+final class ConfigOrError<T> {
 
   /**
    * Returns a {@link ConfigOrError} for the successfully converted data object.
@@ -36,8 +36,8 @@ public final class ConfigOrError<T> {
     return new ConfigOrError<>(errorDetail);
   }
 
-  public final String errorDetail;
-  public final T config;
+  final String errorDetail;
+  final T config;
 
   private ConfigOrError(T config) {
     this.config = checkNotNull(config, "config");

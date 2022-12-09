@@ -23,7 +23,7 @@ import javax.annotation.Nullable;
 
 /** Rbac configuration for Rbac filter. */
 @AutoValue
-public abstract class RbacConfig implements FilterConfig {
+abstract class RbacConfig implements FilterConfig {
   @Override
   public final String typeUrl() {
     return RbacFilter.TYPE_URL;

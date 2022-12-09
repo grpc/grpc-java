@@ -19,14 +19,13 @@ package io.grpc.authz;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.envoyproxy.envoy.config.rbac.v3.RBAC;
+import io.grpc.ExperimentalApi;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
-import io.grpc.xds.ConfigOrError;
-import io.grpc.xds.RbacConfig;
-import io.grpc.xds.RbacFilter;
+import io.grpc.xds.InternalRbacFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +33,7 @@ import java.util.List;
 /**
  * Authorization server interceptor for static policy.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9746")
 public final class AuthorizationServerInterceptor implements ServerInterceptor {
   private final List<ServerInterceptor> interceptors = new ArrayList<>();
 
@@ -44,14 +44,10 @@ public final class AuthorizationServerInterceptor implements ServerInterceptor {
       throw new IllegalArgumentException("Failed to translate authorization policy");
     }
     for (RBAC rbac: rbacs) {
-      ConfigOrError<RbacConfig> filterConfig = RbacFilter.parseRbacConfig(
-          io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
-          .setRules(rbac).build());
-      if (filterConfig.errorDetail != null) {
-        throw new IllegalArgumentException(
-            String.format("Failed to parse Rbac policy: %s", filterConfig.errorDetail));
-      }
-      interceptors.add(new RbacFilter().buildServerInterceptor(filterConfig.config, null));
+      interceptors.add(
+          InternalRbacFilter.createInterceptor(
+            io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
+            .setRules(rbac).build()));
     }
   }
 
