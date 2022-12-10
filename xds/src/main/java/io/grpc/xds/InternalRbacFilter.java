@@ -22,14 +22,17 @@ import io.grpc.ServerInterceptor;
 import io.grpc.xds.RbacConfig;
 import io.grpc.xds.RbacFilter;
 
+/*
+ * Parses RBAC filter config and creates AuthorizationServerInterceptor.
+ */
 @Internal
 public final class InternalRbacFilter {
-    public static ServerInterceptor createInterceptor(RBAC rbac) throws IllegalArgumentException {
-      ConfigOrError<RbacConfig> filterConfig = RbacFilter.parseRbacConfig(rbac);
-      if (filterConfig.errorDetail != null) {
-        throw new IllegalArgumentException(
-            String.format("Failed to parse Rbac policy: %s", filterConfig.errorDetail));
-      }
-      return new RbacFilter().buildServerInterceptor(filterConfig.config, null);
+  public static ServerInterceptor createInterceptor(RBAC rbac) throws IllegalArgumentException {
+    ConfigOrError<RbacConfig> filterConfig = RbacFilter.parseRbacConfig(rbac);
+    if (filterConfig.errorDetail != null) {
+      throw new IllegalArgumentException(
+        String.format("Failed to parse Rbac policy: %s", filterConfig.errorDetail));
     }
+    return new RbacFilter().buildServerInterceptor(filterConfig.config, null);
+  }
 }
