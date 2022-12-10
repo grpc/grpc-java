@@ -18,6 +18,10 @@ package io.grpc.examples.helloworld;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.health.v1.HealthCheckRequest;
+import io.grpc.health.v1.HealthCheckResponse;
+import io.grpc.health.v1.HealthGrpc;
+import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -34,8 +38,9 @@ public class HelloWorldServer {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
+    server = ServerBuilder.forPort(port).addService(ProtoReflectionService.newInstance())
         .addService(new GreeterImpl())
+            .addService(new HealthImpl())
         .build()
         .start();
     logger.info("Server started, listening on " + port);
@@ -82,8 +87,25 @@ public class HelloWorldServer {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-      HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
-      responseObserver.onNext(reply);
+      synchronized (this) {
+        try {
+          Thread.sleep(10 * 1000L);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+
+        HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
+        responseObserver.onNext(reply);
+        responseObserver.onCompleted();
+      }
+    }
+  }
+
+  static class HealthImpl extends HealthGrpc.HealthImplBase {
+    @Override
+    public void check(HealthCheckRequest request, StreamObserver<HealthCheckResponse> responseObserver) {
+      HealthCheckResponse response = HealthCheckResponse.newBuilder().setStatus(HealthCheckResponse.ServingStatus.SERVING).build();
+      responseObserver.onNext(response);
       responseObserver.onCompleted();
     }
   }

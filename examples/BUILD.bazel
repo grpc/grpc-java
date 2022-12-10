@@ -51,9 +51,24 @@ java_grpc_library(
     deps = [":route_guide_java_proto"],
 )
 
+proto_library(
+    name = "health_check_proto",
+    srcs = ["src/main/proto/healthcheck.proto"],
+)
+
+java_proto_library(
+    name = "health_check_java_proto",
+    deps = [":health_check_proto"],
+)
+
+java_grpc_library(
+    name = "health_check_java_grpc",
+    srcs = [":health_check_proto"],
+    deps = [":health_check_java_proto"],
+)
+
 java_library(
     name = "examples",
-    testonly = 1,
     srcs = glob(
         ["src/main/java/**/*.java"],
     ),
@@ -64,6 +79,8 @@ java_library(
         "@io_grpc_grpc_java//netty",
     ],
     deps = [
+        ":health_check_java_grpc",
+        ":health_check_java_proto",
         ":hello_streaming_java_grpc",
         ":hello_streaming_java_proto",
         ":helloworld_java_grpc",
@@ -74,6 +91,7 @@ java_library(
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_java//api",
         "@io_grpc_grpc_java//protobuf",
+        "@io_grpc_grpc_java//services:reflection",
         "@io_grpc_grpc_java//stub",
         "@maven//:com_google_api_grpc_proto_google_common_protos",
         "@maven//:com_google_code_findbugs_jsr305",
@@ -84,7 +102,6 @@ java_library(
 
 java_binary(
     name = "hello-world-client",
-    testonly = 1,
     main_class = "io.grpc.examples.helloworld.HelloWorldClient",
     runtime_deps = [
         ":examples",
@@ -93,7 +110,6 @@ java_binary(
 
 java_binary(
     name = "hello-world-server",
-    testonly = 1,
     main_class = "io.grpc.examples.helloworld.HelloWorldServer",
     runtime_deps = [
         ":examples",

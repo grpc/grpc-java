@@ -10,6 +10,8 @@ plugins {
 import net.ltgt.gradle.errorprone.CheckSeverity
 import org.gradle.util.GUtil
 
+import java.lang.module.Configuration
+
 subprojects {
     apply plugin: "checkstyle"
     apply plugin: "idea"
