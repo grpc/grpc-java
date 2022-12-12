@@ -55,8 +55,7 @@ public final class SecurityPolicies {
   }
 
   /**
-   * Creates a default {@link SecurityPolicy} that allows access only to callers with the same UID
-   * as the current process.
+   * Creates a default {@link SecurityPolicy} that checks authorization based on UID.
    */
   public static SecurityPolicy internalOnly() {
     return new SecurityPolicy() {

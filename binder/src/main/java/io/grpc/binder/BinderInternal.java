@@ -26,7 +26,7 @@ import io.grpc.Internal;
 public class BinderInternal {
 
   /**
-   * Sets the receiver's {@link IBinder} using {@link IBinderReceiver#set(IBinder)}.
+   * Set the receiver's {@link IBinder} using {@link IBinderReceiver#set(IBinder)}.
    */
   static void setIBinder(IBinderReceiver receiver, IBinder binder) {
     receiver.set(binder);
