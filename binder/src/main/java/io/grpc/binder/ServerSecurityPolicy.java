@@ -17,6 +17,7 @@
 package io.grpc.binder;
 
 import com.google.common.collect.ImmutableMap;
+import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,6 +28,7 @@ import javax.annotation.CheckReturnValue;
  *
  * Contains a default policy, and optional policies for each server.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class ServerSecurityPolicy {
 
   private final SecurityPolicy defaultPolicy;
