@@ -16,10 +16,11 @@
 
 package io.grpc.examples.helloworld;
 
-import io.grpc.Channel;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.StatusRuntimeException;
+import io.grpc.*;
+import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.NettyChannelBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -60,9 +61,9 @@ public class HelloWorldClient {
    * greeting. The second argument is the target server.
    */
   public static void main(String[] args) throws Exception {
-    String user = "world";
+    String user = "kamaljit pati";
     // Access a service running on the local machine on port 50051
-    String target = "localhost:50051";
+    String target = "grpc.example.com:443";
     // Allow passing in the user and target strings as command line arguments
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
@@ -81,11 +82,11 @@ public class HelloWorldClient {
     // Create a communication channel to the server, known as a Channel. Channels are thread-safe
     // and reusable. It is common to create channels at the beginning of your application and reuse
     // them until the application shuts down.
-    ManagedChannel channel = ManagedChannelBuilder.forTarget(target)
-        // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
-        // needing certificates.
-        .usePlaintext()
-        .build();
+    ManagedChannel channel = NettyChannelBuilder
+            .forTarget(target)
+            .sslContext(GrpcSslContexts.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build())
+            .build();
+
     try {
       HelloWorldClient client = new HelloWorldClient(channel);
       client.greet(user);

@@ -39,7 +39,7 @@ public class HelloWorldServer {
     /* The port on which the server should run */
     int port = 50051;
     server = ServerBuilder.forPort(port).addService(ProtoReflectionService.newInstance())
-        .addService(new GreeterImpl())
+            .addService(new GreeterImpl())
             .addService(new HealthImpl())
         .build()
         .start();
@@ -87,17 +87,9 @@ public class HelloWorldServer {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-      synchronized (this) {
-        try {
-          Thread.sleep(10 * 1000L);
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
-        }
-
         HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
         responseObserver.onNext(reply);
         responseObserver.onCompleted();
-      }
     }
   }
 

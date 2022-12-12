@@ -90,6 +90,7 @@ java_library(
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_java//api",
+        "@io_grpc_grpc_java//netty",
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//services:reflection",
         "@io_grpc_grpc_java//stub",
@@ -97,6 +98,7 @@ java_library(
         "@maven//:com_google_code_findbugs_jsr305",
         "@maven//:com_google_code_gson_gson",
         "@maven//:com_google_guava_guava",
+        "@maven//:io_netty_netty_handler",
     ],
 )
 
