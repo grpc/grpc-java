@@ -2151,6 +2151,10 @@ public class RetriableStreamTest {
     assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
     inOrder.verify(retriableStreamRecorder).postCommit();
+    sublistenerCaptor1.getValue().closed(
+        Status.CANCELLED, PROCESSED, new Metadata());
+    sublistenerCaptor4.getValue().closed(
+        Status.CANCELLED, PROCESSED, new Metadata());
     inOrder.verify(masterListener).closed(
         any(Status.class), any(RpcProgress.class), any(Metadata.class));
     inOrder.verifyNoMoreInteractions();
@@ -2158,7 +2162,7 @@ public class RetriableStreamTest {
     insight = new InsightBuilder();
     hedgingStream.appendTimeoutInsight(insight);
     assertThat(insight.toString()).isEqualTo(
-        "[closed=[UNAVAILABLE, INTERNAL], committed=[remote_addr=2.2.2.2:81]]");
+        "[closed=[UNAVAILABLE, INTERNAL, CANCELLED, CANCELLED], committed=[remote_addr=2.2.2.2:81]]");
   }
 
   @Test
@@ -2425,6 +2429,7 @@ public class RetriableStreamTest {
     assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
     inOrder.verify(retriableStreamRecorder).postCommit();
+    sublistenerCaptor3.getValue().closed(Status.CANCELLED, PROCESSED, metadata);
     inOrder.verify(masterListener).closed(fatal, PROCESSED, metadata);
     inOrder.verifyNoMoreInteractions();
   }
@@ -2605,6 +2610,8 @@ public class RetriableStreamTest {
     assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
     verify(retriableStreamRecorder).postCommit();
+    sublistenerCaptor1.getValue().closed(Status.CANCELLED, PROCESSED, metadata);
+    sublistenerCaptor4.getValue().closed(Status.CANCELLED, PROCESSED, metadata);
     verify(masterListener).closed(status, REFUSED, metadata);
   }
 
@@ -2645,6 +2652,9 @@ public class RetriableStreamTest {
     assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
     verify(retriableStreamRecorder).postCommit();
+    sublistenerCaptor1.getValue()
+        .closed(Status.CANCELLED, REFUSED, new Metadata());
+    //master listener close should wait until all substreams are closed
     verify(masterListener).closed(status, REFUSED, metadata);
   }
 
