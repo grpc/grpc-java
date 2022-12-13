@@ -125,7 +125,7 @@ public final class Matchers {
         name, null, null, null, null, null, null, contains, null, inverted);
     }
 
-    /** The request header value should have this string matcher. */
+    /** The request header value should match this stringMatcher. */
     public static HeaderMatcher forString(
         String name, StringMatcher stringMatcher, boolean inverted) {
       checkNotNull(name, "name");

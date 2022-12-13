@@ -53,6 +53,34 @@ public class AuthorizationEnd2EndTest {
   private Server server;
   private ManagedChannel channel;
 
+  private void initServerWithStaticAuthz(
+      String authorizationPolicy, ServerCredentials serverCredentials) throws Exception {
+    AuthorizationServerInterceptor authzInterceptor = 
+        AuthorizationServerInterceptor.create(authorizationPolicy);
+    server = Grpc.newServerBuilderForPort(0, serverCredentials)
+                .addService(new SimpleServiceImpl())
+                .intercept(authzInterceptor)
+                .build()
+                .start();
+  }
+
+  private SimpleServiceGrpc.SimpleServiceBlockingStub getStub() {
+    channel = 
+        Grpc.newChannelBuilderForAddress(
+            "localhost", server.getPort(), InsecureChannelCredentials.create())
+            .build();
+    return SimpleServiceGrpc.newBlockingStub(channel);
+  }
+
+  private SimpleServiceGrpc.SimpleServiceBlockingStub getStub(
+      ChannelCredentials channelCredentials) {
+    channel = Grpc.newChannelBuilderForAddress(
+        "localhost", server.getPort(), channelCredentials)
+            .overrideAuthority("foo.test.google.com.au")
+            .build();
+    return SimpleServiceGrpc.newBlockingStub(channel);
+  }
+
   @After
   public void tearDown() {
     if (server != null) {
@@ -89,19 +117,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
-    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
-    channel = 
-        Grpc.newChannelBuilderForAddress(
-            "localhost", server.getPort(), InsecureChannelCredentials.create())
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
-    client.unaryRpc(SimpleRequest.getDefaultInstance());
+    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
   @Test
@@ -129,20 +146,9 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
-    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
-    channel = 
-        Grpc.newChannelBuilderForAddress(
-            "localhost", server.getPort(), InsecureChannelCredentials.create())
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
+    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
     try {
-      client.unaryRpc(SimpleRequest.getDefaultInstance());
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
@@ -177,20 +183,9 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
-    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
-    channel = 
-        Grpc.newChannelBuilderForAddress(
-            "localhost", server.getPort(), InsecureChannelCredentials.create())
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
+    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
     try {
-      client.unaryRpc(SimpleRequest.getDefaultInstance());
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
@@ -225,20 +220,9 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
-    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
-    channel = 
-        Grpc.newChannelBuilderForAddress(
-            "localhost", server.getPort(), InsecureChannelCredentials.create())
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
+    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
     try {
-      client.unaryRpc(SimpleRequest.getDefaultInstance());
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
@@ -263,19 +247,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
-    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
-    channel = 
-        Grpc.newChannelBuilderForAddress(
-            "localhost", server.getPort(), InsecureChannelCredentials.create())
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
-    client.unaryRpc(SimpleRequest.getDefaultInstance());
+    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
   @Test
@@ -293,20 +266,9 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
-    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
-    channel = 
-        Grpc.newChannelBuilderForAddress(
-            "localhost", server.getPort(), InsecureChannelCredentials.create())
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
+    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
     try {
-      client.unaryRpc(SimpleRequest.getDefaultInstance());
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
@@ -330,20 +292,9 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
-    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
-    channel = 
-        Grpc.newChannelBuilderForAddress(
-            "localhost", server.getPort(), InsecureChannelCredentials.create())
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
+    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
     try {
-      client.unaryRpc(SimpleRequest.getDefaultInstance());
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
@@ -372,28 +323,17 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverCert0File, serverKey0File)
         .trustManager(caCertFile)
         .clientAuth(ClientAuth.REQUIRE)
         .build();
-    server = Grpc.newServerBuilderForPort(0, serverCredentials)
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
+    initServerWithStaticAuthz(policy, serverCredentials);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .keyManager(clientCert0File, clientKey0File)
         .trustManager(caCertFile)
         .build();
-    channel = Grpc.newChannelBuilderForAddress(
-        "localhost", server.getPort(), channelCredentials)
-            .overrideAuthority("foo.test.google.com.au")
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
-    client.unaryRpc(SimpleRequest.getDefaultInstance());
+    getStub(channelCredentials).unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
   @Test
@@ -413,27 +353,16 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    AuthorizationServerInterceptor authzInterceptor = AuthorizationServerInterceptor.create(policy);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverCert0File, serverKey0File)
         .trustManager(caCertFile)
         .clientAuth(ClientAuth.OPTIONAL)
         .build();
-    server = Grpc.newServerBuilderForPort(0, serverCredentials)
-                .addService(new SimpleServiceImpl())
-                .intercept(authzInterceptor)
-                .build()
-                .start();
+    initServerWithStaticAuthz(policy, serverCredentials);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .trustManager(caCertFile)
         .build();
-    channel = Grpc.newChannelBuilderForAddress(
-        "localhost", server.getPort(), channelCredentials)
-            .overrideAuthority("foo.test.google.com.au")
-            .build();
-    SimpleServiceGrpc.SimpleServiceBlockingStub client =
-        SimpleServiceGrpc.newBlockingStub(channel);
-    client.unaryRpc(SimpleRequest.getDefaultInstance());
+    getStub(channelCredentials).unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
