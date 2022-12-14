@@ -91,7 +91,6 @@ import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -295,14 +294,13 @@ public abstract class XdsClientImplTestBase {
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     XdsResourceType.enableLeastRequest = true;
     originalEnableFederation = BootstrapperImpl.enableFederation;
-    xdsServer = InProcessServerBuilder
+    xdsServer = cleanupRule.register(InProcessServerBuilder
         .forName(serverName)
         .addService(adsService)
         .addService(lrsService)
         .directExecutor()
         .build()
-        .start();
-    cleanupRule.register(xdsServer);
+        .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
@@ -3490,14 +3488,14 @@ public abstract class XdsClientImplTestBase {
       fakeClock.forwardTime(14, TimeUnit.SECONDS);
 
       // Restart the server
-      xdsServer =
+      xdsServer = cleanupRule.register(
           InProcessServerBuilder
               .forName(serverName)
               .addService(adsService)
               .addService(lrsService)
               .directExecutor()
-              .build();
-      xdsServer.start();
+              .build()
+              .start());
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
       Thread.sleep(1); // For some reason the V2 test fails the verifyRequest without this
@@ -3543,8 +3541,8 @@ public abstract class XdsClientImplTestBase {
 
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(type, Collections.singletonList(name), "", "", NODE);
-    Collection<ScheduledTask> pendingTasks = fakeClock.getPendingTasks(timeoutTaskFilter);
-    ScheduledTask timeoutTask = Iterables.getOnlyElement(pendingTasks);
+    ScheduledTask timeoutTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
     assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
         .isEqualTo(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
     return call;
