@@ -2162,7 +2162,8 @@ public class RetriableStreamTest {
     insight = new InsightBuilder();
     hedgingStream.appendTimeoutInsight(insight);
     assertThat(insight.toString()).isEqualTo(
-        "[closed=[UNAVAILABLE, INTERNAL, CANCELLED, CANCELLED], committed=[remote_addr=2.2.2.2:81]]");
+        "[closed=[UNAVAILABLE, INTERNAL, CANCELLED, CANCELLED], "
+            + "committed=[remote_addr=2.2.2.2:81]]");
   }
 
   @Test
