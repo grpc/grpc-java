@@ -36,6 +36,8 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.stub.ClientCallStreamObserver;
+import io.grpc.stub.ClientResponseObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -71,6 +73,7 @@ final class AbstractXdsClient {
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
   private final Node bootstrapNode;
+  private final XdsClient.TimerLaunch timerLaunch;
 
   // Last successfully applied version_info for each resource type. Starts with empty string.
   // A version_info is used to update management server with client's most recent knowledge of
@@ -98,7 +101,8 @@ final class AbstractXdsClient {
       timeService,
       SynchronizationContext syncContext,
       BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier) {
+      Supplier<Stopwatch> stopwatchSupplier,
+      XdsClient.TimerLaunch timerLaunch) {
     this.serverInfo = checkNotNull(serverInfo, "serverInfo");
     this.channel = checkNotNull(xdsChannelFactory, "xdsChannelFactory").create(serverInfo);
     this.xdsResponseHandler = checkNotNull(xdsResponseHandler, "xdsResponseHandler");
@@ -108,6 +112,7 @@ final class AbstractXdsClient {
     this.timeService = checkNotNull(timeService, "timeService");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+    this.timerLaunch  = checkNotNull(timerLaunch, "timerLaunch");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
     logId = InternalLogId.allocate("xds-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
@@ -199,6 +204,22 @@ final class AbstractXdsClient {
     return rpcRetryTimer != null && rpcRetryTimer.isPending();
   }
 
+  boolean isReady() {
+    return adsStream != null && adsStream.isReady();
+  }
+
+  /**
+   * Starts a timer for each requested resource that hasn't been responded to and
+   * has been waiting for the channel to get ready.
+   */
+  void readyHandler() {
+    if (!isReady()) {
+      return;
+    }
+
+    timerLaunch.startSubscriberTimersIfNeeded(serverInfo);
+  }
+
   /**
    * Establishes the RPC connection by creating a new RPC stream on the given channel for
    * xDS protocol communication.
@@ -261,6 +282,8 @@ final class AbstractXdsClient {
     abstract void start();
 
     abstract void sendError(Exception error);
+
+    abstract boolean isReady();
 
     /**
      * Sends a discovery request with the given {@code versionInfo}, {@code nonce} and
@@ -345,12 +368,25 @@ final class AbstractXdsClient {
     private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriter;
 
     @Override
+    public boolean isReady() {
+      return requestWriter != null && ((ClientCallStreamObserver<?>) requestWriter).isReady();
+    }
+
+    @Override
     void start() {
       io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
           .AggregatedDiscoveryServiceStub stub =
           io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(channel);
       StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
-          new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
+          new ClientResponseObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
+
+            @Override
+            public void beforeStart(
+                ClientCallStreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> reqStream) {
+              reqStream.setOnReadyHandler(AbstractXdsClient.this::readyHandler);
+            }
+
             @Override
             public void onNext(final io.envoyproxy.envoy.api.v2.DiscoveryResponse response) {
               syncContext.execute(new Runnable() {
@@ -428,10 +464,22 @@ final class AbstractXdsClient {
     private StreamObserver<DiscoveryRequest> requestWriter;
 
     @Override
+    public boolean isReady() {
+      return requestWriter != null && ((ClientCallStreamObserver<?>) requestWriter).isReady();
+    }
+
+    @Override
     void start() {
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
           AggregatedDiscoveryServiceGrpc.newStub(channel);
-      StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
+      StreamObserver<DiscoveryResponse> responseReader =
+          new ClientResponseObserver<DiscoveryRequest,DiscoveryResponse>() {
+
+        @Override
+        public void beforeStart(ClientCallStreamObserver<DiscoveryRequest> requestStream) {
+          requestStream.setOnReadyHandler(AbstractXdsClient.this::readyHandler);
+        }
+
         @Override
         public void onNext(final DiscoveryResponse response) {
           syncContext.execute(new Runnable() {
