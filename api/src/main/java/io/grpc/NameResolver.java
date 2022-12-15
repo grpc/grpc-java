@@ -59,6 +59,10 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public abstract class NameResolver {
+
+  // Outside listeners that get notified of the result of each name resolution.
+  private ArrayList<ResolutionResultListener> resolutionResultListeners = new ArrayList<>();
+
   /**
    * Returns the authority used to authenticate connections to servers.  It <strong>must</strong> be
    * from a trusted source, because if the authority is tampered with, RPCs may be sent to the
@@ -91,8 +95,9 @@ public abstract class NameResolver {
           }
 
           @Override
-          public void onResult(ResolutionResult resolutionResult) {
+          public boolean onResult(ResolutionResult resolutionResult) {
             listener.onAddresses(resolutionResult.getAddresses(), resolutionResult.getAttributes());
+            return true;
           }
       });
     }
@@ -130,6 +135,43 @@ public abstract class NameResolver {
    * @since 1.0.0
    */
   public void refresh() {}
+
+  /**
+   * Adds a new {@link ResolutionResultListener} that will get notified of the outcome of each
+   * resolution.
+   *
+   * @since 1.53.0
+   */
+  public final void addResolutionResultListener(ResolutionResultListener listener) {
+    checkArgument(listener != null);
+    resolutionResultListeners.add(listener);
+  }
+
+  /**
+   * Removes an existing {@link ResolutionResultListener}.
+   *
+   * @return {@code true} if the listener was removed, otherwise {@code false}
+   * @since 1.53.0
+   */
+  public final boolean removeResolutionResultListener(ResolutionResultListener listener) {
+    checkArgument(listener != null);
+    return resolutionResultListeners.remove(listener);
+  }
+
+  /**
+   * Intended for extending classes to call when they know the result of a name resolution.
+   *
+   * <p>Note that while these listeners can be added to any {@link NameResolver}, only concrete
+   * implementations that call this method will actually support this facility.
+   *
+   * @param successful {@code true} if resolution was successful and the addresses were accepted.
+   * @since 1.53.0
+   */
+  protected final void fireResolutionResultEvent(boolean successful) {
+    for (ResolutionResultListener listener : resolutionResultListeners) {
+      listener.resolutionAttempted(successful);
+    }
+  }
 
   /**
    * Factory that creates {@link NameResolver} instances.
@@ -225,9 +267,12 @@ public abstract class NameResolver {
      * {@link ResolutionResult#getAddresses()} is empty, {@link #onError(Status)} will be called.
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
+     * @return {@code true} if the listener accepts the resolved addresses, otherwise {@code false}.
+     *         If the addresses are not accepted the {@link NameResolver} will refresh and retry
+     *         later if it uses polling.
      * @since 1.21.0
      */
-    public abstract void onResult(ResolutionResult resolutionResult);
+    public abstract boolean onResult(ResolutionResult resolutionResult);
 
     /**
      * Handles a name resolving error from the resolver. The listener is responsible for eventually
@@ -248,6 +293,24 @@ public abstract class NameResolver {
   @Retention(RetentionPolicy.SOURCE)
   @Documented
   public @interface ResolutionResultAttr {}
+
+
+  /**
+   * A callback interface called at the end of every resolve operation to indicate if the operation
+   * was successful. Success means that there were no problems with either the name resolution part
+   * nor with {@link Listener} accepting the resolution results.
+   */
+  public interface ResolutionResultListener {
+
+    /**
+     * Called after an attempt at name resolution.
+     *
+     * <p>Note! Implementations of this should return quickly and not throw exceptions.
+     *
+     * @param successful {@code true} if resolution was successful and the addresses were accepted.
+     */
+    void resolutionAttempted(boolean successful);
+  }
 
   /**
    * Information that a {@link Factory} uses to create a {@link NameResolver}.

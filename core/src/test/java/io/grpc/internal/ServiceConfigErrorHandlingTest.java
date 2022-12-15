@@ -98,7 +98,7 @@ public class ServiceConfigErrorHandlingTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString().contains(
-              ManagedChannelImpl.DelayedNameResolverRefresh.class.getName());
+              RetryingNameResolver.DelayedNameResolverRefresh.class.getName());
         }
       };
 
@@ -542,7 +542,7 @@ public class ServiceConfigErrorHandlingTest {
     final URI expectedUri;
     final List<EquivalentAddressGroup> servers;
     final boolean resolvedAtStart;
-    final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
+    final ArrayList<RetryingNameResolver> resolvers = new ArrayList<>();
     final AtomicReference<Map<String, ?>> nextRawServiceConfig = new AtomicReference<>();
     final AtomicReference<Attributes> nextAttributes = new AtomicReference<>(Attributes.EMPTY);
 
@@ -561,7 +561,11 @@ public class ServiceConfigErrorHandlingTest {
         return null;
       }
       assertEquals(DEFAULT_PORT, args.getDefaultPort());
-      FakeNameResolver resolver = new FakeNameResolver(args.getServiceConfigParser());
+      RetryingNameResolver resolver = new RetryingNameResolver(
+          new FakeNameResolver(args.getServiceConfigParser()),
+          new FakeBackoffPolicyProvider(),
+          args.getScheduledExecutorService(),
+          args.getSynchronizationContext());
       resolvers.add(resolver);
       return resolver;
     }
@@ -572,8 +576,8 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     void allResolved() {
-      for (FakeNameResolver resolver : resolvers) {
-        resolver.resolved();
+      for (RetryingNameResolver resolver : resolvers) {
+        ((FakeNameResolver)resolver.getRetriedNameResolver()).resolved();
       }
     }
 
@@ -613,7 +617,7 @@ public class ServiceConfigErrorHandlingTest {
               .setServiceConfig(serviceConfigParser.parseServiceConfig(rawServiceConfig));
         }
 
-        listener.onResult(builder.build());
+        fireResolutionResultEvent(listener.onResult(builder.build()));
       }
 
       @Override public void shutdown() {
@@ -647,7 +651,8 @@ public class ServiceConfigErrorHandlingTest {
   }
 
   private FakeClock.ScheduledTask getNameResolverRefresh() {
-    return Iterables.getOnlyElement(timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
+    return Iterables.getOnlyElement(
+       timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
   }
 
   private static class FakeLoadBalancer extends LoadBalancer {
