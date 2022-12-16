@@ -55,7 +55,6 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -205,14 +204,6 @@ public class ManagedChannelImplTest {
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private final FakeClock balancerRpcExecutor = new FakeClock();
-  private static final FakeClock.TaskFilter NAME_RESOLVER_REFRESH_TASK_FILTER =
-      new FakeClock.TaskFilter() {
-        @Override
-        public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(
-              ManagedChannelImpl.DelayedNameResolverRefresh.class.getName());
-        }
-      };
 
   private final InternalChannelz channelz = new InternalChannelz();
 
@@ -306,10 +297,6 @@ public class ManagedChannelImplTest {
           }
         });
       if (channelBuilder.idleTimeoutMillis != ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE) {
-        numExpectedTasks += 1;
-      }
-
-      if (getNameResolverRefresh() != null) {
         numExpectedTasks += 1;
       }
 
@@ -1058,139 +1045,6 @@ public class ManagedChannelImplTest {
     shutdownSafely(helper, subchannel);
     timer.forwardNanos(
         TimeUnit.SECONDS.toNanos(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
-  }
-
-  @Test
-  public void nameResolutionFailed() {
-    Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
-            .setError(error)
-            .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    // Name resolution is started as soon as channel is created.
-    createChannel();
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
-    verify(mockLoadBalancer).handleNameResolutionError(same(error));
-    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
-
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
-    assertEquals(0, resolver.refreshCalled);
-
-    timer.forwardNanos(1);
-    assertEquals(1, resolver.refreshCalled);
-    verify(mockLoadBalancer, times(2)).handleNameResolutionError(same(error));
-
-    // Verify an additional name resolution failure does not schedule another timer
-    resolver.refresh();
-    verify(mockLoadBalancer, times(3)).handleNameResolutionError(same(error));
-    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
-
-    // Allow the next refresh attempt to succeed
-    resolver.error = null;
-
-    // For the second attempt, the backoff should occur at RECONNECT_BACKOFF_INTERVAL_NANOS * 2
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS * 2 - 1);
-    assertEquals(2, resolver.refreshCalled);
-    timer.forwardNanos(1);
-    assertEquals(3, resolver.refreshCalled);
-    assertEquals(0, timer.numPendingTasks());
-
-    // Verify that the successful resolution reset the backoff policy
-    resolver.listener.onError(error);
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
-    assertEquals(3, resolver.refreshCalled);
-    timer.forwardNanos(1);
-    assertEquals(4, resolver.refreshCalled);
-    assertEquals(0, timer.numPendingTasks());
-  }
-
-  @Test
-  public void nameResolutionFailed_delayedTransportShutdownCancelsBackoff() {
-    Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    // Name resolution is started as soon as channel is created.
-    createChannel();
-    verify(mockLoadBalancer).handleNameResolutionError(same(error));
-
-    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverRefresh();
-    assertNotNull(nameResolverBackoff);
-    assertFalse(nameResolverBackoff.isCancelled());
-
-    // Add a pending call to the delayed transport
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
-    Metadata headers = new Metadata();
-    call.start(mockCallListener, headers);
-
-    // The pending call on the delayed transport stops the name resolver backoff from cancelling
-    channel.shutdown();
-    assertFalse(nameResolverBackoff.isCancelled());
-
-    // Notify that a subchannel is ready, which drains the delayed transport
-    SubchannelPicker picker = mock(SubchannelPicker.class);
-    Status status = Status.UNAVAILABLE.withDescription("for test");
-    when(picker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withDrop(status));
-    updateBalancingStateSafely(helper, READY, picker);
-    executor.runDueTasks();
-    verify(mockCallListener).onClose(same(status), any(Metadata.class));
-
-    assertTrue(nameResolverBackoff.isCancelled());
-  }
-
-  @Test
-  public void nameResolverReturnsEmptySubLists_resolutionRetry() throws Exception {
-    // The mock LB is set to reject the addresses.
-    when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(false);
-
-    // Pass a FakeNameResolverFactory with an empty list and LB config
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
-    Map<String, Object> rawServiceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
-    ManagedChannelServiceConfig parsedServiceConfig =
-        createManagedChannelServiceConfig(rawServiceConfig, null);
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
-
-    // A resolution retry has been scheduled
-    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
-  }
-
-  @Test
-  public void nameResolverReturnsEmptySubLists_optionallyAllowed() throws Exception {
-    // Pass a FakeNameResolverFactory with an empty list and LB config
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
-    String rawLbConfig = "{ \"setting1\": \"high\" }";
-    Object parsedLbConfig = new Object();
-    Map<String, Object> rawServiceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": " + rawLbConfig + " } ] }");
-    ManagedChannelServiceConfig parsedServiceConfig =
-        createManagedChannelServiceConfig(
-            rawServiceConfig,
-            new PolicySelection(
-                mockLoadBalancerProvider,
-                parsedLbConfig));
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
-
-    // LoadBalancer received the empty list and the LB config
-    verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    ArgumentCaptor<ResolvedAddresses> resultCaptor =
-        ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
-    assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig()).isEqualTo(parsedLbConfig);
-
-    // A no resolution retry
-    assertEquals(0, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
   }
 
   @Test
@@ -3017,36 +2871,6 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void resetConnectBackoff() {
-    // Start with a name resolution failure to trigger backoff attempts
-    Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    // Name resolution is started as soon as channel is created.
-    createChannel();
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
-    verify(mockLoadBalancer).handleNameResolutionError(same(error));
-
-    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverRefresh();
-    assertNotNull("There should be a name resolver backoff task", nameResolverBackoff);
-    assertEquals(0, resolver.refreshCalled);
-
-    // Verify resetConnectBackoff() calls refresh and cancels the scheduled backoff
-    channel.resetConnectBackoff();
-    assertEquals(1, resolver.refreshCalled);
-    assertTrue(nameResolverBackoff.isCancelled());
-
-    // Simulate a race between cancel and the task scheduler. Should be a no-op.
-    nameResolverBackoff.command.run();
-    assertEquals(1, resolver.refreshCalled);
-
-    // Verify that the reconnect policy was recreated and the backoff multiplier reset to 1
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
-    assertEquals(2, resolver.refreshCalled);
-  }
-
-  @Test
   public void resetConnectBackoff_noOpWithoutPendingResolverBackoff() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
@@ -4512,10 +4336,6 @@ public class ManagedChannelImplTest {
   private static ChannelStats getStats(
       InternalInstrumented<ChannelStats> instrumented) throws Exception {
     return instrumented.getStats().get();
-  }
-
-  private FakeClock.ScheduledTask getNameResolverRefresh() {
-    return Iterables.getOnlyElement(timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
   }
 
   // Helper methods to call methods from SynchronizationContext
