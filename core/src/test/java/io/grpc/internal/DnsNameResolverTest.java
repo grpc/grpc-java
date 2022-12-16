@@ -303,11 +303,11 @@ public class DnsNameResolverTest {
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
 
-    DnsNameResolver resolver
-        = (DnsNameResolver) newResolver(name, 81, isAndroid).getRetriedNameResolver();
+    RetryingNameResolver resolver = newResolver(name, 81, isAndroid);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
-    resolver.setAddressResolver(mockResolver);
+    dnsResolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
@@ -331,11 +331,11 @@ public class DnsNameResolverTest {
   public void testExecutor_default() throws Exception {
     final List<InetAddress> answer = createAddressList(2);
 
-    DnsNameResolver resolver
-        = (DnsNameResolver) newResolver("foo.googleapis.com", 81).getRetriedNameResolver();
+    RetryingNameResolver resolver = newResolver("foo.googleapis.com", 81);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer);
-    resolver.setAddressResolver(mockResolver);
+    dnsResolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
@@ -372,11 +372,12 @@ public class DnsNameResolverTest {
                 })
             .build();
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(
-        "foo.googleapis.com", Stopwatch.createUnstarted(), false, args).getRetriedNameResolver();
+    RetryingNameResolver resolver = newResolver(
+        "foo.googleapis.com", Stopwatch.createUnstarted(), false, args);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer);
-    resolver.setAddressResolver(mockResolver);
+    dnsResolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
     assertEquals(0, fakeExecutor.runDueTasks());
@@ -398,14 +399,14 @@ public class DnsNameResolverTest {
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(
-        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR,
-        Stopwatch.createUnstarted(fakeTicker)).getRetriedNameResolver();
+    RetryingNameResolver resolver = newResolver(
+        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString()))
         .thenReturn(answer1)
         .thenThrow(new AssertionError("should not called twice"));
-    resolver.setAddressResolver(mockResolver);
+    dnsResolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
@@ -432,14 +433,14 @@ public class DnsNameResolverTest {
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(
-        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR,
-        Stopwatch.createUnstarted(fakeTicker)).getRetriedNameResolver();
+    RetryingNameResolver resolver = newResolver(
+        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString()))
         .thenReturn(answer)
         .thenThrow(new AssertionError("should not reach here."));
-    resolver.setAddressResolver(mockResolver);
+    dnsResolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
@@ -468,13 +469,13 @@ public class DnsNameResolverTest {
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(
-        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR,
-        Stopwatch.createUnstarted(fakeTicker)).getRetriedNameResolver();
+    RetryingNameResolver resolver = newResolver(
+        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1)
         .thenReturn(answer2);
-    resolver.setAddressResolver(mockResolver);
+    dnsResolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
@@ -513,12 +514,12 @@ public class DnsNameResolverTest {
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(
-        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR,
-        Stopwatch.createUnstarted(fakeTicker)).getRetriedNameResolver();
+    RetryingNameResolver resolver = newResolver(
+        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
-    resolver.setAddressResolver(mockResolver);
+    dnsResolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
@@ -548,9 +549,9 @@ public class DnsNameResolverTest {
   @Test
   public void resolve_emptyResult() throws Exception {
     DnsNameResolver.enableTxt = true;
-    DnsNameResolver nr
-        = (DnsNameResolver) newResolver("dns:///addr.fake:1234", 443).getRetriedNameResolver();
-    nr.setAddressResolver(new AddressResolver() {
+    RetryingNameResolver resolver = newResolver("dns:///addr.fake:1234", 443);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(new AddressResolver() {
       @Override
       public List<InetAddress> resolveAddress(String host) throws Exception {
         return Collections.emptyList();
@@ -560,9 +561,9 @@ public class DnsNameResolverTest {
     when(mockResourceResolver.resolveTxt(anyString()))
         .thenReturn(Collections.<String>emptyList());
 
-    nr.setResourceResolver(mockResourceResolver);
+    dnsResolver.setResourceResolver(mockResourceResolver);
 
-    nr.start(mockListener);
+    resolver.start(mockListener);
     assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
 
     ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
@@ -583,9 +584,9 @@ public class DnsNameResolverTest {
     when(mockListener.onResult(isA(ResolutionResult.class))).thenReturn(false);
 
     DnsNameResolver.enableTxt = true;
-    DnsNameResolver nr
-        = (DnsNameResolver) newResolver("dns:///addr.fake:1234", 443).getRetriedNameResolver();
-    nr.setAddressResolver(new AddressResolver() {
+    RetryingNameResolver resolver = newResolver("dns:///addr.fake:1234", 443);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(new AddressResolver() {
       @Override
       public List<InetAddress> resolveAddress(String host) throws Exception {
         return Collections.emptyList();
@@ -595,9 +596,9 @@ public class DnsNameResolverTest {
     when(mockResourceResolver.resolveTxt(anyString()))
         .thenReturn(Collections.<String>emptyList());
 
-    nr.setResourceResolver(mockResourceResolver);
+    dnsResolver.setResourceResolver(mockResourceResolver);
 
-    nr.start(mockListener);
+    resolver.start(mockListener);
     assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
 
     ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
@@ -622,9 +623,10 @@ public class DnsNameResolverTest {
         .thenReturn(Collections.singletonList(backendAddr));
     String name = "foo.googleapis.com";
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(name, 81).getRetriedNameResolver();
-    resolver.setAddressResolver(mockAddressResolver);
-    resolver.setResourceResolver(null);
+    RetryingNameResolver resolver = newResolver(name, 81);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(mockAddressResolver);
+    dnsResolver.setResourceResolver(null);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener).onResult(resultCaptor.capture());
@@ -649,9 +651,10 @@ public class DnsNameResolverTest {
         .thenThrow(new IOException("no addr"));
     String name = "foo.googleapis.com";
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(name, 81).getRetriedNameResolver();
-    resolver.setAddressResolver(mockAddressResolver);
-    resolver.setResourceResolver(null);
+    RetryingNameResolver resolver = newResolver(name, 81);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(mockAddressResolver);
+    dnsResolver.setResourceResolver(null);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener).onError(errorCaptor.capture());
@@ -692,10 +695,10 @@ public class DnsNameResolverTest {
             .build();
 
     String name = "foo.googleapis.com";
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(
-        name, Stopwatch.createUnstarted(), false, args).getRetriedNameResolver();
-    resolver.setAddressResolver(mockAddressResolver);
-    resolver.setResourceResolver(mockResourceResolver);
+    RetryingNameResolver resolver = newResolver(name, Stopwatch.createUnstarted(), false, args);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(mockAddressResolver);
+    dnsResolver.setResourceResolver(mockResourceResolver);
 
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
@@ -751,9 +754,10 @@ public class DnsNameResolverTest {
     when(mockResourceResolver.resolveTxt(anyString()))
         .thenThrow(new Exception("something like javax.naming.NamingException"));
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(name, 81).getRetriedNameResolver();
-    resolver.setAddressResolver(mockAddressResolver);
-    resolver.setResourceResolver(mockResourceResolver);
+    RetryingNameResolver resolver = newResolver(name, 81);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(mockAddressResolver);
+    dnsResolver.setResourceResolver(mockResourceResolver);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener).onResult(resultCaptor.capture());
@@ -783,9 +787,10 @@ public class DnsNameResolverTest {
     when(mockResourceResolver.resolveTxt(anyString()))
         .thenReturn(Collections.singletonList("grpc_config=something invalid"));
 
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(name, 81).getRetriedNameResolver();
-    resolver.setAddressResolver(mockAddressResolver);
-    resolver.setResourceResolver(mockResourceResolver);
+    RetryingNameResolver resolver = newResolver(name, 81);
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(mockAddressResolver);
+    dnsResolver.setResourceResolver(mockResourceResolver);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener).onResult(resultCaptor.capture());
@@ -848,11 +853,12 @@ public class DnsNameResolverTest {
               .setPassword("password").build();
         }
       };
-    DnsNameResolver resolver = (DnsNameResolver) newResolver(
-        name, port, alwaysDetectProxy, Stopwatch.createUnstarted()).getRetriedNameResolver();
+    RetryingNameResolver resolver = newResolver(
+        name, port, alwaysDetectProxy, Stopwatch.createUnstarted());
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString())).thenThrow(new AssertionError());
-    resolver.setAddressResolver(mockAddressResolver);
+    dnsResolver.setAddressResolver(mockAddressResolver);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
 
