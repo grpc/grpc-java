@@ -43,8 +43,6 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
-  static final String ADS_TYPE_URL_EDS_V2 =
-      "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
@@ -74,11 +72,6 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  String typeUrlV2() {
-    return ADS_TYPE_URL_EDS_V2;
-  }
-
-  @Override
   boolean isFullStateOfTheWorld() {
     return false;
   }
@@ -89,7 +82,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  EdsUpdate doParse(Args args, Message unpackedMessage, boolean isResourceV3)
+  EdsUpdate doParse(Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof ClusterLoadAssignment)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());

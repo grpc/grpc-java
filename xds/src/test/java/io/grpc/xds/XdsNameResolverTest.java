@@ -145,7 +145,7 @@ public class XdsNameResolverTest {
   private final TestChannel channel = new TestChannel();
   private BootstrapInfo bootstrapInfo = BootstrapInfo.builder()
       .servers(ImmutableList.of(ServerInfo.create(
-          "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+          "td.googleapis.com", InsecureChannelCredentials.create())))
       .node(Node.newBuilder().build())
       .build();
   private String expectedLdsResourceName = AUTHORITY;
@@ -231,7 +231,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_templateWithoutXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate("%s/id=1")
         .build();
@@ -249,7 +249,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_templateWithXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")

@@ -125,15 +125,34 @@ public class XdsServerWrapperTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void testBootstrap_notV3() throws Exception {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create(), false)))
+                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create())))
             .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
             .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
             .build();
-    verifyBootstrapFail(b);
+    XdsClient xdsClient = mock(XdsClient.class);
+    XdsListenerResource listenerResource = XdsListenerResource.getInstance();
+    when(xdsClient.getBootstrapInfo()).thenReturn(b);
+    xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          xdsServerWrapper.start();
+        } catch (IOException ex) {
+          // ignore
+        }
+      }
+    });
+    verify(xdsClient, timeout(5000)).watchXdsResource(
+        eq(listenerResource),
+        eq("grpc/server?udpa.resource.listening_address=[::FFFF:129.144.52.38]:80"),
+        any(ResourceWatcher.class));
   }
 
   @Test
@@ -141,7 +160,7 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create(), true)))
+                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create())))
             .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
             .build();
     verifyBootstrapFail(b);
@@ -181,7 +200,7 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b = Bootstrapper.BootstrapInfo.builder()
         .servers(Arrays.asList(
             Bootstrapper.ServerInfo.create(
-                "uri", InsecureChannelCredentials.create(), true)))
+                "uri", InsecureChannelCredentials.create())))
         .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
         .serverListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")

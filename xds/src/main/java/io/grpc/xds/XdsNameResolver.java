@@ -202,8 +202,7 @@ final class XdsNameResolver extends NameResolver {
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
     if (!XdsClient.isResourceNameValid(ldsResourceName, XdsListenerResource.getInstance().typeUrl())
-        && !XdsClient.isResourceNameValid(ldsResourceName,
-        XdsListenerResource.getInstance().typeUrlV2())) {
+        ) {
       listener.onError(Status.INVALID_ARGUMENT.withDescription(
           "invalid listener resource URI for service authority: " + serviceAuthority));
       return;

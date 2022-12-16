@@ -152,7 +152,7 @@ import org.junit.runners.JUnit4;
 public class XdsClientImplDataTest {
 
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
 
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
@@ -2719,9 +2719,6 @@ public class XdsClientImplDataTest {
     assertThat(XdsClient.isResourceNameValid(traditionalResource,
         XdsClusterResource.getInstance().typeUrl()))
         .isTrue();
-    assertThat(XdsClient.isResourceNameValid(traditionalResource,
-        XdsRouteConfigureResource.getInstance().typeUrlV2()))
-        .isTrue();
 
     String invalidPath = "xdstp:/abc/efg";
     assertThat(XdsClient.isResourceNameValid(invalidPath,
@@ -2736,8 +2733,6 @@ public class XdsClientImplDataTest {
         XdsListenerResource.getInstance().typeUrl())).isFalse();
     assertThat(XdsClient.isResourceNameValid(typeMatch,
         XdsRouteConfigureResource.getInstance().typeUrl())).isTrue();
-    assertThat(XdsClient.isResourceNameValid(typeMatch,
-        XdsRouteConfigureResource.getInstance().typeUrlV2())).isFalse();
   }
 
   @Test
