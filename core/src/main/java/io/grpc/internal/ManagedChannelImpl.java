@@ -457,11 +457,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
    * Force name resolution refresh to happen immediately. Must be run
    * from syncContext.
    */
-  private void refreshAndResetNameResolution() {
-    syncContext.throwIfNotInThisSynchronizationContext();
-    refreshNameResolution();
-  }
-
   private void refreshNameResolution() {
     syncContext.throwIfNotInThisSynchronizationContext();
     if (nameResolverStarted) {
@@ -1266,7 +1261,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be called from syncContext
   private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
     if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-      refreshAndResetNameResolution();
+      refreshNameResolution();
     }
   }
 
@@ -1315,7 +1310,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
         if (lastAddressesAccepted != null && !lastAddressesAccepted) {
           checkState(nameResolverStarted, "name resolver must be started");
-          refreshAndResetNameResolution();
+          refreshNameResolution();
         }
         for (InternalSubchannel subchannel : subchannels) {
           subchannel.resetConnectBackoff();
@@ -1471,7 +1466,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
-          refreshAndResetNameResolution();
+          refreshNameResolution();
         }
       }
 

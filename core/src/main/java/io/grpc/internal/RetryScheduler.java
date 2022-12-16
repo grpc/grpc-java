@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
- * Schedules a retry operation according to a {@link BackoffPolicy}. The retry is run withing a
+ * Schedules a retry operation according to a {@link BackoffPolicy}. The retry is run within a
  * {@link SynchronizationContext}. At most one retry is scheduled at a time.
  */
 final class RetryScheduler {

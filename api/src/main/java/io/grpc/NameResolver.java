@@ -143,7 +143,7 @@ public abstract class NameResolver {
    * @since 1.53.0
    */
   public final void addResolutionResultListener(ResolutionResultListener listener) {
-    checkArgument(listener != null);
+    checkArgument(listener != null, "listener");
     resolutionResultListeners.add(listener);
   }
 
