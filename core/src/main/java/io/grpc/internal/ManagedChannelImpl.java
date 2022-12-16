@@ -1466,7 +1466,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
-          refreshNameResolution();
+          ManagedChannelImpl.this.refreshNameResolution();
         }
       }
 
