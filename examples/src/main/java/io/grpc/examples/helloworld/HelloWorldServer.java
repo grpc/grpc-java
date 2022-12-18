@@ -24,7 +24,10 @@ import io.grpc.health.v1.HealthGrpc;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 /**
@@ -32,6 +35,7 @@ import java.util.logging.Logger;
  */
 public class HelloWorldServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
+  private static final AtomicInteger REQUEST_COUNT = new AtomicInteger(0);
 
   private Server server;
 
@@ -87,17 +91,38 @@ public class HelloWorldServer {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-        HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
+      String hostName = "";
+      try {
+        hostName = InetAddress.getLocalHost().getHostName();
+      } catch (UnknownHostException e) {
+        throw new RuntimeException(e);
+      }
+        REQUEST_COUNT.set(REQUEST_COUNT.get() + 1);
+        HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName() + " This is host: " + hostName).build();
+
+        try {
+          Thread.sleep(10 * 1000L);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+
         responseObserver.onNext(reply);
+        REQUEST_COUNT.set(REQUEST_COUNT.get() - 1);
         responseObserver.onCompleted();
+    }
+
+    public static int requestCount() {
+      return REQUEST_COUNT.get();
     }
   }
 
   static class HealthImpl extends HealthGrpc.HealthImplBase {
     @Override
     public void check(HealthCheckRequest request, StreamObserver<HealthCheckResponse> responseObserver) {
-      HealthCheckResponse response = HealthCheckResponse.newBuilder().setStatus(HealthCheckResponse.ServingStatus.SERVING).build();
-      responseObserver.onNext(response);
+      HealthCheckResponse servingResponse = HealthCheckResponse.newBuilder().setStatus(HealthCheckResponse.ServingStatus.SERVING).build();
+      HealthCheckResponse notServingResponse = HealthCheckResponse.newBuilder().setStatus(HealthCheckResponse.ServingStatus.NOT_SERVING).build();
+      if(REQUEST_COUNT.get() > 0) responseObserver.onNext(notServingResponse);
+      else responseObserver.onNext(servingResponse);
       responseObserver.onCompleted();
     }
   }
