@@ -1,12 +1,14 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
 # Publicly exposed in //netty package. Purposefully does not export any symbols.
 java_library(
     name = "shaded",
     visibility = ["//netty:__pkg__"],
     runtime_deps = [
         "//netty",
-        "@io_netty_netty_tcnative_boringssl_static//jar",
-        "@io_netty_netty_tcnative_classes//jar",
-        "@io_netty_netty_transport_native_unix_common//jar",
-        "@io_netty_netty_transport_native_epoll_linux_x86_64//jar",
+        artifact("io.netty:netty-tcnative-boringssl-static"),
+        artifact("io.netty:netty-tcnative-classes"),
+        artifact("io.netty:netty-transport-native-unix-common"),
+        artifact("io.netty:netty-transport-native-epoll_linux_x86_64"),
     ],
 )
