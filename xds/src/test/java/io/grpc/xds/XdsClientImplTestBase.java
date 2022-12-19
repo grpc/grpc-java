@@ -3516,7 +3516,7 @@ public abstract class XdsClientImplTestBase {
       // Establish the adsStream object
       xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE,
           cdsResourceWatcher);
-      resourceDiscoveryCalls.take(); // clear this entry
+      DiscoveryRpcCall unused = resourceDiscoveryCalls.take(); // clear this entry
 
       // Shutdown server and initiate a request
       xdsServer.shutdownNow();
