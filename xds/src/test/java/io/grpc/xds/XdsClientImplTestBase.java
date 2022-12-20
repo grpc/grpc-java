@@ -3474,6 +3474,42 @@ public abstract class XdsClientImplTestBase {
   }
 
   @Test
+  public void longServerStop() throws Exception {
+    try {
+      // Establish the adsStream object
+      xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE,
+          cdsResourceWatcher);
+      resourceDiscoveryCalls.take(); // clear this entry
+
+      // Shutdown server and initiate a request
+      xdsServer.shutdownNow();
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
+          ldsResourceWatcher);
+      fakeClock.forwardTime(16, TimeUnit.SECONDS);
+
+      // Restart the server
+      xdsServer = cleanupRule.register(
+          InProcessServerBuilder
+              .forName(serverName)
+              .addService(adsService)
+              .addService(lrsService)
+              .directExecutor()
+              .build()
+              .start());
+      fakeClock.forwardTime(1, TimeUnit.SECONDS);
+      DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      Thread.sleep(1); // For some reason the V2 test fails the verifyRequest without this
+
+      // Send a response and do verifications
+      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+      call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
+      call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE);
+    } catch (Throwable t) {
+      throw t; // This allows putting a breakpoint here for debugging
+    }
+  }
+
+  @Test
   public void sendingToStoppedServer() throws Exception {
     try {
       // Establish the adsStream object
