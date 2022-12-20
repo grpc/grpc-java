@@ -168,6 +168,8 @@ final class LoadReportClient {
     }
   }
 
+  // TODO(zivy@): The abstract class was used to support xds v2 and v3. Remove abstract here since
+  // v2 is dropped and v3 is the only supported version now.
   private abstract class LrsStream {
     boolean initialResponseReceived;
     boolean closed;

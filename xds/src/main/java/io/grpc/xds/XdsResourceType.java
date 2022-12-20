@@ -39,7 +39,7 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 abstract class XdsResourceType<T extends ResourceUpdate> {
-  static final String TYPE_URL_RESOURCE_V3 =
+  static final String TYPE_URL_RESOURCE =
       "type.googleapis.com/envoy.service.discovery.v3.Resource";
   static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   @VisibleForTesting
@@ -191,8 +191,8 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   private Any maybeUnwrapResources(Any resource)
       throws InvalidProtocolBufferException {
-    if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE_V3)) {
-      return unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE_V3,
+    if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE)) {
+      return unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE,
           null).getResource();
     } else {
       return resource;

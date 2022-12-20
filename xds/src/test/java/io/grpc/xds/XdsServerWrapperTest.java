@@ -126,7 +126,7 @@ public class XdsServerWrapperTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void testBootstrap_notV3() throws Exception {
+  public void testBootstrap() throws Exception {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(

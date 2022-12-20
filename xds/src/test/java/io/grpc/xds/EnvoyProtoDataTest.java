@@ -86,41 +86,6 @@ public class EnvoyProtoDataTest {
             .addClientFeatures("feature-2")
             .build();
     assertThat(node.toEnvoyProtoNode()).isEqualTo(nodeProto);
-
-    @SuppressWarnings("deprecation") // Deprecated v2 API setBuildVersion().
-    io.envoyproxy.envoy.api.v2.core.Node nodeProtoV2 =
-        io.envoyproxy.envoy.api.v2.core.Node.newBuilder()
-            .setId("node-id")
-            .setCluster("cluster")
-            .setMetadata(Struct.newBuilder()
-                .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                    Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                    Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build()))
-            .setLocality(
-                io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
-                    .setRegion("region")
-                    .setZone("zone")
-                    .setSubZone("subzone"))
-            .addListeningAddresses(
-                io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
-                    .setSocketAddress(
-                        io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder()
-                            .setAddress("www.foo.com")
-                            .setPortValue(8080)))
-            .addListeningAddresses(
-                io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
-                    .setSocketAddress(
-                        io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder()
-                            .setAddress("www.bar.com")
-                            .setPortValue(8088)))
-            .setBuildVersion("v1")
-            .setUserAgentName("agent")
-            .setUserAgentVersion("1.1")
-            .addClientFeatures("feature-1")
-            .addClientFeatures("feature-2")
-            .build();
-    assertThat(node.toEnvoyProtoNodeV2()).isEqualTo(nodeProtoV2);
   }
 
   @Test

@@ -124,6 +124,8 @@ import org.mockito.MockitoAnnotations;
  * Tests for {@link XdsClientImpl}.
  */
 @RunWith(JUnit4.class)
+// The base class was used to test both xds v2 and v3. V2 is dropped now so the base class is not
+// necessary. Still keep it for future version usage. Remove if too much trouble to maintain.
 public abstract class XdsClientImplTestBase {
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";

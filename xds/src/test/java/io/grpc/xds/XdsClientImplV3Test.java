@@ -177,7 +177,6 @@ public class XdsClientImplV3Test extends XdsClientImplTestBase {
     };
   }
 
-
   @Override
   protected MessageFactory createMessageFactory() {
     return new MessageFactoryV3();
