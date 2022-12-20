@@ -80,8 +80,8 @@ public class ForwardingNameResolverTest {
   public void start_observer() {
     NameResolver.Listener2 listener = new NameResolver.Listener2() {
       @Override
-      public boolean onResult(ResolutionResult result) {
-        return true;
+      public void onResult(ResolutionResult result) {
+
       }
 
       @Override

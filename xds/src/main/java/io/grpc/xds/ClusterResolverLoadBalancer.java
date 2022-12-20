@@ -602,7 +602,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       private class NameResolverListener extends NameResolver.Listener2 {
         @Override
-        public boolean onResult(final ResolutionResult resolutionResult) {
+        public void onResult(final ResolutionResult resolutionResult) {
           class NameResolved implements Runnable {
             @Override
             public void run() {
@@ -634,7 +634,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           }
 
           syncContext.execute(new NameResolved());
-          return true;
         }
 
         @Override
