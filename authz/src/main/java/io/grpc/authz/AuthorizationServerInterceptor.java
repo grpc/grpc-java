@@ -31,14 +31,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Authorization server interceptor for static policy.
+ * Authorization server interceptor for static policy. The class will get
+ * gRPC Authorization policy as a JSON string during initialization. This
+ * policy will be translated to Envoy RBAC policies and used to initialize
+ * GrpcAuthorizationEngine objects to make authorization decisions. It
+ * either contains two engines - deny engine followed by an allow engine
+ * or only one allow engine. This provider will use the same authorization
+ * engines everytime.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9746")
 public final class AuthorizationServerInterceptor implements ServerInterceptor {
   private final List<ServerInterceptor> interceptors = new ArrayList<>();
 
   private AuthorizationServerInterceptor(String authorizationPolicy) 
-      throws IllegalArgumentException, IOException {
+      throws IOException {
     List<RBAC> rbacs = AuthorizationPolicyTranslator.translate(authorizationPolicy);
     if (rbacs == null || rbacs.isEmpty() || rbacs.size() > 2) {
       throw new IllegalArgumentException("Failed to translate authorization policy");
@@ -63,7 +69,7 @@ public final class AuthorizationServerInterceptor implements ServerInterceptor {
 
   // Static method that creates an AuthorizationServerInterceptor.
   public static AuthorizationServerInterceptor create(String authorizationPolicy) 
-      throws IllegalArgumentException, IOException {
+      throws IOException {
     checkNotNull(authorizationPolicy, "authorizationPolicy");
     return new AuthorizationServerInterceptor(authorizationPolicy);
   }

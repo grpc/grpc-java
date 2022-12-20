@@ -26,8 +26,10 @@ import io.grpc.xds.RbacFilter;
 @Internal
 public final class InternalRbacFilter {
 
+  InternalRbacFilter() {}
+
   /** Parses RBAC filter config and creates AuthorizationServerInterceptor. */
-  public static ServerInterceptor createInterceptor(RBAC rbac) throws IllegalArgumentException {
+  public static ServerInterceptor createInterceptor(RBAC rbac) {
     ConfigOrError<RbacConfig> filterConfig = RbacFilter.parseRbacConfig(rbac);
     if (filterConfig.errorDetail != null) {
       throw new IllegalArgumentException(
