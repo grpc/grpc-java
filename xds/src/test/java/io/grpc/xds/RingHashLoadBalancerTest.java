@@ -986,7 +986,7 @@ public class RingHashLoadBalancerTest {
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     assertThat(addressesAccepted).isFalse();
 
-    // Try something larger than max unsigned int
+    // Try an individual value larger than max unsigned int
     long maxUnsigned = UnsignedInteger.MAX_VALUE.longValue();
     servers = createWeightedServerAddrs(maxUnsigned + 10, 10, 100); // uMAX+10:10:100
     addressesAccepted = loadBalancer.acceptResolvedAddresses(
@@ -994,7 +994,7 @@ public class RingHashLoadBalancerTest {
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     assertThat(addressesAccepted).isFalse();
 
-    // Try something larger than max unsigned int
+    // Try a sum of values larger than max unsigned int
     servers = createWeightedServerAddrs(Integer.MAX_VALUE, Integer.MAX_VALUE, 100); // MAX:MAX:100
     addressesAccepted = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
