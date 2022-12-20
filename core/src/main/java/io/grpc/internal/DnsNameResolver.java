@@ -318,7 +318,6 @@ public class DnsNameResolver extends NameResolver {
           result = doResolve(false);
           if (result.error != null) {
             savedListener.onError(result.error);
-            fireResolutionResultEvent(false);
             return;
           }
           if (result.addresses != null) {
@@ -331,7 +330,7 @@ public class DnsNameResolver extends NameResolver {
             resolutionResultBuilder.setAttributes(result.attributes);
           }
         }
-        fireResolutionResultEvent(savedListener.onResult(resolutionResultBuilder.build()));
+        savedListener.onResult(resolutionResultBuilder.build());
       } catch (IOException e) {
         savedListener.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
