@@ -20,7 +20,6 @@ import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -115,23 +114,6 @@ class NettyClientTransport implements ConnectionClientTransport {
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
       Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
       LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
-      boolean useGetForSafeMethods) {
-    this(address,channelFactory, channelOptions, group, negotiator, autoFlowControl,
-        flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeNanos,
-        keepAliveTimeoutNanos, keepAliveWithoutCalls, authority, userAgent, tooManyPingsRunnable,
-        transportTracer, eagAttributes, localSocketPicker, channelLogger, useGetForSafeMethods,
-        Ticker.systemTicker());
-  }
-
-  NettyClientTransport(
-      SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
-      Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
-      ProtocolNegotiator negotiator, boolean autoFlowControl, int flowControlWindow,
-      int maxMessageSize, int maxHeaderListSize,
-      long keepAliveTimeNanos, long keepAliveTimeoutNanos,
-      boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
-      Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
-      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
       boolean useGetForSafeMethods, Ticker ticker) {
 
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
@@ -158,7 +140,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.useGetForSafeMethods = useGetForSafeMethods;
-    this.ticker = (ticker != null) ? ticker : Ticker.systemTicker();
+    this.ticker = Preconditions.checkNotNull(ticker, "ticker");
   }
 
   @Override

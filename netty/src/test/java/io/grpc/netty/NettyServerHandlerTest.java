@@ -71,7 +71,6 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
-import io.grpc.testing.TestMethodDescriptors;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelFuture;
@@ -1284,21 +1283,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Override
-  protected AbstractStream stream() {
+  protected AbstractStream stream()  {
     if (stream == null) {
-      NettyServerStream.TransportState state = new NettyServerStream.TransportState(
-          handler(),
-          channel().eventLoop(),
-          connection().connectionStream(),
-          DEFAULT_MAX_MESSAGE_SIZE,
-          stream.statsTraceContext(),
-          transportTracer,
-          TestMethodDescriptors.voidMethod().getFullMethodName());
-
-      stream = new NettyServerStream(channel(), state, Attributes.EMPTY,
-          "test-authority", stream.statsTraceContext(), transportTracer);
-      stream.transportState().setListener(new NoopListener());
-      state.onStreamAllocated();
+      try {
+        makeStream();
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to make stream", e);
+      }
     }
 
     return stream;

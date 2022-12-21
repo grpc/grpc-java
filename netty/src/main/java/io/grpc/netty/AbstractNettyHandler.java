@@ -57,18 +57,6 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       Http2Settings initialSettings,
       ChannelLogger negotiationLogger,
       boolean autoFlowControl,
-      PingLimiter pingLimiter) {
-    this(channelUnused, decoder, encoder, initialSettings, negotiationLogger, autoFlowControl,
-        pingLimiter, Ticker.systemTicker());
-  }
-
-  AbstractNettyHandler(
-      ChannelPromise channelUnused,
-      Http2ConnectionDecoder decoder,
-      Http2ConnectionEncoder encoder,
-      Http2Settings initialSettings,
-      ChannelLogger negotiationLogger,
-      boolean autoFlowControl,
       PingLimiter pingLimiter,
       Ticker ticker) {
     super(channelUnused, decoder, encoder, initialSettings, negotiationLogger);
@@ -80,8 +68,10 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     this.initialConnectionWindow = initialSettings.initialWindowSize() == null ? -1 :
         initialSettings.initialWindowSize();
     this.autoTuneFlowControlOn = autoFlowControl;
-    PingLimiter activePingLimiter = (pingLimiter != null) ? pingLimiter :  new AllowPingLimiter();
-    this.flowControlPing = new FlowControlPinger(activePingLimiter);
+    if (pingLimiter == null) {
+      pingLimiter = new AllowPingLimiter();
+    }
+    this.flowControlPing = new FlowControlPinger(pingLimiter);
     this.ticker = checkNotNull(ticker, "ticker");
   }
 
