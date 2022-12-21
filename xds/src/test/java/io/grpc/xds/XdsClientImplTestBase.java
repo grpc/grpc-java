@@ -3535,7 +3535,6 @@ public abstract class XdsClientImplTestBase {
               .start());
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
-      Thread.sleep(1); // For some reason the V2 test fails the verifyRequest without this
 
       // Send a response and do verifications
       verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
