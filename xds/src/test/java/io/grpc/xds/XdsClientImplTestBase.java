@@ -3535,8 +3535,10 @@ public abstract class XdsClientImplTestBase {
               .start());
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
-      Thread.sleep(1); // For some reason the V2 test fails the verifyRequest without this
 
+      // NOTE:  There is a ScheduledExecutorService that may get involved due to the reconnect
+      // so you cannot rely on the logic being single threaded.  The timeout() in verifyRequest
+      // is therefore necessary to avoid flakiness.
       // Send a response and do verifications
       verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
       call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
