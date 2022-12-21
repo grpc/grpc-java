@@ -3536,13 +3536,11 @@ public abstract class XdsClientImplTestBase {
               .start());
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
-      Thread.sleep(1); // For some reason the V2 test fails the verifyRequest without this
 
       // Send a response and do verifications
       verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
-      call.setResponseLatch();
       call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
-      assertThat(call.waitForResponseLatch()).isTrue();
+      assertThat(call.waitForResponseLatch(2)).isTrue();
       call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE);
       verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
       verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
@@ -3589,15 +3587,16 @@ public abstract class XdsClientImplTestBase {
   }
 
   protected abstract static class DiscoveryRpcCall {
-    private CountDownLatch responseLatch;
+    private volatile CountDownLatch responseLatch;
 
     protected void setResponseLatch() {
       responseLatch = new CountDownLatch(1);
     }
 
     protected void countdownResponseLatch() {
-      if (responseLatch != null) {
-        responseLatch.countDown();
+      CountDownLatch currentLatch = this.responseLatch;
+      if (currentLatch != null) {
+        currentLatch.countDown();
       }
     }
 
@@ -3605,14 +3604,9 @@ public abstract class XdsClientImplTestBase {
      * If responseLatch is non-null waits for a response to be sent.
      * @return true if wait was successful, false if is null or wait was unsuccessful
      */
-    protected boolean waitForResponseLatch() {
-      boolean waitSuccesful;
-      try {
-        waitSuccesful = (responseLatch != null && responseLatch.await(2, TimeUnit.SECONDS));
-      } catch (InterruptedException e) {
-        waitSuccesful = false;
-      }
-
+    protected boolean waitForResponseLatch(int seconds) throws InterruptedException {
+      boolean waitSuccesful =
+          (responseLatch != null && responseLatch.await(seconds, TimeUnit.SECONDS));
       responseLatch = null;
       return waitSuccesful;
     }
@@ -3643,6 +3637,7 @@ public abstract class XdsClientImplTestBase {
 
     protected void sendResponse(XdsResourceType<?> type, Any resource, String versionInfo,
                                 String nonce) {
+      setResponseLatch();
       sendResponse(type, ImmutableList.of(resource), versionInfo, nonce);
     }
 
