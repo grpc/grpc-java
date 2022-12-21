@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -104,6 +105,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentMatcher;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 
 /**
@@ -132,6 +134,12 @@ public class XdsClientImplV2Test extends XdsClientImplTestBase {
         @SuppressWarnings("unchecked")
         StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
         DiscoveryRpcCall call = new DiscoveryRpcCallV2(requestObserver, responseObserver);
+
+        doAnswer((d) -> {
+          call.countdownResponseLatch();
+          return null;
+        }).when(requestObserver).onNext(ArgumentMatchers.any());
+
         resourceDiscoveryCalls.offer(call);
         Context.current().addListener(
             new CancellationListener() {
@@ -227,7 +235,6 @@ public class XdsClientImplV2Test extends XdsClientImplTestBase {
               .setNonce(nonce)
               .build();
       responseObserver.onNext(response);
-      countdownResponseLatch();
     }
 
     @Override
