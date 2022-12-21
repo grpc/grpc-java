@@ -17,6 +17,8 @@
 package io.grpc.authz;
 
 import static com.google.common.truth.Truth.assertThat;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 import io.grpc.ChannelCredentials;
@@ -26,6 +28,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerCredentials;
+import io.grpc.ServerInterceptor;
 import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
@@ -36,7 +39,10 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 
+import java.io.Closeable;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -53,10 +59,24 @@ public class AuthorizationEnd2EndTest {
   private Server server;
   private ManagedChannel channel;
 
-  private void initServerWithStaticAuthz(
-      String authorizationPolicy, ServerCredentials serverCredentials) throws Exception {
-    AuthorizationServerInterceptor authzInterceptor = 
+  private AuthorizationServerInterceptor createStaticAuthorizationInterceptor(
+      String authorizationPolicy) throws Exception {
+    AuthorizationServerInterceptor interceptor =
         AuthorizationServerInterceptor.create(authorizationPolicy);
+    assertNotNull(interceptor);
+    return interceptor;
+  }
+
+  private FileWatcherAuthorizationServerInterceptor 
+      createFileWatcherAuthorizationInterceptor(File policyFile) throws Exception {
+    FileWatcherAuthorizationServerInterceptor interceptor =
+        FileWatcherAuthorizationServerInterceptor.create(policyFile);
+    assertNotNull(interceptor);
+    return interceptor;
+  }
+
+  private void initServerWithAuthzInterceptor(
+      ServerInterceptor authzInterceptor, ServerCredentials serverCredentials) throws Exception {
     server = Grpc.newServerBuilderForPort(0, serverCredentials)
                 .addService(new SimpleServiceImpl())
                 .intercept(authzInterceptor)
@@ -64,11 +84,29 @@ public class AuthorizationEnd2EndTest {
                 .start();
   }
 
+  private File createTempAuthorizationPolicy(String authorizationPolicy) throws Exception {
+    File policyFile = File.createTempFile("temp", "json");
+    try (FileOutputStream outputStream = new FileOutputStream(policyFile, false)) {
+      outputStream.write(authorizationPolicy.getBytes(UTF_8));
+      outputStream.close();
+    }
+    return policyFile;
+  }
+
+  private void rewriteAuthorizationPolicy(
+      File policyFile, String newPolicy) throws Exception {
+    try (FileOutputStream outputStream = new FileOutputStream(policyFile, false)) {
+      outputStream.write(newPolicy.getBytes(UTF_8));
+      outputStream.close();
+    }
+  }
+
   private SimpleServiceGrpc.SimpleServiceBlockingStub getStub() {
-    channel = 
-        Grpc.newChannelBuilderForAddress(
-            "localhost", server.getPort(), InsecureChannelCredentials.create())
-            .build();
+    if (channel == null) {
+      channel = Grpc.newChannelBuilderForAddress(
+        "localhost", server.getPort(), InsecureChannelCredentials.create())
+        .build();
+    }
     return SimpleServiceGrpc.newBlockingStub(channel);
   }
 
@@ -117,7 +155,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
@@ -146,7 +185,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -183,7 +223,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -220,7 +261,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -247,7 +289,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
@@ -266,7 +309,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -292,7 +336,8 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    initServerWithStaticAuthz(policy, InsecureServerCredentials.create());
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -323,12 +368,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverCert0File, serverKey0File)
         .trustManager(caCertFile)
         .clientAuth(ClientAuth.REQUIRE)
         .build();
-    initServerWithStaticAuthz(policy, serverCredentials);
+    initServerWithAuthzInterceptor(interceptor, serverCredentials);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .keyManager(clientCert0File, clientKey0File)
         .trustManager(caCertFile)
@@ -353,16 +399,416 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
+    AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverCert0File, serverKey0File)
         .trustManager(caCertFile)
         .clientAuth(ClientAuth.OPTIONAL)
         .build();
-    initServerWithStaticAuthz(policy, serverCredentials);
+    initServerWithAuthzInterceptor(interceptor, serverCredentials);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .trustManager(caCertFile)
         .build();
     getStub(channelCredentials).unaryRpc(SimpleRequest.getDefaultInstance());
+  }
+
+  @Test
+  public void fileWatcherAuthzAllowsRpcNoMatchInDenyMatchInAllowTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"deny_rules\": ["
+        + "   {"
+        + "     \"name\": \"deny_UnaryRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/UnaryRpc\""
+        + "       ],"
+        + "       \"headers\": ["
+        + "         {"
+        + "           \"key\": \"dev-path\","
+        + "           \"values\": [\"/dev/path/*\"]"
+        + "         }"
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ],"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_all\""
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+  }
+
+  @Test
+  public void fileWatcherAuthzDeniesRpcNoMatchInDenyAndAllowTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"deny_rules\": ["
+        + "   {"
+        + "     \"name\": \"deny_foo\","
+        + "     \"source\": {"
+        + "       \"principals\": ["
+        + "         \"foo\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ],"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_ClientStreamingRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/ClientStreamingRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void fileWatcherAuthzDeniesRpcMatchInDenyAndAllowTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"deny_rules\": ["
+        + "   {"
+        + "     \"name\": \"deny_UnaryRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/UnaryRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ],"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_UnaryRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/UnaryRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void fileWatcherAuthzDeniesRpcMatchInDenyNoMatchInAllowTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"deny_rules\": ["
+        + "   {"
+        + "     \"name\": \"deny_UnaryRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/UnaryRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ],"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_ClientStreamingRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/ClientStreamingRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void fileWatcherAuthzAllowsRpcEmptyDenyMatchInAllowTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_UnaryRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/UnaryRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+  }
+
+  @Test
+  public void fileWatcherAuthzDeniesRpcEmptyDenyNoMatchInAllowTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_ClientStreamingRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/ClientStreamingRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void fileWatcherAuthzValidPolicyRefreshTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"deny_rules\": ["
+        + "   {"
+        + "     \"name\": \"deny_UnaryRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/UnaryRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ],"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_all\""
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_UnaryRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/UnaryRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    rewriteAuthorizationPolicy(policyFile, policy);
+    Runnable callback = () -> {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+    };
+    Thread onReloadDone = new Thread(callback);
+    interceptor.setCallbackForTesting(onReloadDone);
+    onReloadDone.join();
+  }
+
+  @Test
+  public void fileWatcherAuthzInvalidPolicySkipRefreshTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_ClientStreamingRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/ClientStreamingRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    policy = "{}";
+    rewriteAuthorizationPolicy(policyFile, policy);
+    Runnable callback = () -> {
+      try {
+        getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+        fail("exception expected");
+      } catch (StatusRuntimeException sre) {
+        assertThat(sre).hasMessageThat().isEqualTo(
+            "PERMISSION_DENIED: Access Denied");
+      } catch (Exception e) {
+        throw new AssertionError("the test failed ", e);
+      }
+    };
+    Thread onReloadDone = new Thread(callback);
+    interceptor.setCallbackForTesting(onReloadDone);
+    onReloadDone.join();
+  }
+
+  @Test
+  public void fileWatcherAuthzRecoversFromReloadTest() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_ClientStreamingRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/ClientStreamingRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    File policyFile = createTempAuthorizationPolicy(policy);
+    FileWatcherAuthorizationServerInterceptor interceptor = 
+        createFileWatcherAuthorizationInterceptor(policyFile);
+    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
+    closeable.close();
+    policyFile.deleteOnExit();
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+            "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    policy = "{}";
+    rewriteAuthorizationPolicy(policyFile, policy);
+    Runnable callback = () -> {
+      try {
+        getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+        fail("exception expected");
+      } catch (StatusRuntimeException sre) {
+        assertThat(sre).hasMessageThat().isEqualTo(
+            "PERMISSION_DENIED: Access Denied");
+      } catch (Exception e) {
+        throw new AssertionError("the test failed ", e);
+      }
+    };
+    Thread onFirstReloadDone = new Thread(callback);
+    interceptor.setCallbackForTesting(onFirstReloadDone);
+    onFirstReloadDone.join();
+    policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_UnaryRpc\","
+        + "     \"request\": {"
+        + "       \"paths\": ["
+        + "         \"*/UnaryRpc\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    rewriteAuthorizationPolicy(policyFile, policy);
+    callback = () -> {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+    };
+    Thread onSecondReloadDone = new Thread(callback);
+    interceptor.setCallbackForTesting(onSecondReloadDone);
+    onSecondReloadDone.join();
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
