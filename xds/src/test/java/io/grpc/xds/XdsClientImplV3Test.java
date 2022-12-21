@@ -235,6 +235,7 @@ public class XdsClientImplV3Test extends XdsClientImplTestBase {
               .setNonce(nonce)
               .build();
       responseObserver.onNext(response);
+      countdownResponseLatch();
     }
 
     @Override

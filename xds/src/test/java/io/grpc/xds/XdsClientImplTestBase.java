@@ -97,6 +97,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -3539,7 +3540,9 @@ public abstract class XdsClientImplTestBase {
 
       // Send a response and do verifications
       verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+      call.setResponseLatch();
       call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
+      assertThat(call.waitForResponseLatch()).isTrue();
       call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE);
       verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
       verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
@@ -3586,6 +3589,33 @@ public abstract class XdsClientImplTestBase {
   }
 
   protected abstract static class DiscoveryRpcCall {
+    private CountDownLatch responseLatch;
+
+    protected void setResponseLatch() {
+      responseLatch = new CountDownLatch(1);
+    }
+
+    protected void countdownResponseLatch() {
+      if (responseLatch != null) {
+        responseLatch.countDown();
+      }
+    }
+
+    /**
+     * If responseLatch is non-null waits for a response to be sent.
+     * @return true if wait was successful, false if is null or wait was unsuccessful
+     */
+    protected boolean waitForResponseLatch() {
+      boolean waitSuccesful;
+      try {
+        waitSuccesful = (responseLatch != null && responseLatch.await(2, TimeUnit.SECONDS));
+      } catch (InterruptedException e) {
+        waitSuccesful = false;
+      }
+
+      responseLatch = null;
+      return waitSuccesful;
+    }
 
     protected abstract void verifyRequest(
         XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
