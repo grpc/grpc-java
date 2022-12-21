@@ -54,6 +54,12 @@ public final class MatcherParser {
       case SUFFIX_MATCH:
         return Matchers.HeaderMatcher.forSuffix(
               proto.getName(), proto.getSuffixMatch(), proto.getInvertMatch());
+      case CONTAINS_MATCH:
+        return Matchers.HeaderMatcher.forContains(
+              proto.getName(), proto.getContainsMatch(), proto.getInvertMatch());
+      case STRING_MATCH:
+        return Matchers.HeaderMatcher.forString(
+          proto.getName(), parseStringMatcher(proto.getStringMatch()), proto.getInvertMatch());
       case HEADERMATCHSPECIFIER_NOT_SET:
       default:
         throw new IllegalArgumentException(
