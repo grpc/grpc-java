@@ -32,12 +32,10 @@ import java.util.List;
 
 /**
  * Authorization server interceptor for static policy. The class will get
- * gRPC Authorization policy as a JSON string during initialization. This
- * policy will be translated to Envoy RBAC policies and used to initialize
- * GrpcAuthorizationEngine objects. This class could contain two engines
- * deny engine followed by an allow engine or only one allow engine. The
- * same set of authorization engines will be used everytime to make
- * authorization engines.
+ * <a href="https://github.com/grpc/proposal/blob/master/A43-grpc-authorization-api.md#user-facing-authorization-policy">
+ * gRPC Authorization policy</a> as a JSON string during initialization.
+ * This policy will be translated to Envoy RBAC policies to make
+ * authorization decisions. The policy cannot be changed once created.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9746")
 public final class AuthorizationServerInterceptor implements ServerInterceptor {

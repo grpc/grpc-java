@@ -26,7 +26,7 @@ import io.grpc.xds.RbacFilter;
 @Internal
 public final class InternalRbacFilter {
 
-  InternalRbacFilter() {}
+  private InternalRbacFilter() {}
 
   /** Parses RBAC filter config and creates AuthorizationServerInterceptor. */
   public static ServerInterceptor createInterceptor(RBAC rbac) {
