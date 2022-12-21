@@ -84,7 +84,6 @@ import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -1293,41 +1292,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     }
 
     return stream;
-  }
-
-  private static final class NoopListener implements ServerStreamListener {
-    @Override
-    public void messagesAvailable(MessageProducer producer) {
-      InputStream message;
-      while ((message = producer.next()) != null) {
-        try {
-          message.close();
-        } catch (IOException e) {
-          // Close any remaining messages
-          int errorsInClose = 0;
-          while ((message = producer.next()) != null) {
-            try {
-              message.close();
-            } catch (IOException ignore) {
-              errorsInClose++;
-            }
-          }
-          String errMsg = (errorsInClose == 0)
-              ? e.getMessage()
-              : String.format("There were %d errors during message close", errorsInClose);
-          throw new RuntimeException(errMsg, e);
-        }
-      }
-    }
-
-    @Override
-    public void halfClosed() {}
-
-    @Override
-    public void closed(Status status) {}
-
-    @Override
-    public void onReady() {}
   }
 
 }
