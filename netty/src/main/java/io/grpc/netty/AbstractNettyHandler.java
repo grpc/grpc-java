@@ -165,15 +165,18 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       if (!autoTuneFlowControlOn) {
         return;
       }
-      if (lastTargetWindow == 0 && pingCount > 0) {
-        lastTargetWindow =
-            decoder().flowController().initialWindowSize(connection().connectionStream());
-      }
+
       if (!isPinging() && pingLimiter.isPingAllowed()
           && getDataSincePing() * 2 >= lastTargetWindow * pingFrequencyMultiplier) {
         setPinging(true);
         sendPing(ctx());
       }
+
+      if (lastTargetWindow == 0) {
+        lastTargetWindow =
+            decoder().flowController().initialWindowSize(connection().connectionStream());
+      }
+
       incrementDataSincePing(dataLength + paddingLength);
     }
 
