@@ -65,6 +65,7 @@ import io.netty.util.concurrent.DefaultPromise;
 import io.netty.util.concurrent.Promise;
 import io.netty.util.concurrent.ScheduledFuture;
 import java.io.ByteArrayInputStream;
+import java.nio.ByteBuffer;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
@@ -420,15 +421,15 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     AbstractNettyHandler handler = (AbstractNettyHandler) handler();
     handler.setAutoTuneFlowControl(true);
 
-    ByteBuf data = initXkbBuffer(1);
-    int length = data.readableBytes();
-    ByteBuf frame = dataFrame(3, false, data.copy());
+    byte[] data = initXkbBuffer(1);
+    int wireSize = data.length + 5; // 5 is the size of the header
+    ByteBuf frame = grpcDataFrame(3, false, data);
     channelRead(frame);
-    int accumulator = length;
+    int accumulator = wireSize;
     // 40 is arbitrary, any number large enough to trigger a window update would work
     for (int i = 0; i < 40; i++) {
-      channelRead(dataFrame(3, false, data.copy()));
-      accumulator += length;
+      channelRead(grpcDataFrame(3, false, data));
+      accumulator += wireSize;
     }
     long pingData = handler.flowControlPing().payload();
     channelRead(pingFrame(true, pingData));
@@ -521,8 +522,8 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     AbstractNettyHandler handler = setupPingTest();
     long pingData = handler.flowControlPing().payload();
 
-    ByteBuf data1KbBuf = initXkbBuffer(1);
-    ByteBuf data40KbBuf = initXkbBuffer(40);
+    byte[] data1KbBuf = initXkbBuffer(1);
+    byte[] data40KbBuf = initXkbBuffer(40);
 
     readXCopies(1, data1KbBuf); // should initiate a ping
 
@@ -551,7 +552,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   public void testPingBackoff() throws Exception {
     AbstractNettyHandler handler = setupPingTest();
     long pingData = handler.flowControlPing().payload();
-    ByteBuf data40KbBuf = initXkbBuffer(40);
+    byte[] data40KbBuf = initXkbBuffer(40);
 
     handler.flowControlPing().setDataSizeAndSincePing(200000);
 
@@ -579,8 +580,8 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     Http2LocalFlowController localFlowController = connection().local().flowController();
     long pingData = handler.flowControlPing().payload();
     int initialWindowSize = localFlowController.initialWindowSize();
-    ByteBuf data1Kb = initXkbBuffer(1);
-    ByteBuf data40Kb = initXkbBuffer(40);
+    byte[] data1Kb = initXkbBuffer(1);
+    byte[] data40Kb = initXkbBuffer(40);
 
     readXCopies(1, data1Kb); // initiate ping
     fakeClock().forwardNanos(2);
@@ -610,23 +611,20 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     channelRead(pingFrame(true, pingData));
   }
 
-  private void readXCopies(int copies, ByteBuf data) throws Exception {
+  private void readXCopies(int copies, byte[] data) throws Exception {
     for (int i = 0; i < copies; i++) {
-      channelRead(dataFrame(STREAM_ID, false, data.copy())); // buffer it
+      channelRead(grpcDataFrame(STREAM_ID, false, data)); // buffer it
       stream().request(1); // consume it
     }
   }
 
-  private ByteBuf initXkbBuffer(int multiple) {
-    ByteBuf data = ctx().alloc().buffer(5 + 1024 * multiple);
-    // add header
-    data.writeByte(0);
-    data.writeInt(1024 * multiple);
-    //
-    while (data.isWritable(4)) {
-      data.writeLong(1111);
+  private byte[] initXkbBuffer(int multiple) {
+    ByteBuffer data = ByteBuffer.allocate(1024 * multiple);
+
+    for (int i = 0; i < multiple * 1024 / 4; i++) {
+      data.putInt(4 * i, 1111);
     }
-    return data;
+    return data.array();
   }
 
 }
