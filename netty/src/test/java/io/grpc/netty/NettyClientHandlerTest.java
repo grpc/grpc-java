@@ -147,7 +147,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Override
-  protected AbstractStream stream() {
+  protected AbstractStream stream() throws Exception {
     if (stream == null) {
       stream = new NettyClientStream(streamTransportState,
           TestMethodDescriptors.voidMethod(),

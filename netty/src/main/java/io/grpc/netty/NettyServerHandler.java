@@ -191,34 +191,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
-        eagAttributes);
-  }
-
-  static NettyServerHandler newHandler(
-      ChannelPromise channelUnused,
-      Http2FrameReader frameReader,
-      Http2FrameWriter frameWriter,
-      ServerTransportListener transportListener,
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      TransportTracer transportTracer,
-      int maxStreams,
-      boolean autoFlowControl,
-      int flowControlWindow,
-      int maxHeaderListSize,
-      int maxMessageSize,
-      long keepAliveTimeInNanos,
-      long keepAliveTimeoutInNanos,
-      long maxConnectionIdleInNanos,
-      long maxConnectionAgeInNanos,
-      long maxConnectionAgeGraceInNanos,
-      boolean permitKeepAliveWithoutCalls,
-      long permitKeepAliveTimeInNanos,
-      Attributes eagAttributes) {
-    return newHandler(channelUnused, frameReader,frameWriter, transportListener,
-        streamTracerFactories, transportTracer, maxStreams, autoFlowControl, flowControlWindow,
-        maxHeaderListSize, maxMessageSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-        maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-        permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, eagAttributes,
+        eagAttributes,
         Ticker.systemTicker());
   }
 

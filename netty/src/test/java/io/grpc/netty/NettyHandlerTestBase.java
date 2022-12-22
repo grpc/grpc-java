@@ -332,7 +332,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     return handler().connection();
   }
 
-  protected abstract AbstractStream stream();
+  protected abstract AbstractStream stream() throws Exception;
 
   @CanIgnoreReturnValue
   protected final ChannelFuture enqueue(WriteQueue.QueuedCommand command) {

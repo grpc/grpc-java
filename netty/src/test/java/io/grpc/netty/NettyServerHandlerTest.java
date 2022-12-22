@@ -1282,13 +1282,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Override
-  protected AbstractStream stream()  {
+  protected AbstractStream stream() throws Exception {
     if (stream == null) {
-      try {
-        makeStream();
-      } catch (Exception e) {
-        throw new RuntimeException("Failed to make stream", e);
-      }
+      makeStream();
     }
 
     return stream;
