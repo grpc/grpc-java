@@ -23,12 +23,12 @@ need to make the following changes:
 +++ b/examples/build.gradle
 @@ -27,6 +27,7 @@
  dependencies {
-   compile "io.grpc:grpc-netty:${grpcVersion}"
+   compile "io.grpc:grpc-netty-shaded:${grpcVersion}"
    compile "io.grpc:grpc-protobuf:${grpcVersion}"
 +  compile "io.grpc:grpc-services:${grpcVersion}"
    compile "io.grpc:grpc-stub:${grpcVersion}"
  
-   testCompile "junit:junit:4.11"
+   testCompile "junit:junit:4.12"
 --- a/examples/src/main/java/io/grpc/examples/helloworld/HelloWorldServer.java
 +++ b/examples/src/main/java/io/grpc/examples/helloworld/HelloWorldServer.java
 @@ -33,6 +33,7 @@ package io.grpc.examples.helloworld;

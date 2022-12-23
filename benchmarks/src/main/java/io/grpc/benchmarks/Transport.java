@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 
 package io.grpc.benchmarks;
-
-import java.net.SocketAddress;
 
 /**
  * All of the supported transports.
@@ -49,7 +47,7 @@ public enum Transport {
    *
    * @throws IllegalArgumentException if the given address is invalid for this transport.
    */
-  public void validateSocketAddress(SocketAddress address) {
+  public void validateSocketAddress(String address) {
     if (!socketAddressValidator.isValidSocketAddress(address)) {
       throw new IllegalArgumentException(
           "Invalid address " + address + " for transport " + this);

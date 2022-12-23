@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * {@link Listener#transportTerminated}.
  */
 @ThreadSafe
-public interface ManagedClientTransport extends ClientTransport, WithLogId {
+public interface ManagedClientTransport extends ClientTransport {
 
   /**
    * Starts transport. This method may only be called once.
@@ -56,7 +56,7 @@ public interface ManagedClientTransport extends ClientTransport, WithLogId {
    * {@link Listener#transportShutdown} callback called), or be transferred off this transport (in
    * which case they may succeed).  This method may only be called once.
    */
-  void shutdown();
+  void shutdown(Status reason);
 
   /**
    * Initiates a forceful shutdown in which preexisting and new calls are closed. Existing calls
@@ -94,6 +94,8 @@ public interface ManagedClientTransport extends ClientTransport, WithLogId {
     /**
      * The transport is ready to accept traffic, because the connection is established.  This is
      * called at most once.
+     *
+     * <p>Streams created before this milestone are not guaranteed to function.
      */
     void transportReady();
 

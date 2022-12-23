@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ public final class SharedResourceHolder {
       });
 
   private final IdentityHashMap<Resource<?>, Instance> instances =
-      new IdentityHashMap<Resource<?>, Instance>();
+      new IdentityHashMap<>();
 
   private final ScheduledExecutorFactory destroyerFactory;
 
@@ -124,25 +124,20 @@ public final class SharedResourceHolder {
     Preconditions.checkState(cached.refcount > 0, "Refcount has already reached zero");
     cached.refcount--;
     if (cached.refcount == 0) {
-      if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
-        // AppEngine must immediately release shared resources, particularly executors
-        // which could retain request-scoped threads which become zombies after the request
-        // completes.
-        resource.close(instance);
-        instances.remove(resource);
-      } else {
-        Preconditions.checkState(cached.destroyTask == null, "Destroy task already scheduled");
-        // Schedule a delayed task to destroy the resource.
-        if (destroyer == null) {
-          destroyer = destroyerFactory.createScheduledExecutor();
-        }
-        cached.destroyTask = destroyer.schedule(new LogExceptionRunnable(new Runnable() {
-          @Override
-          public void run() {
-            synchronized (SharedResourceHolder.this) {
-              // Refcount may have gone up since the task was scheduled. Re-check it.
-              if (cached.refcount == 0) {
+      Preconditions.checkState(cached.destroyTask == null, "Destroy task already scheduled");
+      // Schedule a delayed task to destroy the resource.
+      if (destroyer == null) {
+        destroyer = destroyerFactory.createScheduledExecutor();
+      }
+      cached.destroyTask = destroyer.schedule(new LogExceptionRunnable(new Runnable() {
+        @Override
+        public void run() {
+          synchronized (SharedResourceHolder.this) {
+            // Refcount may have gone up since the task was scheduled. Re-check it.
+            if (cached.refcount == 0) {
+              try {
                 resource.close(instance);
+              } finally {
                 instances.remove(resource);
                 if (instances.isEmpty()) {
                   destroyer.shutdown();
@@ -151,8 +146,8 @@ public final class SharedResourceHolder {
               }
             }
           }
-        }), DESTROY_DELAY_SECONDS, TimeUnit.SECONDS);
-      }
+        }
+      }), DESTROY_DELAY_SECONDS, TimeUnit.SECONDS);
     }
     // Always returning null
     return null;

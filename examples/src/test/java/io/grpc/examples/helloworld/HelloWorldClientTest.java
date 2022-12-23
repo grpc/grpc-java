@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,23 +17,29 @@
 package io.grpc.examples.helloworld;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.spy;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.ManagedChannel;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.GrpcServerRule;
+import io.grpc.testing.GrpcCleanupRule;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 
 /**
  * Unit tests for {@link HelloWorldClient}.
  * For demonstrating how to write gRPC unit test only.
  * Not intended to provide a high code coverage or to test every major usecase.
+ *
+ * directExecutor() makes it easier to have deterministic tests.
  *
  * <p>For more unit test examples see {@link io.grpc.examples.routeguide.RouteGuideClientTest} and
  * {@link io.grpc.examples.routeguide.RouteGuideServerTest}.
@@ -41,21 +47,42 @@ import org.mockito.Matchers;
 @RunWith(JUnit4.class)
 public class HelloWorldClientTest {
   /**
-   * This creates and starts an in-process server, and creates a client with an in-process channel.
-   * When the test is done, it also shuts down the in-process client and server.
+   * This rule manages automatic graceful shutdown for the registered servers and channels at the
+   * end of test.
    */
   @Rule
-  public final GrpcServerRule grpcServerRule = new GrpcServerRule().directExecutor();
+  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
-  private final GreeterGrpc.GreeterImplBase serviceImpl = spy(new GreeterGrpc.GreeterImplBase() {});
+  private final GreeterGrpc.GreeterImplBase serviceImpl =
+      mock(GreeterGrpc.GreeterImplBase.class, delegatesTo(
+          new GreeterGrpc.GreeterImplBase() {
+          // By default the client will receive Status.UNIMPLEMENTED for all RPCs.
+          // You might need to implement necessary behaviors for your test here, like this:
+          //
+          // @Override
+          // public void sayHello(HelloRequest request, StreamObserver<HelloReply> respObserver) {
+          //   respObserver.onNext(HelloReply.getDefaultInstance());
+          //   respObserver.onCompleted();
+          // }
+          }));
+
   private HelloWorldClient client;
 
   @Before
   public void setUp() throws Exception {
-    // Add service.
-    grpcServerRule.getServiceRegistry().addService(serviceImpl);
+    // Generate a unique in-process server name.
+    String serverName = InProcessServerBuilder.generateName();
+
+    // Create a server, add service, start, and register for automatic graceful shutdown.
+    grpcCleanup.register(InProcessServerBuilder
+        .forName(serverName).directExecutor().addService(serviceImpl).build().start());
+
+    // Create a client channel and register for automatic graceful shutdown.
+    ManagedChannel channel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(serverName).directExecutor().build());
+
     // Create a HelloWorldClient using the in-process channel;
-    client = new HelloWorldClient(grpcServerRule.getChannel());
+    client = new HelloWorldClient(channel);
   }
 
   /**
@@ -65,12 +92,11 @@ public class HelloWorldClientTest {
   @Test
   public void greet_messageDeliveredToServer() {
     ArgumentCaptor<HelloRequest> requestCaptor = ArgumentCaptor.forClass(HelloRequest.class);
-    String testName = "test name";
 
-    client.greet(testName);
+    client.greet("test name");
 
     verify(serviceImpl)
-        .sayHello(requestCaptor.capture(), Matchers.<StreamObserver<HelloReply>>any());
-    assertEquals(testName, requestCaptor.getValue().getName());
+        .sayHello(requestCaptor.capture(), ArgumentMatchers.<StreamObserver<HelloReply>>any());
+    assertEquals("test name", requestCaptor.getValue().getName());
   }
 }

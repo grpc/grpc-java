@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,29 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
+import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.io.ByteStreams;
+import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.Codec;
 import io.grpc.Compressor;
+import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -63,15 +75,10 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param endOfStream {@code true} if this is the last frame; {@code flush} is guaranteed to be
      *     {@code true} if this is {@code true}
      * @param flush {@code true} if more data may not be arriving soon
+     * @param numMessages the number of messages this series of frames represents, must be >= 0.
      */
-    void writeFrame(@Nullable WritableBuffer frame, boolean endOfStream, boolean flush);
-
-    /**
-     * Requests up to the given number of messages from the call to be delivered to the client. This
-     * should end up triggering {@link TransportState#requestMessagesFromDeframer(int)} on the
-     * transport thread.
-     */
-    void request(int numMessages);
+    void writeFrame(
+        @Nullable WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages);
 
     /**
      * Tears down the stream, typically in the event of a timeout. This method may be called
@@ -83,10 +90,11 @@ public abstract class AbstractClientStream extends AbstractStream
     void cancel(Status status);
   }
 
+  private final TransportTracer transportTracer;
   private final Framer framer;
+  private boolean shouldBeCountedForInUse;
   private boolean useGet;
   private Metadata headers;
-  private boolean outboundClosed;
   /**
    * Whether cancel() has been called. This is not strictly necessary, but removes the delay between
    * cancel() being called and isReady() beginning to return false, since cancel is commonly
@@ -94,9 +102,16 @@ public abstract class AbstractClientStream extends AbstractStream
    */
   private volatile boolean cancelled;
 
-  protected AbstractClientStream(WritableBufferAllocator bufferAllocator,
-      StatsTraceContext statsTraceCtx, Metadata headers, boolean useGet) {
-    Preconditions.checkNotNull(headers, "headers");
+  protected AbstractClientStream(
+      WritableBufferAllocator bufferAllocator,
+      StatsTraceContext statsTraceCtx,
+      TransportTracer transportTracer,
+      Metadata headers,
+      CallOptions callOptions,
+      boolean useGet) {
+    checkNotNull(headers, "headers");
+    this.transportTracer = checkNotNull(transportTracer, "transportTracer");
+    this.shouldBeCountedForInUse = GrpcUtil.shouldBeCountedForInUse(callOptions);
     this.useGet = useGet;
     if (!useGet) {
       framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
@@ -107,6 +122,13 @@ public abstract class AbstractClientStream extends AbstractStream
   }
 
   @Override
+  public void setDeadline(Deadline deadline) {
+    headers.discardAll(TIMEOUT_KEY);
+    long effectiveTimeout = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
+    headers.put(TIMEOUT_KEY, effectiveTimeout);
+  }
+
+  @Override
   public void setMaxOutboundMessageSize(int maxSize) {
     framer.setMaxOutboundMessageSize(maxSize);
   }
@@ -114,6 +136,11 @@ public abstract class AbstractClientStream extends AbstractStream
   @Override
   public void setMaxInboundMessageSize(int maxSize) {
     transportState().setMaxInboundMessageSize(maxSize);
+  }
+
+  @Override
+  public final void setFullStreamDecompression(boolean fullStreamDecompression) {
+    transportState().setFullStreamDecompression(fullStreamDecompression);
   }
 
   @Override
@@ -145,21 +172,25 @@ public abstract class AbstractClientStream extends AbstractStream
     return framer;
   }
 
-  @Override
-  public final void request(int numMessages) {
-    abstractClientStreamSink().request(numMessages);
+  /**
+   * Returns true if this stream should be counted when determining the in-use state of the
+   * transport.
+   */
+  public final boolean shouldBeCountedForInUse() {
+    return shouldBeCountedForInUse;
   }
 
   @Override
-  public final void deliverFrame(WritableBuffer frame, boolean endOfStream, boolean flush) {
+  public final void deliverFrame(
+      WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages) {
     Preconditions.checkArgument(frame != null || endOfStream, "null frame before EOS");
-    abstractClientStreamSink().writeFrame(frame, endOfStream, flush);
+    abstractClientStreamSink().writeFrame(frame, endOfStream, flush, numMessages);
   }
 
   @Override
   public final void halfClose() {
-    if (!outboundClosed) {
-      outboundClosed = true;
+    if (!transportState().isOutboundClosed()) {
+      transportState().setOutboundClosed();
       endOfMessages();
     }
   }
@@ -176,55 +207,90 @@ public abstract class AbstractClientStream extends AbstractStream
     return super.isReady() && !cancelled;
   }
 
-  /** This should only called from the transport thread. */
+  @Override
+  public final void appendTimeoutInsight(InsightBuilder insight) {
+    Attributes attrs = getAttributes();
+    insight.appendKeyValue("remote_addr", attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+  }
+
+  protected TransportTracer getTransportTracer() {
+    return transportTracer;
+  }
+
+  /** This should only be called from the transport thread. */
   protected abstract static class TransportState extends AbstractStream.TransportState {
     /** Whether listener.closed() has been called. */
     private final StatsTraceContext statsTraceCtx;
     private boolean listenerClosed;
     private ClientStreamListener listener;
+    private boolean fullStreamDecompression;
     private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
 
-    private Runnable deliveryStalledTask;
+    private boolean deframerClosed = false;
+    private Runnable deframerClosedTask;
+
+    /** Whether the client has half-closed the stream. */
+    private volatile boolean outboundClosed;
 
     /**
      * Whether the stream is closed from the transport's perspective. This can differ from {@link
      * #listenerClosed} because there may still be messages buffered to deliver to the application.
      */
     private boolean statusReported;
+    /** True if the status reported (set via {@link #transportReportStatus}) is OK. */
+    private boolean statusReportedIsOk;
 
-    protected TransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
-      super(maxMessageSize, statsTraceCtx);
-      this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
+    protected TransportState(
+        int maxMessageSize,
+        StatsTraceContext statsTraceCtx,
+        TransportTracer transportTracer) {
+      super(maxMessageSize, statsTraceCtx, transportTracer);
+      this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
+    }
+
+    private void setFullStreamDecompression(boolean fullStreamDecompression) {
+      this.fullStreamDecompression = fullStreamDecompression;
     }
 
     private void setDecompressorRegistry(DecompressorRegistry decompressorRegistry) {
-      Preconditions.checkState(this.listener == null, "Already called start");
+      checkState(this.listener == null, "Already called start");
       this.decompressorRegistry =
-          Preconditions.checkNotNull(decompressorRegistry, "decompressorRegistry");
+          checkNotNull(decompressorRegistry, "decompressorRegistry");
     }
 
     @VisibleForTesting
     public final void setListener(ClientStreamListener listener) {
-      Preconditions.checkState(this.listener == null, "Already called setListener");
-      this.listener = Preconditions.checkNotNull(listener, "listener");
+      checkState(this.listener == null, "Already called setListener");
+      this.listener = checkNotNull(listener, "listener");
     }
 
     @Override
-    public final void deliveryStalled() {
-      if (deliveryStalledTask != null) {
-        deliveryStalledTask.run();
-        deliveryStalledTask = null;
+    public void deframerClosed(boolean hasPartialMessage) {
+      checkState(statusReported, "status should have been reported on deframer closed");
+      deframerClosed = true;
+      if (statusReportedIsOk && hasPartialMessage) {
+        transportReportStatus(
+            Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame"),
+            true,
+            new Metadata());
       }
-    }
-
-    @Override
-    public final void endOfStream() {
-      deliveryStalled();
+      if (deframerClosedTask != null) {
+        deframerClosedTask.run();
+        deframerClosedTask = null;
+      }
     }
 
     @Override
     protected final ClientStreamListener listener() {
       return listener;
+    }
+
+    private final void setOutboundClosed() {
+      outboundClosed = true;
+    }
+
+    protected final boolean isOutboundClosed() {
+      return outboundClosed;
     }
 
     /**
@@ -233,20 +299,45 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param headers the parsed headers
      */
     protected void inboundHeadersReceived(Metadata headers) {
-      Preconditions.checkState(!statusReported, "Received headers on closed stream");
+      checkState(!statusReported, "Received headers on closed stream");
       statsTraceCtx.clientInboundHeaders();
 
-      Decompressor decompressor = Codec.Identity.NONE;
-      String encoding = headers.get(MESSAGE_ENCODING_KEY);
-      if (encoding != null) {
-        decompressor = decompressorRegistry.lookupDecompressor(encoding);
-        if (decompressor == null) {
-          deframeFailed(Status.INTERNAL.withDescription(
-              String.format("Can't find decompressor for %s", encoding)).asRuntimeException());
+      boolean compressedStream = false;
+      String streamEncoding = headers.get(CONTENT_ENCODING_KEY);
+      if (fullStreamDecompression && streamEncoding != null) {
+        if (streamEncoding.equalsIgnoreCase("gzip")) {
+          setFullStreamDecompressor(new GzipInflatingBuffer());
+          compressedStream = true;
+        } else if (!streamEncoding.equalsIgnoreCase("identity")) {
+          deframeFailed(
+              Status.INTERNAL
+                  .withDescription(
+                      String.format("Can't find full stream decompressor for %s", streamEncoding))
+                  .asRuntimeException());
           return;
         }
       }
-      setDecompressor(decompressor);
+
+      String messageEncoding = headers.get(MESSAGE_ENCODING_KEY);
+      if (messageEncoding != null) {
+        Decompressor decompressor = decompressorRegistry.lookupDecompressor(messageEncoding);
+        if (decompressor == null) {
+          deframeFailed(
+              Status.INTERNAL
+                  .withDescription(String.format("Can't find decompressor for %s", messageEncoding))
+                  .asRuntimeException());
+          return;
+        } else if (decompressor != Codec.Identity.NONE) {
+          if (compressedStream) {
+            deframeFailed(
+                Status.INTERNAL
+                    .withDescription("Full stream and gRPC message encoding cannot both be set")
+                    .asRuntimeException());
+            return;
+          }
+          setDecompressor(decompressor);
+        }
+      }
 
       listener().headersRead(headers);
     }
@@ -257,7 +348,7 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param frame the received data frame. Its ownership is transferred to this method.
      */
     protected void inboundDataReceived(ReadableBuffer frame) {
-      Preconditions.checkNotNull(frame, "frame");
+      checkNotNull(frame, "frame");
       boolean needToCloseFrame = true;
       try {
         if (statusReported) {
@@ -266,7 +357,7 @@ public abstract class AbstractClientStream extends AbstractStream
         }
 
         needToCloseFrame = false;
-        deframe(frame, false);
+        deframe(frame);
       } finally {
         if (needToCloseFrame) {
           frame.close();
@@ -281,13 +372,14 @@ public abstract class AbstractClientStream extends AbstractStream
      * @param status the status extracted from the trailers
      */
     protected void inboundTrailersReceived(Metadata trailers, Status status) {
-      Preconditions.checkNotNull(status, "status");
-      Preconditions.checkNotNull(trailers, "trailers");
+      checkNotNull(status, "status");
+      checkNotNull(trailers, "trailers");
       if (statusReported) {
         log.log(Level.INFO, "Received trailers on closed stream:\n {1}\n {2}",
             new Object[]{status, trailers});
         return;
       }
+      statsTraceCtx.clientInboundTrailers(trailers);
       transportReportStatus(status, false, trailers);
     }
 
@@ -305,27 +397,51 @@ public abstract class AbstractClientStream extends AbstractStream
      */
     public final void transportReportStatus(final Status status, boolean stopDelivery,
         final Metadata trailers) {
-      Preconditions.checkNotNull(status, "status");
-      Preconditions.checkNotNull(trailers, "trailers");
+      transportReportStatus(status, RpcProgress.PROCESSED, stopDelivery, trailers);
+    }
+
+    /**
+     * Report stream closure with status to the application layer if not already reported. This
+     * method must be called from the transport thread.
+     *
+     * @param status the new status to set
+     * @param rpcProgress RPC progress that the
+     *        {@link ClientStreamListener#closed(Status, RpcProgress, Metadata)}
+     *        will receive
+     * @param stopDelivery if {@code true}, interrupts any further delivery of inbound messages that
+     *        may already be queued up in the deframer and overrides any previously queued status.
+     *        If {@code false}, the listener will be notified immediately after all currently
+     *        completed messages in the deframer have been delivered to the application.
+     * @param trailers new instance of {@code Trailers}, either empty or those returned by the
+     *        server
+     */
+    public final void transportReportStatus(
+        final Status status,
+        final RpcProgress rpcProgress,
+        boolean stopDelivery,
+        final Metadata trailers) {
+      checkNotNull(status, "status");
+      checkNotNull(trailers, "trailers");
       // If stopDelivery, we continue in case previous invocation is waiting for stall
       if (statusReported && !stopDelivery) {
         return;
       }
       statusReported = true;
+      statusReportedIsOk = status.isOk();
       onStreamDeallocated();
 
-      // If not stopping delivery, then we must wait until the deframer is stalled (i.e., it has no
-      // complete messages to deliver).
-      if (stopDelivery || isDeframerStalled()) {
-        deliveryStalledTask = null;
-        closeListener(status, trailers);
+      if (deframerClosed) {
+        deframerClosedTask = null;
+        closeListener(status, rpcProgress, trailers);
       } else {
-        deliveryStalledTask = new Runnable() {
-          @Override
-          public void run() {
-            closeListener(status, trailers);
-          }
-        };
+        deframerClosedTask =
+            new Runnable() {
+              @Override
+              public void run() {
+                closeListener(status, rpcProgress, trailers);
+              }
+            };
+        closeDeframer(stopDelivery);
       }
     }
 
@@ -334,12 +450,15 @@ public abstract class AbstractClientStream extends AbstractStream
      *
      * @throws IllegalStateException if the call has not yet been started.
      */
-    private void closeListener(Status status, Metadata trailers) {
+    private void closeListener(
+        Status status, RpcProgress rpcProgress, Metadata trailers) {
       if (!listenerClosed) {
         listenerClosed = true;
-        closeDeframer();
         statsTraceCtx.streamClosed(status);
-        listener().closed(status, trailers);
+        listener().closed(status, rpcProgress, trailers);
+        if (getTransportTracer() != null) {
+          getTransportTracer().reportStreamClosed(status.isOk());
+        }
       }
     }
   }
@@ -351,19 +470,21 @@ public abstract class AbstractClientStream extends AbstractStream
     private byte[] payload;
 
     public GetFramer(Metadata headers, StatsTraceContext statsTraceCtx) {
-      this.headers = Preconditions.checkNotNull(headers, "headers");
-      this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
+      this.headers = checkNotNull(headers, "headers");
+      this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     }
 
+    @SuppressWarnings("BetaApi") // ByteStreams is not Beta in v27
     @Override
     public void writePayload(InputStream message) {
-      Preconditions.checkState(payload == null, "writePayload should not be called multiple times");
+      checkState(payload == null, "writePayload should not be called multiple times");
       try {
-        payload = IoUtils.toByteArray(message);
+        payload = ByteStreams.toByteArray(message);
       } catch (java.io.IOException ex) {
         throw new RuntimeException(ex);
       }
-      statsTraceCtx.outboundMessage();
+      statsTraceCtx.outboundMessage(0);
+      statsTraceCtx.outboundMessageSent(0, payload.length, payload.length);
       statsTraceCtx.outboundUncompressedSize(payload.length);
       // NB(zhangkun83): this is not accurate, because the underlying transport will probably encode
       // it using e.g., base64.  However, we are not supposed to know such detail here.
@@ -389,7 +510,7 @@ public abstract class AbstractClientStream extends AbstractStream
     @Override
     public void close() {
       closed = true;
-      Preconditions.checkState(payload != null,
+      checkState(payload != null,
           "Lack of request message. GET request is only supported for unary requests");
       abstractClientStreamSink().writeHeaders(headers, payload);
       payload = null;

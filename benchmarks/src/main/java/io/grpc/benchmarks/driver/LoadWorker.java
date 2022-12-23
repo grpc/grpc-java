@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package io.grpc.benchmarks.driver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.benchmarks.proto.Control;
@@ -27,6 +28,7 @@ import io.grpc.benchmarks.proto.WorkerServiceGrpc;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -48,8 +50,9 @@ public class LoadWorker {
             .setDaemon(true)
             .setNameFormat("load-worker-%d")
             .build());
-    this.driverServer = NettyServerBuilder.forPort(driverPort)
+    this.driverServer = NettyServerBuilder.forPort(driverPort, InsecureServerCredentials.create())
         .directExecutor()
+        .channelType(NioServerSocketChannel.class)
         .workerEventLoopGroup(singleThreadGroup)
         .bossEventLoopGroup(singleThreadGroup)
         .addService(new WorkerServiceImpl())
@@ -102,7 +105,8 @@ public class LoadWorker {
               + "\n  --driver_port=<port>"
               + "\n    Port to expose grpc.testing.WorkerService, used by driver to initiate work."
               + "\n  --server_port=<port>"
-              + "\n    Port to start load servers on. Defaults to any available port");
+              + "\n    Port to start load servers on, if not specified by the server config"
+              + "\n    message. Defaults to any available port.");
       System.exit(1);
     }
     LoadWorker loadWorker = new LoadWorker(driverPort, serverPort);
@@ -251,7 +255,7 @@ public class LoadWorker {
         log.log(Level.INFO, "Received quitWorker request.");
         responseObserver.onNext(Control.Void.getDefaultInstance());
         responseObserver.onCompleted();
-        driverServer.shutdownNow();
+        driverServer.shutdown();
       } catch (Throwable t) {
         log.log(Level.WARNING, "Error during shutdown", t);
       }

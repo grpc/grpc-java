@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import io.netty.buffer.ByteBufAllocator;
 class NettyWritableBufferAllocator implements WritableBufferAllocator {
 
   // Use 4k as our minimum buffer size.
-  private static final int MIN_BUFFER = 4096;
+  private static final int MIN_BUFFER = 4 * 1024;
 
-  // Set the maximum buffer size to 1MB
+  // Set the maximum buffer size to 1MB.
   private static final int MAX_BUFFER = 1024 * 1024;
 
   private final ByteBufAllocator allocator;

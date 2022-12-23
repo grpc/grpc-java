@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -82,13 +82,12 @@ class LoadClient {
       channels[i] =
           Utils.newClientChannel(
               Epoll.isAvailable() ?  Transport.NETTY_EPOLL : Transport.NETTY_NIO,
-              Utils.parseSocketAddress(config.getServerTargets(i % config.getServerTargetsCount())),
+              config.getServerTargets(i % config.getServerTargetsCount()),
               config.hasSecurityParams(),
               config.hasSecurityParams() && config.getSecurityParams().getUseTestCa(),
               config.hasSecurityParams()
                   ? config.getSecurityParams().getServerHostOverride()
                   : null,
-              true,
               Utils.DEFAULT_FLOW_CONTROL_WINDOW,
               false);
     }
@@ -380,7 +379,7 @@ class LoadClient {
       while (!shutdown) {
         maxOutstanding.acquireUninterruptibly();
         final AtomicReference<StreamObserver<Messages.SimpleRequest>> requestObserver =
-            new AtomicReference<StreamObserver<Messages.SimpleRequest>>();
+            new AtomicReference<>();
         requestObserver.set(stub.streamingCall(
             new StreamObserver<Messages.SimpleResponse>() {
               long now = System.nanoTime();

@@ -1,7 +1,25 @@
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "me.champeau.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = 'gRPC: Context'
 
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
 dependencies {
-    testCompile project(':grpc-testing')
-    testCompile project(':grpc-core').sourceSets.test.output
-    signature "org.codehaus.mojo.signature:java16:1.1@signature"
+    testImplementation libraries.jsr305
+    // Explicitly choose the guava version to stay Java 7-compatible. The rest of gRPC can move
+    // forward to Java 8-requiring versions. This is also only used for testing, so is unlikely to
+    // cause problems.
+    testImplementation ('com.google.guava:guava-testlib:30.1.1-android') {
+        exclude group: 'junit', module: 'junit'
+    }
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }

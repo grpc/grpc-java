@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,49 +17,79 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalMetadata.TrustedAsciiMarshaller;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ProxiedSocketAddress;
+import io.grpc.ProxyDetector;
 import io.grpc.Status;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.internal.StreamListener.MessageProducer;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.Immutable;
 
 /**
  * Common utilities for GRPC.
  */
 public final class GrpcUtil {
 
-  public static final Charset US_ASCII = Charset.forName("US-ASCII");
+  private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
 
-  // AppEngine runtimes have constraints on threading and socket handling
-  // that need to be accommodated.
-  public static final boolean IS_RESTRICTED_APPENGINE =
-      System.getProperty("com.google.appengine.runtime.environment") != null
-          && "1.7".equals(System.getProperty("java.specification.version"));
+  private static final Set<Status.Code> INAPPROPRIATE_CONTROL_PLANE_STATUS
+      = Collections.unmodifiableSet(EnumSet.of(
+          Status.Code.OK,
+          Status.Code.INVALID_ARGUMENT,
+          Status.Code.NOT_FOUND,
+          Status.Code.ALREADY_EXISTS,
+          Status.Code.FAILED_PRECONDITION,
+          Status.Code.ABORTED,
+          Status.Code.OUT_OF_RANGE,
+          Status.Code.DATA_LOSS));
+
+  public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
   /**
    * {@link io.grpc.Metadata.Key} for the timeout header.
@@ -79,6 +109,21 @@ public final class GrpcUtil {
   public static final Metadata.Key<byte[]> MESSAGE_ACCEPT_ENCODING_KEY =
       InternalMetadata.keyOf(GrpcUtil.MESSAGE_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
 
+  /**
+   * {@link io.grpc.Metadata.Key} for the stream's content encoding header.
+   */
+  public static final Metadata.Key<String> CONTENT_ENCODING_KEY =
+      Metadata.Key.of(GrpcUtil.CONTENT_ENCODING, Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the stream's accepted content encoding header.
+   */
+  public static final Metadata.Key<byte[]> CONTENT_ACCEPT_ENCODING_KEY =
+      InternalMetadata.keyOf(GrpcUtil.CONTENT_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
+
+  static final Metadata.Key<String> CONTENT_LENGTH_KEY =
+      Metadata.Key.of("content-length", Metadata.ASCII_STRING_MARSHALLER);
+
   private static final class AcceptEncodingMarshaller implements TrustedAsciiMarshaller<byte[]> {
     @Override
     public byte[] toAsciiString(byte[] value) {
@@ -96,6 +141,12 @@ public final class GrpcUtil {
    */
   public static final Metadata.Key<String> CONTENT_TYPE_KEY =
           Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER);
+
+  /**
+   * {@link io.grpc.Metadata.Key} for the Transfer encoding.
+   */
+  public static final Metadata.Key<String> TE_HEADER =
+      Metadata.Key.of("te", Metadata.ASCII_STRING_MARSHALLER);
 
   /**
    * {@link io.grpc.Metadata.Key} for the Content-Type request/response header.
@@ -144,6 +195,16 @@ public final class GrpcUtil {
   public static final String MESSAGE_ACCEPT_ENCODING = "grpc-accept-encoding";
 
   /**
+   * The content-encoding used to compress the full gRPC stream.
+   */
+  public static final String CONTENT_ENCODING = "content-encoding";
+
+  /**
+   * The accepted content-encodings that can be used to compress the full gRPC stream.
+   */
+  public static final String CONTENT_ACCEPT_ENCODING = "accept-encoding";
+
+  /**
    * The default maximum uncompressed size (in bytes) for inbound messages. Defaults to 4 MiB.
    */
   public static final int DEFAULT_MAX_MESSAGE_SIZE = 4 * 1024 * 1024;
@@ -156,12 +217,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = getImplementationVersion();
-
-  /**
-   * The default delay in nanos before we send a keepalive.
-   */
-  public static final long DEFAULT_KEEPALIVE_TIME_NANOS = TimeUnit.MINUTES.toNanos(1);
+  private static final String IMPLEMENTATION_VERSION = "1.53.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -187,6 +243,45 @@ public final class GrpcUtil {
    * The magic keepalive time value that disables keepalive.
    */
   public static final long SERVER_KEEPALIVE_TIME_NANOS_DISABLED = Long.MAX_VALUE;
+
+  /**
+   * The default proxy detector.
+   */
+  public static final ProxyDetector DEFAULT_PROXY_DETECTOR = new ProxyDetectorImpl();
+
+  /**
+   * A proxy detector that always claims no proxy is needed.
+   */
+  public static final ProxyDetector NOOP_PROXY_DETECTOR = new ProxyDetector() {
+    @Nullable
+    @Override
+    public ProxiedSocketAddress proxyFor(SocketAddress targetServerAddress) {
+      return null;
+    }
+  };
+
+  /**
+   * The very default load-balancing policy.
+   */
+  public static final String DEFAULT_LB_POLICY = "pick_first";
+
+  /**
+   * RPCs created on the Channel returned by {@link io.grpc.LoadBalancer.Subchannel#asChannel}
+   * will have this option with value {@code true}.  They will be treated differently from
+   * the ones created by application.
+   */
+  public static final CallOptions.Key<Boolean> CALL_OPTIONS_RPC_OWNED_BY_BALANCER =
+      CallOptions.Key.create("io.grpc.internal.CALL_OPTIONS_RPC_OWNED_BY_BALANCER");
+
+  private static final ClientStreamTracer NOOP_TRACER = new ClientStreamTracer() {};
+
+  /**
+   * Returns true if an RPC with the given properties should be counted when calculating the
+   * in-use state of a transport.
+   */
+  public static boolean shouldBeCountedForInUse(CallOptions callOptions) {
+    return !Boolean.TRUE.equals(callOptions.getOption(CALL_OPTIONS_RPC_OWNED_BY_BALANCER));
+  }
 
   /**
    * Maps HTTP error response status codes to transport codes, as defined in <a
@@ -272,7 +367,11 @@ public final class GrpcUtil {
 
     Http2Error(int code, Status status) {
       this.code = code;
-      this.status = status.augmentDescription("HTTP/2 error code: " + this.name());
+      String description = "HTTP/2 error code: " + this.name();
+      if (status.getDescription() != null) {
+        description += " (" + status.getDescription() + ")";
+      }
+      this.status = status.withDescription(description);
     }
 
     /**
@@ -367,8 +466,41 @@ public final class GrpcUtil {
     }
     builder.append("grpc-java-");
     builder.append(transportName);
+    builder.append('/');
     builder.append(IMPLEMENTATION_VERSION);
     return builder.toString();
+  }
+
+  @Immutable
+  public static final class GrpcBuildVersion {
+    private final String userAgent;
+    private final String implementationVersion;
+
+    private GrpcBuildVersion(String userAgent, String implementationVersion) {
+      this.userAgent = Preconditions.checkNotNull(userAgent, "userAgentName");
+      this.implementationVersion =
+          Preconditions.checkNotNull(implementationVersion, "implementationVersion");
+    }
+
+    public String getUserAgent() {
+      return userAgent;
+    }
+
+    public String getImplementationVersion() {
+      return implementationVersion;
+    }
+
+    @Override
+    public String toString() {
+      return userAgent + " " + implementationVersion;
+    }
+  }
+
+  /**
+   * Returns the build version of gRPC.
+   */
+  public static GrpcBuildVersion getGrpcBuildVersion() {
+    return new GrpcBuildVersion("gRPC Java", IMPLEMENTATION_VERSION);
   }
 
   /**
@@ -402,6 +534,7 @@ public final class GrpcUtil {
   /**
    * Combine a host and port into an authority string.
    */
+  // There is a copy of this method in io.grpc.Grpc
   public static String authorityFromHostAndPort(String host, int port) {
     try {
       return new URI(null, null, host, port, null, null, null).getAuthority();
@@ -413,17 +546,17 @@ public final class GrpcUtil {
   /**
    * Shared executor for channels.
    */
-  public static final Resource<ExecutorService> SHARED_CHANNEL_EXECUTOR =
-      new Resource<ExecutorService>() {
+  public static final Resource<Executor> SHARED_CHANNEL_EXECUTOR =
+      new Resource<Executor>() {
         private static final String NAME = "grpc-default-executor";
         @Override
-        public ExecutorService create() {
+        public Executor create() {
           return Executors.newCachedThreadPool(getThreadFactory(NAME + "-%d", true));
         }
 
         @Override
-        public void close(ExecutorService instance) {
-          instance.shutdown();
+        public void close(Executor instance) {
+          ((ExecutorService) instance).shutdown();
         }
 
         @Override
@@ -461,7 +594,7 @@ public final class GrpcUtil {
             throw new RuntimeException(e);
           }
 
-          return service;
+          return Executors.unconfigurableScheduledExecutorService(service);
         }
 
         @Override
@@ -479,16 +612,10 @@ public final class GrpcUtil {
    * @return a {@link ThreadFactory}.
    */
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
-    ThreadFactory threadFactory = MoreExecutors.platformThreadFactory();
-    if (IS_RESTRICTED_APPENGINE) {
-      return threadFactory;
-    } else {
-      return new ThreadFactoryBuilder()
-          .setThreadFactory(threadFactory)
-          .setDaemon(daemon)
-          .setNameFormat(nameFormat)
-          .build();
-    }
+    return new ThreadFactoryBuilder()
+        .setDaemon(daemon)
+        .setNameFormat(nameFormat)
+        .build();
   }
 
   /**
@@ -500,6 +627,25 @@ public final class GrpcUtil {
         return Stopwatch.createUnstarted();
       }
     };
+
+  /**
+   * Returns the host via {@link InetSocketAddress#getHostString} if it is possible,
+   * i.e. in jdk >= 7.
+   * Otherwise, return it via {@link InetSocketAddress#getHostName} which may incur a DNS lookup.
+   */
+  public static String getHost(InetSocketAddress addr) {
+    try {
+      Method getHostStringMethod = InetSocketAddress.class.getMethod("getHostString");
+      return (String) getHostStringMethod.invoke(addr);
+    } catch (NoSuchMethodException e) {
+      // noop
+    } catch (IllegalAccessException e) {
+      // noop
+    } catch (InvocationTargetException e) {
+      // noop
+    }
+    return addr.getHostName();
+  }
 
   /**
    * Marshals a nanoseconds representation of the timeout to and from a string representation,
@@ -575,7 +721,7 @@ public final class GrpcUtil {
     final ClientTransport transport;
     Subchannel subchannel = result.getSubchannel();
     if (subchannel != null) {
-      transport = ((AbstractSubchannel) subchannel).obtainActiveTransport();
+      transport = ((TransportProvider) subchannel.getInternalSubchannel()).obtainActiveTransport();
     } else {
       transport = null;
     }
@@ -587,30 +733,130 @@ public final class GrpcUtil {
       return new ClientTransport() {
         @Override
         public ClientStream newStream(
-            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          return transport.newStream(
-              method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
+            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+            ClientStreamTracer[] tracers) {
+          StreamInfo info = StreamInfo.newBuilder().setCallOptions(callOptions).build();
+          ClientStreamTracer streamTracer =
+              streamTracerFactory.newClientStreamTracer(info, headers);
+          checkState(tracers[tracers.length - 1] == NOOP_TRACER, "lb tracer already assigned");
+          tracers[tracers.length - 1] = streamTracer;
+          return transport.newStream(method, headers, callOptions, tracers);
         }
 
         @Override
         public void ping(PingCallback callback, Executor executor) {
           transport.ping(callback, executor);
         }
+
+        @Override
+        public InternalLogId getLogId() {
+          return transport.getLogId();
+        }
+
+        @Override
+        public ListenableFuture<SocketStats> getStats() {
+          return transport.getStats();
+        }
       };
     }
-    if (!result.getStatus().isOk() && !isWaitForReady) {
-      return new FailingClientTransport(result.getStatus());
+    if (!result.getStatus().isOk()) {
+      if (result.isDrop()) {
+        return new FailingClientTransport(
+            replaceInappropriateControlPlaneStatus(result.getStatus()), RpcProgress.DROPPED);
+      }
+      if (!isWaitForReady) {
+        return new FailingClientTransport(
+            replaceInappropriateControlPlaneStatus(result.getStatus()), RpcProgress.PROCESSED);
+      }
     }
     return null;
   }
 
-  private GrpcUtil() {}
-
-  private static String getImplementationVersion() {
-    String version = GrpcUtil.class.getPackage().getImplementationVersion();
-    if (version != null) {
-      return "/" + version;
+  /** Gets stream tracers based on CallOptions. */
+  public static ClientStreamTracer[] getClientStreamTracers(
+      CallOptions callOptions, Metadata headers, int previousAttempts, boolean isTransparentRetry) {
+    List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
+    ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
+    StreamInfo streamInfo = StreamInfo.newBuilder()
+        .setCallOptions(callOptions)
+        .setPreviousAttempts(previousAttempts)
+        .setIsTransparentRetry(isTransparentRetry)
+        .build();
+    for (int i = 0; i < factories.size(); i++) {
+      tracers[i] = factories.get(i).newClientStreamTracer(streamInfo, headers);
     }
-    return "";
+    // Reserved to be set later by the lb as per the API contract of ClientTransport.newStream().
+    // See also GrpcUtil.getTransportFromPickResult()
+    tracers[tracers.length - 1] = NOOP_TRACER;
+    return tracers;
   }
+
+  /** Quietly closes all messages in MessageProducer. */
+  static void closeQuietly(MessageProducer producer) {
+    InputStream message;
+    while ((message = producer.next()) != null) {
+      closeQuietly(message);
+    }
+  }
+
+  /**
+   * Closes a Closeable, ignoring IOExceptions.
+   * This method exists because Guava's {@code Closeables.closeQuietly()} is beta.
+   */
+  public static void closeQuietly(@Nullable Closeable message) {
+    if (message == null) {
+      return;
+    }
+    try {
+      message.close();
+    } catch (IOException ioException) {
+      // do nothing except log
+      log.log(Level.WARNING, "exception caught in closeQuietly", ioException);
+    }
+  }
+
+  /** Reads {@code in} until end of stream. */
+  public static void exhaust(InputStream in) throws IOException {
+    byte[] buf = new byte[256];
+    while (in.read(buf) != -1) {}
+  }
+
+  /**
+   * Some status codes from the control plane are not appropritate to use in the data plane. If one
+   * is given it will be replaced with INTERNAL, indicating a bug in the control plane
+   * implementation.
+   */
+  public static Status replaceInappropriateControlPlaneStatus(Status status) {
+    checkArgument(status != null);
+    return INAPPROPRIATE_CONTROL_PLANE_STATUS.contains(status.getCode())
+        ? Status.INTERNAL.withDescription(
+        "Inappropriate status code from control plane: " + status.getCode() + " "
+            + status.getDescription()).withCause(status.getCause()) : status;
+  }
+
+  /**
+   * Checks whether the given item exists in the iterable.  This is copied from Guava Collect's
+   * {@code Iterables.contains()} because Guava Collect is not Android-friendly thus core can't
+   * depend on it.
+   */
+  static <T> boolean iterableContains(Iterable<T> iterable, T item) {
+    if (iterable instanceof Collection) {
+      Collection<?> collection = (Collection<?>) iterable;
+      try {
+        return collection.contains(item);
+      } catch (NullPointerException e) {
+        return false;
+      } catch (ClassCastException e) {
+        return false;
+      }
+    }
+    for (T i : iterable) {
+      if (Objects.equal(i, item)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private GrpcUtil() {}
 }

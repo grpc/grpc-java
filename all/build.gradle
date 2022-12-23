@@ -1,41 +1,42 @@
-apply plugin: 'com.github.kt3k.coveralls'
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.github.kt3k.coveralls"
+}
 
 description = "gRPC: All"
 
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'org.kt3k.gradle.plugin:coveralls-gradle-plugin:2.0.1'
-    }
-}
-
 def subprojects = [
-  project(':grpc-auth'),
-  project(':grpc-core'),
-  project(':grpc-context'),
-  project(':grpc-netty'),
-  project(':grpc-okhttp'),
-  project(':grpc-protobuf'),
-  project(':grpc-protobuf-lite'),
-  project(':grpc-protobuf-nano'),
-  project(':grpc-stub'),
-  // project(':grpc-thrift'), // not exported currently.
+    project(':grpc-api'),
+    project(':grpc-auth'),
+    project(':grpc-context'),
+    project(':grpc-core'),
+    project(':grpc-grpclb'),
+    project(':grpc-netty'),
+    project(':grpc-okhttp'),
+    project(':grpc-protobuf'),
+    project(':grpc-protobuf-lite'),
+    project(':grpc-rls'),
+    project(':grpc-services'),
+    project(':grpc-stub'),
+    project(':grpc-testing'),
+    project(':grpc-xds'),
 ]
 
-for (subproject in rootProject.subprojects) {
+for (subproject in subprojects) {
     if (subproject == project) {
         continue
     }
     evaluationDependsOn(subproject.path)
 }
+evaluationDependsOn(':grpc-interop-testing')
 
 dependencies {
-    compile subprojects.minus(project(':grpc-protobuf-lite'))
+    api subprojects.minus([project(':grpc-protobuf-lite')])
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     classpath = files(subprojects.collect { subproject ->
         subproject.javadoc.classpath
     })
@@ -48,35 +49,33 @@ javadoc {
     }
 }
 
-task jacocoMerge(type: JacocoMerge) {
+tasks.register("jacocoMerge", JacocoMerge) {
     dependsOn(subprojects.jacocoTestReport.dependsOn)
+    dependsOn(project(':grpc-interop-testing').jacocoTestReport.dependsOn)
     mustRunAfter(subprojects.jacocoTestReport.mustRunAfter)
+    mustRunAfter(project(':grpc-interop-testing').jacocoTestReport.mustRunAfter)
     destinationFile = file("${buildDir}/jacoco/test.exec")
     executionData = files(subprojects.jacocoTestReport.executionData)
-        .plus(project(':grpc-interop-testing').jacocoTestReport.executionData)
-        .filter { f -> f.exists() }
+            .plus(project(':grpc-interop-testing').jacocoTestReport.executionData)
+            .filter { f -> f.exists() }
 }
 
-jacocoTestReport {
+tasks.named("jacocoTestReport").configure {
     dependsOn(jacocoMerge)
     reports {
-        xml.enabled = true
-        html.enabled = true
+        xml.required = true
+        html.required = true
     }
 
-    additionalSourceDirs = files(subprojects.sourceSets.main.allSource.srcDirs)
-    sourceDirectories = files(subprojects.sourceSets.main.allSource.srcDirs)
-    classDirectories = files(subprojects.sourceSets.main.output)
-    classDirectories = files(classDirectories.files.collect {
-        fileTree(dir: it,
-                exclude: ['**/io/grpc/okhttp/internal/**'])
-    })
+    subprojects.each { subproject ->
+        additionalSourceDirs.from(subproject.jacocoTestReport.additionalSourceDirs)
+        sourceDirectories.from(subproject.jacocoTestReport.sourceDirectories)
+        classDirectories.from(subproject.jacocoTestReport.classDirectories)
+    }
 }
 
 coveralls {
     sourceDirs = subprojects.sourceSets.main.allSource.srcDirs.flatten()
 }
 
-tasks.coveralls {
-    dependsOn(jacocoTestReport)
-}
+tasks.named("coveralls").configure { dependsOn tasks.named("jacocoTestReport") }

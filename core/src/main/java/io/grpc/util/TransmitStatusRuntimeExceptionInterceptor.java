@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
   @Override
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-    final ServerCall<ReqT, RespT> serverCall = new SerializingServerCall<ReqT, RespT>(call);
+    final ServerCall<ReqT, RespT> serverCall = new SerializingServerCall<>(call);
     ServerCall.Listener<ReqT> listener = next.startCall(serverCall, headers);
     return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(listener) {
       @Override
@@ -123,6 +123,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
     private static final String ERROR_MSG = "Encountered error during serialized access";
     private final SerializingExecutor serializingExecutor =
         new SerializingExecutor(MoreExecutors.directExecutor());
+    private boolean closeCalled = false;
 
     SerializingServerCall(ServerCall<ReqT, RespT> delegate) {
       super(delegate);
@@ -163,7 +164,11 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       serializingExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          SerializingServerCall.super.close(status, trailers);
+          if (!closeCalled) {
+            closeCalled = true;
+
+            SerializingServerCall.super.close(status, trailers);
+          }
         }
       });
     }

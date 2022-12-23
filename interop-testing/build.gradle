@@ -1,99 +1,227 @@
-apply plugin: 'application'
+plugins {
+    id "application"
+    id "java"
+    id "maven-publish"
 
-description = "gRPC: Integration Testing"
-startScripts.enabled = false
-
-// Add dependency on the protobuf plugin
-buildscript {
-  repositories {
-    mavenCentral()
-  }
-  dependencies {
-    classpath libraries.protobuf_plugin
-  }
+    id "com.github.johnrengelman.shadow"
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
+description = "gRPC: Integration Testing"
+
+configurations {
+    alpnagent
+}
+
+evaluationDependsOn(project(':grpc-context').path)
+
 dependencies {
-    compile project(':grpc-auth'),
+    implementation project(path: ':grpc-alts', configuration: 'shadow'),
+            project(':grpc-auth'),
+            project(':grpc-census'),
             project(':grpc-core'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-protobuf'),
+            project(':grpc-services'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            libraries.hdrhistogram,
             libraries.junit,
-            libraries.mockito,
-            libraries.netty_tcnative,
-            libraries.oauth_client
+            libraries.truth,
+            libraries.opencensus.contrib.grpc.metrics,
+            libraries.google.auth.oauth2Http
+    def xdsDependency = implementation project(':grpc-xds')
+
+    compileOnly libraries.javax.annotation
+    shadow project(path: ':grpc-xds', configuration: 'shadow')
+    // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
+    // Used instead of google-cloud-logging because it's failing
+    // due to a circular dependency on grpc.
+    // https://cloud.google.com/logging/docs/setup/java#the_javautillogging_handler
+    // Error example: "java.util.logging.ErrorManager: 1"
+    // Latest failing version com.google.cloud:google-cloud-logging:2.1.2
+    // TODO(ejona): These should be compileOnly, but that doesn't get picked up
+    // for the shadow runtime
+    implementation group: 'io.github.devatherock', name: 'jul-jsonformatter', version: '1.1.0'
+    implementation libraries.opencensus.impl,
+            libraries.netty.tcnative,
+            libraries.netty.tcnative.classes,
+            project(':grpc-grpclb'),
+            project(':grpc-rls')
+    testImplementation project(':grpc-context').sourceSets.test.output,
+            project(':grpc-api').sourceSets.test.output,
+            project(':grpc-core').sourceSets.test.output,
+            libraries.mockito.core,
+            libraries.okhttp
+    alpnagent libraries.jetty.alpn.agent
+    shadow configurations.implementation.getDependencies().minus(xdsDependency)
+
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 configureProtoCompilation()
 
-test {
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+tasks.named("compileJava").configure {
+    // This isn't a library; it can use beta APIs
+    options.errorprone.check("BetaApi", CheckSeverity.OFF)
+}
+tasks.named("jar").configure {
+    // Must use a different archiveClassifier to avoid conflicting with shadowJar
+    archiveClassifier = 'original'
+}
+
+tasks.named("distZip").configure {
+    archiveClassifier = "original"
+}
+
+tasks.named("distTar").configure {
+    archiveClassifier = "original"
+}
+
+def xdsPrefixName = 'io.grpc.xds'
+tasks.named("shadowJar").configure {
+    archiveClassifier = null
+    dependencies {
+        exclude(dependency {true})
+    }
+    relocate 'com.github.xds', "${xdsPrefixName}.shaded.com.github.xds"
+}
+
+tasks.named("test").configure {
     // For the automated tests, use Jetty ALPN.
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
+}
+
+tasks.named("startShadowScripts").configure {
+    enabled = false
+}
+tasks.named("installDist").configure {
+    dependsOn installShadowDist
+    enabled = false
 }
 
 // For the generated scripts, use Netty tcnative (i.e. OpenSSL).
 // Note that OkHttp currently only supports ALPN, so OpenSSL version >= 1.0.2 is required.
 
-task test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.TestServiceClient"
+def startScriptsClasspath = provider {
+    shadowJar.outputs.files + configurations.shadow
+}
+
+def test_client = tasks.register("test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.TestServiceClient"
     applicationName = "test-client"
-    defaultJvmOpts = ["-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name]
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
-    dependencies {
-        runtime configurations.alpnagent
-    }
+    defaultJvmOpts = [
+        "-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name
+    ]
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
     doLast {
-        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\$APP_HOME/lib/')
+        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\'"\$APP_HOME"\'/lib/')
         windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
     }
 }
 
-task test_server(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.TestServiceServer"
+def test_server = tasks.register("test_server", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.TestServiceServer"
     applicationName = "test-server"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
 }
 
-task reconnect_test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.ReconnectTestClient"
+def reconnect_test_client = tasks.register("reconnect_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.ReconnectTestClient"
     applicationName = "reconnect-test-client"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
 }
 
-task stresstest_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.StressTestClient"
+def stresstest_client = tasks.register("stresstest_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.StressTestClient"
     applicationName = "stresstest-client"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
-    defaultJvmOpts = ["-verbose:gc", "-XX:+PrintFlagsFinal"]
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
+    defaultJvmOpts = [
+        "-verbose:gc",
+        "-XX:+PrintFlagsFinal"
+    ]
 }
 
-task http2_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.Http2Client"
+def http2_client = tasks.register("http2_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.Http2Client"
     applicationName = "http2-client"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
 }
 
-applicationDistribution.into("bin") {
+def grpclb_long_lived_affinity_test_client = tasks.register("grpclb_long_lived_affinity_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
+    applicationName = "grpclb-long-lived-affinity-test-client"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
+    defaultJvmOpts = [
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
+    ]
+}
+
+def grpclb_fallback_test_client = tasks.register("grpclb_fallback_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.GrpclbFallbackTestClient"
+    applicationName = "grpclb-fallback-test-client"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
+    defaultJvmOpts = [
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
+    ]
+}
+
+def xds_test_client = tasks.register("xds_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.XdsTestClient"
+    applicationName = "xds-test-client"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
+}
+
+def xds_test_server = tasks.register("xds_test_server", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.XdsTestServer"
+    applicationName = "xds-test-server"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
+}
+
+distributions.shadow.contents.into("bin") {
     from(test_client)
     from(test_server)
     from(reconnect_test_client)
     from(stresstest_client)
     from(http2_client)
+    from(grpclb_long_lived_affinity_test_client)
+    from(grpclb_fallback_test_client)
+    from(xds_test_client)
+    from(xds_test_server)
     fileMode = 0755
 }
 
-// Let intellij projects refer to generated code
-idea {
-  module {
-    sourceDirs += file("${projectDir}/src/generated/main/java")
-    sourceDirs += file("${projectDir}/src/generated/main/grpc")
-  }
+distributions.shadow.contents.into("lib") {
+    from(configurations.alpnagent)
+}
+
+distributions.shadow.distributionBaseName = project.name
+// to please shadowJar
+mainClassName = 'io.grpc.testing.integration.TestServiceClient'
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
+
+            artifact shadowDistZip
+            artifact shadowDistTar
+        }
+    }
 }

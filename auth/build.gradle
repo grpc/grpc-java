@@ -1,7 +1,18 @@
-description = "gRpc: Auth"
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: Auth"
 dependencies {
-    compile project(':grpc-core'),
-            libraries.google_auth_credentials
-    testCompile libraries.oauth_client
-    signature "org.codehaus.mojo.signature:java16:1.1@signature"
+    api project(':grpc-api'),
+            libraries.google.auth.credentials
+    implementation libraries.guava
+    testImplementation project(':grpc-testing'),
+            libraries.google.auth.oauth2Http
+    signature libraries.signature.java
+    signature libraries.signature.android
 }

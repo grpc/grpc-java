@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,10 +43,10 @@ final class OkHttpTlsUpgrader {
    */
   @VisibleForTesting
   static final List<Protocol> TLS_PROTOCOLS =
-      Collections.unmodifiableList(Arrays.<Protocol>asList(Protocol.GRPC_EXP, Protocol.HTTP_2));
+      Collections.unmodifiableList(Arrays.asList(Protocol.HTTP_2));
 
   /**
-   * Upgrades given Socket to be a SSLSocket.
+   * Upgrades given Socket to be an SSLSocket.
    *
    * @throws IOException if an IO error was encountered during the upgrade handshake.
    * @throws RuntimeException if the upgrade negotiation failed.
@@ -70,9 +70,28 @@ final class OkHttpTlsUpgrader {
     if (hostnameVerifier == null) {
       hostnameVerifier = OkHostnameVerifier.INSTANCE;
     }
-    if (!hostnameVerifier.verify(host, sslSocket.getSession())) {
+    if (!hostnameVerifier.verify(canonicalizeHost(host), sslSocket.getSession())) {
       throw new SSLPeerUnverifiedException("Cannot verify hostname: " + host);
     }
     return sslSocket;
+  }
+
+  /**
+   * Converts a host from URI to X509 format.
+   *
+   * <p>IPv6 host addresses derived from URIs are enclosed in square brackets per RFC2732, but
+   * omit these brackets in X509 certificate subjectAltName extensions per RFC5280.
+   *
+   * @see <a href="https://www.ietf.org/rfc/rfc2732.txt">RFC2732</a>
+   * @see <a href="https://tools.ietf.org/html/rfc5280#section-4.2.1.6">RFC5280</a>
+   *
+   * @return {@code host} in a form consistent with X509 certificates
+   */
+  @VisibleForTesting
+  static String canonicalizeHost(String host) {
+    if (host.startsWith("[") && host.endsWith("]")) {
+      return host.substring(1, host.length() - 1);
+    }
+    return host;
   }
 }

@@ -1,0 +1,106 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.github.johnrengelman.shadow"
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: ALTS"
+
+evaluationDependsOn(project(':grpc-core').path)
+
+dependencies {
+    api project(':grpc-core')
+    implementation project(':grpc-auth'),
+            project(':grpc-grpclb'),
+            project(':grpc-protobuf'),
+            project(':grpc-stub'),
+            libraries.protobuf.java,
+            libraries.conscrypt,
+            libraries.guava,
+            libraries.google.auth.oauth2Http
+    def nettyDependency = implementation project(':grpc-netty')
+    compileOnly libraries.javax.annotation
+
+    shadow configurations.implementation.getDependencies().minus(nettyDependency)
+    shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
+
+    testImplementation project(':grpc-testing'),
+            project(':grpc-core').sourceSets.test.output,
+            project(':grpc-testing-proto'),
+            libraries.guava,
+            libraries.junit,
+            libraries.mockito.core,
+            libraries.truth
+
+    testImplementation (libraries.guava.testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
+    testRuntimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
+    testRuntimeOnly (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    signature libraries.signature.java
+}
+
+configureProtoCompilation()
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+[tasks.named("compileJava"), tasks.named("compileTestJava")]*.configure {
+    // protobuf calls valueof. Will be fixed in next release (google/protobuf#4046)
+    options.compilerArgs += [
+        "-Xlint:-deprecation"
+    ]
+    // ALTS returns a lot of futures that we mostly don't care about.
+    options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
+}
+
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/alts/internal/**'
+    exclude 'io/grpc/alts/Internal*'
+}
+
+tasks.named("jar").configure {
+    // Must use a different archiveClassifier to avoid conflicting with shadowJar
+    archiveClassifier = 'original'
+}
+
+// We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
+// source to work with Bazel, so we rewrite the code as part of the build.
+tasks.named("shadowJar").configure {
+    archiveClassifier = null
+    dependencies {
+        exclude(dependency {true})
+    }
+    relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
+    relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
+
+            pom.withXml {
+                def dependenciesNode = new Node(null, 'dependencies')
+                project.configurations.shadow.allDependencies.each { dep ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dep.group)
+                    dependencyNode.appendNode('artifactId', dep.name)
+                    def version = (dep.name == 'grpc-netty-shaded') ? '[' + dep.version + ']' : dep.version
+                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('scope', 'compile')
+                }
+                asNode().dependencies[0].replaceNode(dependenciesNode)
+            }
+        }
+    }
+}

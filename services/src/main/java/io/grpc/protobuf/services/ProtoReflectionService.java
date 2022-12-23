@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Descriptors.ServiceDescriptor;
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
-import io.grpc.InternalNotifyOnServerBuild;
+import io.grpc.InternalServer;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
@@ -42,14 +42,15 @@ import io.grpc.reflection.v1alpha.ServerReflectionResponse;
 import io.grpc.reflection.v1alpha.ServiceResponse;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.WeakHashMap;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -61,45 +62,41 @@ import javax.annotation.concurrent.GuardedBy;
  * extension.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase
-    implements InternalNotifyOnServerBuild {
+public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase {
 
   private final Object lock = new Object();
 
   @GuardedBy("lock")
-  private ServerReflectionIndex serverReflectionIndex;
-
-  private Server server;
+  private final Map<Server, ServerReflectionIndex> serverReflectionIndexes = new WeakHashMap<>();
 
   private ProtoReflectionService() {}
 
+  /**
+   * Creates a instance of {@link ProtoReflectionService}.
+   */
   public static BindableService newInstance() {
     return new ProtoReflectionService();
   }
 
-  /** Receives a reference to the server at build time. */
-  @Override
-  public void notifyOnBuild(Server server) {
-    this.server = checkNotNull(server);
-  }
-
   /**
-   * Checks for updates to the server's mutable services and updates the index if any changes are
+   * Retrieves the index for services of the server that dispatches the current call. Computes
+   * one if not exist. The index is updated if any changes to the server's mutable services are
    * detected. A change is any addition or removal in the set of file descriptors attached to the
    * mutable services or a change in the service names.
-   *
-   * @return The (potentially updated) index.
    */
-  private ServerReflectionIndex updateIndexIfNecessary() {
+  private ServerReflectionIndex getRefreshedIndex() {
     synchronized (lock) {
-      if (serverReflectionIndex == null) {
-        serverReflectionIndex =
+      Server server = InternalServer.SERVER_CONTEXT_KEY.get();
+      ServerReflectionIndex index = serverReflectionIndexes.get(server);
+      if (index == null) {
+        index =
             new ServerReflectionIndex(server.getImmutableServices(), server.getMutableServices());
-        return serverReflectionIndex;
+        serverReflectionIndexes.put(server, index);
+        return index;
       }
 
-      Set<FileDescriptor> serverFileDescriptors = new HashSet<FileDescriptor>();
-      Set<String> serverServiceNames = new HashSet<String>();
+      Set<FileDescriptor> serverFileDescriptors = new HashSet<>();
+      Set<String> serverServiceNames = new HashSet<>();
       List<ServerServiceDefinition> serverMutableServices = server.getMutableServices();
       for (ServerServiceDefinition mutableService : serverMutableServices) {
         io.grpc.ServiceDescriptor serviceDescriptor = mutableService.getServiceDescriptor();
@@ -116,14 +113,15 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       // Replace the index if the underlying mutable services have changed. Check both the file
       // descriptors and the service names, because one file descriptor can define multiple
       // services.
-      FileDescriptorIndex mutableServicesIndex = serverReflectionIndex.getMutableServicesIndex();
+      FileDescriptorIndex mutableServicesIndex = index.getMutableServicesIndex();
       if (!mutableServicesIndex.getServiceFileDescriptors().equals(serverFileDescriptors)
           || !mutableServicesIndex.getServiceNames().equals(serverServiceNames)) {
-        serverReflectionIndex =
+        index =
             new ServerReflectionIndex(server.getImmutableServices(), serverMutableServices);
+        serverReflectionIndexes.put(server, index);
       }
 
-      return serverReflectionIndex;
+      return index;
     }
   }
 
@@ -133,9 +131,9 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
     final ServerCallStreamObserver<ServerReflectionResponse> serverCallStreamObserver =
         (ServerCallStreamObserver<ServerReflectionResponse>) responseObserver;
     ProtoReflectionStreamObserver requestObserver =
-        new ProtoReflectionStreamObserver(updateIndexIfNecessary(), serverCallStreamObserver);
+        new ProtoReflectionStreamObserver(getRefreshedIndex(), serverCallStreamObserver);
     serverCallStreamObserver.setOnReadyHandler(requestObserver);
-    serverCallStreamObserver.disableAutoInboundFlowControl();
+    serverCallStreamObserver.disableAutoRequest();
     serverCallStreamObserver.request(1);
     return requestObserver;
   }
@@ -188,7 +186,10 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
             listServices(request);
             break;
           default:
-            sendErrorResponse(request, Status.UNIMPLEMENTED, "");
+            sendErrorResponse(
+                request,
+                Status.Code.UNIMPLEMENTED,
+                "not implemented " + request.getMessageRequestCase());
         }
         request = null;
         if (closeAfterSend) {
@@ -219,7 +220,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       if (fd != null) {
         serverCallStreamObserver.onNext(createServerReflectionResponse(request, fd));
       } else {
-        sendErrorResponse(request, Status.NOT_FOUND, "File not found.");
+        sendErrorResponse(request, Status.Code.NOT_FOUND, "File not found.");
       }
     }
 
@@ -229,7 +230,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       if (fd != null) {
         serverCallStreamObserver.onNext(createServerReflectionResponse(request, fd));
       } else {
-        sendErrorResponse(request, Status.NOT_FOUND, "Symbol not found.");
+        sendErrorResponse(request, Status.Code.NOT_FOUND, "Symbol not found.");
       }
     }
 
@@ -242,7 +243,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       if (fd != null) {
         serverCallStreamObserver.onNext(createServerReflectionResponse(request, fd));
       } else {
-        sendErrorResponse(request, Status.NOT_FOUND, "Extension not found.");
+        sendErrorResponse(request, Status.Code.NOT_FOUND, "Extension not found.");
       }
     }
 
@@ -261,7 +262,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
                 .setAllExtensionNumbersResponse(builder)
                 .build());
       } else {
-        sendErrorResponse(request, Status.NOT_FOUND, "Type not found.");
+        sendErrorResponse(request, Status.Code.NOT_FOUND, "Type not found.");
       }
     }
 
@@ -278,14 +279,15 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
               .build());
     }
 
-    private void sendErrorResponse(ServerReflectionRequest request, Status status, String message) {
+    private void sendErrorResponse(
+        ServerReflectionRequest request, Status.Code code, String message) {
       ServerReflectionResponse response =
           ServerReflectionResponse.newBuilder()
               .setValidHost(request.getHost())
               .setOriginalRequest(request)
               .setErrorResponse(
                   ErrorResponse.newBuilder()
-                      .setErrorCode(status.getCode().value())
+                      .setErrorCode(code.value())
                       .setErrorMessage(message))
               .build();
       serverCallStreamObserver.onNext(response);
@@ -295,8 +297,8 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
         ServerReflectionRequest request, FileDescriptor fd) {
       FileDescriptorResponse.Builder fdRBuilder = FileDescriptorResponse.newBuilder();
 
-      Set<String> seenFiles = new HashSet<String>();
-      Queue<FileDescriptor> frontier = new LinkedList<FileDescriptor>();
+      Set<String> seenFiles = new HashSet<>();
+      Queue<FileDescriptor> frontier = new ArrayDeque<>();
       seenFiles.add(fd.getName());
       frontier.add(fd);
       while (!frontier.isEmpty()) {
@@ -344,7 +346,7 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
       Set<String> immutableServiceNames = immutableServicesIndex.getServiceNames();
       Set<String> mutableServiceNames = mutableServicesIndex.getServiceNames();
       Set<String> serviceNames =
-          new HashSet<String>(immutableServiceNames.size() + mutableServiceNames.size());
+          new HashSet<>(immutableServiceNames.size() + mutableServiceNames.size());
       serviceNames.addAll(immutableServiceNames);
       serviceNames.addAll(mutableServiceNames);
       return serviceNames;
@@ -394,18 +396,18 @@ public final class ProtoReflectionService extends ServerReflectionGrpc.ServerRef
    * mutable services.
    */
   private static final class FileDescriptorIndex {
-    private final Set<String> serviceNames = new HashSet<String>();
-    private final Set<FileDescriptor> serviceFileDescriptors = new HashSet<FileDescriptor>();
+    private final Set<String> serviceNames = new HashSet<>();
+    private final Set<FileDescriptor> serviceFileDescriptors = new HashSet<>();
     private final Map<String, FileDescriptor> fileDescriptorsByName =
-        new HashMap<String, FileDescriptor>();
+        new HashMap<>();
     private final Map<String, FileDescriptor> fileDescriptorsBySymbol =
-        new HashMap<String, FileDescriptor>();
+        new HashMap<>();
     private final Map<String, Map<Integer, FileDescriptor>> fileDescriptorsByExtensionAndNumber =
-        new HashMap<String, Map<Integer, FileDescriptor>>();
+        new HashMap<>();
 
     FileDescriptorIndex(List<ServerServiceDefinition> services) {
-      Queue<FileDescriptor> fileDescriptorsToProcess = new LinkedList<FileDescriptor>();
-      Set<String> seenFiles = new HashSet<String>();
+      Queue<FileDescriptor> fileDescriptorsToProcess = new ArrayDeque<>();
+      Set<String> seenFiles = new HashSet<>();
       for (ServerServiceDefinition service : services) {
         io.grpc.ServiceDescriptor serviceDescriptor = service.getServiceDescriptor();
         if (serviceDescriptor.getSchemaDescriptor() instanceof ProtoFileDescriptorSupplier) {

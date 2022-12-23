@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 import java.io.InputStream;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -41,15 +43,29 @@ public abstract class AbstractStream implements Stream {
   protected abstract TransportState transportState();
 
   @Override
+  public void optimizeForDirectExecutor() {
+    transportState().optimizeForDirectExecutor();
+  }
+
+  @Override
   public final void setMessageCompression(boolean enable) {
     framer().setMessageCompression(enable);
   }
 
   @Override
+  public final void request(int numMessages) {
+    transportState().requestMessagesFromDeframer(numMessages);
+  }
+
+  @Override
   public final void writeMessage(InputStream message) {
     checkNotNull(message, "message");
-    if (!framer().isClosed()) {
-      framer().writePayload(message);
+    try {
+      if (!framer().isClosed()) {
+        framer().writePayload(message);
+      }
+    } finally {
+      GrpcUtil.closeQuietly(message);
     }
   }
 
@@ -75,9 +91,6 @@ public abstract class AbstractStream implements Stream {
 
   @Override
   public boolean isReady() {
-    if (framer().isClosed()) {
-      return false;
-    }
     return transportState().isReady();
   }
 
@@ -92,10 +105,11 @@ public abstract class AbstractStream implements Stream {
   }
 
   /**
-   * Stream state as used by the transport. This should only called from the transport thread
-   * (except for private interactions with {@code AbstractStream2}).
+   * Stream state as used by the transport. This should only be called from the transport thread
+   * (except for private interactions with {@code AbstractStream}).
    */
-  public abstract static class TransportState implements MessageDeframer.Listener {
+  public abstract static class TransportState
+      implements ApplicationThreadDeframer.TransportExecutor, MessageDeframer.Listener {
     /**
      * The default number of queued bytes for a given stream, below which
      * {@link StreamListener#onReady()} will be called.
@@ -103,9 +117,12 @@ public abstract class AbstractStream implements Stream {
     @VisibleForTesting
     public static final int DEFAULT_ONREADY_THRESHOLD = 32 * 1024;
 
-    private final MessageDeframer deframer;
+    private Deframer deframer;
     private final Object onReadyLock = new Object();
     private final StatsTraceContext statsTraceCtx;
+    private final TransportTracer transportTracer;
+    private final MessageDeframer rawDeframer;
+
     /**
      * The number of bytes currently queued, waiting to be sent. When this falls below
      * DEFAULT_ONREADY_THRESHOLD, {@link StreamListener#onReady()} will be called.
@@ -125,10 +142,30 @@ public abstract class AbstractStream implements Stream {
     @GuardedBy("onReadyLock")
     private boolean deallocated;
 
-    protected TransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
+    protected TransportState(
+        int maxMessageSize,
+        StatsTraceContext statsTraceCtx,
+        TransportTracer transportTracer) {
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
-      deframer = new MessageDeframer(
-          this, Codec.Identity.NONE, maxMessageSize, statsTraceCtx, getClass().getName());
+      this.transportTracer = checkNotNull(transportTracer, "transportTracer");
+      rawDeframer = new MessageDeframer(
+          this,
+          Codec.Identity.NONE,
+          maxMessageSize,
+          statsTraceCtx,
+          transportTracer);
+      // TODO(#7168): use MigratingThreadDeframer when enabling retry doesn't break.
+      deframer = rawDeframer;
+    }
+
+    final void optimizeForDirectExecutor() {
+      rawDeframer.setListener(this);
+      deframer = rawDeframer;
+    }
+
+    protected void setFullStreamDecompressor(GzipInflatingBuffer fullStreamDecompressor) {
+      rawDeframer.setFullStreamDecompressor(fullStreamDecompressor);
+      deframer = new ApplicationThreadDeframer(this, this, rawDeframer);
     }
 
     final void setMaxInboundMessageSize(int maxSize) {
@@ -141,61 +178,80 @@ public abstract class AbstractStream implements Stream {
     protected abstract StreamListener listener();
 
     @Override
-    public void messageRead(InputStream is) {
-      listener().messageRead(is);
+    public void messagesAvailable(StreamListener.MessageProducer producer) {
+      listener().messagesAvailable(producer);
     }
 
     /**
-     * Called when a {@link #deframe(ReadableBuffer, boolean)} operation failed.
-     *
-     * @param cause the actual failure
-     */
-    protected abstract void deframeFailed(Throwable cause);
-
-    /**
-     * Closes this deframer and frees any resources. After this method is called, additional calls
+     * Closes the deframer and frees any resources. After this method is called, additional calls
      * will have no effect.
+     *
+     * <p>When {@code stopDelivery} is false, the deframer will wait to close until any already
+     * queued messages have been delivered.
+     *
+     * <p>The deframer will invoke {@link #deframerClosed(boolean)} upon closing.
+     *
+     * @param stopDelivery interrupt pending deliveries and close immediately
      */
-    protected final void closeDeframer() {
-      deframer.close();
-    }
-
-    /**
-     * Indicates whether delivery is currently stalled, pending receipt of more data.
-     */
-    protected final boolean isDeframerStalled() {
-      return deframer.isStalled();
-    }
-
-    /**
-     * Called to parse a received frame and attempt delivery of any completed
-     * messages. Must be called from the transport thread.
-     */
-    protected final void deframe(ReadableBuffer frame, boolean endOfStream) {
-      if (deframer.isClosed()) {
-        frame.close();
-        return;
+    protected final void closeDeframer(boolean stopDelivery) {
+      if (stopDelivery) {
+        deframer.close();
+      } else {
+        deframer.closeWhenComplete();
       }
+    }
+
+    /**
+     * Called to parse a received frame and attempt delivery of any completed messages. Must be
+     * called from the transport thread.
+     */
+    protected final void deframe(final ReadableBuffer frame) {
       try {
-        deframer.deframe(frame, endOfStream);
+        deframer.deframe(frame);
       } catch (Throwable t) {
         deframeFailed(t);
       }
     }
 
     /**
-     * Called to request the given number of messages from the deframer. Must be called
-     * from the transport thread.
+     * Called to request the given number of messages from the deframer. May be called from any
+     * thread.
      */
-    public final void requestMessagesFromDeframer(int numMessages) {
-      if (deframer.isClosed()) {
+    private void requestMessagesFromDeframer(final int numMessages) {
+      if (deframer instanceof ThreadOptimizedDeframer) {
+        PerfMark.startTask("AbstractStream.request");
+        try {
+          deframer.request(numMessages);
+        } finally {
+          PerfMark.stopTask("AbstractStream.request");
+        }
         return;
       }
-      try {
-        deframer.request(numMessages);
-      } catch (Throwable t) {
-        deframeFailed(t);
+      final Link link = PerfMark.linkOut();
+      class RequestRunnable implements Runnable {
+        @Override public void run() {
+          PerfMark.startTask("AbstractStream.request");
+          PerfMark.linkIn(link);
+          try {
+            deframer.request(numMessages);
+          } catch (Throwable t) {
+            deframeFailed(t);
+          } finally {
+            PerfMark.stopTask("AbstractStream.request");
+          }
+        }
       }
+
+      runOnTransportThread(new RequestRunnable());
+    }
+
+    /**
+     * Very rarely used. Prefer stream.request() instead of this; this method is only necessary if
+     * a stream is not available.
+     */
+    @VisibleForTesting
+    public final void requestMessagesFromDeframerForTesting(int numMessages) {
+      requestMessagesFromDeframer(numMessages);
     }
 
     public final StatsTraceContext getStatsTraceContext() {
@@ -203,9 +259,6 @@ public abstract class AbstractStream implements Stream {
     }
 
     protected final void setDecompressor(Decompressor decompressor) {
-      if (deframer.isClosed()) {
-        return;
-      }
       deframer.setDecompressor(decompressor);
     }
 
@@ -276,6 +329,10 @@ public abstract class AbstractStream implements Stream {
       if (doNotify) {
         notifyIfReady();
       }
+    }
+
+    protected TransportTracer getTransportTracer() {
+      return transportTracer;
     }
 
     private void notifyIfReady() {

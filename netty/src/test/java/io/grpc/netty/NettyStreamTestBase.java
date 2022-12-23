@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,20 +20,20 @@ import static com.google.common.base.Charsets.US_ASCII;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyLong;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.grpc.internal.Stream;
 import io.grpc.internal.StreamListener;
+import io.grpc.netty.WriteQueue.QueuedCommand;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
@@ -43,10 +43,9 @@ import io.netty.handler.codec.http2.Http2Stream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.concurrent.TimeUnit;
+import java.util.Queue;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
@@ -67,11 +66,6 @@ public abstract class NettyStreamTestBase<T extends Stream> {
 
   @Mock
   private ChannelPipeline pipeline;
-
-  // ChannelFuture has too many methods to implement; we stubbed all necessary methods of Future.
-  @SuppressWarnings("DoNotMock")
-  @Mock
-  protected ChannelFuture future;
 
   @Mock
   protected EventLoop eventLoop;
@@ -94,14 +88,16 @@ public abstract class NettyStreamTestBase<T extends Stream> {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
 
-    mockFuture(true);
-    when(channel.write(any())).thenReturn(future);
-    when(channel.writeAndFlush(any())).thenReturn(future);
     when(channel.alloc()).thenReturn(UnpooledByteBufAllocator.DEFAULT);
     when(channel.pipeline()).thenReturn(pipeline);
     when(channel.eventLoop()).thenReturn(eventLoop);
     when(channel.newPromise()).thenReturn(new DefaultChannelPromise(channel));
     when(channel.voidPromise()).thenReturn(new DefaultChannelPromise(channel));
+    ChannelPromise completedPromise = new DefaultChannelPromise(channel)
+        .setSuccess();
+    when(channel.write(any())).thenReturn(completedPromise);
+    when(channel.writeAndFlush(any())).thenReturn(completedPromise);
+    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(completedPromise);
     when(pipeline.firstContext()).thenReturn(ctx);
     when(eventLoop.inEventLoop()).thenReturn(true);
     when(http2Stream.id()).thenReturn(STREAM_ID);
@@ -129,11 +125,12 @@ public abstract class NettyStreamTestBase<T extends Stream> {
       ((NettyClientStream) stream).transportState()
           .transportDataReceived(messageFrame(MESSAGE), false);
     }
-    ArgumentCaptor<InputStream> captor = ArgumentCaptor.forClass(InputStream.class);
-    verify(listener()).messageRead(captor.capture());
+
+    InputStream message = listenerMessageQueue().poll();
 
     // Verify that inbound flow control window update has been disabled for the stream.
-    assertEquals(MESSAGE, NettyTestUtil.toString(captor.getValue()));
+    assertEquals(MESSAGE, NettyTestUtil.toString(message));
+    assertNull("no additional message expected", listenerMessageQueue().poll());
   }
 
   @Test
@@ -142,18 +139,12 @@ public abstract class NettyStreamTestBase<T extends Stream> {
   }
 
   @Test
-  public void closedShouldNotBeReady() throws IOException {
-    assertTrue(stream.isReady());
-    closeStream();
-    assertFalse(stream.isReady());
-  }
-
-  @Test
   public void notifiedOnReadyAfterWriteCompletes() throws IOException {
     sendHeadersIfServer();
     assertTrue(stream.isReady());
     byte[] msg = largeMessage();
-    // The future is set up to automatically complete, indicating that the write is done.
+    // The channel.write future is set up to automatically complete, indicating that the write is
+    // done.
     stream.writeMessage(new ByteArrayInputStream(msg));
     stream.flush();
     assertTrue(stream.isReady());
@@ -164,7 +155,8 @@ public abstract class NettyStreamTestBase<T extends Stream> {
   public void shouldBeReadyForDataAfterWritingSmallMessage() throws IOException {
     sendHeadersIfServer();
     // Make sure the writes don't complete so we "back up"
-    reset(future);
+    ChannelPromise uncompletedPromise = new DefaultChannelPromise(channel);
+    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(uncompletedPromise);
 
     assertTrue(stream.isReady());
     byte[] msg = smallMessage();
@@ -178,7 +170,8 @@ public abstract class NettyStreamTestBase<T extends Stream> {
   public void shouldNotBeReadyForDataAfterWritingLargeMessage() throws IOException {
     sendHeadersIfServer();
     // Make sure the writes don't complete so we "back up"
-    reset(future);
+    ChannelPromise uncompletedPromise = new DefaultChannelPromise(channel);
+    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(uncompletedPromise);
 
     assertTrue(stream.isReady());
     byte[] msg = largeMessage();
@@ -208,15 +201,7 @@ public abstract class NettyStreamTestBase<T extends Stream> {
 
   protected abstract StreamListener listener();
 
-  protected abstract void closeStream();
+  protected abstract Queue<InputStream> listenerMessageQueue();
 
-  private void mockFuture(boolean succeeded) {
-    when(future.isDone()).thenReturn(true);
-    when(future.isCancelled()).thenReturn(false);
-    when(future.isSuccess()).thenReturn(succeeded);
-    when(future.awaitUninterruptibly(anyLong(), any(TimeUnit.class))).thenReturn(true);
-    if (!succeeded) {
-      when(future.cause()).thenReturn(new Exception("fake"));
-    }
-  }
+  protected abstract void closeStream();
 }

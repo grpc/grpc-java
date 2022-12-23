@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,8 @@ package io.grpc.examples.header;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.mockito.Mockito.spy;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.CallOptions;
@@ -26,7 +27,6 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
-import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerInterceptors;
@@ -35,8 +35,10 @@ import io.grpc.examples.helloworld.GreeterGrpc.GreeterBlockingStub;
 import io.grpc.examples.helloworld.GreeterGrpc.GreeterImplBase;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.GrpcServerRule;
+import io.grpc.testing.GrpcCleanupRule;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -55,11 +57,13 @@ import org.mockito.ArgumentCaptor;
 @RunWith(JUnit4.class)
 public class HeaderServerInterceptorTest {
   /**
-   * This creates and starts an in-process server, and creates a client with an in-process channel.
-   * When the test is done, it also shuts down the in-process client and server.
+   * This rule manages automatic graceful shutdown for the registered servers and channels at the
+   * end of test.
    */
   @Rule
-  public final GrpcServerRule grpcServerRule = new GrpcServerRule().directExecutor();
+  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+
+  private Channel channel;
 
   @Before
   public void setUp() throws Exception {
@@ -71,8 +75,15 @@ public class HeaderServerInterceptorTest {
             responseObserver.onCompleted();
           }
         };
-    grpcServerRule.getServiceRegistry()
-        .addService(ServerInterceptors.intercept(greeterImplBase, new HeaderServerInterceptor()));
+    // Generate a unique in-process server name.
+    String serverName = InProcessServerBuilder.generateName();
+    // Create a server, add service, start, and register for automatic graceful shutdown.
+    grpcCleanup.register(InProcessServerBuilder.forName(serverName).directExecutor()
+        .addService(ServerInterceptors.intercept(greeterImplBase, new HeaderServerInterceptor()))
+        .build().start());
+    // Create a client channel and register for automatic graceful shutdown.
+    channel =
+        grpcCleanup.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
   }
 
   @Test
@@ -87,7 +98,7 @@ public class HeaderServerInterceptorTest {
           @Override
           public void start(Listener<RespT> responseListener, Metadata headers) {
             spyListener = responseListener =
-                spy(new SimpleForwardingClientCallListener(responseListener) {});
+                mock(ClientCall.Listener.class, delegatesTo(responseListener));
             super.start(responseListener, headers);
           }
         };
@@ -95,7 +106,7 @@ public class HeaderServerInterceptorTest {
     }
 
     SpyingClientInterceptor clientInterceptor = new SpyingClientInterceptor();
-    GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(grpcServerRule.getChannel())
+    GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(channel)
         .withInterceptors(clientInterceptor);
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
 

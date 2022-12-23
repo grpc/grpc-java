@@ -1,0 +1,56 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: Google Cloud Platform Observability"
+
+tasks.named("compileJava").configure {
+    it.options.compilerArgs += [
+            // only has AutoValue annotation processor
+            "-Xlint:-processing"
+    ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
+}
+
+dependencies {
+    def cloudLoggingVersion = '3.6.1'
+
+    annotationProcessor libraries.auto.value
+    api project(':grpc-api')
+    
+    implementation project(':grpc-protobuf'),
+            project(':grpc-stub'),
+            project(':grpc-alts'),
+            project(':grpc-census'),
+            ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}"),
+            libraries.opencensus.contrib.grpc.metrics,
+            libraries.opencensus.exporter.stats.stackdriver,
+            libraries.opencensus.exporter.trace.stackdriver,
+            libraries.animalsniffer.annotations, // Prefer our version
+            libraries.google.auth.credentials, // Prefer our version
+            libraries.protobuf.java.util, // Prefer our version
+            libraries.gson, // Prefer our version
+            libraries.perfmark.api, // Prefer our version
+            ('com.google.guava:guava:31.1-jre')
+
+    runtimeOnly libraries.opencensus.impl
+
+    testImplementation project(':grpc-context').sourceSets.test.output,
+            project(':grpc-testing'),
+            project(':grpc-testing-proto'),
+            project(':grpc-netty-shaded')
+    testImplementation (libraries.guava.testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
+
+    signature libraries.signature.java
+}
+
+configureProtoCompilation()

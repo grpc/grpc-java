@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,11 @@ public interface SocketAddressValidator {
     public boolean isValidSocketAddress(SocketAddress address) {
       return address instanceof InetSocketAddress;
     }
+
+    @Override
+    public boolean isValidSocketAddress(String address) {
+      return !address.startsWith("unix://");
+    }
   };
 
   /**
@@ -43,10 +48,20 @@ public interface SocketAddressValidator {
     public boolean isValidSocketAddress(SocketAddress address) {
       return "DomainSocketAddress".equals(address.getClass().getSimpleName());
     }
+
+    @Override
+    public boolean isValidSocketAddress(String address) {
+      return address.startsWith("unix://");
+    }
   };
 
   /**
    * Returns {@code true} if the given address is valid.
    */
   boolean isValidSocketAddress(SocketAddress address);
+
+  /**
+   * Returns {@code true} if the given address is valid.
+   */
+  boolean isValidSocketAddress(String address);
 }

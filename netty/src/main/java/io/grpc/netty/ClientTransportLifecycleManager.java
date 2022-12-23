@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Status;
 import io.grpc.internal.ManagedClientTransport;
 
@@ -43,14 +44,28 @@ final class ClientTransportLifecycleManager {
     listener.transportReady();
   }
 
-  public void notifyShutdown(Status s) {
+  /**
+   * Marks transport as shutdown, but does not set the error status. This must eventually be
+   * followed by a call to notifyShutdown.
+   */
+  public void notifyGracefulShutdown(Status s) {
     if (transportShutdown) {
       return;
     }
     transportShutdown = true;
+    listener.transportShutdown(s);
+  }
+
+  /** Returns {@code true} if was the first shutdown. */
+  @CanIgnoreReturnValue
+  public boolean notifyShutdown(Status s) {
+    notifyGracefulShutdown(s);
+    if (shutdownStatus != null) {
+      return false;
+    }
     shutdownStatus = s;
     shutdownThrowable = s.asException();
-    listener.transportShutdown(s);
+    return true;
   }
 
   public void notifyInUse(boolean inUse) {

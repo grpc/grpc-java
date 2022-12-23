@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,17 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.ManagedChannel;
+import io.grpc.ServerBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.After;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -34,32 +36,41 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class Http2NettyLocalChannelTest extends AbstractInteropTest {
 
-  /** Start server. */
-  @BeforeClass
-  public static void startServer() {
-    startStaticServer(
-        NettyServerBuilder
-            .forAddress(new LocalAddress("in-process-1"))
-            .flowControlWindow(65 * 1024)
-            .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-            .channelType(LocalServerChannel.class));
-  }
+  private DefaultEventLoopGroup eventLoopGroup = new DefaultEventLoopGroup();
 
-  /** Stop server. */
-  @AfterClass
-  public static void stopServer() {
-    stopStaticServer();
+  @Override
+  protected ServerBuilder<?> getServerBuilder() {
+    NettyServerBuilder builder = NettyServerBuilder
+        .forAddress(new LocalAddress("in-process-1"))
+        .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+        .channelType(LocalServerChannel.class)
+        .workerEventLoopGroup(eventLoopGroup)
+        .bossEventLoopGroup(eventLoopGroup);
+    // Disable the default census stats tracer, use testing tracer instead.
+    InternalNettyServerBuilder.setStatsEnabled(builder, false);
+    return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected NettyChannelBuilder createChannelBuilder() {
     NettyChannelBuilder builder = NettyChannelBuilder
         .forAddress(new LocalAddress("in-process-1"))
         .negotiationType(NegotiationType.PLAINTEXT)
         .channelType(LocalChannel.class)
-        .flowControlWindow(65 * 1024)
+        .eventLoopGroup(eventLoopGroup)
+        .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    io.grpc.internal.TestingAccessor.setStatsContextFactory(builder, getClientStatsFactory());
-    return builder.build();
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
+  }
+
+  @Override
+  @After
+  @SuppressWarnings("FutureReturnValueIgnored")
+  public void tearDown() {
+    super.tearDown();
+    eventLoopGroup.shutdownGracefully();
   }
 }

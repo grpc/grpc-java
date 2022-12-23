@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableList;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.testing.integration.Metrics.EmptyMessage;
 import io.grpc.testing.integration.Metrics.GaugeResponse;
 import io.grpc.testing.integration.StressTestClient.TestCaseWeightPair;
@@ -33,13 +34,18 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link StressTestClient}. */
 @RunWith(JUnit4.class)
 public class StressTestClientTest {
+
+  @Rule
+  public final Timeout globalTimeout = Timeout.seconds(10);
 
   @Test
   public void ipv6AddressesShouldBeSupported() {
@@ -108,7 +114,7 @@ public class StressTestClientTest {
     assertEquals("foo.test.google.fr", client.addresses().get(0).getHostName());
   }
 
-  @Test(timeout = 5000)
+  @Test
   public void gaugesShouldBeExported() throws Exception {
 
     TestServiceServer server = new TestServiceServer();
@@ -123,8 +129,8 @@ public class StressTestClientTest {
     client.runStressTest();
 
     // Connect to the metrics service
-    ManagedChannel ch = ManagedChannelBuilder.forAddress("localhost", client.getMetricServerPort())
-        .usePlaintext(true)
+    ManagedChannel ch = Grpc.newChannelBuilder(
+          "localhost:" + client.getMetricServerPort(), InsecureChannelCredentials.create())
         .build();
 
     MetricsServiceGrpc.MetricsServiceBlockingStub stub = MetricsServiceGrpc.newBlockingStub(ch);

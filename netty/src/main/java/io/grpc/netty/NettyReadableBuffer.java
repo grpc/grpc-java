@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,6 +92,31 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
   @Override
   public int arrayOffset() {
     return buffer.arrayOffset() + buffer.readerIndex();
+  }
+
+  @Override
+  public boolean markSupported() {
+    return true;
+  }
+
+  @Override
+  public void mark() {
+    buffer.markReaderIndex();
+  }
+
+  @Override
+  public void reset() {
+    buffer.resetReaderIndex();
+  }
+
+  @Override
+  public boolean byteBufferSupported() {
+    return buffer.nioBufferCount() > 0;
+  }
+
+  @Override
+  public ByteBuffer getByteBuffer() {
+    return buffer.nioBufferCount() == 1 ? buffer.nioBuffer() : buffer.nioBuffers()[0];
   }
 
   /**

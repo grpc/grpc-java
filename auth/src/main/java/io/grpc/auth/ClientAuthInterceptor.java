@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -102,7 +102,7 @@ public final class ClientAuthInterceptor implements ClientInterceptor {
     // Always use HTTPS, by definition.
     final String scheme = "https";
     final int defaultPort = 443;
-    String path = "/" + MethodDescriptor.extractFullServiceName(method.getFullMethodName());
+    String path = "/" + method.getServiceName();
     URI uri;
     try {
       uri = new URI(scheme, authority, path, null, null);
@@ -132,7 +132,8 @@ public final class ClientAuthInterceptor implements ClientInterceptor {
     try {
       return credentials.getRequestMetadata(uri);
     } catch (IOException e) {
-      throw Status.UNAUTHENTICATED.withCause(e).asException();
+      throw Status.UNAUTHENTICATED.withDescription("Unable to get request metadata").withCause(e)
+          .asException();
     }
   }
 

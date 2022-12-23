@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import com.google.protobuf.Descriptors.FileDescriptor;
 
 /**
  * Provides access to the underlying proto file descriptor.
+ *
+ * @since 1.1.0
  */
 public interface ProtoFileDescriptorSupplier {
   /**

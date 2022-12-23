@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,23 +19,40 @@ package io.grpc.stub;
 import io.grpc.ExperimentalApi;
 
 /**
- * A refinement of StreamObserver provided by the GRPC runtime to the application that allows for
- * more complex interactions with call behavior.
+ * A refinement of StreamObserver provided by the GRPC runtime to the application (the client or
+ * the server) that allows for more complex interactions with call behavior.
  *
- * <p>In any call there are logically two {@link StreamObserver} implementations:
+ * <p>In any call there are logically four {@link StreamObserver} implementations:
  * <ul>
- *   <li>'inbound' - which the GRPC runtime calls when it receives messages from the
- *   remote peer. This is implemented by the application.
+ *   <li>'inbound', client-side - which the GRPC runtime calls when it receives messages from
+ *   the server. This is implemented by the client application and passed into a service method
+ *   on a stub object.
  *   </li>
- *   <li>'outbound' - which the GRPC runtime provides to the application which it uses to
- *   send messages to the remote peer.
+ *   <li>'outbound', client-side - which the GRPC runtime provides to the client application and the
+ *   client uses this {@code StreamObserver} to send messages to the server.
+ *   </li>
+ *   <li>'inbound', server-side - which the GRPC runtime calls when it receives messages from
+ *   the client. This is implemented by the server application and returned from service
+ *   implementations of client-side streaming and bidirectional streaming methods.
+ *   </li>
+ *   <li>'outbound', server-side - which the GRPC runtime provides to the server application and
+ *   the server uses this {@code StreamObserver} to send messages (responses) to the client.
  *   </li>
  * </ul>
  *
- * <p>Implementations of this class represent the 'outbound' message stream.
+ * <p>Implementations of this class represent the 'outbound' message streams. The client-side
+ * one is {@link ClientCallStreamObserver} and the service-side one is
+ * {@link ServerCallStreamObserver}.
  *
+ * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
+ * threads will be writing to an instance concurrently, the application must synchronize its calls.
+ *
+ * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
+ * "real" RPCs suitable for testing.
+ *
+ * @param <V> type of outbound message.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8499")
 public abstract class CallStreamObserver<V> implements StreamObserver<V> {
 
   /**
@@ -43,6 +60,9 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * without requiring excessive buffering internally. This value is just a suggestion and the
    * application is free to ignore it, however doing so may result in excessive buffering within the
    * observer.
+   *
+   * <p>If {@code false}, the runnable passed to {@link #setOnReadyHandler} will be called after
+   * {@code isReady()} transitions to {@code true}.
    */
   public abstract boolean isReady();
 
@@ -52,8 +72,15 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * thread will always be used to execute the {@link Runnable}, it is guaranteed that executions
    * are serialized with calls to the 'inbound' {@link StreamObserver}.
    *
-   * <p>Note that the handler may be called some time after {@link #isReady} has transitioned to
-   * true as other callbacks may still be executing in the 'inbound' observer.
+   * <p>On client-side this method may only be called during {@link
+   * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
+   * call to the application, before the service returns its {@code StreamObserver}.
+   *
+   * <p>Because there is a processing delay to deliver this notification, it is possible for
+   * concurrent writes to cause {@code isReady() == false} within this callback. Handle "spurious"
+   * notifications by checking {@code isReady()}'s current value instead of assuming it is now
+   * {@code true}. If {@code isReady() == false} the normal expectations apply, so there would be
+   * <em>another</em> {@code onReadyHandler} callback.
    *
    * @param onReadyHandler to call when peer is ready to receive more messages.
    */
@@ -64,6 +91,10 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * to the 'inbound' {@link io.grpc.stub.StreamObserver#onNext(Object)} has completed. If disabled
    * an application must make explicit calls to {@link #request} to receive messages.
    *
+   * <p>On client-side this method may only be called during {@link
+   * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
+   * call to the application, before the service returns its {@code StreamObserver}.
+   *
    * <p>Note that for cases where the runtime knows that only one inbound message is allowed
    * calling this method will have no effect and the runtime will always permit one and only
    * one message. This is true for:
@@ -71,18 +102,25 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    *   <li>{@link io.grpc.MethodDescriptor.MethodType#UNARY} operations on both the
    *   client and server.
    *   </li>
-   *   <li>{@link io.grpc.MethodDescriptor.MethodType#CLIENT_STREAMING} operations on the server.
+   *   <li>{@link io.grpc.MethodDescriptor.MethodType#CLIENT_STREAMING} operations on the client.
    *   </li>
-   *   <li>{@link io.grpc.MethodDescriptor.MethodType#SERVER_STREAMING} operations on the client.
+   *   <li>{@link io.grpc.MethodDescriptor.MethodType#SERVER_STREAMING} operations on the server.
    *   </li>
    * </ul>
    * </p>
+   * 
+   * <p>This API is being replaced, but is not yet deprecated. On server-side it being replaced
+   * with {@link ServerCallStreamObserver#disableAutoRequest}. On client-side {@link
+   * ClientCallStreamObserver#disableAutoRequestWithInitial disableAutoRequestWithInitial(1)}.
    */
   public abstract void disableAutoInboundFlowControl();
 
   /**
    * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'
    * {@link StreamObserver}.
+   *
+   * <p>This method is safe to call from multiple threads without external synchronization.
+   *
    * @param count more messages
    */
   public abstract void request(int count);

@@ -1,98 +1,102 @@
-buildscript {
-    repositories {
-        mavenCentral()
-        maven {
-            url "https://plugins.gradle.org/m2/"
-        }
-    }
-    dependencies {
-        classpath libraries.math
-        classpath libraries.protobuf_plugin
-    }
-}
-
 plugins {
-  id "me.champeau.gradle.jmh" version "0.4.4"
-}
+    id "application"
+    id "java"
+    id "maven-publish"
 
-apply plugin: 'application'
+    id "com.google.protobuf"
+    id "me.champeau.jmh"
+    id "ru.vyarus.animalsniffer"
+}
 
 description = "grpc Benchmarks"
 
-startScripts.enabled = false
-run.enabled = false
+tasks.named("jmh").configure {
+    jvmArgs = ["-server", "-Xms2g", "-Xmx2g"]
+}
 
-jmh {
-    jmhVersion = '1.19'
-    warmupIterations = 10
-    iterations = 10
-    fork = 1
-    jvmArgs = "-server -Xms2g -Xmx2g"
+configurations {
+    alpnagent
 }
 
 dependencies {
-    compile project(':grpc-core'),
+    implementation project(':grpc-core'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-stub'),
             project(':grpc-protobuf'),
             project(':grpc-testing'),
-            libraries.junit,
-            libraries.mockito,
+            project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.hdrhistogram,
-            libraries.netty_tcnative,
-            libraries.netty_epoll,
-            libraries.math
+            libraries.netty.tcnative,
+            libraries.netty.tcnative.classes,
+            libraries.commons.math3
+    implementation (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    compileOnly libraries.javax.annotation
+    alpnagent libraries.jetty.alpn.agent
+
+    testImplementation libraries.junit,
+            libraries.mockito.core
+
+    signature libraries.signature.java
 }
 
-compileJava {
-  // The Control.Void protobuf clashes
-  options.compilerArgs += ["-Xep:JavaLangClash:OFF"]
-}
+import net.ltgt.gradle.errorprone.CheckSeverity
 
-compileJmhJava {
-  options.compilerArgs = compileJava.options.compilerArgs
+tasks.named("compileJava").configure {
+    // The Control.Void protobuf clashes
+    options.errorprone.check("JavaLangClash", CheckSeverity.OFF)
 }
 
 configureProtoCompilation()
 
 def vmArgs = [
-        "-server",
-        "-Xms2g",
-        "-Xmx2g",
-        "-XX:+PrintGCDetails"
+    "-server",
+    "-Xms2g",
+    "-Xmx2g",
+    "-XX:+PrintGCDetails"
 ]
 
-task qps_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.benchmarks.qps.AsyncClient"
+tasks.named("startScripts").configure {
+    enabled = false
+}
+
+tasks.named("run").configure {
+    enabled = false
+}
+
+def qps_client = tasks.register("qps_client", CreateStartScripts) {
+    mainClass = "io.grpc.benchmarks.qps.AsyncClient"
     applicationName = "qps_client"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    defaultJvmOpts = vmArgs
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
-task openloop_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.benchmarks.qps.OpenLoopClient"
+def openloop_client = tasks.register("openloop_client", CreateStartScripts) {
+    mainClass = "io.grpc.benchmarks.qps.OpenLoopClient"
     applicationName = "openloop_client"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    defaultJvmOpts = vmArgs
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
-task qps_server(type: CreateStartScripts) {
-    mainClassName = "io.grpc.benchmarks.qps.AsyncServer"
+def qps_server = tasks.register("qps_server", CreateStartScripts) {
+    mainClass = "io.grpc.benchmarks.qps.AsyncServer"
     applicationName = "qps_server"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
-task benchmark_worker(type: CreateStartScripts) {
-    mainClassName = "io.grpc.benchmarks.driver.LoadWorker"
+def benchmark_worker = tasks.register("benchmark_worker", CreateStartScripts) {
+    mainClass = "io.grpc.benchmarks.driver.LoadWorker"
     applicationName = "benchmark_worker"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    defaultJvmOpts = vmArgs
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 applicationDistribution.into("bin") {
@@ -103,11 +107,11 @@ applicationDistribution.into("bin") {
     fileMode = 0755
 }
 
-// Let intellij projects refer to generated code
-idea {
-    module {
-        sourceDirs += file("${projectDir}/src/generated/main/java");
-        sourceDirs += file("${projectDir}/src/generated/main/grpc");
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifact distZip
+            artifact distTar
+        }
     }
 }
-

@@ -1,25 +1,13 @@
 package io.grpc.reflection.v1alpha;
 
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
 
 /**
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.6.0-SNAPSHOT)",
-    comments = "Source: io/grpc/reflection/v1alpha/reflection.proto")
+    value = "by gRPC proto compiler",
+    comments = "Source: grpc/reflection/v1alpha/reflection.proto")
+@io.grpc.stub.annotations.GrpcGenerated
 public final class ServerReflectionGrpc {
 
   private ServerReflectionGrpc() {}
@@ -27,24 +15,49 @@ public final class ServerReflectionGrpc {
   public static final String SERVICE_NAME = "grpc.reflection.v1alpha.ServerReflection";
 
   // Static method descriptors that strictly reflect the proto.
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/1901")
-  public static final io.grpc.MethodDescriptor<io.grpc.reflection.v1alpha.ServerReflectionRequest,
-      io.grpc.reflection.v1alpha.ServerReflectionResponse> METHOD_SERVER_REFLECTION_INFO =
-      io.grpc.MethodDescriptor.<io.grpc.reflection.v1alpha.ServerReflectionRequest, io.grpc.reflection.v1alpha.ServerReflectionResponse>newBuilder()
-          .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-          .setFullMethodName(generateFullMethodName(
-              "grpc.reflection.v1alpha.ServerReflection", "ServerReflectionInfo"))
-          .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.reflection.v1alpha.ServerReflectionRequest.getDefaultInstance()))
-          .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-              io.grpc.reflection.v1alpha.ServerReflectionResponse.getDefaultInstance()))
-          .build();
+  private static volatile io.grpc.MethodDescriptor<io.grpc.reflection.v1alpha.ServerReflectionRequest,
+      io.grpc.reflection.v1alpha.ServerReflectionResponse> getServerReflectionInfoMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "ServerReflectionInfo",
+      requestType = io.grpc.reflection.v1alpha.ServerReflectionRequest.class,
+      responseType = io.grpc.reflection.v1alpha.ServerReflectionResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
+  public static io.grpc.MethodDescriptor<io.grpc.reflection.v1alpha.ServerReflectionRequest,
+      io.grpc.reflection.v1alpha.ServerReflectionResponse> getServerReflectionInfoMethod() {
+    io.grpc.MethodDescriptor<io.grpc.reflection.v1alpha.ServerReflectionRequest, io.grpc.reflection.v1alpha.ServerReflectionResponse> getServerReflectionInfoMethod;
+    if ((getServerReflectionInfoMethod = ServerReflectionGrpc.getServerReflectionInfoMethod) == null) {
+      synchronized (ServerReflectionGrpc.class) {
+        if ((getServerReflectionInfoMethod = ServerReflectionGrpc.getServerReflectionInfoMethod) == null) {
+          ServerReflectionGrpc.getServerReflectionInfoMethod = getServerReflectionInfoMethod =
+              io.grpc.MethodDescriptor.<io.grpc.reflection.v1alpha.ServerReflectionRequest, io.grpc.reflection.v1alpha.ServerReflectionResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ServerReflectionInfo"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.reflection.v1alpha.ServerReflectionRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.reflection.v1alpha.ServerReflectionResponse.getDefaultInstance()))
+              .setSchemaDescriptor(new ServerReflectionMethodDescriptorSupplier("ServerReflectionInfo"))
+              .build();
+        }
+      }
+    }
+    return getServerReflectionInfoMethod;
+  }
 
   /**
    * Creates a new async stub that supports all call types for the service
    */
   public static ServerReflectionStub newStub(io.grpc.Channel channel) {
-    return new ServerReflectionStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionStub>() {
+        @java.lang.Override
+        public ServerReflectionStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionStub.newStub(factory, channel);
   }
 
   /**
@@ -52,7 +65,14 @@ public final class ServerReflectionGrpc {
    */
   public static ServerReflectionBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new ServerReflectionBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionBlockingStub>() {
+        @java.lang.Override
+        public ServerReflectionBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionBlockingStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -60,7 +80,14 @@ public final class ServerReflectionGrpc {
    */
   public static ServerReflectionFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new ServerReflectionFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionFutureStub>() {
+        @java.lang.Override
+        public ServerReflectionFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionFutureStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -75,14 +102,14 @@ public final class ServerReflectionGrpc {
      */
     public io.grpc.stub.StreamObserver<io.grpc.reflection.v1alpha.ServerReflectionRequest> serverReflectionInfo(
         io.grpc.stub.StreamObserver<io.grpc.reflection.v1alpha.ServerReflectionResponse> responseObserver) {
-      return asyncUnimplementedStreamingCall(METHOD_SERVER_REFLECTION_INFO, responseObserver);
+      return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getServerReflectionInfoMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
-            METHOD_SERVER_REFLECTION_INFO,
-            asyncBidiStreamingCall(
+            getServerReflectionInfoMethod(),
+            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
               new MethodHandlers<
                 io.grpc.reflection.v1alpha.ServerReflectionRequest,
                 io.grpc.reflection.v1alpha.ServerReflectionResponse>(
@@ -93,19 +120,15 @@ public final class ServerReflectionGrpc {
 
   /**
    */
-  public static final class ServerReflectionStub extends io.grpc.stub.AbstractStub<ServerReflectionStub> {
-    private ServerReflectionStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ServerReflectionStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ServerReflectionStub extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
+    private ServerReflectionStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ServerReflectionStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ServerReflectionStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ServerReflectionStub(channel, callOptions);
     }
 
@@ -117,45 +140,37 @@ public final class ServerReflectionGrpc {
      */
     public io.grpc.stub.StreamObserver<io.grpc.reflection.v1alpha.ServerReflectionRequest> serverReflectionInfo(
         io.grpc.stub.StreamObserver<io.grpc.reflection.v1alpha.ServerReflectionResponse> responseObserver) {
-      return asyncBidiStreamingCall(
-          getChannel().newCall(METHOD_SERVER_REFLECTION_INFO, getCallOptions()), responseObserver);
+      return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
+          getChannel().newCall(getServerReflectionInfoMethod(), getCallOptions()), responseObserver);
     }
   }
 
   /**
    */
-  public static final class ServerReflectionBlockingStub extends io.grpc.stub.AbstractStub<ServerReflectionBlockingStub> {
-    private ServerReflectionBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ServerReflectionBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ServerReflectionBlockingStub extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
+    private ServerReflectionBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ServerReflectionBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ServerReflectionBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ServerReflectionBlockingStub(channel, callOptions);
     }
   }
 
   /**
    */
-  public static final class ServerReflectionFutureStub extends io.grpc.stub.AbstractStub<ServerReflectionFutureStub> {
-    private ServerReflectionFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ServerReflectionFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ServerReflectionFutureStub extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {
+    private ServerReflectionFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ServerReflectionFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ServerReflectionFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ServerReflectionFutureStub(channel, callOptions);
     }
   }
@@ -198,10 +213,38 @@ public final class ServerReflectionGrpc {
     }
   }
 
-  private static final class ServerReflectionDescriptorSupplier implements io.grpc.protobuf.ProtoFileDescriptorSupplier {
+  private static abstract class ServerReflectionBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    ServerReflectionBaseDescriptorSupplier() {}
+
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
       return io.grpc.reflection.v1alpha.ServerReflectionProto.getDescriptor();
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().findServiceByName("ServerReflection");
+    }
+  }
+
+  private static final class ServerReflectionFileDescriptorSupplier
+      extends ServerReflectionBaseDescriptorSupplier {
+    ServerReflectionFileDescriptorSupplier() {}
+  }
+
+  private static final class ServerReflectionMethodDescriptorSupplier
+      extends ServerReflectionBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+    private final String methodName;
+
+    ServerReflectionMethodDescriptorSupplier(String methodName) {
+      this.methodName = methodName;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor() {
+      return getServiceDescriptor().findMethodByName(methodName);
     }
   }
 
@@ -214,8 +257,8 @@ public final class ServerReflectionGrpc {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new ServerReflectionDescriptorSupplier())
-              .addMethod(METHOD_SERVER_REFLECTION_INFO)
+              .setSchemaDescriptor(new ServerReflectionFileDescriptorSupplier())
+              .addMethod(getServerReflectionInfoMethod())
               .build();
         }
       }

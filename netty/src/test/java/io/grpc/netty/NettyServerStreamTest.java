@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,18 +19,17 @@ package io.grpc.netty;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.same;
+import static org.junit.Assert.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableListMultimap;
@@ -40,18 +39,22 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.StatsTraceContext;
-import io.grpc.netty.WriteQueue.QueuedCommand;
+import io.grpc.internal.StreamListener;
+import io.grpc.internal.TransportTracer;
 import io.netty.buffer.EmptyByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.util.LinkedList;
+import java.util.Queue;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -66,6 +69,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
   private NettyServerHandler handler;
 
   private Metadata trailers = new Metadata();
+  private final Queue<InputStream> listenerMessageQueue = new LinkedList<>();
 
   @Before
   @Override
@@ -75,6 +79,22 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     // Verify onReady notification and then reset it.
     verify(listener()).onReady();
     reset(listener());
+
+    doAnswer(
+          new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+              StreamListener.MessageProducer producer =
+                  (StreamListener.MessageProducer) invocation.getArguments()[0];
+              InputStream message;
+              while ((message = producer.next()) != null) {
+                listenerMessageQueue.add(message);
+              }
+              return null;
+            }
+          })
+      .when(serverListener)
+      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   @Test
@@ -90,7 +110,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
         ArgumentCaptor.forClass(SendResponseHeadersCommand.class);
     verify(writeQueue).enqueue(sendHeadersCap.capture(), eq(true));
     SendResponseHeadersCommand sendHeaders = sendHeadersCap.getValue();
-    assertThat(sendHeaders.stream()).isSameAs(stream.transportState());
+    assertThat(sendHeaders.stream()).isSameInstanceAs(stream.transportState());
     assertThat(ImmutableListMultimap.copyOf(sendHeaders.headers()))
         .containsExactlyEntriesIn(expectedHeaders);
     assertThat(sendHeaders.endOfStream()).isFalse();
@@ -101,7 +121,6 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
 
     verify(writeQueue).enqueue(
         eq(new SendGrpcFrameCommand(stream.transportState(), messageFrame(MESSAGE), false)),
-        isA(ChannelPromise.class),
         eq(true));
   }
 
@@ -117,7 +136,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
         ArgumentCaptor.forClass(SendResponseHeadersCommand.class);
     verify(writeQueue).enqueue(sendHeadersCap.capture(), eq(true));
     SendResponseHeadersCommand sendHeaders = sendHeadersCap.getValue();
-    assertThat(sendHeaders.stream()).isSameAs(stream.transportState());
+    assertThat(sendHeaders.stream()).isSameInstanceAs(stream.transportState());
     assertThat(ImmutableListMultimap.copyOf(sendHeaders.headers()))
         .containsExactlyEntriesIn(expectedHeaders);
     assertThat(sendHeaders.endOfStream()).isFalse();
@@ -137,17 +156,17 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
         ArgumentCaptor.forClass(SendResponseHeadersCommand.class);
     verify(writeQueue).enqueue(sendHeadersCap.capture(), eq(true));
     SendResponseHeadersCommand sendHeaders = sendHeadersCap.getValue();
-    assertThat(sendHeaders.stream()).isSameAs(stream.transportState());
+    assertThat(sendHeaders.stream()).isSameInstanceAs(stream.transportState());
     assertThat(ImmutableListMultimap.copyOf(sendHeaders.headers()))
         .containsExactlyEntriesIn(expectedHeaders);
     assertThat(sendHeaders.endOfStream()).isTrue();
-    verifyZeroInteractions(serverListener);
+    verifyNoInteractions(serverListener);
 
     // Sending complete. Listener gets closed()
     stream().transportState().complete();
 
     verify(serverListener).closed(Status.OK);
-    verifyZeroInteractions(serverListener);
+    assertNull("no message expected", listenerMessageQueue.poll());
   }
 
   @Test
@@ -165,16 +184,16 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
         ArgumentCaptor.forClass(SendResponseHeadersCommand.class);
     verify(writeQueue).enqueue(sendHeadersCap.capture(), eq(true));
     SendResponseHeadersCommand sendHeaders = sendHeadersCap.getValue();
-    assertThat(sendHeaders.stream()).isSameAs(stream.transportState());
+    assertThat(sendHeaders.stream()).isSameInstanceAs(stream.transportState());
     assertThat(ImmutableListMultimap.copyOf(sendHeaders.headers()))
         .containsExactlyEntriesIn(expectedHeaders);
     assertThat(sendHeaders.endOfStream()).isTrue();
-    verifyZeroInteractions(serverListener);
+    verifyNoInteractions(serverListener);
 
     // Sending complete. Listener gets closed()
     stream().transportState().complete();
     verify(serverListener).closed(Status.OK);
-    verifyZeroInteractions(serverListener);
+    assertNull("no message expected", listenerMessageQueue.poll());
   }
 
   @Test
@@ -193,13 +212,13 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
 
     // Server closes. Status sent
     stream().close(Status.OK, trailers);
-    verifyNoMoreInteractions(serverListener);
+    assertNull("no message expected", listenerMessageQueue.poll());
 
     ArgumentCaptor<SendResponseHeadersCommand> cmdCap =
         ArgumentCaptor.forClass(SendResponseHeadersCommand.class);
     verify(writeQueue).enqueue(cmdCap.capture(), eq(true));
     SendResponseHeadersCommand cmd = cmdCap.getValue();
-    assertThat(cmd.stream()).isSameAs(stream.transportState());
+    assertThat(cmd.stream()).isSameInstanceAs(stream.transportState());
     assertThat(ImmutableListMultimap.copyOf(cmd.headers()))
         .containsExactlyEntriesIn(expectedHeaders);
     assertThat(cmd.endOfStream()).isTrue();
@@ -207,7 +226,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     // Sending and receiving complete. Listener gets closed()
     stream().transportState().complete();
     verify(serverListener).closed(Status.OK);
-    verifyNoMoreInteractions(serverListener);
+    assertNull("no message expected", listenerMessageQueue.poll());
   }
 
   @Test
@@ -217,7 +236,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     verify(serverListener).closed(same(status));
     verify(channel, never()).writeAndFlush(any(SendResponseHeadersCommand.class));
     verify(channel, never()).writeAndFlush(any(SendGrpcFrameCommand.class));
-    verifyNoMoreInteractions(serverListener);
+    assertNull("no message expected", listenerMessageQueue.poll());
   }
 
   @Test
@@ -230,7 +249,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     // Abort from the transport layer
     stream().transportState().transportReportStatus(status);
     verify(serverListener).closed(same(status));
-    verifyNoMoreInteractions(serverListener);
+    assertNull("no message expected", listenerMessageQueue.poll());
   }
 
   @Test
@@ -247,7 +266,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
 
     verify(writeQueue).enqueue(cmdCap.capture(), eq(true));
     SendResponseHeadersCommand cmd = cmdCap.getValue();
-    assertThat(cmd.stream()).isSameAs(stream.transportState());
+    assertThat(cmd.stream()).isSameInstanceAs(stream.transportState());
     assertThat(ImmutableListMultimap.copyOf(cmd.headers()))
         .containsExactlyEntriesIn(expectedHeaders);
     assertThat(cmd.endOfStream()).isTrue();
@@ -264,21 +283,13 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
   @Override
   protected NettyServerStream createStream() {
     when(handler.getWriteQueue()).thenReturn(writeQueue);
-    doAnswer(new Answer<Object>() {
-      @Override
-      public Object answer(InvocationOnMock invocation) throws Throwable {
-        if (future.isDone()) {
-          ((ChannelPromise) invocation.getArguments()[1]).setSuccess();
-        }
-        return null;
-      }
-    }).when(writeQueue).enqueue(any(QueuedCommand.class), any(ChannelPromise.class), anyBoolean());
-    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(future);
     StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
+    TransportTracer transportTracer = new TransportTracer();
     NettyServerStream.TransportState state = new NettyServerStream.TransportState(
-        handler, http2Stream, DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx);
+        handler, channel.eventLoop(), http2Stream, DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx,
+        transportTracer, "method");
     NettyServerStream stream = new NettyServerStream(channel, state, Attributes.EMPTY,
-        "test-authority", statsTraceCtx);
+        "test-authority", statsTraceCtx, transportTracer);
     stream.transportState().setListener(serverListener);
     state.onStreamAllocated();
     verify(serverListener, atLeastOnce()).onReady();
@@ -299,6 +310,11 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
   @Override
   protected ServerStreamListener listener() {
     return serverListener;
+  }
+
+  @Override
+  protected Queue<InputStream> listenerMessageQueue() {
+    return listenerMessageQueue;
   }
 
   private NettyServerStream stream() {

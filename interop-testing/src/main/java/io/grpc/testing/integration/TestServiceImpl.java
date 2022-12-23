@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,17 +19,19 @@ package io.grpc.testing.integration;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.EmptyProtos;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.MetricRecorder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.integration.Messages.PayloadType;
+import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
@@ -37,17 +39,19 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import java.io.IOException;
-import java.io.InputStream;
+import io.grpc.testing.integration.Messages.TestOrcaReport;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -56,25 +60,28 @@ import javax.annotation.concurrent.GuardedBy;
  * sent in response streams.
  */
 public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
-  private static final String UNCOMPRESSABLE_FILE =
-      "/io/grpc/testing/integration/testdata/uncompressable.bin";
   private final Random random = new Random();
 
   private final ScheduledExecutorService executor;
-  private final ByteString uncompressableBuffer;
   private final ByteString compressableBuffer;
+  private final MetricRecorder metricRecorder;
+  final Semaphore lock = new Semaphore(1);
 
   /**
    * Constructs a controller using the given executor for scheduling response stream chunks.
    */
-  public TestServiceImpl(ScheduledExecutorService executor) {
+  public TestServiceImpl(ScheduledExecutorService executor, MetricRecorder metricRecorder) {
     this.executor = executor;
     this.compressableBuffer = ByteString.copyFrom(new byte[1024]);
-    this.uncompressableBuffer = createBufferFromFile(UNCOMPRESSABLE_FILE);
+    this.metricRecorder = metricRecorder;
+  }
+
+  public TestServiceImpl(ScheduledExecutorService executor) {
+    this(executor, MetricRecorder.newInstance());
   }
 
   @Override
-  public void emptyCall(EmptyProtos.Empty empty,
+  public void emptyCall(EmptyProtos.Empty request,
       StreamObserver<EmptyProtos.Empty> responseObserver) {
     responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
     responseObserver.onCompleted();
@@ -89,22 +96,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
         (ServerCallStreamObserver<SimpleResponse>) responseObserver;
     SimpleResponse.Builder responseBuilder = SimpleResponse.newBuilder();
     try {
-      switch (req.getResponseCompression()) {
-        case DEFLATE:
-          // fallthrough, just use gzip
-        case GZIP:
-          obs.setCompression("gzip");
-          break;
-        case NONE:
-          obs.setCompression("identity");
-          break;
-        case UNRECOGNIZED:
-          // fallthrough
-        default:
-          obs.onError(Status.INVALID_ARGUMENT
-              .withDescription("Unknown: " + req.getResponseCompression())
-              .asRuntimeException());
-          return;
+      if (req.hasResponseCompressed() && req.getResponseCompressed().getValue()) {
+        obs.setCompression("gzip");
+      } else {
+        obs.setCompression("identity");
       }
     } catch (IllegalArgumentException e) {
       obs.onError(Status.UNIMPLEMENTED
@@ -115,16 +110,13 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     }
 
     if (req.getResponseSize() != 0) {
-      boolean compressable = compressableResponse(req.getResponseType());
-      ByteString dataBuffer = compressable ? compressableBuffer : uncompressableBuffer;
       // For consistency with the c++ TestServiceImpl, use a random offset for unary calls.
       // TODO(wonderfly): whether or not this is a good approach needs further discussion.
-      int offset = random.nextInt(
-          compressable ? compressableBuffer.size() : uncompressableBuffer.size());
-      ByteString payload = generatePayload(dataBuffer, offset, req.getResponseSize());
-      responseBuilder.getPayloadBuilder()
-          .setType(compressable ? PayloadType.COMPRESSABLE : PayloadType.UNCOMPRESSABLE)
-          .setBody(payload);
+      int offset = random.nextInt(compressableBuffer.size());
+      ByteString payload = generatePayload(compressableBuffer, offset, req.getResponseSize());
+      responseBuilder.setPayload(
+          Payload.newBuilder()
+              .setBody(payload));
     }
 
     if (req.hasResponseStatus()) {
@@ -134,8 +126,32 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       return;
     }
 
+    if (req.hasOrcaPerQueryReport()) {
+      echoCallMetricsFromPayload(req.getOrcaPerQueryReport());
+    }
     responseObserver.onNext(responseBuilder.build());
     responseObserver.onCompleted();
+  }
+
+  private static void echoCallMetricsFromPayload(TestOrcaReport report) {
+    CallMetricRecorder recorder = CallMetricRecorder.getCurrent()
+        .recordCpuUtilizationMetric(report.getCpuUtilization())
+        .recordMemoryUtilizationMetric(report.getMemoryUtilization());
+    for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
+      recorder.recordUtilizationMetric(entry.getKey(), entry.getValue());
+    }
+    for (Map.Entry<String, Double> entry : report.getRequestCostMap().entrySet()) {
+      recorder.recordRequestCostMetric(entry.getKey(), entry.getValue());
+    }
+  }
+
+  private void echoMetricsFromPayload(TestOrcaReport report) {
+    metricRecorder.setCpuUtilizationMetric(report.getCpuUtilization());
+    metricRecorder.setMemoryUtilizationMetric(report.getMemoryUtilization());
+    metricRecorder.setAllUtilizationMetrics(new HashMap<>());
+    for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
+      metricRecorder.putUtilizationMetric(entry.getKey(), entry.getValue());
+    }
   }
 
   /**
@@ -187,11 +203,28 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
     final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
     return new StreamObserver<StreamingOutputCallRequest>() {
+      boolean oobTestLocked;
+
       @Override
       public void onNext(StreamingOutputCallRequest request) {
+        // to facilitate multiple clients running orca_oob test in parallel, the server allows
+        // only one orca_oob test client to run at a time to avoid conflicts.
+        if (request.hasOrcaOobReport()) {
+          if (!oobTestLocked) {
+            try {
+              lock.acquire();
+            } catch (InterruptedException ex) {
+              responseObserver.onError(new StatusRuntimeException(
+                  Status.ABORTED.withDescription("server service interrupted").withCause(ex)));
+              return;
+            }
+            oobTestLocked = true;
+          }
+          echoMetricsFromPayload(request.getOrcaOobReport());
+        }
         if (request.hasResponseStatus()) {
           dispatcher.cancel();
-          responseObserver.onError(Status.fromCodeValue(request.getResponseStatus().getCode())
+          dispatcher.onError(Status.fromCodeValue(request.getResponseStatus().getCode())
               .withDescription(request.getResponseStatus().getMessage())
               .asRuntimeException());
           return;
@@ -201,6 +234,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onCompleted() {
+        if (oobTestLocked) {
+          lock.release();
+          oobTestLocked = false;
+        }
         if (!dispatcher.isCancelled()) {
           // Tell the dispatcher that all input has been received.
           dispatcher.completeInput();
@@ -209,7 +246,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
       @Override
       public void onError(Throwable cause) {
-        responseObserver.onError(cause);
+        if (oobTestLocked) {
+          lock.release();
+          oobTestLocked = false;
+        }
+        dispatcher.onError(cause);
       }
     };
   }
@@ -221,7 +262,8 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   @Override
   public StreamObserver<Messages.StreamingOutputCallRequest> halfDuplexCall(
       final StreamObserver<Messages.StreamingOutputCallResponse> responseObserver) {
-    final Queue<Chunk> chunks = new LinkedList<Chunk>();
+    final ResponseDispatcher dispatcher = new ResponseDispatcher(responseObserver);
+    final Queue<Chunk> chunks = new ArrayDeque<>();
     return new StreamObserver<StreamingOutputCallRequest>() {
       @Override
       public void onNext(StreamingOutputCallRequest request) {
@@ -231,12 +273,12 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       @Override
       public void onCompleted() {
         // Dispatch all of the chunks in one shot.
-        new ResponseDispatcher(responseObserver).enqueue(chunks).completeInput();
+        dispatcher.enqueue(chunks).completeInput();
       }
 
       @Override
       public void onError(Throwable cause) {
-        responseObserver.onError(cause);
+        dispatcher.onError(cause);
       }
     };
   }
@@ -247,7 +289,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
    * available, the stream is half-closed.
    */
   private class ResponseDispatcher {
-    private final Chunk completionChunk = new Chunk(0, 0, 0, false);
+    private final Chunk completionChunk = new Chunk(0, 0, 0);
     private final Queue<Chunk> chunks;
     private final StreamObserver<StreamingOutputCallResponse> responseStream;
     private boolean scheduled;
@@ -255,6 +297,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     private Throwable failure;
     private Runnable dispatchTask = new Runnable() {
       @Override
+      @SuppressWarnings("CatchAndPrintStackTrace")
       public void run() {
         try {
 
@@ -281,6 +324,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       }
     };
 
+    /**
+     * The {@link StreamObserver} will be used to send the queue of response chunks. Since calls to
+     * {@link StreamObserver} must be synchronized across threads, no further calls should be made
+     * directly on {@code responseStream} after it is provided to the {@link ResponseDispatcher}.
+     */
     public ResponseDispatcher(StreamObserver<StreamingOutputCallResponse> responseStream) {
       this.chunks = Queues.newLinkedBlockingQueue();
       this.responseStream = responseStream;
@@ -319,6 +367,10 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
     public synchronized boolean isCancelled() {
       return cancelled;
+    }
+
+    private synchronized void onError(Throwable cause) {
+      responseStream.onError(cause);
     }
 
     /**
@@ -383,16 +435,13 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
    * Breaks down the request and creates a queue of response chunks for the given request.
    */
   public Queue<Chunk> toChunkQueue(StreamingOutputCallRequest request) {
-    Queue<Chunk> chunkQueue = new LinkedList<Chunk>();
+    Queue<Chunk> chunkQueue = new ArrayDeque<>();
     int offset = 0;
-    boolean compressable = compressableResponse(request.getResponseType());
     for (ResponseParameters params : request.getResponseParametersList()) {
-      chunkQueue.add(new Chunk(params.getIntervalUs(), offset, params.getSize(), compressable));
+      chunkQueue.add(new Chunk(params.getIntervalUs(), offset, params.getSize()));
 
-      // Increment the offset past this chunk.
-      // Both buffers need to be circular.
-      offset = (offset + params.getSize())
-          % (compressable ? compressableBuffer.size() : uncompressableBuffer.size());
+      // Increment the offset past this chunk. Buffer need to be circular.
+      offset = (offset + params.getSize()) % compressableBuffer.size();
     }
     return chunkQueue;
   }
@@ -400,20 +449,18 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   /**
    * A single chunk of a response stream. Contains delivery information for the dispatcher and can
    * be converted to a streaming response proto. A chunk just references it's payload in the
-   * {@link #uncompressableBuffer} array. The payload isn't actually created until {@link
+   * {@link #compressableBuffer} array. The payload isn't actually created until {@link
    * #toResponse()} is called.
    */
   private class Chunk {
     private final int delayMicroseconds;
     private final int offset;
     private final int length;
-    private final boolean compressable;
 
-    public Chunk(int delayMicroseconds, int offset, int length, boolean compressable) {
+    public Chunk(int delayMicroseconds, int offset, int length) {
       this.delayMicroseconds = delayMicroseconds;
       this.offset = offset;
       this.length = length;
-      this.compressable = compressable;
     }
 
     /**
@@ -422,53 +469,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     private StreamingOutputCallResponse toResponse() {
       StreamingOutputCallResponse.Builder responseBuilder =
           StreamingOutputCallResponse.newBuilder();
-      ByteString dataBuffer = compressable ? compressableBuffer : uncompressableBuffer;
-      ByteString payload = generatePayload(dataBuffer, offset, length);
-      responseBuilder.getPayloadBuilder()
-          .setType(compressable ? PayloadType.COMPRESSABLE : PayloadType.UNCOMPRESSABLE)
-          .setBody(payload);
+      ByteString payload = generatePayload(compressableBuffer, offset, length);
+      responseBuilder.setPayload(
+          Payload.newBuilder()
+              .setBody(payload));
       return responseBuilder.build();
-    }
-  }
-
-  /**
-   * Creates a buffer with data read from a file.
-   */
-  @SuppressWarnings("Finally") // Not concerned about suppression; expected to be exceedingly rare
-  private ByteString createBufferFromFile(String fileClassPath) {
-    ByteString buffer = ByteString.EMPTY;
-    InputStream inputStream = getClass().getResourceAsStream(fileClassPath);
-    if (inputStream == null) {
-      throw new IllegalArgumentException("Unable to locate file on classpath: " + fileClassPath);
-    }
-
-    try {
-      buffer = ByteString.readFrom(inputStream);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    } finally {
-      try {
-        inputStream.close();
-      } catch (IOException ignorable) {
-        // ignore
-      }
-    }
-    return buffer;
-  }
-
-  /**
-   * Indicates whether or not the response for this type should be compressable. If {@code RANDOM},
-   * picks a random boolean.
-   */
-  private boolean compressableResponse(PayloadType responseType) {
-    switch (responseType) {
-      case COMPRESSABLE:
-        return true;
-      case RANDOM:
-        return random.nextBoolean();
-      case UNCOMPRESSABLE:
-      default:
-        return false;
     }
   }
 
@@ -505,7 +510,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
    * testing end-to-end metadata propagation.
    */
   private static ServerInterceptor echoRequestHeadersInterceptor(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<Metadata.Key<?>>(Arrays.asList(keys));
+    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
@@ -533,7 +538,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
    * Echoes request headers with the specified key(s) from a client into response headers only.
    */
   private static ServerInterceptor echoRequestMetadataInHeaders(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<Metadata.Key<?>>(Arrays.asList(keys));
+    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
@@ -560,7 +565,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
    * Echoes request headers with the specified key(s) from a client into response trailers only.
    */
   private static ServerInterceptor echoRequestMetadataInTrailers(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<Metadata.Key<?>>(Arrays.asList(keys));
+    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(

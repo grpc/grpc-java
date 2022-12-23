@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,6 @@
 
 package io.grpc.okhttp;
 
-import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
-import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
-
 import com.google.common.base.Preconditions;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
@@ -32,12 +29,14 @@ import okio.ByteString;
 /**
  * Constants for request/response headers.
  */
-public class Headers {
+class Headers {
 
-  public static final Header SCHEME_HEADER = new Header(Header.TARGET_SCHEME, "https");
+  public static final Header HTTPS_SCHEME_HEADER = new Header(Header.TARGET_SCHEME, "https");
+  public static final Header HTTP_SCHEME_HEADER = new Header(Header.TARGET_SCHEME, "http");
   public static final Header METHOD_HEADER = new Header(Header.TARGET_METHOD, GrpcUtil.HTTP_METHOD);
+  public static final Header METHOD_GET_HEADER = new Header(Header.TARGET_METHOD, "GET");
   public static final Header CONTENT_TYPE_HEADER =
-      new Header(CONTENT_TYPE_KEY.name(), GrpcUtil.CONTENT_TYPE_GRPC);
+      new Header(GrpcUtil.CONTENT_TYPE_KEY.name(), GrpcUtil.CONTENT_TYPE_GRPC);
   public static final Header TE_HEADER = new Header("te", GrpcUtil.TE_TRAILERS);
 
   /**
@@ -45,18 +44,33 @@ public class Headers {
    * creating a stream. Since this serializes the headers, this method should be called in the
    * application thread context.
    */
-  public static List<Header> createRequestHeaders(Metadata headers, String defaultPath,
-      String authority, String userAgent) {
+  public static List<Header> createRequestHeaders(
+      Metadata headers,
+      String defaultPath,
+      String authority,
+      String userAgent,
+      boolean useGet,
+      boolean usePlaintext) {
     Preconditions.checkNotNull(headers, "headers");
     Preconditions.checkNotNull(defaultPath, "defaultPath");
     Preconditions.checkNotNull(authority, "authority");
 
+    stripNonApplicationHeaders(headers);
+
     // 7 is the number of explicit add calls below.
-    List<Header> okhttpHeaders = new ArrayList<Header>(7 + InternalMetadata.headerCount(headers));
+    List<Header> okhttpHeaders = new ArrayList<>(7 + InternalMetadata.headerCount(headers));
 
     // Set GRPC-specific headers.
-    okhttpHeaders.add(SCHEME_HEADER);
-    okhttpHeaders.add(METHOD_HEADER);
+    if (usePlaintext) {
+      okhttpHeaders.add(HTTP_SCHEME_HEADER);
+    } else {
+      okhttpHeaders.add(HTTPS_SCHEME_HEADER);
+    }
+    if (useGet) {
+      okhttpHeaders.add(METHOD_GET_HEADER);
+    } else {
+      okhttpHeaders.add(METHOD_HEADER);
+    }
 
     okhttpHeaders.add(new Header(Header.TARGET_AUTHORITY, authority));
     String path = defaultPath;
@@ -69,27 +83,72 @@ public class Headers {
     okhttpHeaders.add(TE_HEADER);
 
     // Now add any application-provided headers.
-    byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(headers);
-    for (int i = 0; i < serializedHeaders.length; i += 2) {
-      ByteString key = ByteString.of(serializedHeaders[i]);
-      String keyString = key.utf8();
-      if (isApplicationHeader(keyString)) {
-        ByteString value = ByteString.of(serializedHeaders[i + 1]);
-        okhttpHeaders.add(new Header(key, value));
-      }
-    }
-
-    return okhttpHeaders;
+    return addMetadata(okhttpHeaders, headers);
   }
 
   /**
-   * Returns {@code true} if the given header is an application-provided header. Otherwise, returns
-   * {@code false} if the header is reserved by GRPC.
+   * Serializes the given headers and creates a list of OkHttp {@link Header}s to be used when
+   * starting a response. Since this serializes the headers, this method should be called in the
+   * application thread context.
    */
-  private static boolean isApplicationHeader(String key) {
-    // Don't allow HTTP/2 pseudo headers or content-type to be added by the application.
-    return (!key.startsWith(":")
-            && !CONTENT_TYPE_KEY.name().equalsIgnoreCase(key))
-            && !USER_AGENT_KEY.name().equalsIgnoreCase(key);
+  public static List<Header> createResponseHeaders(Metadata headers) {
+    stripNonApplicationHeaders(headers);
+
+    // 2 is the number of explicit add calls below.
+    List<Header> okhttpHeaders = new ArrayList<>(2 + InternalMetadata.headerCount(headers));
+    okhttpHeaders.add(new Header(Header.RESPONSE_STATUS, "200"));
+    // All non-pseudo headers must come after pseudo headers.
+    okhttpHeaders.add(CONTENT_TYPE_HEADER);
+    return addMetadata(okhttpHeaders, headers);
+  }
+
+  /**
+   * Serializes the given headers and creates a list of OkHttp {@link Header}s to be used when
+   * finishing a response. Since this serializes the headers, this method should be called in the
+   * application thread context.
+   */
+  public static List<Header> createResponseTrailers(Metadata trailers, boolean headersSent) {
+    if (!headersSent) {
+      return createResponseHeaders(trailers);
+    }
+    stripNonApplicationHeaders(trailers);
+
+    List<Header> okhttpTrailers = new ArrayList<>(InternalMetadata.headerCount(trailers));
+    return addMetadata(okhttpTrailers, trailers);
+  }
+
+  /**
+   * Serializes the given headers and creates a list of OkHttp {@link Header}s to be used when
+   * failing with an HTTP response.
+   */
+  public static List<Header> createHttpResponseHeaders(
+      int httpCode, String contentType, Metadata headers) {
+    // 2 is the number of explicit add calls below.
+    List<Header> okhttpHeaders = new ArrayList<>(2 + InternalMetadata.headerCount(headers));
+    okhttpHeaders.add(new Header(Header.RESPONSE_STATUS, "" + httpCode));
+    // All non-pseudo headers must come after pseudo headers.
+    okhttpHeaders.add(new Header(GrpcUtil.CONTENT_TYPE_KEY.name(), contentType));
+    return addMetadata(okhttpHeaders, headers);
+  }
+
+  private static List<Header> addMetadata(List<Header> okhttpHeaders, Metadata toAdd) {
+    byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(toAdd);
+    for (int i = 0; i < serializedHeaders.length; i += 2) {
+      ByteString key = ByteString.of(serializedHeaders[i]);
+      // Don't allow HTTP/2 pseudo headers to be added by the application.
+      if (key.size() == 0 || key.getByte(0) == ':') {
+        continue;
+      }
+      ByteString value = ByteString.of(serializedHeaders[i + 1]);
+      okhttpHeaders.add(new Header(key, value));
+    }
+    return okhttpHeaders;
+  }
+
+  /** Strips all non-pseudo headers reserved by gRPC, to avoid duplicates and misinterpretation. */
+  private static void stripNonApplicationHeaders(Metadata headers) {
+    headers.discardAll(GrpcUtil.CONTENT_TYPE_KEY);
+    headers.discardAll(GrpcUtil.TE_HEADER);
+    headers.discardAll(GrpcUtil.USER_AGENT_KEY);
   }
 }

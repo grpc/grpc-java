@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,16 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
+import io.grpc.ManagedChannelProvider.NewChannelBuilderResult;
+import io.grpc.ManagedChannelRegistryAccessor;
+import io.grpc.TlsChannelCredentials;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -33,7 +38,8 @@ public class OkHttpChannelProviderTest {
   @Test
   public void provided() {
     for (ManagedChannelProvider current
-        : ManagedChannelProvider.getCandidatesViaServiceLoader(getClass().getClassLoader())) {
+        : InternalServiceProviders.getCandidatesViaServiceLoader(
+            ManagedChannelProvider.class, getClass().getClassLoader())) {
       if (current instanceof OkHttpChannelProvider) {
         return;
       }
@@ -43,8 +49,8 @@ public class OkHttpChannelProviderTest {
 
   @Test
   public void providedHardCoded() {
-    for (ManagedChannelProvider current : ManagedChannelProvider.getCandidatesViaHardCoded()) {
-      if (current instanceof OkHttpChannelProvider) {
+    for (Class<?> current : ManagedChannelRegistryAccessor.getHardCodedClasses()) {
+      if (current == OkHttpChannelProvider.class) {
         return;
       }
     }
@@ -59,5 +65,24 @@ public class OkHttpChannelProviderTest {
   @Test
   public void builderIsAOkHttpBuilder() {
     assertSame(OkHttpChannelBuilder.class, provider.builderForAddress("localhost", 443).getClass());
+  }
+
+  @Test
+  public void builderForTarget() {
+    assertThat(provider.builderForTarget("localhost:443")).isInstanceOf(OkHttpChannelBuilder.class);
+  }
+
+  @Test
+  public void newChannelBuilder_success() {
+    NewChannelBuilderResult result =
+        provider.newChannelBuilder("localhost:443", TlsChannelCredentials.create());
+    assertThat(result.getChannelBuilder()).isInstanceOf(OkHttpChannelBuilder.class);
+  }
+
+  @Test
+  public void newChannelBuilder_fail() {
+    NewChannelBuilderResult result = provider.newChannelBuilder("localhost:443",
+        TlsChannelCredentials.newBuilder().requireFakeFeature().build());
+    assertThat(result.getError()).contains("FAKE");
   }
 }

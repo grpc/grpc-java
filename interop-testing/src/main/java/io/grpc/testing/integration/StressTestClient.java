@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
@@ -53,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -97,7 +99,7 @@ public class StressTestClient {
 
   private List<InetSocketAddress> addresses =
       singletonList(new InetSocketAddress("localhost", 8080));
-  private List<TestCaseWeightPair> testCaseWeightPairs = new ArrayList<TestCaseWeightPair>();
+  private List<TestCaseWeightPair> testCaseWeightPairs = new ArrayList<>();
 
   private String serverHostOverride;
   private boolean useTls = false;
@@ -109,7 +111,7 @@ public class StressTestClient {
 
   private Server metricsServer;
   private final Map<String, Metrics.GaugeResponse> gauges =
-      new ConcurrentHashMap<String, Metrics.GaugeResponse>();
+      new ConcurrentHashMap<>();
 
   private volatile boolean shutdown;
 
@@ -117,8 +119,8 @@ public class StressTestClient {
    * List of futures that {@link #blockUntilStressTestComplete()} waits for.
    */
   private final List<ListenableFuture<?>> workerFutures =
-      new ArrayList<ListenableFuture<?>>();
-  private final List<ManagedChannel> channels = new ArrayList<ManagedChannel>();
+      new ArrayList<>();
+  private final List<ManagedChannel> channels = new ArrayList<>();
   private ListeningExecutorService threadpool;
 
   @VisibleForTesting
@@ -230,8 +232,8 @@ public class StressTestClient {
         ManagedChannel channel = createChannel(address);
         channels.add(channel);
         for (int j = 0; j < stubsPerChannel; j++) {
-          String gaugeName =
-              String.format("/stress_test/server_%d/channel_%d/stub_%d/qps", serverIdx, i, j);
+          String gaugeName = String.format(
+              Locale.US, "/stress_test/server_%d/channel_%d/stub_%d/qps", serverIdx, i, j);
           Worker worker =
               new Worker(channel, testCaseWeightPairs, durationSecs, gaugeName);
 
@@ -291,7 +293,7 @@ public class StressTestClient {
   }
 
   private List<InetSocketAddress> parseServerAddresses(String addressesStr) {
-    List<InetSocketAddress> addresses = new ArrayList<InetSocketAddress>();
+    List<InetSocketAddress> addresses = new ArrayList<>();
 
     for (List<String> namePort : parseCommaSeparatedTuples(addressesStr)) {
       InetAddress address;
@@ -313,7 +315,7 @@ public class StressTestClient {
   }
 
   private static List<TestCaseWeightPair> parseTestCases(String testCasesStr) {
-    List<TestCaseWeightPair> testCaseWeightPairs = new ArrayList<TestCaseWeightPair>();
+    List<TestCaseWeightPair> testCaseWeightPairs = new ArrayList<>();
 
     for (List<String> nameWeight : parseCommaSeparatedTuples(testCasesStr)) {
       TestCases testCase = TestCases.fromString(nameWeight.get(0));
@@ -325,7 +327,7 @@ public class StressTestClient {
   }
 
   private static List<List<String>> parseCommaSeparatedTuples(String str) {
-    List<List<String>> tuples = new ArrayList<List<String>>();
+    List<List<String>> tuples = new ArrayList<>();
     for (String tupleStr : Splitter.on(',').split(str)) {
       int splitIdx = tupleStr.lastIndexOf(':');
       if (splitIdx == -1) {
@@ -355,7 +357,7 @@ public class StressTestClient {
   }
 
   private static String serverAddressesToString(List<InetSocketAddress> addresses) {
-    List<String> tmp = new ArrayList<String>();
+    List<String> tmp = new ArrayList<>();
     for (InetSocketAddress address : addresses) {
       URI uri;
       try {
@@ -516,6 +518,11 @@ public class StressTestClient {
       }
 
       @Override
+      protected ManagedChannelBuilder<?> createChannelBuilder() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
       protected int operationTimeoutMillis() {
         // Don't enforce a timeout when using the interop tests for the stress test client.
         // Fixes https://github.com/grpc/grpc-java/issues/1812
@@ -541,7 +548,7 @@ public class StressTestClient {
         Preconditions.checkNotNull(testCaseWeightPairs, "testCaseWeightPairs");
         Preconditions.checkArgument(testCaseWeightPairs.size() > 0);
 
-        List<TestCases> testCases = new ArrayList<TestCases>();
+        List<TestCases> testCases = new ArrayList<>();
         for (TestCaseWeightPair testCaseWeightPair : testCaseWeightPairs) {
           for (int i = 0; i < testCaseWeightPair.weight; i++) {
             testCases.add(testCaseWeightPair.testCase);

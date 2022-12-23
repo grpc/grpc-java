@@ -1,0 +1,91 @@
+plugins {
+    id "maven-publish"
+
+    id "com.android.library"
+    id "digital.wup.android-maven-publish"
+}
+
+description = "gRPC: Cronet Android"
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+android {
+    compileSdkVersion 29
+    defaultConfig {
+        minSdkVersion 19
+        targetSdkVersion 29
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+    buildTypes {
+        debug { minifyEnabled false }
+        release {
+            minifyEnabled false
+            consumerProguardFiles 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    testOptions { unitTests { includeAndroidResources = true } }
+    lintOptions { disable 'InvalidPackage' }
+}
+
+dependencies {
+    api project(':grpc-core'),
+            libraries.cronet.api
+    implementation libraries.guava
+    testImplementation project(':grpc-testing')
+
+    testImplementation libraries.cronet.embedded
+
+    testImplementation libraries.junit
+    testImplementation libraries.mockito.core
+    testImplementation (libraries.robolectric) {
+        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
+        exclude group: 'com.google.auto.service', module: 'auto-service'
+    }
+}
+
+task javadocs(type: Javadoc) {
+    source = android.sourceSets.main.java.srcDirs
+    classpath += files(android.getBootClasspath())
+    classpath += files({
+        android.libraryVariants.collect { variant ->
+            variant.javaCompileProvider.get().classpath
+        }
+    })
+    options {
+        // Disable JavaDoc doclint on Java 8.
+        if (JavaVersion.current().isJava8Compatible()) {
+            addStringOption('Xdoclint:none', '-quiet')
+        }
+    }
+    exclude 'io/grpc/cronet/Internal*'
+}
+
+task javadocJar(type: Jar, dependsOn: javadocs) {
+    archiveClassifier = 'javadoc'
+    from javadocs.destinationDir
+}
+
+task sourcesJar(type: Jar) {
+    archiveClassifier = 'sources'
+    from android.sourceSets.main.java.srcDirs
+}
+
+publishing {
+    publications {
+        maven {
+            from components.android
+
+            artifact javadocJar
+            artifact sourcesJar
+        }
+    }
+}

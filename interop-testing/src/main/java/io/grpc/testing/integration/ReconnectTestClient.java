@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +18,14 @@ package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertTrue;
 
-import com.google.protobuf.EmptyProtos.Empty;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.testing.integration.EmptyProtos.Empty;
 import io.grpc.testing.integration.Messages.ReconnectInfo;
+import io.grpc.testing.integration.Messages.ReconnectParams;
 
 /**
  * Verifies the client is reconnecting the server with correct backoffs
@@ -70,19 +71,21 @@ public class ReconnectTestClient {
           .negotiationType(NegotiationType.PLAINTEXT).build();
       controlStub = ReconnectServiceGrpc.newBlockingStub(controlChannel);
       if (useOkhttp) {
-        retryChannel = OkHttpChannelBuilder.forAddress("127.0.0.1", serverRetryPort)
-            .negotiationType(io.grpc.okhttp.NegotiationType.TLS).build();
+        retryChannel =
+            OkHttpChannelBuilder.forAddress("127.0.0.1", serverRetryPort)
+                .useTransportSecurity()
+                .build();
       } else {
         retryChannel = NettyChannelBuilder.forAddress("127.0.0.1", serverRetryPort)
             .negotiationType(NegotiationType.TLS).build();
       }
       retryStub = ReconnectServiceGrpc.newBlockingStub(retryChannel);
-      controlStub.start(Empty.getDefaultInstance());
+      controlStub.start(ReconnectParams.getDefaultInstance());
 
       long startTimeStamp = System.currentTimeMillis();
       while ((System.currentTimeMillis() - startTimeStamp) < TEST_TIME_MS) {
         try {
-          retryStub.start(Empty.getDefaultInstance());
+          retryStub.start(ReconnectParams.getDefaultInstance());
         } catch (StatusRuntimeException expected) {
           // Make CheckStyle happy.
         }

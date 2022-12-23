@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,14 +22,14 @@ import io.grpc.Metadata;
 /**
  * {@link NoopClientCall} is a class that is designed for use in tests.  It is designed to be used
  * in places where a scriptable call is necessary.  By default, all methods are noops, and designed
- * to be overriden.
+ * to be overridden.
  */
 public class NoopClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   /**
    * {@link NoopClientCall.NoopClientCallListener} is a class that is designed for use in tests.
    * It is designed to be used in places where a scriptable call listener is necessary.  By
-   * default, all methods are noops, and designed to be overriden.
+   * default, all methods are noops, and designed to be overridden.
    */
   public static class NoopClientCallListener<T> extends ClientCall.Listener<T> {
   }

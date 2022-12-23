@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,14 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.AbstractFuture;
+import io.grpc.Deadline;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -41,14 +43,28 @@ import java.util.concurrent.TimeUnit;
  */
 public final class FakeClock {
 
+  private static final TaskFilter ACCEPT_ALL_FILTER = new TaskFilter() {
+      @Override
+      public boolean shouldAccept(Runnable command) {
+        return true;
+      }
+    };
+
   private final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
 
-  private final PriorityBlockingQueue<ScheduledTask> tasks =
-      new PriorityBlockingQueue<ScheduledTask>();
+  private final PriorityBlockingQueue<ScheduledTask> scheduledTasks = new PriorityBlockingQueue<>();
+  private final LinkedBlockingQueue<ScheduledTask> dueTasks = new LinkedBlockingQueue<>();
 
   private final Ticker ticker =
       new Ticker() {
         @Override public long read() {
+          return currentTimeNanos;
+        }
+      };
+
+  private final Deadline.Ticker deadlineTicker =
+      new Deadline.Ticker() {
+        @Override public long nanoTime() {
           return currentTimeNanos;
         }
       };
@@ -60,19 +76,36 @@ public final class FakeClock {
         }
       };
 
+  private final TimeProvider timeProvider =
+      new TimeProvider() {
+        @Override
+        public long currentTimeNanos() {
+          return currentTimeNanos;
+        }
+      };
+
   private long currentTimeNanos;
 
   public class ScheduledTask extends AbstractFuture<Void> implements ScheduledFuture<Void> {
     public final Runnable command;
-    public final long dueTimeNanos;
+    public long dueTimeNanos;
 
-    ScheduledTask(long dueTimeNanos, Runnable command) {
-      this.dueTimeNanos = dueTimeNanos;
+    ScheduledTask(Runnable command) {
       this.command = command;
     }
 
+    void run() {
+      command.run();
+      set(null);
+    }
+
+    void setDueTimeNanos(long dueTimeNanos) {
+      this.dueTimeNanos = dueTimeNanos;
+    }
+
     @Override public boolean cancel(boolean mayInterruptIfRunning) {
-      tasks.remove(this);
+      scheduledTasks.remove(this);
+      dueTasks.remove(this);
       return super.cancel(mayInterruptIfRunning);
     }
 
@@ -91,10 +124,6 @@ public final class FakeClock {
       }
     }
 
-    void complete() {
-      set(null);
-    }
-
     @Override
     public String toString() {
       return "[due=" + dueTimeNanos + ", task=" + command + "]";
@@ -107,20 +136,33 @@ public final class FakeClock {
       throw new UnsupportedOperationException();
     }
 
+    private void schedule(ScheduledTask task, long delay, TimeUnit unit) {
+      task.setDueTimeNanos(currentTimeNanos + unit.toNanos(delay));
+      if (delay > 0) {
+        scheduledTasks.add(task);
+      } else {
+        dueTasks.add(task);
+      }
+    }
+
     @Override public ScheduledFuture<?> schedule(Runnable cmd, long delay, TimeUnit unit) {
-      ScheduledTask task = new ScheduledTask(currentTimeNanos + unit.toNanos(delay), cmd);
-      tasks.add(task);
+      ScheduledTask task = new ScheduledTask(cmd);
+      schedule(task, delay, unit);
       return task;
     }
 
     @Override public ScheduledFuture<?> scheduleAtFixedRate(
-        Runnable command, long initialDelay, long period, TimeUnit unit) {
-      throw new UnsupportedOperationException();
+        Runnable cmd, long initialDelay, long period, TimeUnit unit) {
+      ScheduledTask task = new ScheduleAtFixedRateTask(cmd, period, unit);
+      schedule(task, initialDelay, unit);
+      return task;
     }
 
     @Override public ScheduledFuture<?> scheduleWithFixedDelay(
-        Runnable command, long initialDelay, long delay, TimeUnit unit) {
-      throw new UnsupportedOperationException();
+        Runnable cmd, long initialDelay, long delay, TimeUnit unit) {
+      ScheduledTask task = new ScheduleWithFixedDelayTask(cmd, delay, unit);
+      schedule(task, initialDelay, unit);
+      return task;
     }
 
     @Override public boolean awaitTermination(long timeout, TimeUnit unit) {
@@ -177,6 +219,41 @@ public final class FakeClock {
       // Since it is being enqueued immediately, no point in tracing the future for cancellation.
       Future<?> unused = schedule(command, 0, TimeUnit.NANOSECONDS);
     }
+
+    class ScheduleAtFixedRateTask extends ScheduledTask {
+      final long periodNanos;
+
+      public ScheduleAtFixedRateTask(Runnable command, long period, TimeUnit unit) {
+        super(command);
+        this.periodNanos = unit.toNanos(period);
+      }
+
+      @Override void run() {
+        long startTimeNanos = currentTimeNanos;
+        command.run();
+        if (!isCancelled()) {
+          schedule(this, startTimeNanos + periodNanos - currentTimeNanos, TimeUnit.NANOSECONDS);
+        }
+      }
+    }
+
+    class ScheduleWithFixedDelayTask extends ScheduledTask {
+
+      final long delayNanos;
+
+      ScheduleWithFixedDelayTask(Runnable command, long delay, TimeUnit unit) {
+        super(command);
+        this.delayNanos = unit.toNanos(delay);
+      }
+
+      @Override
+      void run() {
+        command.run();
+        if (!isCancelled()) {
+          schedule(this, delayNanos, TimeUnit.NANOSECONDS);
+        }
+      }
+    }
   }
 
   /**
@@ -185,6 +262,13 @@ public final class FakeClock {
    */
   public ScheduledExecutorService getScheduledExecutorService() {
     return scheduledExecutorService;
+  }
+
+  /**
+   * Provides a {@link TimeProvider} that is backed by this FakeClock.
+   */
+  public TimeProvider getTimeProvider() {
+    return timeProvider;
   }
 
   /**
@@ -202,65 +286,76 @@ public final class FakeClock {
   }
 
   /**
-   * Run all due tasks.
+   * Deadline ticker of the FakeClock.
+   */
+  public Deadline.Ticker getDeadlineTicker() {
+    return deadlineTicker;
+  }
+
+  /**
+   * Run all due tasks. Immediately due tasks that are queued during the process also get executed.
    *
    * @return the number of tasks run by this call
    */
   public int runDueTasks() {
-    return runDueTasks(new TaskFilter() {
-      @Override
-      public boolean shouldRun(Runnable runnable) {
-        return true;
+    int count = 0;
+    while (true) {
+      checkDueTasks();
+      if (dueTasks.isEmpty()) {
+        break;
       }
-    });
+      ScheduledTask task;
+      while ((task = dueTasks.poll()) != null) {
+        task.run();
+        count++;
+      }
+    }
+    return count;
   }
 
-  /**
-   * Run all due tasks that match the {@link TaskFilter}.
-   *
-   * @return the number of tasks run by this call
-   */
-  public int runDueTasks(TaskFilter filter) {
-    int count = 0;
-    List<ScheduledTask> putBack = new ArrayList<ScheduledTask>();
+  private void checkDueTasks() {
     while (true) {
-      ScheduledTask task = tasks.peek();
+      ScheduledTask task = scheduledTasks.peek();
       if (task == null || task.dueTimeNanos > currentTimeNanos) {
         break;
       }
-      if (tasks.remove(task)) {
-        if (filter.shouldRun(task.command)) {
-          task.command.run();
-          task.complete();
-          count++;
-        } else {
-          putBack.add(task);
-        }
+      if (scheduledTasks.remove(task)) {
+        dueTasks.add(task);
       }
     }
-    tasks.addAll(putBack);
-    return count;
   }
 
   /**
    * Return all due tasks.
    */
   public Collection<ScheduledTask> getDueTasks() {
-    ArrayList<ScheduledTask> result = new ArrayList<ScheduledTask>();
-    for (ScheduledTask task : tasks) {
-      if (task.dueTimeNanos > currentTimeNanos) {
-        continue;
-      }
-      result.add(task);
-    }
-    return result;
+    checkDueTasks();
+    return new ArrayList<>(dueTasks);
   }
 
   /**
    * Return all unrun tasks.
    */
   public Collection<ScheduledTask> getPendingTasks() {
-    return new ArrayList<ScheduledTask>(tasks);
+    return getPendingTasks(ACCEPT_ALL_FILTER);
+  }
+
+  /**
+   * Return all unrun tasks accepted by the given filter.
+   */
+  public Collection<ScheduledTask> getPendingTasks(TaskFilter filter) {
+    ArrayList<ScheduledTask> result = new ArrayList<>();
+    for (ScheduledTask task : dueTasks) {
+      if (filter.shouldAccept(task.command)) {
+        result.add(task);
+      }
+    }
+    for (ScheduledTask task : scheduledTasks) {
+      if (filter.shouldAccept(task.command)) {
+        result.add(task);
+      }
+    }
+    return result;
   }
 
   /**
@@ -286,21 +381,40 @@ public final class FakeClock {
    * Return the number of queued tasks.
    */
   public int numPendingTasks() {
-    return tasks.size();
+    return dueTasks.size() + scheduledTasks.size();
+  }
+
+  /**
+   * Return the number of queued tasks accepted by the given filter.
+   */
+  public int numPendingTasks(TaskFilter filter) {
+    int count = 0;
+    for (ScheduledTask task : dueTasks) {
+      if (filter.shouldAccept(task.command)) {
+        count++;
+      }
+    }
+    for (ScheduledTask task : scheduledTasks) {
+      if (filter.shouldAccept(task.command)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   public long currentTimeMillis() {
     // Normally millis and nanos are of different epochs. Add an offset to simulate that.
-    return TimeUnit.NANOSECONDS.toMillis(currentTimeNanos + 123456789L);
+    return TimeUnit.NANOSECONDS.toMillis(currentTimeNanos + 1234567890123456789L);
   }
 
   /**
-   * A filter that allows us to have fine grained control over which tasks are run.
+   * A filter that allows us to have fine grained control over which tasks are accepted for certain
+   * operation.
    */
   public interface TaskFilter {
     /**
-     * Inspect the Runnable and returns true if it should be run.
+     * Inspect the Runnable and returns true if it should be accepted.
      */
-    boolean shouldRun(Runnable runnable);
+    boolean shouldAccept(Runnable runnable);
   }
 }

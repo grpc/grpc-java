@@ -1,52 +1,117 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-
-buildscript {
-    repositories {
-        jcenter()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:2.3.1'
-        classpath "com.google.protobuf:protobuf-gradle-plugin:0.8.1"
-
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
-    }
+plugins {
+    id "com.android.application"
+    id "com.google.protobuf"
 }
 
-allprojects {
-    repositories {
-        mavenLocal()
-        jcenter()
-    }
+description = 'gRPC: Android Integration Testing'
+
+repositories {
+    google()
+    mavenCentral()
 }
 
-subprojects {
-    apply plugin: "checkstyle"
-
-    checkstyle {
-        configFile = file("$rootDir/../buildscripts/checkstyle.xml")
-        toolVersion = "6.17"
-        ignoreFailures = false
-        if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
-            ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
+android {
+    sourceSets {
+        main {
+            java {
+                srcDirs += "${projectDir}/../interop-testing/src/main/java/"
+                setIncludes(["io/grpc/android/integrationtest/**",
+                             "io/grpc/testing/integration/AbstractInteropTest.java",
+                             "io/grpc/testing/integration/TestServiceImpl.java",
+                             "io/grpc/testing/integration/Util.java"])
+            }
+            proto {
+                srcDirs += "${projectDir}/../interop-testing/src/main/proto/"
+            }
         }
-        configProperties["rootDir"] = "$rootDir/../"
     }
-
-    // Checkstyle doesn't run automatically with android
-    task checkStyleMain(type: Checkstyle) {
-        source 'src/main/java'
-        include '**/*.java'
-        classpath = files()
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
+    compileSdkVersion 29
 
-    task checkStyleTest(type: Checkstyle) {
-        source 'src/test/java'
-        include '**/*.java'
-        classpath = files()
+    defaultConfig {
+        applicationId "io.grpc.android.integrationtest"
+        minSdkVersion 19
+        targetSdkVersion 29
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled true
     }
-
-    afterEvaluate { project ->
-        project.tasks['check'].dependsOn checkStyleMain, checkStyleTest
+    buildTypes {
+        debug { minifyEnabled false }
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    lintOptions {
+        disable 'InvalidPackage', 'HardcodedText',
+                'MissingClass' // https://github.com/grpc/grpc-java/issues/8799
     }
 }
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.3.0'
+    implementation 'androidx.multidex:multidex:2.0.0'
+    implementation libraries.androidx.annotation
+    implementation 'com.google.android.gms:play-services-base:18.0.1'
+
+    implementation project(':grpc-auth'),
+            project(':grpc-census'),
+            project(':grpc-okhttp'),
+            project(':grpc-protobuf-lite'),
+            project(':grpc-stub'),
+            project(':grpc-testing'),
+            libraries.hdrhistogram,
+            libraries.junit,
+            libraries.truth,
+            libraries.opencensus.contrib.grpc.metrics
+
+    implementation (libraries.google.auth.oauth2Http) {
+        exclude group: 'org.apache.httpcomponents'
+    }
+
+    implementation (project(':grpc-services')) {
+        exclude group: 'com.google.protobuf'
+    }
+
+    compileOnly libraries.javax.annotation
+
+    androidTestImplementation 'androidx.test.ext:junit:1.1.3',
+            'androidx.test:runner:1.4.0'
+}
+
+// Checkstyle doesn't run automatically with android
+task checkStyleMain(type: Checkstyle) {
+    source 'src/main/java'
+    include '**/*.java'
+    classpath = files()
+}
+
+task checkStyleTest(type: Checkstyle) {
+    source 'src/androidTest/java'
+    include '**/*.java'
+    classpath = files()
+}
+
+project.tasks['check'].dependsOn checkStyleMain, checkStyleTest
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += [
+            "-Xlint:-cast"
+    ]
+    appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/src/generated/.*",
+            "|")
+    // Reuses source code from grpc-interop-testing, which targets Java 7 (no method references)
+    options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+}
+
+configureProtoCompilation()

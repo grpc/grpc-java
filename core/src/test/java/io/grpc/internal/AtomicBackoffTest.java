@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,9 +26,13 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link AtomicBackoff}. */
 @RunWith(JUnit4.class)
 public class AtomicBackoffTest {
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void mustBePositive() {
-    new AtomicBackoff("test", 0);
+    try {
+      new AtomicBackoff("test", 0);
+      fail();
+    } catch (IllegalArgumentException expected) {
+    }
   }
 
   @Test

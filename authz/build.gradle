@@ -1,0 +1,79 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.github.johnrengelman.shadow"
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: Authorization"
+
+dependencies {
+    implementation project(':grpc-protobuf'),
+            project(':grpc-core')
+
+    annotationProcessor libraries.auto.value
+    compileOnly libraries.javax.annotation
+
+    testImplementation project(':grpc-testing'),
+            project(':grpc-testing-proto')
+    testImplementation (libraries.guava.testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
+
+    def xdsDependency = implementation project(':grpc-xds')
+    shadow configurations.implementation.getDependencies().minus([xdsDependency])
+    shadow project(path: ':grpc-xds', configuration: 'shadow')
+
+    signature libraries.signature.java
+}
+
+tasks.named("jar").configure {
+    classifier = 'original'
+}
+
+tasks.named("shadowJar").configure {
+    classifier = null
+    dependencies {
+        exclude(dependency {true})
+    }
+    relocate 'io.grpc.xds', 'io.grpc.xds.shaded.io.grpc.xds'
+    relocate 'udpa.annotations', 'io.grpc.xds.shaded.udpa.annotations'
+    relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
+    relocate 'envoy.annotations', 'io.grpc.xds.shaded.envoy.annotations'
+    relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
+    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
+}
+
+tasks.named("compileJava").configure {
+    it.options.compilerArgs += [
+        "-Xlint:-processing",
+    ]
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
+
+            pom.withXml {
+                def dependenciesNode = new Node(null, 'dependencies')
+                project.configurations.shadow.allDependencies.each { dep ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dep.group)
+                    dependencyNode.appendNode('artifactId', dep.name)
+                    dependencyNode.appendNode('version', dep.version)
+                    dependencyNode.appendNode('scope', 'compile')
+                }
+                asNode().dependencies[0].replaceNode(dependenciesNode)
+            }
+        }
+    }
+}
+
+tasks.named("publishMavenPublicationToMavenRepository").configure {
+    enabled = false
+}

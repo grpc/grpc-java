@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.NameResolver;
 
 /**
@@ -37,7 +38,13 @@ abstract class ForwardingNameResolver extends NameResolver {
   }
 
   @Override
+  @Deprecated
   public void start(Listener listener) {
+    delegate.start(listener);
+  }
+
+  @Override
+  public void start(Listener2 listener) {
     delegate.start(listener);
   }
 
@@ -49,5 +56,10 @@ abstract class ForwardingNameResolver extends NameResolver {
   @Override
   public void refresh() {
     delegate.refresh();
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this).add("delegate", delegate).toString();
   }
 }

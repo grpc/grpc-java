@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,8 +50,8 @@ public class AbstractHttp2HeadersTest {
       } catch (InvocationTargetException ex) {
         assertEquals("For method: " + method,
             UnsupportedOperationException.class, ex.getCause().getClass());
-      } catch (Throwable t) {
-        throw new RuntimeException("Failure with method: " + method, t);
+      } catch (Exception ex) {
+        throw new AssertionError("Failure with method: " + method, ex);
       }
     }
   }

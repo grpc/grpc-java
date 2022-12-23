@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,25 +16,20 @@
 
 package io.grpc.netty;
 
-import io.grpc.Internal;
+import io.grpc.internal.ObjectPool;
 import io.netty.channel.ChannelHandler;
 import io.netty.util.AsciiString;
+import java.util.concurrent.Executor;
 
 /**
- * A class that provides a Netty handler to control protocol negotiation.
+ * An class that provides a Netty handler to control protocol negotiation.
  */
-@Internal
-public interface ProtocolNegotiator {
+interface ProtocolNegotiator {
 
   /**
-   * The Netty handler to control the protocol negotiation.
+   * The HTTP/2 scheme to be used when sending {@code HEADERS}.
    */
-  interface Handler extends ChannelHandler {
-    /**
-     * The HTTP/2 scheme to be used when sending {@code HEADERS}.
-     */
-    AsciiString scheme();
-  }
+  AsciiString scheme();
 
   /**
    * Creates a new handler to control the protocol negotiation. Once the negotiation has completed
@@ -42,5 +37,30 @@ public interface ProtocolNegotiator {
    * grpcHandler.onHandleProtocolNegotiationCompleted()} at certain point if the negotiation has
    * completed successfully.
    */
-  Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler);
+  ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler);
+
+  /**
+   * Releases resources held by this negotiator. Called when the Channel transitions to terminated
+   * or when InternalServer is shutdown (depending on client or server). That means handlers
+   * returned by {@link #newHandler} can outlive their parent negotiator on server-side, but not
+   * on client-side.
+   */
+  void close();
+
+  interface ClientFactory {
+    /** Creates a new negotiator. */
+    ProtocolNegotiator newNegotiator();
+
+    /** Returns the implicit port to use if no port was specified explicitly by the user. */
+    int getDefaultPort();
+  }
+
+  interface ServerFactory {
+    /**
+     * Creates a new negotiator.
+     *
+     * @param offloadExecutorPool an executor pool for time-consuming tasks
+     */
+    ProtocolNegotiator newNegotiator(ObjectPool<? extends Executor> offloadExecutorPool);
+  }
 }

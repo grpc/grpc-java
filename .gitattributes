@@ -1,3 +1,4 @@
-TestService.java.txt binary
-TestServiceLite.java.txt binary
-TestServiceNano.java.txt binary
+TestService.java.txt -text
+TestServiceLite.java.txt -text
+TestDeprecatedService.java.txt -text
+TestDeprecatedServiceLite.java.txt -text

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,11 +25,12 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Uninterruptibles;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.GreeterGrpc.GreeterBlockingStub;
@@ -55,15 +56,16 @@ public class ErrorHandlingClient {
 
   void run() throws Exception {
     // Port 0 means that the operating system will pick an available port to use.
-    Server server = ServerBuilder.forPort(0).addService(new GreeterGrpc.GreeterImplBase() {
+    Server server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+        .addService(new GreeterGrpc.GreeterImplBase() {
       @Override
       public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
         responseObserver.onError(Status.INTERNAL
             .withDescription("Eggplant Xerxes Crybaby Overbite Narwhal").asRuntimeException());
       }
     }).build().start();
-    channel =
-        ManagedChannelBuilder.forAddress("localhost", server.getPort()).usePlaintext(true).build();
+    channel = Grpc.newChannelBuilderForAddress(
+        "localhost", server.getPort(), InsecureChannelCredentials.create()).build();
 
     blockingCall();
     futureCallDirect();
@@ -177,7 +179,7 @@ public class ErrorHandlingClient {
    */
   void advancedAsyncCall() {
     ClientCall<HelloRequest, HelloReply> call =
-        channel.newCall(GreeterGrpc.METHOD_SAY_HELLO, CallOptions.DEFAULT);
+        channel.newCall(GreeterGrpc.getSayHelloMethod(), CallOptions.DEFAULT);
 
     final CountDownLatch latch = new CountDownLatch(1);
 

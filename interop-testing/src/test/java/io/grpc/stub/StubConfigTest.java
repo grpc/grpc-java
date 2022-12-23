@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -38,8 +38,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 /**
@@ -60,9 +60,10 @@ public class StubConfigTest {
   @Before public void setUp() {
     MockitoAnnotations.initMocks(this);
     ClientCall<SimpleRequest, SimpleResponse> call =
-        new NoopClientCall<SimpleRequest, SimpleResponse>();
+        new NoopClientCall<>();
     when(channel.newCall(
-        Mockito.<MethodDescriptor<SimpleRequest, SimpleResponse>>any(), any(CallOptions.class)))
+            ArgumentMatchers.<MethodDescriptor<SimpleRequest, SimpleResponse>>any(),
+            any(CallOptions.class)))
         .thenReturn(call);
   }
 
@@ -86,11 +87,11 @@ public class StubConfigTest {
     CallOptions options1 = stub.getCallOptions();
     SimpleRequest request = SimpleRequest.getDefaultInstance();
     stub.unaryCall(request, responseObserver);
-    verify(channel).newCall(same(TestServiceGrpc.METHOD_UNARY_CALL), same(options1));
+    verify(channel).newCall(same(TestServiceGrpc.getUnaryCallMethod()), same(options1));
     stub = stub.withDeadlineAfter(2, NANOSECONDS);
     CallOptions options2 = stub.getCallOptions();
     assertNotSame(options1, options2);
     stub.unaryCall(request, responseObserver);
-    verify(channel).newCall(same(TestServiceGrpc.METHOD_UNARY_CALL), same(options2));
+    verify(channel).newCall(same(TestServiceGrpc.getUnaryCallMethod()), same(options2));
   }
 }

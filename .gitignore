@@ -3,6 +3,7 @@ build
 gradle.properties
 .gradle
 local.properties
+out
 
 # Maven (examples)
 target
@@ -18,6 +19,9 @@ bazel-testlogs
 # IntelliJ IDEA
 .idea
 *.iml
+*.ipr
+*.iws
+.ijwb
 
 # Eclipse
 .classpath
@@ -32,3 +36,9 @@ bin
 # Emacs
 *~
 \#*\#
+
+# ARM tests
+qemu-arm-static
+
+# Temporary output dir for artifacts
+mvn-artifacts

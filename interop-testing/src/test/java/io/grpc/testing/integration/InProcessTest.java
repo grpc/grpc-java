@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.ManagedChannel;
+import io.grpc.ServerBuilder;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import io.grpc.inprocess.InternalInProcessChannelBuilder;
+import io.grpc.inprocess.InternalInProcessServerBuilder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -30,20 +30,27 @@ public class InProcessTest extends AbstractInteropTest {
 
   private static final String SERVER_NAME = "test";
 
-  /** Starts the in-process server. */
-  @BeforeClass
-  public static void startServer() {
-    startStaticServer(InProcessServerBuilder.forName(SERVER_NAME));
-  }
-
-  @AfterClass
-  public static void stopServer() {
-    stopStaticServer();
+  @Override
+  protected ServerBuilder<?> getServerBuilder() {
+    // Starts the in-process server.
+    InProcessServerBuilder builder = InProcessServerBuilder.forName(SERVER_NAME);
+    // Disable the default census stats tracer, use testing tracer instead.
+    InternalInProcessServerBuilder.setStatsEnabled(builder, false);
+    return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
   }
 
   @Override
-  protected ManagedChannel createChannel() {
-    return InProcessChannelBuilder.forName(SERVER_NAME).build();
+  protected InProcessChannelBuilder createChannelBuilder() {
+    InProcessChannelBuilder builder = InProcessChannelBuilder.forName(SERVER_NAME);
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    InternalInProcessChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
+  }
+
+  @Override
+  protected boolean customCensusModulePresent() {
+    // Metrics values are not expected, but custom census module is still used.
+    return true;
   }
 
   @Override

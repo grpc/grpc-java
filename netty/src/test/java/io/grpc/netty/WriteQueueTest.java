@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@
 package io.grpc.netty;
 
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -33,7 +33,9 @@ import io.netty.channel.EventLoop;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -44,6 +46,9 @@ import org.mockito.stubbing.Answer;
 
 @RunWith(JUnit4.class)
 public class WriteQueueTest {
+
+  @Rule
+  public final Timeout globalTimeout = Timeout.seconds(60);
 
   private final Object lock = new Object();
 
@@ -138,7 +143,7 @@ public class WriteQueueTest {
     verify(channel, times(2)).flush();
   }
 
-  @Test(timeout = 10000)
+  @Test
   public void concurrentWriteAndFlush() throws Throwable {
     final WriteQueue queue = new WriteQueue(channel);
     final CountDownLatch flusherStarted = new CountDownLatch(1);

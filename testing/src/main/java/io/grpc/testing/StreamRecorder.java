@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,10 @@ import javax.annotation.Nullable;
 /**
  * Utility implementation of {@link StreamObserver} used in testing. Records all the observed
  * values produced by the stream as well as any errors.
+ *
+ * @deprecated Not for public use
  */
+@Deprecated
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1791")
 public class StreamRecorder<T> implements StreamObserver<T> {
 
@@ -38,7 +41,7 @@ public class StreamRecorder<T> implements StreamObserver<T> {
    * Creates a new recorder.
    */
   public static <T> StreamRecorder<T> create() {
-    return new StreamRecorder<T>();
+    return new StreamRecorder<>();
   }
 
   private final CountDownLatch latch;

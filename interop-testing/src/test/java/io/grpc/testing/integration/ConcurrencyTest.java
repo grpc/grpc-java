@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,27 +16,26 @@
 
 package io.grpc.testing.integration;
 
-import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
+import io.grpc.ServerCredentials;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NegotiationType;
-import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.integration.Messages.PayloadType;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.io.IOException;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
-import java.util.concurrent.CountDownLatch;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -59,26 +58,30 @@ import org.junit.runners.JUnit4;
 // bidirectional streaming requests also.
 @RunWith(JUnit4.class)
 public class ConcurrencyTest {
+
   /**
-   * A response observer that signals a {@code CountDownLatch} when the proper number of responses
-   * arrives and the server signals that the RPC is complete.
+   * A response observer that completes a {@code ListenableFuture} when the proper number of
+   * responses arrives and the server signals that the RPC is complete.
    */
   private static class SignalingResponseObserver
       implements StreamObserver<StreamingOutputCallResponse> {
-    public SignalingResponseObserver(CountDownLatch responsesDoneSignal) {
-      this.responsesDoneSignal = responsesDoneSignal;
+    public SignalingResponseObserver(SettableFuture<Void> completionFuture) {
+      this.completionFuture = completionFuture;
     }
 
     @Override
     public void onCompleted() {
-      Preconditions.checkState(numResponsesReceived == NUM_RESPONSES_PER_REQUEST);
-      responsesDoneSignal.countDown();
+      if (numResponsesReceived != NUM_RESPONSES_PER_REQUEST) {
+        completionFuture.setException(
+            new IllegalStateException("Wrong number of responses: " + numResponsesReceived));
+      } else {
+        completionFuture.set(null);
+      }
     }
 
     @Override
     public void onError(Throwable error) {
-      // This should never happen. If it does happen, ensure that the error is visible.
-      error.printStackTrace();
+      completionFuture.setException(error);
     }
 
     @Override
@@ -86,27 +89,26 @@ public class ConcurrencyTest {
       numResponsesReceived++;
     }
 
-    private final CountDownLatch responsesDoneSignal;
+    private final SettableFuture<Void> completionFuture;
     private int numResponsesReceived = 0;
   }
 
   /**
    * A client worker task that waits until all client workers are ready, then sends a request for a
-   * server-streaming RPC and arranges for a {@code CountDownLatch} to be signaled when the RPC is
+   * server-streaming RPC and arranges for a {@code ListenableFuture} to be signaled when the RPC is
    * complete.
    */
   private class ClientWorker implements Runnable {
-    public ClientWorker(CyclicBarrier startBarrier, CountDownLatch responsesDoneSignal) {
+    public ClientWorker(CyclicBarrier startBarrier, SettableFuture<Void> completionFuture) {
       this.startBarrier = startBarrier;
-      this.responsesDoneSignal = responsesDoneSignal;
+      this.completionFuture = completionFuture;
     }
 
     @Override
     public void run() {
       try {
         // Prepare the request.
-        StreamingOutputCallRequest.Builder requestBuilder = StreamingOutputCallRequest.newBuilder()
-            .setResponseType(PayloadType.RANDOM);
+        StreamingOutputCallRequest.Builder requestBuilder = StreamingOutputCallRequest.newBuilder();
         for (int i = 0; i < NUM_RESPONSES_PER_REQUEST; i++) {
           requestBuilder.addResponseParameters(ResponseParameters.newBuilder()
               .setSize(1000)
@@ -117,14 +119,17 @@ public class ConcurrencyTest {
         // Wait until all client worker threads are poised & ready, then send the request. This way
         // all clients send their requests at approximately the same time.
         startBarrier.await();
-        clientStub.streamingOutputCall(request, new SignalingResponseObserver(responsesDoneSignal));
-      } catch (Exception e) {
-        throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
+        clientStub.streamingOutputCall(request, new SignalingResponseObserver(completionFuture));
+      } catch (InterruptedException ex) {
+        Thread.currentThread().interrupt();
+        completionFuture.setException(ex);
+      } catch (Throwable t) {
+        completionFuture.setException(t);
       }
     }
 
     private final CyclicBarrier startBarrier;
-    private final CountDownLatch responsesDoneSignal;
+    private final SettableFuture<Void> completionFuture;
   }
 
   private static final int NUM_SERVER_THREADS = 10;
@@ -165,59 +170,52 @@ public class ConcurrencyTest {
   /**
    * Tests that gRPC can handle concurrent server-streaming RPCs.
    */
-  @Test(timeout = 10000)
+  @Test
   public void serverStreamingTest() throws Exception {
     CyclicBarrier startBarrier = new CyclicBarrier(NUM_CONCURRENT_REQUESTS);
-    CountDownLatch responsesDoneSignal = new CountDownLatch(NUM_CONCURRENT_REQUESTS);
+    List<ListenableFuture<Void>> workerFutures = new ArrayList<>(NUM_CONCURRENT_REQUESTS);
 
     for (int i = 0; i < NUM_CONCURRENT_REQUESTS; i++) {
-      clientExecutor.execute(new ClientWorker(startBarrier, responsesDoneSignal));
+      SettableFuture<Void> future = SettableFuture.create();
+      clientExecutor.execute(new ClientWorker(startBarrier, future));
+      workerFutures.add(future);
     }
 
-    // Wait until the clients all receive their complete RPC response streams.
-    responsesDoneSignal.await();
+    Futures.allAsList(workerFutures).get(60, TimeUnit.SECONDS);
   }
 
   /**
    * Creates and starts a new {@link TestServiceImpl} server.
    */
-  private Server newServer() throws CertificateException, IOException {
+  private Server newServer() throws IOException {
     File serverCertChainFile = TestUtils.loadCert("server1.pem");
     File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
-    X509Certificate[] serverTrustedCaCerts = {
-      TestUtils.loadX509Cert("ca.pem")
-    };
+    File serverTrustedCaCerts = TestUtils.loadCert("ca.pem");
 
-    SslContext sslContext =
-        GrpcSslContexts.forServer(serverCertChainFile, serverPrivateKeyFile)
-                       .trustManager(serverTrustedCaCerts)
-                       .clientAuth(ClientAuth.REQUIRE)
-                       .build();
+    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+        .keyManager(serverCertChainFile, serverPrivateKeyFile)
+        .trustManager(serverTrustedCaCerts)
+        .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
+        .build();
 
-    return NettyServerBuilder.forPort(0)
-        .sslContext(sslContext)
+    return Grpc.newServerBuilderForPort(0, serverCreds)
         .addService(new TestServiceImpl(serverExecutor))
         .build()
         .start();
   }
 
-  private ManagedChannel newClientChannel() throws CertificateException, IOException {
+  private ManagedChannel newClientChannel() throws IOException {
     File clientCertChainFile = TestUtils.loadCert("client.pem");
     File clientPrivateKeyFile = TestUtils.loadCert("client.key");
-    X509Certificate[] clientTrustedCaCerts = {
-      TestUtils.loadX509Cert("ca.pem")
-    };
+    File clientTrustedCaCerts = TestUtils.loadCert("ca.pem");
 
-    SslContext sslContext =
-        GrpcSslContexts.forClient()
-                       .keyManager(clientCertChainFile, clientPrivateKeyFile)
-                       .trustManager(clientTrustedCaCerts)
-                       .build();
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .keyManager(clientCertChainFile, clientPrivateKeyFile)
+        .trustManager(clientTrustedCaCerts)
+        .build();
 
-    return NettyChannelBuilder.forAddress("localhost", server.getPort())
+    return Grpc.newChannelBuilder("localhost:" + server.getPort(), channelCreds)
         .overrideAuthority(TestUtils.TEST_SERVER_HOST)
-        .negotiationType(NegotiationType.TLS)
-        .sslContext(sslContext)
         .build();
   }
 }

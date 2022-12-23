@@ -1,28 +1,56 @@
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath libraries.protobuf_plugin
-    }
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Services"
 
+tasks.named("compileJava").configure {
+    // v1alpha of reflection.proto is deprecated at the file level.
+    // Without this workaround, the project can not compile.
+    it.options.compilerArgs += [
+        "-Xlint:-deprecation",
+    ]
+}
+
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
-    compile project(':grpc-protobuf'),
-            project(':grpc-stub')
-    testCompile project(':grpc-testing')
-    signature "org.codehaus.mojo.signature:java16:1.1@signature"
+    api project(':grpc-protobuf'),
+            project(':grpc-stub'),
+            project(':grpc-core')
+    implementation libraries.protobuf.java.util,
+            libraries.guava
+
+    runtimeOnly libraries.errorprone.annotations
+
+    compileOnly libraries.javax.annotation
+    testImplementation project(':grpc-testing'),
+            libraries.netty.transport.epoll, // for DomainSocketAddress
+            project(':grpc-core').sourceSets.test.output  // for FakeClock
+    testCompileOnly libraries.javax.annotation
+    signature libraries.signature.java
 }
 
 configureProtoCompilation()
 
-// Let intellij projects refer to generated code
-idea {
-    module {
-        sourceDirs += file("${projectDir}/src/generated/main/java");
-        sourceDirs += file("${projectDir}/src/generated/main/grpc");
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/services/Internal*.java'
+    exclude 'io/grpc/services/internal/*'
+    exclude 'io/grpc/protobuf/services/internal/*'
+}
+
+tasks.named("jacocoTestReport").configure {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/binarylog/v1/**',
+                '**/io/grpc/channelz/v1/**',
+                '**/io/grpc/health/v1/**',
+                '**/io/grpc/reflection/v1alpha/**',
+        ])
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,15 +64,19 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
   private Charset errorCharset = Charsets.UTF_8;
   private boolean headersReceived;
 
-  protected Http2ClientStreamTransportState(int maxMessageSize, StatsTraceContext statsTraceCtx) {
-    super(maxMessageSize, statsTraceCtx);
+  protected Http2ClientStreamTransportState(
+      int maxMessageSize,
+      StatsTraceContext statsTraceCtx,
+      TransportTracer transportTracer) {
+    super(maxMessageSize, statsTraceCtx, transportTracer);
   }
 
   /**
    * Called to process a failure in HTTP/2 processing. It should notify the transport to cancel the
    * stream and call {@code transportReportStatus()}.
    */
-  protected abstract void http2ProcessingFailed(Status status, Metadata trailers);
+  protected abstract void http2ProcessingFailed(
+      Status status, boolean stopDelivery, Metadata trailers);
 
   /**
    * Called by subclasses whenever {@code Headers} are received from the transport.
@@ -130,20 +134,27 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
           + ReadableBuffers.readAsString(frame, errorCharset));
       frame.close();
       if (transportError.getDescription().length() > 1000 || endOfStream) {
-        http2ProcessingFailed(transportError, transportErrorMetadata);
+        http2ProcessingFailed(transportError, false, transportErrorMetadata);
       }
     } else {
       if (!headersReceived) {
         http2ProcessingFailed(
             Status.INTERNAL.withDescription("headers not received before payload"),
+            false,
             new Metadata());
         return;
       }
+      int frameSize = frame.readableBytes();
       inboundDataReceived(frame);
       if (endOfStream) {
         // This is a protocol violation as we expect to receive trailers.
-        transportError =
-            Status.INTERNAL.withDescription("Received unexpected EOS on DATA frame from server.");
+        if (frameSize > 0) {
+          transportError = Status.INTERNAL
+              .withDescription("Received unexpected EOS on non-empty DATA frame from server");
+        } else {
+          transportError = Status.INTERNAL
+              .withDescription("Received unexpected EOS on empty DATA frame from server");
+        }
         transportErrorMetadata = new Metadata();
         transportReportStatus(transportError, false, transportErrorMetadata);
       }
@@ -165,7 +176,7 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
     }
     if (transportError != null) {
       transportError = transportError.augmentDescription("trailers: " + trailers);
-      http2ProcessingFailed(transportError, transportErrorMetadata);
+      http2ProcessingFailed(transportError, false, transportErrorMetadata);
     } else {
       Status status = statusFromTrailers(trailers);
       stripTransportDetails(trailers);
@@ -221,7 +232,7 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
   private static Charset extractCharset(Metadata headers) {
     String contentType = headers.get(GrpcUtil.CONTENT_TYPE_KEY);
     if (contentType != null) {
-      String[] split = contentType.split("charset=");
+      String[] split = contentType.split("charset=", 2);
       try {
         return Charset.forName(split[split.length - 1].trim());
       } catch (Exception t) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.HandlerRegistry;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import java.util.ArrayList;
@@ -26,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
-final class InternalHandlerRegistry {
+final class InternalHandlerRegistry extends HandlerRegistry {
 
   private final List<ServerServiceDefinition> services;
   private final Map<String, ServerMethodDefinition<?, ?>> methods;
@@ -40,20 +41,23 @@ final class InternalHandlerRegistry {
   /**
    * Returns the service definitions in this registry.
    */
+  @Override
   public List<ServerServiceDefinition> getServices() {
     return services;
   }
 
   @Nullable
-  ServerMethodDefinition<?, ?> lookupMethod(String methodName) {
+  @Override
+  public ServerMethodDefinition<?, ?> lookupMethod(String methodName, @Nullable String authority) {
+    // TODO (carl-mastrangelo): honor authority header.
     return methods.get(methodName);
   }
 
-  static class Builder {
+  static final class Builder {
 
     // Store per-service first, to make sure services are added/replaced atomically.
     private final HashMap<String, ServerServiceDefinition> services =
-        new LinkedHashMap<String, ServerServiceDefinition>();
+        new LinkedHashMap<>();
 
     Builder addService(ServerServiceDefinition service) {
       services.put(service.getServiceDescriptor().getName(), service);
@@ -62,14 +66,14 @@ final class InternalHandlerRegistry {
 
     InternalHandlerRegistry build() {
       Map<String, ServerMethodDefinition<?, ?>> map =
-          new HashMap<String, ServerMethodDefinition<?, ?>>();
+          new HashMap<>();
       for (ServerServiceDefinition service : services.values()) {
         for (ServerMethodDefinition<?, ?> method : service.getMethods()) {
           map.put(method.getMethodDescriptor().getFullMethodName(), method);
         }
       }
       return new InternalHandlerRegistry(
-          Collections.unmodifiableList(new ArrayList<ServerServiceDefinition>(services.values())),
+          Collections.unmodifiableList(new ArrayList<>(services.values())),
           Collections.unmodifiableMap(map));
     }
   }

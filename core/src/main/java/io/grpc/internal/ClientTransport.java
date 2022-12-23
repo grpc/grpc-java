@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,9 @@
 package io.grpc.internal;
 
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalInstrumented;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import java.util.concurrent.Executor;
@@ -29,7 +32,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * are expected to execute quickly.
  */
 @ThreadSafe
-public interface ClientTransport {
+public interface ClientTransport extends InternalInstrumented<SocketStats> {
 
   /**
    * Creates a new stream for sending messages to a remote end-point.
@@ -44,10 +47,15 @@ public interface ClientTransport {
    * @param method the descriptor of the remote method to be called for this stream.
    * @param headers to send at the beginning of the call
    * @param callOptions runtime options of the call
+   * @param tracers a non-empty array of tracers. The last element in it is reserved to be set by
+   *        the load balancer's pick result and otherwise is a no-op tracer.
    * @return the newly created stream.
    */
   // TODO(nmittler): Consider also throwing for stopping.
-  ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions);
+  ClientStream newStream(
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      // Using array for tracers instead of a list or composition for better performance.
+      ClientStreamTracer[] tracers);
 
   /**
    * Pings a remote endpoint. When an acknowledgement is received, the given callback will be

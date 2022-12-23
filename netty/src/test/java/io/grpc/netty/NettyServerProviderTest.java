@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,13 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import io.grpc.InsecureServerCredentials;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerProvider;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -45,4 +48,20 @@ public class NettyServerProviderTest {
   public void builderIsANettyBuilder() {
     assertSame(NettyServerBuilder.class, provider.builderForPort(443).getClass());
   }
+
+  @Test
+  public void newServerBuilderForPort_success() {
+    ServerProvider.NewServerBuilderResult result =
+        provider.newServerBuilderForPort(80, InsecureServerCredentials.create());
+    assertThat(result.getServerBuilder()).isInstanceOf(NettyServerBuilder.class);
+  }
+
+  @Test
+  public void newServerBuilderForPort_fail() {
+    ServerProvider.NewServerBuilderResult result = provider.newServerBuilderForPort(
+        80, new FakeServerCredentials());
+    assertThat(result.getError()).contains("FakeServerCredentials");
+  }
+
+  private static final class FakeServerCredentials extends ServerCredentials {}
 }

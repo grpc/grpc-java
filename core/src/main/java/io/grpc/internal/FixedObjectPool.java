@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import com.google.common.base.Preconditions;
 /**
  * An object pool that always returns the same instance and does nothing when returning the object.
  */
-final class FixedObjectPool<T> implements ObjectPool<T> {
+public final class FixedObjectPool<T> implements ObjectPool<T> {
   private final T object;
 
   public FixedObjectPool(T object) {

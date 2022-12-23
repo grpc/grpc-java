@@ -1,0 +1,34 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC: API'
+
+evaluationDependsOn(project(':grpc-context').path)
+
+dependencies {
+    api project(':grpc-context'),
+            libraries.jsr305,
+            libraries.errorprone.annotations
+    implementation libraries.guava
+
+    testImplementation project(':grpc-context').sourceSets.test.output,
+            project(':grpc-testing'),
+            project(':grpc-grpclb')
+    testImplementation (libraries.guava.testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
+    jmh project(':grpc-core')
+
+    signature libraries.signature.java
+    signature libraries.signature.android
+}
+
+tasks.named("javadoc").configure {
+    // We want io.grpc.Internal, but not io.grpc.Internal*
+    exclude 'io/grpc/Internal?*.java'
+}

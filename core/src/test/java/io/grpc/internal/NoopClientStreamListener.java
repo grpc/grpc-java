@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,13 @@ package io.grpc.internal;
 
 import io.grpc.Metadata;
 import io.grpc.Status;
-import java.io.InputStream;
 
 /**
  * No-op base class for testing.
  */
-class NoopClientStreamListener implements ClientStreamListener {
+public class NoopClientStreamListener implements ClientStreamListener {
   @Override
-  public void messageRead(InputStream message) {}
+  public void messagesAvailable(MessageProducer producer) {}
 
   @Override
   public void onReady() {}
@@ -34,5 +33,5 @@ class NoopClientStreamListener implements ClientStreamListener {
   public void headersRead(Metadata headers) {}
 
   @Override
-  public void closed(Status status, Metadata trailers) {}
+  public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {}
 }

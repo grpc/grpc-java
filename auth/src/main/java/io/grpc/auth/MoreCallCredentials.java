@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,18 @@ package io.grpc.auth;
 
 import com.google.auth.Credentials;
 import io.grpc.CallCredentials;
-import io.grpc.ExperimentalApi;
 
 /**
  * A utility class that converts other types of credentials to {@link CallCredentials}.
  */
-@ExperimentalApi("https//github.com/grpc/grpc-java/issues/1914")
 public final class MoreCallCredentials {
   /**
    * Converts a Google Auth Library {@link Credentials} to {@link CallCredentials}.
+   *
+   * <p>Although this is a stable API, note that the returned instance's API is not stable. You are
+   * free to use the class name {@code CallCredentials} and pass the instance to other code, but the
+   * instance can't be called directly from code expecting stable behavior. See {@link
+   * CallCredentials}.
    */
   public static CallCredentials from(Credentials creds) {
     return new GoogleAuthLibraryCallCredentials(creds);

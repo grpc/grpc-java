@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,33 @@
 
 package io.grpc.okhttp;
 
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerStreamTracer;
-import io.grpc.internal.AccessProtectedHack;
+import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.FakeClock;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.testing.AbstractTransportTest;
-import io.grpc.netty.NettyServerBuilder;
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
-import org.junit.Ignore;
-import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /** Unit tests for OkHttp transport. */
 @RunWith(JUnit4.class)
 public class OkHttpTransportTest extends AbstractTransportTest {
-  private ClientTransportFactory clientFactory = OkHttpChannelBuilder
-      // Although specified here, address is ignored because we never call build.
-      .forAddress("::1", 0)
-      .negotiationType(NegotiationType.PLAINTEXT)
-      .buildTransportFactory();
+  private final FakeClock fakeClock = new FakeClock();
+  private ClientTransportFactory clientFactory =
+      OkHttpChannelBuilder
+          // Although specified here, address is ignored because we never call build.
+          .forAddress("localhost", 0)
+          .usePlaintext()
+          .setTransportTracerFactory(fakeClockTransportTracer)
+          .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE)
+          .buildTransportFactory();
 
   @After
   public void releaseClientFactory() {
@@ -46,47 +50,49 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return AccessProtectedHack.serverBuilderBuildTransportServer(
-        NettyServerBuilder
-          .forPort(0)
-          .flowControlWindow(65 * 1024),
-        streamTracerFactories);
+  protected InternalServer newServer(
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
+    return newServer(0, streamTracerFactories);
   }
 
   @Override
   protected InternalServer newServer(
-      InternalServer server, List<ServerStreamTracer.Factory> streamTracerFactories) {
-    int port = server.getPort();
-    return AccessProtectedHack.serverBuilderBuildTransportServer(
-        NettyServerBuilder
-            .forPort(port)
-            .flowControlWindow(65 * 1024),
-        streamTracerFactories);
+      int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
+    return OkHttpServerBuilder
+        .forPort(port, InsecureServerCredentials.create())
+        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
+        .setTransportTracerFactory(fakeClockTransportTracer)
+        .buildTransportServers(streamTracerFactories);
   }
 
   @Override
   protected String testAuthority(InternalServer server) {
-    return "[::1]:" + server.getPort();
+    return "thebestauthority:" + server.getListenSocketAddress();
   }
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
-    int port = server.getPort();
+    int port = ((InetSocketAddress) server.getListenSocketAddress()).getPort();
     return clientFactory.newClientTransport(
-        new InetSocketAddress("::1", port),
-        testAuthority(server),
-        null /* agent */);
+        new InetSocketAddress("localhost", port),
+        new ClientTransportFactory.ClientTransportOptions()
+          .setAuthority(testAuthority(server))
+          .setEagAttributes(eagAttrs()),
+        transportLogger());
   }
 
   @Override
-  protected boolean metricsExpected() {
+  protected void advanceClock(long offset, TimeUnit unit) {
+    fakeClock.forwardNanos(unit.toNanos(offset));
+  }
+
+  @Override
+  protected long fakeCurrentTimeNanos() {
+    return fakeClock.getTicker().read();
+  }
+
+  @Override
+  protected boolean haveTransportTracer() {
     return true;
   }
-
-  // TODO(ejona): Flaky/Broken
-  @Test
-  @Ignore
-  @Override
-  public void flowControlPushBack() {}
 }

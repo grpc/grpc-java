@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,264 +16,95 @@
 
 package io.grpc.internal;
 
-import static junit.framework.TestCase.assertFalse;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
-import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
-import io.grpc.LoadBalancer;
-import io.grpc.NameResolver;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.net.URI;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
+import com.google.common.base.Defaults;
+import com.google.common.collect.ImmutableSet;
+import io.grpc.ForwardingTestUtil;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link AbstractManagedChannelImplBuilder}. */
+/**
+ * Unit tests for {@link AbstractManagedChannelImplBuilder}.
+ */
 @RunWith(JUnit4.class)
 public class AbstractManagedChannelImplBuilderTest {
-  private Builder builder = new Builder("fake");
-  private Builder directAddressBuilder = new Builder(new SocketAddress(){}, "fake");
+  private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
 
-  @Test
-  public void executor_default() {
-    assertNotNull(builder.executorPool);
-  }
+  private final AbstractManagedChannelImplBuilder<?> testChannelBuilder = new TestBuilder();
 
-  @Test
-  public void executor_normal() {
-    Executor executor = mock(Executor.class);
-    assertEquals(builder, builder.executor(executor));
-    assertEquals(executor, builder.executorPool.getObject());
-  }
-
-  @Test
-  public void executor_null() {
-    ObjectPool<? extends Executor> defaultValue = builder.executorPool;
-    builder.executor(mock(Executor.class));
-    assertEquals(builder, builder.executor(null));
-    assertEquals(defaultValue, builder.executorPool);
-  }
-
-  @Test
-  public void directExecutor() {
-    assertEquals(builder, builder.directExecutor());
-    assertEquals(MoreExecutors.directExecutor(), builder.executorPool.getObject());
-  }
-
-  @Test
-  public void nameResolverFactory_default() {
-    assertNotNull(builder.getNameResolverFactory());
-  }
-
-  @Test
-  public void nameResolverFactory_normal() {
-    NameResolver.Factory nameResolverFactory = mock(NameResolver.Factory.class);
-    assertEquals(builder, builder.nameResolverFactory(nameResolverFactory));
-    assertEquals(nameResolverFactory, builder.getNameResolverFactory());
-  }
-
-  @Test
-  public void nameResolverFactory_null() {
-    NameResolver.Factory defaultValue = builder.getNameResolverFactory();
-    builder.nameResolverFactory(mock(NameResolver.Factory.class));
-    assertEquals(builder, builder.nameResolverFactory(null));
-    assertEquals(defaultValue, builder.getNameResolverFactory());
-  }
-
-  @Test(expected = IllegalStateException.class)
-  public void nameResolverFactory_notAllowedWithDirectAddress() {
-    directAddressBuilder.nameResolverFactory(mock(NameResolver.Factory.class));
-  }
-
-  @Test
-  public void loadBalancerFactory_default() {
-    assertNotNull(builder.loadBalancerFactory);
-  }
-
-  @Test
-  public void loadBalancerFactory_normal() {
-    LoadBalancer.Factory loadBalancerFactory = mock(LoadBalancer.Factory.class);
-    assertEquals(builder, builder.loadBalancerFactory(loadBalancerFactory));
-    assertEquals(loadBalancerFactory, builder.loadBalancerFactory);
-  }
-
-  @Test
-  public void loadBalancerFactory_null() {
-    LoadBalancer.Factory defaultValue = builder.loadBalancerFactory;
-    builder.loadBalancerFactory(mock(LoadBalancer.Factory.class));
-    assertEquals(builder, builder.loadBalancerFactory(null));
-    assertEquals(defaultValue, builder.loadBalancerFactory);
-  }
-
-  @Test(expected = IllegalStateException.class)
-  public void loadBalancerFactory_notAllowedWithDirectAddress() {
-    directAddressBuilder.loadBalancerFactory(mock(LoadBalancer.Factory.class));
-  }
-
-  @Test
-  public void decompressorRegistry_default() {
-    assertNotNull(builder.decompressorRegistry);
-  }
-
-  @Test
-  public void decompressorRegistry_normal() {
-    DecompressorRegistry decompressorRegistry = DecompressorRegistry.emptyInstance();
-    assertNotEquals(decompressorRegistry, builder.decompressorRegistry);
-    assertEquals(builder, builder.decompressorRegistry(decompressorRegistry));
-    assertEquals(decompressorRegistry, builder.decompressorRegistry);
-  }
-
-  @Test
-  public void decompressorRegistry_null() {
-    DecompressorRegistry defaultValue = builder.decompressorRegistry;
-    assertEquals(builder, builder.decompressorRegistry(DecompressorRegistry.emptyInstance()));
-    assertNotEquals(defaultValue, builder.decompressorRegistry);
-    builder.decompressorRegistry(null);
-    assertEquals(defaultValue, builder.decompressorRegistry);
-  }
-
-  @Test
-  public void compressorRegistry_default() {
-    assertNotNull(builder.compressorRegistry);
-  }
-
-  @Test
-  public void compressorRegistry_normal() {
-    CompressorRegistry compressorRegistry = CompressorRegistry.newEmptyInstance();
-    assertNotEquals(compressorRegistry, builder.compressorRegistry);
-    assertEquals(builder, builder.compressorRegistry(compressorRegistry));
-    assertEquals(compressorRegistry, builder.compressorRegistry);
-  }
-
-  @Test
-  public void compressorRegistry_null() {
-    CompressorRegistry defaultValue = builder.compressorRegistry;
-    builder.compressorRegistry(CompressorRegistry.newEmptyInstance());
-    assertNotEquals(defaultValue, builder.compressorRegistry);
-    assertEquals(builder, builder.compressorRegistry(null));
-    assertEquals(defaultValue, builder.compressorRegistry);
-  }
-
-  @Test
-  public void userAgent_default() {
-    assertNull(builder.userAgent);
-  }
-
-  @Test
-  public void userAgent_normal() {
-    String userAgent = "user-agent/1";
-    assertEquals(builder, builder.userAgent(userAgent));
-    assertEquals(userAgent, builder.userAgent);
-  }
-
-  @Test
-  public void userAgent_null() {
-    assertEquals(builder, builder.userAgent(null));
-    assertNull(builder.userAgent);
-
-    builder.userAgent("user-agent/1");
-    builder.userAgent(null);
-    assertNull(builder.userAgent);
-  }
-
-  @Test
-  public void overrideAuthority_default() {
-    assertNull(builder.authorityOverride);
-  }
-
-  @Test
-  public void overrideAuthority_normal() {
-    String overrideAuthority = "best-authority";
-    assertEquals(builder, builder.overrideAuthority(overrideAuthority));
-    assertEquals(overrideAuthority, builder.authorityOverride);
-  }
-
-  @Test(expected = NullPointerException.class)
-  public void overrideAuthority_null() {
-    builder.overrideAuthority(null);
-  }
-
-  @Test(expected = IllegalArgumentException.class)
-  public void overrideAuthority_invalid() {
-    builder.overrideAuthority("not_allowed");
-  }
-
-  @Test
-  public void overrideAuthority_getNameResolverFactory() {
-    Builder builder = new Builder("target");
-    assertNull(builder.authorityOverride);
-    assertFalse(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
-    builder.overrideAuthority("google.com");
-    assertTrue(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
-  }
-
-  @Test
-  public void makeTargetStringForDirectAddress_scopedIpv6() throws Exception {
-    InetSocketAddress address = new InetSocketAddress("0:0:0:0:0:0:0:0%0", 10005);
-    assertEquals("/0:0:0:0:0:0:0:0%0:10005", address.toString());
-    String target = AbstractManagedChannelImplBuilder.makeTargetStringForDirectAddress(address);
-    URI uri = new URI(target);
-    assertEquals("directaddress:////0:0:0:0:0:0:0:0%250:10005", target);
-    assertEquals(target, uri.toString());
-  }
-
-  @Test
-  public void idleTimeout() {
-    Builder builder = new Builder("target");
-
-    assertEquals(AbstractManagedChannelImplBuilder.IDLE_MODE_DEFAULT_TIMEOUT_MILLIS,
-        builder.getIdleTimeoutMillis());
-
-    builder.idleTimeout(Long.MAX_VALUE, TimeUnit.DAYS);
-    assertEquals(ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE, builder.getIdleTimeoutMillis());
-
-    builder.idleTimeout(AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS,
-        TimeUnit.DAYS);
-    assertEquals(ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE, builder.getIdleTimeoutMillis());
-
-    try {
-      builder.idleTimeout(0, TimeUnit.SECONDS);
-      fail("Should throw");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
-
-    builder.idleTimeout(1, TimeUnit.NANOSECONDS);
-    assertEquals(AbstractManagedChannelImplBuilder.IDLE_MODE_MIN_TIMEOUT_MILLIS,
-        builder.getIdleTimeoutMillis());
-
-    builder.idleTimeout(30, TimeUnit.SECONDS);
-    assertEquals(TimeUnit.SECONDS.toMillis(30), builder.getIdleTimeoutMillis());
-  }
-
-  static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
-    Builder(String target) {
-      super(target);
-    }
-
-    Builder(SocketAddress directServerAddress, String authority) {
-      super(directServerAddress, authority);
-    }
-
+  private final class TestBuilder extends AbstractManagedChannelImplBuilder<TestBuilder> {
     @Override
-    protected ClientTransportFactory buildTransportFactory() {
-      throw new UnsupportedOperationException();
+    protected ManagedChannelBuilder<?> delegate() {
+      return mockDelegate;
     }
+  }
 
-    @Override
-    public Builder usePlaintext(boolean value) {
-      throw new UnsupportedOperationException();
+  @Test
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testMethodsForwarded(
+        ManagedChannelBuilder.class,
+        mockDelegate,
+        testChannelBuilder,
+        // maxInboundMessageSize is the only method that shouldn't forward.
+        ImmutableSet.of(ManagedChannelBuilder.class.getMethod("maxInboundMessageSize", int.class)),
+        new ForwardingTestUtil.ArgumentProvider() {
+          @Override
+          public Object get(Method method, int argPos, Class<?> clazz) {
+            if (method.getName().equals("maxInboundMetadataSize")) {
+              assertThat(argPos).isEqualTo(0);
+              return 1; // an arbitrary positive number
+            }
+            return null;
+          }
+        });
+  }
+
+  @Test
+  public void testMaxInboundMessageSize() {
+    assertThat(testChannelBuilder.maxInboundMessageSize)
+        .isEqualTo(GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE);
+
+    testChannelBuilder.maxInboundMessageSize(42);
+    assertThat(testChannelBuilder.maxInboundMessageSize).isEqualTo(42);
+  }
+
+  @Test
+  public void allBuilderMethodsReturnThis() throws Exception {
+    for (Method method : ManagedChannelBuilder.class.getDeclaredMethods()) {
+      if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
+        continue;
+      }
+      if (method.getName().equals("build")) {
+        continue;
+      }
+      Class<?>[] argTypes = method.getParameterTypes();
+      Object[] args = new Object[argTypes.length];
+      for (int i = 0; i < argTypes.length; i++) {
+        args[i] = Defaults.defaultValue(argTypes[i]);
+      }
+      if (method.getName().equals("maxInboundMetadataSize")) {
+        args[0] = 1; // an arbitrary positive number
+      }
+
+      Object returnedValue = method.invoke(testChannelBuilder, args);
+
+      assertThat(returnedValue).isSameInstanceAs(testChannelBuilder);
     }
+  }
+
+  @Test
+  public void buildReturnsDelegateBuildByDefault() {
+    ManagedChannel mockChannel = mock(ManagedChannel.class);
+    doReturn(mockChannel).when(mockDelegate).build();
+
+    assertThat(testChannelBuilder.build()).isSameInstanceAs(mockChannel);
   }
 }

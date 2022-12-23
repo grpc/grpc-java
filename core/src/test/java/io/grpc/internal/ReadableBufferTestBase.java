@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,10 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -86,7 +88,7 @@ public abstract class ReadableBufferTestBase {
     ReadableBuffer buffer = buffer();
     ByteBuffer byteBuffer = ByteBuffer.allocate(msg.length());
     buffer.readBytes(byteBuffer);
-    byteBuffer.flip();
+    ((Buffer) byteBuffer).flip();
     byte[] array = new byte[msg.length()];
     byteBuffer.get(array);
     assertArrayEquals(msg.getBytes(UTF_8), array);
@@ -98,7 +100,7 @@ public abstract class ReadableBufferTestBase {
     ReadableBuffer buffer = buffer();
     ByteBuffer byteBuffer = ByteBuffer.allocate(2);
     buffer.readBytes(byteBuffer);
-    byteBuffer.flip();
+    ((Buffer) byteBuffer).flip();
     byte[] array = new byte[2];
     byteBuffer.get(array);
     assertArrayEquals(new byte[]{'h', 'e'}, array);
@@ -114,6 +116,58 @@ public abstract class ReadableBufferTestBase {
     byte[] array = new byte[2];
     newBuffer.readBytes(array, 0, 2);
     assertArrayEquals(new byte[] {'h', 'e'}, Arrays.copyOfRange(array, 0, 2));     
+  }
+
+  @Test
+  public void markAndResetWithReadShouldSucceed() {
+    ReadableBuffer buffer = buffer();
+    int offset = 5;
+    buffer.readBytes(new byte[offset], 0, offset);
+    buffer.mark();
+    int b = buffer.readUnsignedByte();
+    assertEquals(msg.length() - offset - 1, buffer.readableBytes());
+    buffer.reset();
+    assertEquals(msg.length() - offset, buffer.readableBytes());
+    assertEquals(b, buffer.readUnsignedByte());
+  }
+
+  @Test
+  public void markAndResetWithReadToReadableBufferShouldSucceed() {
+    ReadableBuffer buffer = buffer();
+    int offset = 5;
+    buffer.readBytes(offset);
+    int testLen = 100;
+    buffer.mark();
+    ReadableBuffer first = buffer.readBytes(testLen);
+    assertEquals(msg.length() - offset - testLen, buffer.readableBytes());
+    buffer.reset();
+    assertEquals(msg.length() - offset, buffer.readableBytes());
+    ReadableBuffer second = buffer.readBytes(testLen);
+    byte[] array1 = new byte[testLen];
+    byte[] array2 = new byte[testLen];
+    first.readBytes(array1, 0, testLen);
+    second.readBytes(array2, 0, testLen);
+    assertArrayEquals(array1, array2);
+  }
+
+  @Test
+  public void getByteBufferDoesNotAffectBufferPosition() {
+    ReadableBuffer buffer = buffer();
+    Assume.assumeTrue(buffer.byteBufferSupported());
+    ByteBuffer byteBuffer = buffer.getByteBuffer();
+    assertEquals(msg.length(), buffer.readableBytes());
+    byteBuffer.get(new byte[byteBuffer.remaining()]);
+    assertEquals(msg.length(), buffer.readableBytes());
+  }
+
+  @Test
+  public void getByteBufferIsNotAffectedByBufferRead() {
+    ReadableBuffer buffer = buffer();
+    Assume.assumeTrue(buffer.byteBufferSupported());
+    ByteBuffer byteBuffer = buffer.getByteBuffer();
+    int initialRemaining = byteBuffer.remaining();
+    buffer.readBytes(new byte[100], 0, 100);
+    assertEquals(initialRemaining, byteBuffer.remaining());
   }
 
   protected abstract ReadableBuffer buffer();

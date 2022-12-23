@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import io.grpc.okhttp.internal.framed.Settings;
 class OkHttpSettingsUtil {
   public static final int MAX_CONCURRENT_STREAMS = Settings.MAX_CONCURRENT_STREAMS;
   public static final int INITIAL_WINDOW_SIZE = Settings.INITIAL_WINDOW_SIZE;
+  public static final int MAX_HEADER_LIST_SIZE = Settings.MAX_HEADER_LIST_SIZE;
+  public static final int ENABLE_PUSH = Settings.ENABLE_PUSH;
 
   public static boolean isSet(Settings settings, int id) {
     return settings.isSet(id);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 
 package io.grpc.examples.experimental;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -30,7 +31,7 @@ import java.util.logging.Logger;
  * A simple client that requests a greeting from the
  *      {@link io.grpc.examples.helloworld.HelloWorldServer}.
  *
- * <p>This class should act a a drop in replacement for
+ * <p>This class should act a drop in replacement for
  *      {@link io.grpc.examples.helloworld.HelloWorldClient}.
  */
 public class CompressingHelloWorldClient {
@@ -42,8 +43,7 @@ public class CompressingHelloWorldClient {
 
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public CompressingHelloWorldClient(String host, int port) {
-    channel = ManagedChannelBuilder.forAddress(host, port)
-        .usePlaintext(true)
+    channel = Grpc.newChannelBuilderForAddress(host, port, InsecureChannelCredentials.create())
         .build();
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
@@ -73,12 +73,13 @@ public class CompressingHelloWorldClient {
    * greeting.
    */
   public static void main(String[] args) throws Exception {
+    // Access a service running on the local machine on port 50051
     CompressingHelloWorldClient client = new CompressingHelloWorldClient("localhost", 50051);
     try {
-      /* Access a service running on the local machine on port 50051 */
       String user = "world";
+      // Use the arg as the name to greet if provided
       if (args.length > 0) {
-        user = args[0]; /* Use the arg as the name to greet if provided */
+        user = args[0];
       }
       client.greet(user);
     } finally {

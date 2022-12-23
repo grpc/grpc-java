@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,13 @@
 
 package io.grpc.internal;
 
+import com.google.common.base.MoreObjects;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -30,8 +35,8 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   }
 
   @Override
-  public void shutdown() {
-    delegate().shutdown();
+  public void shutdown(Status status) {
+    delegate().shutdown(status);
   }
 
   @Override
@@ -41,8 +46,9 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
 
   @Override
   public ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-    return delegate().newStream(method, headers, callOptions);
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      ClientStreamTracer[] tracers) {
+    return delegate().newStream(method, headers, callOptions, tracers);
   }
 
   @Override
@@ -51,7 +57,7 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   }
 
   @Override
-  public LogId getLogId() {
+  public InternalLogId getLogId() {
     return delegate().getLogId();
   }
 
@@ -62,7 +68,12 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
 
   @Override
   public String toString() {
-    return getClass().getSimpleName() + "[" + delegate().toString() + "]";
+    return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
+  }
+
+  @Override
+  public ListenableFuture<SocketStats> getStats() {
+    return delegate().getStats();
   }
 
   protected abstract ConnectionClientTransport delegate();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package io.grpc.netty;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
 import java.util.Iterator;
-import java.util.Map.Entry;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 /**
@@ -67,7 +67,17 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
   }
 
   @Override
-  public Iterator<Entry<CharSequence, CharSequence>> iterator() {
+  @SuppressWarnings("ReferenceEquality") // STATUS.value() never changes.
+  public CharSequence status() {
+    // preHeaders is never null.  It has status as the first element or not at all.
+    if (preHeaders.length >= 2 && preHeaders[0] == Http2Headers.PseudoHeaderName.STATUS.value()) {
+      return preHeaders[1];
+    }
+    return null;
+  }
+
+  @Override
+  public Iterator<Map.Entry<CharSequence, CharSequence>> iterator() {
     return new Itr();
   }
 
@@ -76,8 +86,8 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
     return (normalHeaders.length + preHeaders.length) / 2;
   }
 
-  private class Itr implements Entry<CharSequence, CharSequence>,
-      Iterator<Entry<CharSequence, CharSequence>> {
+  private class Itr implements Map.Entry<CharSequence, CharSequence>,
+      Iterator<Map.Entry<CharSequence, CharSequence>> {
     private int idx;
     private AsciiString[] current = preHeaders.length != 0 ? preHeaders : normalHeaders;
     private AsciiString key;
@@ -94,7 +104,7 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
      * speeds before and after.
      */
     @Override
-    public Entry<CharSequence, CharSequence> next() {
+    public Map.Entry<CharSequence, CharSequence> next() {
       if (hasNext()) {
         key = current[idx];
         value = current[idx + 1];
@@ -134,7 +144,7 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
   public String toString() {
     StringBuilder builder = new StringBuilder(getClass().getSimpleName()).append('[');
     String separator = "";
-    for (Entry<CharSequence, CharSequence> e : this) {
+    for (Map.Entry<CharSequence, CharSequence> e : this) {
       CharSequence name = e.getKey();
       CharSequence value = e.getValue();
       builder.append(separator);

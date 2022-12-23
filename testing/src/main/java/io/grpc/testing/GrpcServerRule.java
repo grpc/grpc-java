@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,14 +34,22 @@ import org.junit.rules.TestRule;
 
 /**
  * {@code GrpcServerRule} is a JUnit {@link TestRule} that starts an in-process gRPC service with
- * a {@link MutableHandlerRegistry} for adding services. It is particularly useful for mocking out
- * external gRPC-based services and asserting that the expected requests were made.
+ * a {@link MutableHandlerRegistry} for adding services. Prefer {@link GrpcCleanupRule} in new code.
+ *
+ * <p>{@code GrpcServerRule} is useful for testing gRPC-based clients and services. However,
+ * because {@code GrpcServerRule} does not support useful features such as transport
+ * types other than in-process, multiple channels per server, custom channel or server builder
+ * options, and configuration inside individual test methods, users would end up to a difficult
+ * situation when later they want to make extensions to their tests that were using {@code
+ * GrpcServerRule}. Little benefit comes from proactively migrating existing code from {@code
+ * GrpcServerRule}, but new code is better served by explicit channel and server creation with
+ * {@code GrpcCleanupRule} managing resource lifetimes.
  *
  * <p>An {@link AbstractStub} can be created against this service by using the
  * {@link ManagedChannel} provided by {@link GrpcServerRule#getChannel()}.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2488")
-public class GrpcServerRule extends ExternalResource {
+public final class GrpcServerRule extends ExternalResource {
 
   private ManagedChannel channel;
   private Server server;

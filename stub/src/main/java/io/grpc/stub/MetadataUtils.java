@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.InlineMe;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -43,8 +44,14 @@ public final class MetadataUtils {
    * @param stub to bind the headers to.
    * @param extraHeaders the headers to be passed by each call on the returned stub.
    * @return an implementation of the stub with {@code extraHeaders} bound to each call.
+   * @deprecated Use {@code stub.withInterceptors(newAttachHeadersInterceptor(...))} instead.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
+  @Deprecated
+  @InlineMe(
+      replacement =
+          "stub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(extraHeaders))",
+      imports = "io.grpc.stub.MetadataUtils")
   public static <T extends AbstractStub<T>> T attachHeaders(T stub, Metadata extraHeaders) {
     return stub.withInterceptors(newAttachHeadersInterceptor(extraHeaders));
   }
@@ -65,13 +72,13 @@ public final class MetadataUtils {
 
     // Non private to avoid synthetic class
     HeaderAttachingClientInterceptor(Metadata extraHeaders) {
-      this.extraHeaders = checkNotNull(extraHeaders, extraHeaders);
+      this.extraHeaders = checkNotNull(extraHeaders, "extraHeaders");
     }
 
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      return new HeaderAttachingClientCall<ReqT, RespT>(next.newCall(method, callOptions));
+      return new HeaderAttachingClientCall<>(next.newCall(method, callOptions));
     }
 
     private final class HeaderAttachingClientCall<ReqT, RespT>
@@ -98,8 +105,15 @@ public final class MetadataUtils {
    * @param trailersCapture to record the last received trailers
    * @return an implementation of the stub that allows to access the last received call's
    *         headers and trailers via {@code headersCapture} and {@code trailersCapture}.
+   * @deprecated Use {@code stub.withInterceptors(newCaptureMetadataInterceptor())} instead.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
+  @Deprecated
+  @InlineMe(
+      replacement =
+          "stub.withInterceptors(MetadataUtils.newCaptureMetadataInterceptor(headersCapture,"
+              + " trailersCapture))",
+      imports = "io.grpc.stub.MetadataUtils")
   public static <T extends AbstractStub<T>> T captureMetadata(
       T stub,
       AtomicReference<Metadata> headersCapture,
@@ -135,7 +149,7 @@ public final class MetadataUtils {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      return new MetadataCapturingClientCall<ReqT, RespT>(next.newCall(method, callOptions));
+      return new MetadataCapturingClientCall<>(next.newCall(method, callOptions));
     }
 
     private final class MetadataCapturingClientCall<ReqT, RespT>

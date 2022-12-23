@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,8 +35,9 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -147,7 +148,7 @@ public class CompressionTest {
   @Parameters
   public static Collection<Object[]> params() {
     boolean[] bools = new boolean[]{false, true};
-    List<Object[]> combos = new ArrayList<Object[]>(64);
+    List<Object[]> combos = new ArrayList<>(64);
     for (boolean enableClientMessageCompression : bools) {
       for (boolean clientAcceptEncoding : bools) {
         for (boolean clientEncoding : bools) {
@@ -189,11 +190,11 @@ public class CompressionTest {
         .build()
         .start();
 
-    channel = ManagedChannelBuilder.forAddress("localhost", server.getPort())
+    channel = Grpc.newChannelBuilder(
+            "localhost:" + server.getPort(), InsecureChannelCredentials.create())
         .decompressorRegistry(clientDecompressors)
         .compressorRegistry(clientCompressors)
         .intercept(new ClientCompressorInterceptor())
-        .usePlaintext(true)
         .build();
     stub = TestServiceGrpc.newBlockingStub(channel);
 
@@ -280,7 +281,7 @@ public class CompressionTest {
       }
       ClientCall<ReqT, RespT> call = next.newCall(method, callOptions);
 
-      return new ClientCompressor<ReqT, RespT>(call);
+      return new ClientCompressor<>(call);
     }
   }
 
@@ -291,7 +292,7 @@ public class CompressionTest {
 
     @Override
     public void start(io.grpc.ClientCall.Listener<RespT> responseListener, Metadata headers) {
-      super.start(new ClientHeadersCapture<RespT>(responseListener), headers);
+      super.start(new ClientHeadersCapture<>(responseListener), headers);
       setMessageCompression(enableClientMessageCompression);
     }
   }
