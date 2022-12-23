@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.nio.InvalidMarkException;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Queue;
 import javax.annotation.Nullable;
 
 /**
