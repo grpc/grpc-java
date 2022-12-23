@@ -168,7 +168,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
    *
    * @param dest the destination buffer to receive the bytes.
    * @param length the number of bytes to be copied.
-   * @throws IOException thrown if any error was encountered while writing to the stream.
    * @throws IndexOutOfBoundsException if required bytes are not readable
    */
   public void readBytes(CompositeReadableBuffer dest, int length) {
