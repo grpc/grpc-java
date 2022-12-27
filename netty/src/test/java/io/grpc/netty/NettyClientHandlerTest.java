@@ -148,19 +148,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
   @Override
   protected AbstractStream stream() throws Exception {
-    if (stream == null) {
-      stream = new NettyClientStream(streamTransportState,
-          TestMethodDescriptors.voidMethod(),
-          new Metadata(),
-          channel(),
-          AsciiString.of("localhost"),
-          AsciiString.of("http"),
-          AsciiString.of("agent"),
-          StatsTraceContext.NOOP,
-          transportTracer,
-          CallOptions.DEFAULT,
-          false);
-    }
     return stream;
   }
 
@@ -1007,4 +994,5 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
       return Utils.statusFromThrowable(f.cause());
     }
   }
+
 }
