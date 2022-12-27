@@ -38,14 +38,17 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -173,6 +176,13 @@ final class RingHashLoadBalancer extends LoadBalancer {
       return false;
     }
 
+    String dupAddrString = validateNoDuplicateAddresses(addrList);
+    if (dupAddrString != null) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+          + "resolution was successful, but there were duplicate addresses: " + dupAddrString));
+      return false;
+    }
+
     long totalWeight = 0;
     for (EquivalentAddressGroup eag : addrList) {
       Long weight = eag.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT);
@@ -205,6 +215,28 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
 
     return true;
+  }
+
+  private String validateNoDuplicateAddresses(List<EquivalentAddressGroup> addrList) {
+    Set<SocketAddress> addresses = new HashSet<>();
+    Map<String, Integer> dups = new HashMap<>();
+    for (EquivalentAddressGroup eag : addrList) {
+      for (SocketAddress address : eag.getAddresses()) {
+        if (!addresses.add(address)) {
+          String addrStr = address.toString();
+          Integer oldCount = dups.computeIfAbsent(addrStr, (s) -> 0);
+          dups.put(addrStr, oldCount + 1);
+        }
+      }
+    }
+
+    if (!dups.isEmpty()) {
+      return dups.entrySet().stream()
+          .map((entry) -> String.format("Address: %s, count: %d", entry.getKey(), entry.getValue()))
+          .collect(Collectors.joining("; "));
+    }
+
+    return null;
   }
 
   private static List<RingEntry> buildRing(

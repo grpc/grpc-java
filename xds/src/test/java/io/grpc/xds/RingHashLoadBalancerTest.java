@@ -1040,43 +1040,6 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
-  public void hostSelectionProportionalToRepeatedAddressCount() {
-    RingHashConfig config = new RingHashConfig(10000, 100000);
-    List<EquivalentAddressGroup> servers = createRepeatedServerAddrs(1, 10, 100);  // 1:10:100
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
-    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
-
-    // Bring all subchannels to READY.
-    Map<EquivalentAddressGroup, Integer> pickCounts = new HashMap<>();
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-      pickCounts.put(subchannel.getAddresses(), 0);
-    }
-    verify(helper, times(3)).updateBalancingState(eq(READY), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    for (int i = 0; i < 10000; i++) {
-      long hash = hashFunc.hashInt(i);
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(
-          TestMethodDescriptors.voidMethod(), new Metadata(),
-          CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hash));
-      Subchannel pickedSubchannel = picker.pickSubchannel(args).getSubchannel();
-      EquivalentAddressGroup addr = pickedSubchannel.getAddresses();
-      pickCounts.put(addr, pickCounts.get(addr) + 1);
-    }
-
-    // Actual distribution: server0 = 104, server1 = 808, server2 = 9088
-    double ratio01 = (double) pickCounts.get(servers.get(0)) / pickCounts.get(servers.get(1));
-    double ratio12 = (double) pickCounts.get(servers.get(1)) / pickCounts.get(servers.get(11));
-    assertThat(ratio01).isWithin(0.03).of((double) 1 / 10);
-    assertThat(ratio12).isWithin(0.03).of((double) 10 / 100);
-  }
-
-  @Test
   public void nameResolutionErrorWithNoActiveSubchannels() {
     Status error = Status.UNAVAILABLE.withDescription("not reachable");
     loadBalancer.handleNameResolutionError(error);
@@ -1110,6 +1073,17 @@ public class RingHashLoadBalancerTest {
 
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("target not found"));
     verifyNoMoreInteractions(helper);
+  }
+
+  @Test
+  public void duplicateAddresses() {
+    RingHashConfig config = new RingHashConfig(10, 100);
+    List<EquivalentAddressGroup> servers =
+        createRepeatedServerAddrs(1, 2, 3);
+    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    assertThat(addressesAccepted).isFalse();
   }
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
