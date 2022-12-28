@@ -113,6 +113,7 @@ import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
+import org.mockito.Mockito;
 
 /**
  * Tests for {@link XdsClientImpl} with protocol version v3.
@@ -206,7 +207,7 @@ public class XdsClientImplV3Test extends XdsClientImplTestBase {
     protected void verifyRequest(
         XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
         EnvoyProtoData.Node node) {
-      verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
+      verify(requestObserver, Mockito.timeout(2000)).onNext(argThat(new DiscoveryRequestMatcher(
           node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce, null, null)));
     }
 
@@ -214,7 +215,7 @@ public class XdsClientImplV3Test extends XdsClientImplTestBase {
     protected void verifyRequestNack(
         XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
         EnvoyProtoData.Node node, List<String> errorMessages) {
-      verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
+      verify(requestObserver, Mockito.timeout(2000)).onNext(argThat(new DiscoveryRequestMatcher(
           node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce,
           Code.INVALID_ARGUMENT_VALUE, errorMessages)));
     }

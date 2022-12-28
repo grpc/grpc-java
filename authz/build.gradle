@@ -33,12 +33,6 @@ tasks.named("jar").configure {
     classifier = 'original'
 }
 
-// TODO(ashithasantosh): Remove javadoc exclusion on adding authorization
-// interceptor implementations.
-tasks.named("javadoc").configure {
-    exclude "io/grpc/authz/*"
-}
-
 tasks.named("shadowJar").configure {
     classifier = null
     dependencies {
@@ -50,6 +44,12 @@ tasks.named("shadowJar").configure {
     relocate 'envoy.annotations', 'io.grpc.xds.shaded.envoy.annotations'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
+}
+
+tasks.named("compileJava").configure {
+    it.options.compilerArgs += [
+        "-Xlint:-processing",
+    ]
 }
 
 publishing {

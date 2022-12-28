@@ -27,6 +27,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Sets;
+import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -84,11 +85,10 @@ final class RingHashLoadBalancer extends LoadBalancer {
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     List<EquivalentAddressGroup> addrList = resolvedAddresses.getAddresses();
-    if (addrList.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
-          + "resolution was successful, but returned server addresses are empty."));
+    if (!validateAddrList(addrList)) {
       return false;
     }
+
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
     Set<EquivalentAddressGroup> removedAddrs =
         Sets.newHashSet(Sets.difference(subchannels.keySet(), latestAddrs.keySet()));
@@ -161,6 +161,47 @@ final class RingHashLoadBalancer extends LoadBalancer {
     updateBalancingState();
     for (Subchannel subchann : removedSubchannels) {
       shutdownSubchannel(subchann);
+    }
+
+    return true;
+  }
+
+  private boolean validateAddrList(List<EquivalentAddressGroup> addrList) {
+    if (addrList.isEmpty()) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+          + "resolution was successful, but returned server addresses are empty."));
+      return false;
+    }
+
+    long totalWeight = 0;
+    for (EquivalentAddressGroup eag : addrList) {
+      Long weight = eag.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT);
+
+      if (weight == null) {
+        weight = 1L;
+      }
+
+      if (weight < 0) {
+        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+            String.format("Ring hash lb error: EDS resolution was successful, but returned a "
+                + "negative weight for %s.", stripAttrs(eag))));
+        return false;
+      }
+      if (weight > UnsignedInteger.MAX_VALUE.longValue()) {
+        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+            String.format("Ring hash lb error: EDS resolution was successful, but returned a weight"
+                + " too large to fit in an unsigned int for %s.", stripAttrs(eag))));
+        return false;
+      }
+      totalWeight += weight;
+    }
+
+    if (totalWeight > UnsignedInteger.MAX_VALUE.longValue()) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+          String.format(
+              "Ring hash lb error: EDS resolution was successful, but returned a sum of weights too"
+              + " large to fit in an unsigned int (%d).", totalWeight)));
+      return false;
     }
 
     return true;

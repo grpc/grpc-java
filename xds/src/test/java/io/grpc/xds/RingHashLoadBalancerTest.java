@@ -36,6 +36,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
+import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ConnectivityStateInfo;
@@ -959,6 +960,46 @@ public class RingHashLoadBalancerTest {
     verify(subchannels.get(Collections.singletonList(servers.get(2)))).requestConnection();
     verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
         .requestConnection();
+  }
+
+  @Test
+  public void largeWeights() {
+    RingHashConfig config = new RingHashConfig(10000, 100000);  // large ring
+    List<EquivalentAddressGroup> servers =
+        createWeightedServerAddrs(Integer.MAX_VALUE, 10, 100); // MAX:10:100
+    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    assertThat(addressesAccepted).isTrue();
+
+    // Try value between max signed and max unsigned int
+    servers = createWeightedServerAddrs(Integer.MAX_VALUE + 100L, 100); // (MAX+100):100
+    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    assertThat(addressesAccepted).isTrue();
+
+    // Try a negative value
+    servers = createWeightedServerAddrs(10, -20, 100); // 10:-20:100
+    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    assertThat(addressesAccepted).isFalse();
+
+    // Try an individual value larger than max unsigned int
+    long maxUnsigned = UnsignedInteger.MAX_VALUE.longValue();
+    servers = createWeightedServerAddrs(maxUnsigned + 10, 10, 100); // uMAX+10:10:100
+    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    assertThat(addressesAccepted).isFalse();
+
+    // Try a sum of values larger than max unsigned int
+    servers = createWeightedServerAddrs(Integer.MAX_VALUE, Integer.MAX_VALUE, 100); // MAX:MAX:100
+    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    assertThat(addressesAccepted).isFalse();
   }
 
   @Test
