@@ -227,11 +227,7 @@ final class AbstractXdsClient {
   // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (serverInfo.useProtocolV3()) {
-      adsStream = new AdsStreamV3();
-    } else {
-      adsStream = new AdsStreamV2();
-    }
+    adsStream = new AdsStreamV3();
     Context prevContext = context.attach();
     try {
       adsStream.start();
@@ -361,102 +357,6 @@ final class AbstractXdsClient {
       if (adsStream == this) {
         adsStream = null;
       }
-    }
-  }
-
-  private final class AdsStreamV2 extends AbstractAdsStream {
-    private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriter;
-
-    @Override
-    public boolean isReady() {
-      return requestWriter != null && ((ClientCallStreamObserver<?>) requestWriter).isReady();
-    }
-
-    @Override
-    void start() {
-      io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-          .AggregatedDiscoveryServiceStub stub =
-          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(channel);
-      StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
-          new ClientResponseObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-              io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
-
-            @Override
-            public void beforeStart(
-                ClientCallStreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> reqStream) {
-              reqStream.setOnReadyHandler(AbstractXdsClient.this::readyHandler);
-            }
-
-            @Override
-            public void onNext(final io.envoyproxy.envoy.api.v2.DiscoveryResponse response) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
-                  if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-                    logger.log(
-                        XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
-                        MessagePrinter.print(response));
-                  }
-                  handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
-                      response.getNonce());
-                }
-              });
-            }
-
-            @Override
-            public void onError(final Throwable t) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcError(t);
-                }
-              });
-            }
-
-            @Override
-            public void onCompleted() {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcCompleted();
-                }
-              });
-            }
-          };
-      requestWriter = stub.withWaitForReady().streamAggregatedResources(responseReaderV2);
-    }
-
-    @Override
-    void sendDiscoveryRequest(XdsResourceType<?> type, String versionInfo,
-                              Collection<String> resources, String nonce,
-                              @Nullable String errorDetail) {
-      checkState(requestWriter != null, "ADS stream has not been started");
-      io.envoyproxy.envoy.api.v2.DiscoveryRequest.Builder builder =
-          io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
-              .setVersionInfo(versionInfo)
-              .setNode(bootstrapNode.toEnvoyProtoNodeV2())
-              .addAllResourceNames(resources)
-              .setTypeUrl(type.typeUrlV2())
-              .setResponseNonce(nonce);
-      if (errorDetail != null) {
-        com.google.rpc.Status error =
-            com.google.rpc.Status.newBuilder()
-                .setCode(Code.INVALID_ARGUMENT_VALUE)  // FIXME(chengyuanzhang): use correct code
-                .setMessage(errorDetail)
-                .build();
-        builder.setErrorDetail(error);
-      }
-      io.envoyproxy.envoy.api.v2.DiscoveryRequest request = builder.build();
-      requestWriter.onNext(request);
-      if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-        logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", MessagePrinter.print(request));
-      }
-    }
-
-    @Override
-    void sendError(Exception error) {
-      requestWriter.onError(error);
     }
   }
 

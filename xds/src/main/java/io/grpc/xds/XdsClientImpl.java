@@ -157,8 +157,8 @@ final class XdsClientImpl extends XdsClient
         stopwatchSupplier,
         this);
     LoadReportClient lrsClient = new LoadReportClient(
-        loadStatsManager, xdsChannel.channel(), context, serverInfo.useProtocolV3(),
-        bootstrapInfo.node(), syncContext, timeService, backoffPolicyProvider, stopwatchSupplier);
+        loadStatsManager, xdsChannel.channel(), context, bootstrapInfo.node(), syncContext,
+        timeService, backoffPolicyProvider, stopwatchSupplier);
     serverChannelMap.put(serverInfo, xdsChannel);
     serverLrsClientMap.put(serverInfo, lrsClient);
   }
@@ -302,7 +302,6 @@ final class XdsClientImpl extends XdsClient
         if (!resourceSubscribers.containsKey(type)) {
           resourceSubscribers.put(type, new HashMap<>());
           subscribedResourceTypeUrls.put(type.typeUrl(), type);
-          subscribedResourceTypeUrls.put(type.typeUrlV2(), type);
         }
         ResourceSubscriber<T> subscriber =
             (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);;
@@ -334,7 +333,6 @@ final class XdsClientImpl extends XdsClient
           subscriber.cancelResourceWatch();
           resourceSubscribers.get(type).remove(resourceName);
           subscribedResourceTypeUrls.remove(type.typeUrl());
-          subscribedResourceTypeUrls.remove(type.typeUrlV2());
           if (subscriber.xdsChannel != null) {
             subscriber.xdsChannel.adjustResourceSubscription(type);
           }

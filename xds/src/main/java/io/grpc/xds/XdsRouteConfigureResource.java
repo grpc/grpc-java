@@ -65,8 +65,6 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
-  static final String ADS_TYPE_URL_RDS_V2 =
-      "type.googleapis.com/envoy.api.v2.RouteConfiguration";
   static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
   private static final String TYPE_URL_FILTER_CONFIG =
@@ -103,11 +101,6 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  String typeUrlV2() {
-    return ADS_TYPE_URL_RDS_V2;
-  }
-
-  @Override
   boolean isFullStateOfTheWorld() {
     return false;
   }
@@ -118,13 +111,13 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage, boolean isResourceV3)
+  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
     return processRouteConfiguration((RouteConfiguration) unpackedMessage,
-        args.filterRegistry, enableFaultInjection && isResourceV3);
+        args.filterRegistry, enableFaultInjection);
   }
 
   private static RdsUpdate processRouteConfiguration(

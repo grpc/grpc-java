@@ -50,7 +50,6 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 class XdsClusterResource extends XdsResourceType<CdsUpdate> {
-  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
   static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
@@ -84,11 +83,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  String typeUrlV2() {
-    return ADS_TYPE_URL_CDS_V2;
-  }
-
-  @Override
   boolean isFullStateOfTheWorld() {
     return true;
   }
@@ -100,7 +94,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  CdsUpdate doParse(Args args, Message unpackedMessage, boolean isResourceV3)
+  CdsUpdate doParse(Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof Cluster)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
@@ -167,7 +161,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     try {
       clusterConfig = unpackCompatibleType(customType.getTypedConfig(),
           io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class,
-          TYPE_URL_CLUSTER_CONFIG, TYPE_URL_CLUSTER_CONFIG_V2);
+          TYPE_URL_CLUSTER_CONFIG, null);
     } catch (InvalidProtocolBufferException e) {
       return StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
     }
