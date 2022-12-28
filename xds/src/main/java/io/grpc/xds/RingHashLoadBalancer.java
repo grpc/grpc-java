@@ -26,6 +26,8 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Multiset;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
@@ -217,22 +219,22 @@ final class RingHashLoadBalancer extends LoadBalancer {
     return true;
   }
 
+  @Nullable
   private String validateNoDuplicateAddresses(List<EquivalentAddressGroup> addrList) {
     Set<SocketAddress> addresses = new HashSet<>();
-    Map<String, Integer> dups = new HashMap<>();
+    Multiset<String> dups = HashMultiset.create();
     for (EquivalentAddressGroup eag : addrList) {
       for (SocketAddress address : eag.getAddresses()) {
         if (!addresses.add(address)) {
-          String addrStr = address.toString();
-          Integer oldCount = dups.computeIfAbsent(addrStr, (s) -> 0);
-          dups.put(addrStr, oldCount + 1);
+          dups.add(address.toString());
         }
       }
     }
 
     if (!dups.isEmpty()) {
       return dups.entrySet().stream()
-          .map((entry) -> String.format("Address: %s, count: %d", entry.getKey(), entry.getValue()))
+          .map((entry) ->
+              String.format("Address: %s, count: %d", entry.getElement(), entry.getCount() + 1))
           .collect(Collectors.joining("; "));
     }
 

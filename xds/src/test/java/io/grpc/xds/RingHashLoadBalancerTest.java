@@ -552,9 +552,7 @@ public class RingHashLoadBalancerTest {
     //   "[FakeSocketAddress-server2]_0"
 
     long rpcHash = hashFunc.hashAsciiString("[FakeSocketAddress-server0]_0");
-    PickSubchannelArgs args = new PickSubchannelArgsImpl(
-        TestMethodDescriptors.voidMethod(), new Metadata(),
-        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(rpcHash);
 
     // Bring down server0 to force trying server2.
     deliverSubchannelState(
@@ -590,6 +588,12 @@ public class RingHashLoadBalancerTest {
     result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(2));
+  }
+
+  private PickSubchannelArgsImpl getDefaultPickSubchannelArgs(long rpcHash) {
+    return new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
   }
 
   @Test
@@ -1084,6 +1088,19 @@ public class RingHashLoadBalancerTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     assertThat(addressesAccepted).isFalse();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
+    assertThat(result.getStatus().getCode())
+        .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
+    assertThat(result.getStatus().getDescription()).isEqualTo(
+        "Ring hash lb error: EDS resolution was successful, but there were duplicate "
+            + "addresses: Address: FakeSocketAddress-server1, count: 2; "
+            + "Address: FakeSocketAddress-server2, count: 3");
   }
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
