@@ -38,6 +38,8 @@ else
     ./configure --disable-shared --host=aarch64-linux-gnu --prefix="$INSTALL_DIR"
   elif [[ "$ARCH" == ppc* ]]; then
     ./configure --disable-shared --host=powerpc64le-linux-gnu --prefix="$INSTALL_DIR"
+  elif [[ "$ARCH" == loongarch* ]]; then
+    ./configure --disable-shared --host=loongarch64-unknown-linux-gnu --prefix="$INSTALL_DIR"
   fi
   # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
   make clean
