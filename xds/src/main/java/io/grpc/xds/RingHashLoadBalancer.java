@@ -233,8 +233,8 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
     if (!dups.isEmpty()) {
       return dups.entrySet().stream()
-          .map((entry) ->
-              String.format("Address: %s, count: %d", entry.getElement(), entry.getCount() + 1))
+          .map((dup) ->
+              String.format("Address: %s, count: %d", dup.getElement(), dup.getCount() + 1))
           .collect(Collectors.joining("; "));
     }
 

@@ -1082,8 +1082,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void duplicateAddresses() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers =
-        createRepeatedServerAddrs(1, 2, 3);
+    List<EquivalentAddressGroup> servers = createRepeatedServerAddrs(1, 2, 3);
     boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
