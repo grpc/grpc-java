@@ -16,11 +16,6 @@ git clone -b master --single-branch --depth=1 https://github.com/grpc/grpc.git
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
 
-# Test cases "path_matching" and "header_matching" are not included in "all",
-# because not all interop clients in all languages support these new tests.
-#
-# TODO(ericgribkoff): remove "path_matching" and "header_matching" from
-# --test_case after they are added into "all".
 JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
   python3 grpc/tools/run_tests/run_xds_tests.py \
     --test_case="ping_pong,circuit_breaking" \
