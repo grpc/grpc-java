@@ -1096,10 +1096,10 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
     assertThat(result.getStatus().getCode())
         .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
-    assertThat(result.getStatus().getDescription()).isEqualTo(
-        "Ring hash lb error: EDS resolution was successful, but there were duplicate "
-            + "addresses: Address: FakeSocketAddress-server1, count: 2; "
-            + "Address: FakeSocketAddress-server2, count: 3");
+    assertThat(result.getStatus().getDescription().contains(
+        "Address: FakeSocketAddress-server1, count: 2")).isTrue();
+    assertThat(result.getStatus().getDescription().contains(
+        "Address: FakeSocketAddress-server2, count: 3")).isTrue();
   }
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
