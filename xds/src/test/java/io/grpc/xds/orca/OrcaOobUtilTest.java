@@ -239,7 +239,8 @@ public class OrcaOobUtilTest {
 
     // Calling createSubchannel() on orcaHelper correctly passes augmented CreateSubchannelArgs
     // to origHelper.
-    ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor =
+        ArgumentCaptor.forClass(CreateSubchannelArgs.class);
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs =
@@ -322,7 +323,8 @@ public class OrcaOobUtilTest {
 
     // Calling createSubchannel() on child helper correctly passes augmented CreateSubchannelArgs
     // to origHelper.
-    ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor =
+        ArgumentCaptor.forClass(CreateSubchannelArgs.class);
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs =
@@ -667,8 +669,7 @@ public class OrcaOobUtilTest {
     orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
     assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
     // Only parent helper's listener receives the report.
-    ArgumentCaptor<MetricReport> parentReportCaptor =
-        ArgumentCaptor.forClass(null);
+    ArgumentCaptor<MetricReport> parentReportCaptor = ArgumentCaptor.forClass(MetricReport.class);
     verify(mockOrcaListener1).onLoadReport(parentReportCaptor.capture());
     assertThat(OrcaPerRequestUtilTest.reportEqual(parentReportCaptor.getValue(),
         OrcaPerRequestUtil.fromOrcaLoadReport(report))).isTrue();
@@ -679,8 +680,7 @@ public class OrcaOobUtilTest {
     orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
     assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
     // Both helper receives the same report instance.
-    ArgumentCaptor<MetricReport> childReportCaptor =
-        ArgumentCaptor.forClass(null);
+    ArgumentCaptor<MetricReport> childReportCaptor = ArgumentCaptor.forClass(MetricReport.class);
     verify(mockOrcaListener1, times(2))
         .onLoadReport(parentReportCaptor.capture());
     verify(mockOrcaListener2)

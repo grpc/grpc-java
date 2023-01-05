@@ -315,7 +315,7 @@ public class ManagedChannelImplTest {
 
       assertEquals(numExpectedTasks, timer.numPendingTasks());
 
-      ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+      ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
       verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
       helper = helperCaptor.getValue();
     }
@@ -402,7 +402,8 @@ public class ManagedChannelImplTest {
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     requestConnectionSafely(helper, subchannel);
-    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor =
+        ArgumentCaptor.forClass(ClientTransportOptions.class);
     verify(mockTransportFactory)
         .newClientTransport(
             any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
@@ -427,7 +428,8 @@ public class ManagedChannelImplTest {
     final Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     requestConnectionSafely(helper, subchannel);
-    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor =
+        ArgumentCaptor.forClass(ClientTransportOptions.class);
     verify(mockTransportFactory)
         .newClientTransport(
             any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
@@ -494,7 +496,7 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, headers);
 
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
     // Make the transport available
@@ -520,7 +522,7 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
 
-    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     verify(mockTransport).newStream(
         same(method), same(headers), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
@@ -576,7 +578,7 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, headers);
 
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
     // Make the transport available
@@ -599,7 +601,7 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
 
-    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     verify(mockTransport).newStream(
         same(method), same(headers), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
@@ -2270,9 +2272,10 @@ public class ManagedChannelImplTest {
         .thenReturn(PickResult.withSubchannel(subchannel));
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
-    ArgumentCaptor<Executor> executorArgumentCaptor = ArgumentCaptor.forClass(null);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
+    ArgumentCaptor<Executor> executorArgumentCaptor = ArgumentCaptor.forClass(Executor.class);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(creds).applyRequestMetadata(infoCaptor.capture(),
         executorArgumentCaptor.capture(), applierCaptor.capture());
     assertSame(offloadExecutor,
@@ -2435,7 +2438,7 @@ public class ManagedChannelImplTest {
 
     // call getState() with requestConnection = true
     assertEquals(IDLE, channel.getState(true));
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
 
@@ -2732,7 +2735,7 @@ public class ManagedChannelImplTest {
 
   private void verifyCallListenerClosed(
       ClientCall.Listener<Integer> listener, Status.Code code, Throwable cause) {
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener).onClose(captor.capture(), any(Metadata.class));
     Status rpcStatus = captor.getValue();
     assertEquals(code, rpcStatus.getCode());
@@ -3343,7 +3346,7 @@ public class ManagedChannelImplTest {
   public void channelsAndSubchannels_instrumented_state() throws Exception {
     createChannel();
 
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
 
