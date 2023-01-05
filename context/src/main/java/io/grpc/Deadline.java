@@ -45,7 +45,7 @@ public final class Deadline implements Comparable<Deadline> {
    *
    * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
    * stabilized or have any feedback, please
-   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   * <a href="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
    *
    * @since 1.24.0
    */
@@ -81,7 +81,7 @@ public final class Deadline implements Comparable<Deadline> {
    *
    * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
    * stabilized or have any feedback, please
-   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   * <a href="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
    *
    * @param duration A non-negative duration.
    * @param units The time unit for the duration.
@@ -113,7 +113,8 @@ public final class Deadline implements Comparable<Deadline> {
   }
 
   /**
-   * Has this deadline expired
+   * Returns whether this has deadline expired.
+   *
    * @return {@code true} if it has, otherwise {@code false}.
    */
   public boolean isExpired() {
@@ -266,7 +267,7 @@ public final class Deadline implements Comparable<Deadline> {
    *
    * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
    * stabilized or have any feedback, please
-   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   * <a href="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
    *
    * <p>In general implementations should be thread-safe, unless it's implemented and used in a
    * localized environment (like unit tests) where you are sure the usages are synchronized.

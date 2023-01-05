@@ -40,8 +40,9 @@ public final class InternalCensusTracingAccessor {
   }
 
   /**
-   * @param addMessageEvents add message events to Spans
+   * Returns the client interceptor that facilitates Census-based stats reporting.
    *
+   * @param addMessageEvents add message events to Spans
    * @return a {@link ClientInterceptor} with default tracing implementation.
    */
   public static ClientInterceptor getClientInterceptor(

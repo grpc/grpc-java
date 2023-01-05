@@ -373,6 +373,8 @@ public class MessageFramerTest {
   }
 
   /**
+   * Verify stats were published through the tracer.
+   *
    * @param sizes in the format {wire0, uncompressed0, wire1, uncompressed1, ...}
    */
   private void checkStats(long... sizes) {

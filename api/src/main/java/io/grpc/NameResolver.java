@@ -205,6 +205,8 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract static class Listener2 implements Listener {
     /**
+     * Handles updates on resolved addresses and attributes.
+     *
      * @deprecated This will be removed in 1.22.0
      */
     @Override

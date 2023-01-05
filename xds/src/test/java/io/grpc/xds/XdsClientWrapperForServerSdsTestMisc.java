@@ -71,7 +71,6 @@ import java.net.SocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;

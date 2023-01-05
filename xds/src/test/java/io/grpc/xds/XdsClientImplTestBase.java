@@ -693,7 +693,7 @@ public abstract class XdsClientImplTestBase {
    * Tests a subscribed LDS resource transitioned to and from the invalid state.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>.
+   * A40-csds-support.md</a>
    */
   @Test
   public void ldsResponseErrorHandling_subscribedResourceInvalid() {
@@ -1430,7 +1430,7 @@ public abstract class XdsClientImplTestBase {
    * Tests a subscribed RDS resource transitioned to and from the invalid state.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>.
+   * A40-csds-support.md</a>
    */
   @Test
   public void rdsResponseErrorHandling_subscribedResourceInvalid() {
@@ -1803,7 +1803,7 @@ public abstract class XdsClientImplTestBase {
    * Tests a subscribed CDS resource transitioned to and from the invalid state.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>.
+   * A40-csds-support.md</a>
    */
   @Test
   public void cdsResponseErrorHandling_subscribedResourceInvalid() {
@@ -2813,7 +2813,7 @@ public abstract class XdsClientImplTestBase {
    * Tests a subscribed EDS resource transitioned to and from the invalid state.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>.
+   * A40-csds-support.md</a>
    */
   @Test
   public void edsResponseErrorHandling_subscribedResourceInvalid() {

@@ -2126,7 +2126,7 @@ public abstract class AbstractInteropTest {
     }
   }
 
-  /** Helper for getting remote address from {@link io.grpc.ServerCall#getAttributes()} */
+  /** Helper for getting remote address from {@link io.grpc.ServerCall#getAttributes()}. */
   protected SocketAddress obtainRemoteClientAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub =
         blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
@@ -2136,7 +2136,7 @@ public abstract class AbstractInteropTest {
     return serverCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
   }
 
-  /** Helper for getting remote address from {@link io.grpc.ClientCall#getAttributes()} */
+  /** Helper for getting remote address from {@link io.grpc.ClientCall#getAttributes()}. */
   protected SocketAddress obtainRemoteServerAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
         .withInterceptors(recordClientCallInterceptor(clientCallCapture))
@@ -2147,7 +2147,7 @@ public abstract class AbstractInteropTest {
     return clientCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
   }
 
-  /** Helper for getting local address from {@link io.grpc.ServerCall#getAttributes()} */
+  /** Helper for getting local address from {@link io.grpc.ServerCall#getAttributes()}. */
   protected SocketAddress obtainLocalServerAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub =
         blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
@@ -2157,7 +2157,7 @@ public abstract class AbstractInteropTest {
     return serverCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR);
   }
 
-  /** Helper for getting local address from {@link io.grpc.ClientCall#getAttributes()} */
+  /** Helper for getting local address from {@link io.grpc.ClientCall#getAttributes()}. */
   protected SocketAddress obtainLocalClientAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
         .withInterceptors(recordClientCallInterceptor(clientCallCapture))
@@ -2168,7 +2168,7 @@ public abstract class AbstractInteropTest {
     return clientCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR);
   }
 
-  /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#getAttributes()} */
+  /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#getAttributes()}. */
   protected void assertX500SubjectDn(String tlsInfo) {
     TestServiceGrpc.TestServiceBlockingStub stub =
         blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
