@@ -979,7 +979,9 @@ public final class Metadata {
 
     @Override
     byte[] toBytes(T value) {
-      return marshaller.toAsciiString(value).getBytes(US_ASCII);
+      String encoded = Preconditions.checkNotNull(
+          marshaller.toAsciiString(value), "null marshaller.toAsciiString()");
+      return encoded.getBytes(US_ASCII);
     }
 
     @Override
@@ -1004,7 +1006,8 @@ public final class Metadata {
 
     @Override
     byte[] toBytes(T value) {
-      return marshaller.toAsciiString(value);
+      return Preconditions.checkNotNull(
+          marshaller.toAsciiString(value), "null marshaller.toAsciiString()");
     }
 
     @Override
