@@ -65,7 +65,7 @@ public final class MutableHandlerRegistry extends HandlerRegistry {
   }
 
   /**
-   * Removes a registered service
+   * Removes a registered service.
    *
    * @return true if the service was found to be removed.
    */

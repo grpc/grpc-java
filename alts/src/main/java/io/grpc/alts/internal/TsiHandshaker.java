@@ -68,7 +68,7 @@ public interface TsiHandshaker {
   boolean processBytesFromPeer(ByteBuffer bytes) throws GeneralSecurityException;
 
   /**
-   * Returns true if and only if the handshake is still in progress
+   * Returns true if and only if the handshake is still in progress.
    *
    * @return true, if the handshake is still in progress, false otherwise.
    */

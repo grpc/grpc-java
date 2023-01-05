@@ -650,7 +650,7 @@ public final class GrpcUtil {
   /**
    * Marshals a nanoseconds representation of the timeout to and from a string representation,
    * consisting of an ASCII decimal representation of a number with at most 8 digits, followed by a
-   * unit:
+   * unit. Available units:
    * n = nanoseconds
    * u = microseconds
    * m = milliseconds

@@ -599,6 +599,8 @@ public final class Status {
     }
 
     /**
+     * Percent encode bytes to make them ASCII.
+     *
      * @param valueBytes the UTF-8 bytes
      * @param ri The reader index, pointed at the first byte that needs escaping.
      */

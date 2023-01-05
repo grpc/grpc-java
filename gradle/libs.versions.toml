@@ -2,7 +2,7 @@
 # Breaks on upgrade: https://github.com/mojohaus/animal-sniffer/issues/131
 animalsniffer = "1.18"
 autovalue = "1.9"
-checkstyle = "6.17"
+checkstyle = "8.28"
 googleauth = "1.4.0"
 guava = "31.1-android"
 netty = '4.1.79.Final'
