@@ -25,7 +25,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
-import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceStub;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.Channel;
@@ -212,9 +211,8 @@ final class LoadReportClient {
               });
             }
           };
-      LoadReportingServiceStub stubV3 =
-          LoadReportingServiceGrpc.newStub(channel);
-      lrsRequestWriterV3 = stubV3.withWaitForReady().streamLoadStats(lrsResponseReaderV3);
+      lrsRequestWriterV3 = LoadReportingServiceGrpc.newStub(channel).withWaitForReady()
+          .streamLoadStats(lrsResponseReaderV3);
       logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
       sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
     }
