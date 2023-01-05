@@ -71,7 +71,6 @@ import org.mockito.MockitoAnnotations;
 /**
  * Unit tests for {@link LoadReportClient}.
  */
-// TODO(chengyuanzhang): missing LRS V3 test.
 @RunWith(JUnit4.class)
 public class LoadReportClientTest {
   // bootstrap node identifier

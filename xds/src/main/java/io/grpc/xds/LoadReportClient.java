@@ -158,7 +158,7 @@ final class LoadReportClient {
       return;
     }
     checkState(lrsStream == null, "previous lbStream has not been cleared yet");
-    lrsStream = new LrsStreamV3();
+    lrsStream = new LrsStream();
     retryStopwatch.reset().start();
     Context prevContext = context.attach();
     try {
@@ -168,24 +168,74 @@ final class LoadReportClient {
     }
   }
 
-  // TODO(zivy@): The abstract class was used to support xds v2 and v3. Remove abstract here since
-  // v2 is dropped and v3 is the only supported version now.
-  private abstract class LrsStream {
+  private final class LrsStream {
     boolean initialResponseReceived;
     boolean closed;
     long intervalNano = -1;
     boolean reportAllClusters;
     List<String> clusterNames;  // clusters to report loads for, if not report all.
     ScheduledHandle loadReportTimer;
+    StreamObserver<LoadStatsRequest> lrsRequestWriterV3;
 
-    abstract void start();
+    void start() {
+      StreamObserver<LoadStatsResponse> lrsResponseReaderV3 =
+          new StreamObserver<LoadStatsResponse>() {
+            @Override
+            public void onNext(final LoadStatsResponse response) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
+                  handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
+                      Durations.toNanos(response.getLoadReportingInterval()));
+                }
+              });
+            }
 
-    abstract void sendLoadStatsRequest(List<ClusterStats> clusterStatsList);
+            @Override
+            public void onError(final Throwable t) {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcError(t);
+                }
+              });
+            }
 
-    abstract void sendError(Exception error);
+            @Override
+            public void onCompleted() {
+              syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleRpcCompleted();
+                }
+              });
+            }
+          };
+      LoadReportingServiceStub stubV3 =
+          LoadReportingServiceGrpc.newStub(channel);
+      lrsRequestWriterV3 = stubV3.withWaitForReady().streamLoadStats(lrsResponseReaderV3);
+      logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
+      sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
+    }
 
-    final void handleRpcResponse(List<String> clusters, boolean sendAllClusters,
-        long loadReportIntervalNano) {
+    void sendLoadStatsRequest(List<ClusterStats> clusterStatsList) {
+      LoadStatsRequest.Builder requestBuilder =
+          LoadStatsRequest.newBuilder().setNode(node.toEnvoyProtoNode());
+      for (ClusterStats stats : clusterStatsList) {
+        requestBuilder.addClusterStats(buildClusterStats(stats));
+      }
+      LoadStatsRequest request = requestBuilder.build();
+      lrsRequestWriterV3.onNext(request);
+      logger.log(XdsLogLevel.DEBUG, "Sent LoadStatsRequest\n{0}", request);
+    }
+
+    void sendError(Exception error) {
+      lrsRequestWriterV3.onError(error);
+    }
+
+    void handleRpcResponse(List<String> clusters, boolean sendAllClusters,
+                           long loadReportIntervalNano) {
       if (closed) {
         return;
       }
@@ -205,11 +255,11 @@ final class LoadReportClient {
       scheduleNextLoadReport();
     }
 
-    final void handleRpcError(Throwable t) {
+    void handleRpcError(Throwable t) {
       handleStreamClosed(Status.fromThrowable(t));
     }
 
-    final void handleRpcCompleted() {
+    void handleRpcCompleted() {
       handleStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
     }
 
@@ -290,70 +340,6 @@ final class LoadReportClient {
       if (lrsStream == this) {
         lrsStream = null;
       }
-    }
-  }
-
-  private final class LrsStreamV3 extends LrsStream {
-    StreamObserver<LoadStatsRequest> lrsRequestWriterV3;
-
-    @Override
-    void start() {
-      StreamObserver<LoadStatsResponse> lrsResponseReaderV3 =
-          new StreamObserver<LoadStatsResponse>() {
-            @Override
-            public void onNext(final LoadStatsResponse response) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
-                  handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
-                      Durations.toNanos(response.getLoadReportingInterval()));
-                }
-              });
-            }
-
-            @Override
-            public void onError(final Throwable t) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcError(t);
-                }
-              });
-            }
-
-            @Override
-            public void onCompleted() {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcCompleted();
-                }
-              });
-            }
-          };
-      LoadReportingServiceStub stubV3 =
-          LoadReportingServiceGrpc.newStub(channel);
-      lrsRequestWriterV3 = stubV3.withWaitForReady().streamLoadStats(lrsResponseReaderV3);
-      logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
-      sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
-    }
-
-    @Override
-    void sendLoadStatsRequest(List<ClusterStats> clusterStatsList) {
-      LoadStatsRequest.Builder requestBuilder =
-          LoadStatsRequest.newBuilder().setNode(node.toEnvoyProtoNode());
-      for (ClusterStats stats : clusterStatsList) {
-        requestBuilder.addClusterStats(buildClusterStats(stats));
-      }
-      LoadStatsRequest request = requestBuilder.build();
-      lrsRequestWriterV3.onNext(request);
-      logger.log(XdsLogLevel.DEBUG, "Sent LoadStatsRequest\n{0}", request);
-    }
-
-    @Override
-    void sendError(Exception error) {
-      lrsRequestWriterV3.onError(error);
     }
 
     private io.envoyproxy.envoy.config.endpoint.v3.ClusterStats buildClusterStats(
