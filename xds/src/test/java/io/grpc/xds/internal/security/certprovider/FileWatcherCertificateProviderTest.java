@@ -352,7 +352,7 @@ public class FileWatcherCertificateProviderTest {
     if (code == null && throwableType == null && causeMessages == null) {
       verify(mockWatcher, never()).onError(any(Status.class));
     } else {
-      ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+      ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
       verify(mockWatcher, times(1)).onError(statusCaptor.capture());
       Status status = statusCaptor.getValue();
       assertThat(status.getCode()).isEqualTo(code);
@@ -375,7 +375,8 @@ public class FileWatcherCertificateProviderTest {
   private void verifyWatcherUpdates(String certPemFile, String rootPemFile)
       throws IOException, CertificateException {
     if (certPemFile != null) {
-      ArgumentCaptor<List<X509Certificate>> certChainCaptor = ArgumentCaptor.forClass(null);
+      @SuppressWarnings("unchecked")
+      ArgumentCaptor<List<X509Certificate>> certChainCaptor = ArgumentCaptor.forClass(List.class);
       verify(mockWatcher, times(1))
           .updateCertificate(any(PrivateKey.class), certChainCaptor.capture());
       List<X509Certificate> certChain = certChainCaptor.getValue();
@@ -387,7 +388,8 @@ public class FileWatcherCertificateProviderTest {
           .updateCertificate(any(PrivateKey.class), ArgumentMatchers.<X509Certificate>anyList());
     }
     if (rootPemFile != null) {
-      ArgumentCaptor<List<X509Certificate>> rootsCaptor = ArgumentCaptor.forClass(null);
+      @SuppressWarnings("unchecked")
+      ArgumentCaptor<List<X509Certificate>> rootsCaptor = ArgumentCaptor.forClass(List.class);
       verify(mockWatcher, times(1)).updateTrustedRoots(rootsCaptor.capture());
       List<X509Certificate> roots = rootsCaptor.getValue();
       assertThat(roots).hasSize(1);

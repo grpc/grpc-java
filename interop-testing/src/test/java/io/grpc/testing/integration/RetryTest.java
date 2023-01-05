@@ -300,7 +300,7 @@ public class RetryTest {
         Status.UNAVAILABLE.withDescription("2nd attempt failed"),
         new Metadata());
     // no more retry
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(mockCallListener, timeout(5000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertThat(statusCaptor.getValue().getDescription()).contains("2nd attempt failed");
   }

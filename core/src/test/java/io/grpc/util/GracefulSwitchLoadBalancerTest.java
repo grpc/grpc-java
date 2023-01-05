@@ -479,7 +479,7 @@ public class GracefulSwitchLoadBalancerTest {
   @Test
   public void transientFailureOnInitialResolutionError() {
     gracefulSwitchLb.handleNameResolutionError(Status.DATA_LOSS);
-    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
     verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     assertThat(picker.pickSubchannel(mock(PickSubchannelArgs.class)).getStatus().getCode())
