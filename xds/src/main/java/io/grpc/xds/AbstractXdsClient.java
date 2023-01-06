@@ -217,6 +217,11 @@ final class AbstractXdsClient {
       return;
     }
 
+    if (isInBackoff()) {
+      rpcRetryTimer.cancel();
+      rpcRetryTimer = null;
+    }
+
     timerLaunch.startSubscriberTimersIfNeeded(serverInfo);
   }
 
@@ -320,17 +325,25 @@ final class AbstractXdsClient {
     }
 
     private void handleRpcStreamClosed(Status error) {
-      checkArgument(!error.isOk(), "unexpected OK status");
-      if (closed) {
+      if (shutdown) {
+        closed = true;
+        if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
+          rpcRetryTimer.cancel();
+        }
         return;
       }
+
+      checkArgument(!error.isOk(), "unexpected OK status");
+      String errorMsg =
+          closed
+              ? "ADS stream failed with status {0}: {1}. Cause: {2}"
+              : "ADS stream closed with status {0}: {1}. Cause: {2}";
       logger.log(
-          XdsLogLevel.ERROR,
-          "ADS stream closed with status {0}: {1}. Cause: {2}",
-          error.getCode(), error.getDescription(), error.getCause());
+          XdsLogLevel.ERROR, errorMsg, error.getCode(), error.getDescription(), error.getCause());
       closed = true;
       xdsResponseHandler.handleStreamClosed(error);
       cleanUp();
+
       if (responseReceived || retryBackoffPolicy == null) {
         // Reset the backoff sequence if had received a response, or backoff sequence
         // has never been initialized.

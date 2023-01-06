@@ -107,6 +107,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
@@ -3563,6 +3564,35 @@ public abstract class XdsClientImplTestBase {
     }
   }
 
+  @Test
+  public void sendingToPermanentlyStoppedServer() throws Exception {
+    // Setup xdsClient to fail on stream creation
+    XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
+      @Override
+      ManagedChannel create(ServerInfo serverInfo) {
+        throw new IllegalArgumentException("Can not create channel for " + serverInfo);
+      }
+    };
+    xdsClient =
+        new XdsClientImpl(
+            xdsChannelFactory,
+            xdsClient.getBootstrapInfo(),
+            Context.ROOT,
+            fakeClock.getScheduledExecutorService(),
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier(),
+            timeProvider,
+            tlsContextManager);
+
+    try {
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
+          ldsResourceWatcher);
+      Assert.fail("Expected failure creating stream didn't happen");
+    } catch (AssertionError e) {
+      assertThat(e).hasMessageThat().contains(
+          "Can not create channel for ServerInfo{target=trafficdirector.googleapis.com");
+    }
+  }
 
   private <T extends ResourceUpdate> DiscoveryRpcCall startResourceWatcher(
       XdsResourceType<T> type, String name, ResourceWatcher<T> watcher) {
