@@ -43,6 +43,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Codec;
@@ -1031,11 +1032,15 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
             ArgumentCaptor.forClass(ClientStreamListener.class);
     verify(mockStream2).start(sublistenerCaptor2.capture());
-    sublistenerCaptor2.getValue().headersRead(new Metadata());
+    Metadata headers = new Metadata();
+    headers.put(GRPC_PREVIOUS_RPC_ATTEMPTS, "3");
+    sublistenerCaptor2.getValue().headersRead(headers);
 
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
     verify(masterListener).headersRead(metadataCaptor.capture());
-    assertEquals("1", metadataCaptor.getValue().get(GRPC_PREVIOUS_RPC_ATTEMPTS));
+    Iterable<String> iterable = metadataCaptor.getValue().getAll(GRPC_PREVIOUS_RPC_ATTEMPTS);
+    assertEquals(1, Iterables.size(iterable));
+    assertEquals("1", iterable.iterator().next());
   }
 
   @Test
