@@ -172,6 +172,17 @@ public final class XdsFederationTestClient {
 
   private void run() throws Exception {
     logger.info("Begin test case: " + testCase);
+    // create threads according to server URIs
+    // class InnerClient extends AbstractInteropTest {
+    //   constructed with: server_uri, credentials_type param
+    //   create channel builder uses those
+    //   we create a thread and pass that to the thread and run
+    //   the soak test o that thread.
+    //   then join  threads
+    // }
+    // start threads
+    // join threads
+    // log that all threads done
     if (testCase.equals("fallback_before_startup")) {
       runFallbackBeforeStartup();
     } else if (testCase.equals("fallback_after_startup")) {
