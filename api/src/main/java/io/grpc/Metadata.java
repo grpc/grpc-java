@@ -873,7 +873,7 @@ public final class Metadata {
 
     @Override
     byte[] toBytes(T value) {
-      return marshaller.toBytes(value);
+      return Preconditions.checkNotNull(marshaller.toBytes(value), "null marshaller.toBytes()");
     }
 
     @Override
@@ -901,7 +901,7 @@ public final class Metadata {
 
     @Override
     byte[] toBytes(T value) {
-      return streamToBytes(marshaller.toStream(value));
+      return streamToBytes(checkNotNull(marshaller.toStream(value), "null marshaller.toStream()"));
     }
 
     @Override
@@ -932,7 +932,7 @@ public final class Metadata {
     }
 
     InputStream toStream() {
-      return marshaller.toStream(value);
+      return checkNotNull(marshaller.toStream(value), "null marshaller.toStream()");
     }
 
     byte[] toBytes() {
@@ -979,7 +979,9 @@ public final class Metadata {
 
     @Override
     byte[] toBytes(T value) {
-      return marshaller.toAsciiString(value).getBytes(US_ASCII);
+      String encoded = Preconditions.checkNotNull(
+          marshaller.toAsciiString(value), "null marshaller.toAsciiString()");
+      return encoded.getBytes(US_ASCII);
     }
 
     @Override
@@ -1004,7 +1006,8 @@ public final class Metadata {
 
     @Override
     byte[] toBytes(T value) {
-      return marshaller.toAsciiString(value);
+      return Preconditions.checkNotNull(
+          marshaller.toAsciiString(value), "null marshaller.toAsciiString()");
     }
 
     @Override
