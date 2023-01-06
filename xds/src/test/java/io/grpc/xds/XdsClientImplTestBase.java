@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.xds.XdsClientImpl.XdsChannelFactory.DEFAULT_XDS_CHANNEL_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
@@ -70,6 +71,7 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
@@ -95,6 +97,7 @@ import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
+import java.net.UnknownHostException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
@@ -3594,33 +3597,68 @@ public abstract class XdsClientImplTestBase {
   }
 
   @Test
-  public void sendingToPermanentlyStoppedServer() throws Exception {
+  public void sendToBadUrl() throws Exception {
     // Setup xdsClient to fail on stream creation
-    XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
-      @Override
-      ManagedChannel create(ServerInfo serverInfo) {
-        throw new IllegalArgumentException("Can not create channel for " + serverInfo);
-      }
-    };
-    xdsClient =
-        new XdsClientImpl(
-            xdsChannelFactory,
-            xdsClient.getBootstrapInfo(),
-            Context.ROOT,
-            fakeClock.getScheduledExecutorService(),
-            backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier(),
-            timeProvider,
-            tlsContextManager);
+    XdsClientImpl client = createXdsClient("some. garbage");
 
     try {
-      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
-          ldsResourceWatcher);
-      Assert.fail("Expected failure creating stream didn't happen");
+      client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+      fakeClock.forwardTime(20, TimeUnit.SECONDS);
     } catch (AssertionError e) {
-      assertThat(e).hasMessageThat().contains(
-          "Can not create channel for ServerInfo{target=trafficdirector.googleapis.com");
+      assertThat(e.getCause()).isInstanceOf(IllegalArgumentException.class);
+      return;
     }
+    Assert.fail("Expected exception for bad url not thrown");
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isNotEmpty();
+  }
+
+  @Test
+  public void sendToNonexistentHost() throws Exception {
+    // Setup xdsClient to fail on stream creation
+    XdsClientImpl client = createXdsClient("some.garbage");
+    client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    fakeClock.forwardTime(20, TimeUnit.SECONDS);
+
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isNotEmpty();
+  }
+
+  private XdsClientImpl createXdsClient(String serverUri) {
+    BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
+    return new XdsClientImpl(
+        DEFAULT_XDS_CHANNEL_FACTORY,
+        bootstrapInfo,
+        Context.ROOT,
+        fakeClock.getScheduledExecutorService(),
+        backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier(),
+        timeProvider,
+        tlsContextManager);
+  }
+
+  private  BootstrapInfo buildBootStrap(String serverUri) {
+
+    ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
+        ignoreResourceDeletion());
+
+    return Bootstrapper.BootstrapInfo.builder()
+        .servers(Collections.singletonList(xdsServerInfo))
+        .node(NODE)
+        .authorities(ImmutableMap.of(
+            "authority.xds.com",
+            AuthorityInfo.create(
+                "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
+                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS))),
+            "",
+            AuthorityInfo.create(
+                "xdstp:///envoy.config.listener.v3.Listener/%s",
+                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
+        .certProviders(ImmutableMap.of("cert-instance-name",
+            CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
+        .build();
   }
 
   private <T extends ResourceUpdate> DiscoveryRpcCall startResourceWatcher(
