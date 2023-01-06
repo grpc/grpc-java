@@ -119,7 +119,7 @@ public final class XdsFederationTestClient {
       }
     }
     if (usage) {
-      GrpclbFallbackTestClient c = new GrpclbFallbackTestClient();
+      XdsFederationTestClinet c = new XdsFederationTestClient();
       System.out.println(
           "Usage: [ARGS...]"
           + "\n"
@@ -170,150 +170,7 @@ public final class XdsFederationTestClient {
     }
   }
 
-  private ManagedChannel createChannel() {
-    if (!customCredentialsType.equals("compute_engine_channel_creds")) {
-      throw new AssertionError(
-          "This test currently only supports "
-          + "--custom_credentials_type=compute_engine_channel_creds. "
-          + "TODO: add support for other types.");
-    }
-    ComputeEngineChannelBuilder builder = ComputeEngineChannelBuilder.forTarget(serverUri);
-    builder.keepAliveTime(3600, TimeUnit.SECONDS);
-    builder.keepAliveTimeout(20, TimeUnit.SECONDS);
-    return builder.build();
-  }
-
-  void initStub() {
-    channel = createChannel();
-    blockingStub = TestServiceGrpc.newBlockingStub(channel);
-  }
-
-  private void tearDown() {
-    try {
-      if (channel != null) {
-        channel.shutdownNow();
-        channel.awaitTermination(1, TimeUnit.SECONDS);
-      }
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
-    }
-  }
-
-  private void runShellCmd(String cmd) throws Exception {
-    if (skipNetCmd) {
-      logger.info("Skip net cmd because --skip_net_cmd is set to true");
-      return;
-    }
-    logger.info("Run shell command: " + cmd);
-    // Do not use bash -c here as bash may not exist in a container
-    ProcessBuilder pb = new ProcessBuilder(cmd.split(" "));
-    pb.redirectErrorStream(true);
-    Process process = pb.start();
-    logger.info("Shell command merged stdout and stderr: "
-        + CharStreams.toString(
-            new InputStreamReader(process.getInputStream(), UTF_8)));
-    int exitCode = process.waitFor();
-    logger.info("Shell command exit code: " + exitCode);
-    assertEquals(0, exitCode);
-  }
-
-  private GrpclbRouteType doRpcAndGetPath(
-      TestServiceGrpc.TestServiceBlockingStub stub, Deadline deadline) {
-    logger.info("doRpcAndGetPath deadline: " + deadline);
-    final SimpleRequest request = SimpleRequest.newBuilder()
-        .setFillGrpclbRouteType(true)
-        .build();
-    GrpclbRouteType result = GrpclbRouteType.GRPCLB_ROUTE_TYPE_UNKNOWN;
-    try {
-      SimpleResponse response = stub
-          .withDeadline(deadline)
-          .unaryCall(request);
-      result = response.getGrpclbRouteType();
-    } catch (StatusRuntimeException ex) {
-      logger.warning("doRpcAndGetPath failed. Status: " + ex);
-      return GrpclbRouteType.GRPCLB_ROUTE_TYPE_UNKNOWN;
-    }
-    logger.info("doRpcAndGetPath. GrpclbRouteType result: " + result);
-    if (result != GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK
-        && result != GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
-      throw new AssertionError("Received invalid LB route type. This suggests "
-          + "that the server hasn't implemented this test correctly.");
-    }
-    return result;
-  }
-
-  private void waitForFallbackAndDoRpcs(Deadline fallbackDeadline) throws Exception {
-    int fallbackRetryCount = 0;
-    boolean fallBack = false;
-    while (!fallbackDeadline.isExpired()) {
-      GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
-          blockingStub, Deadline.after(1, TimeUnit.SECONDS));
-      if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
-        throw new AssertionError("Got grpclb route type backend. Backends are "
-            + "supposed to be unreachable, so this test is broken");
-      }
-      if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK) {
-        logger.info("Made one successful RPC to a fallback. Now expect the "
-            + "same for the rest.");
-        fallBack = true;
-        break;
-      } else {
-        logger.info("Retryable RPC failure on iteration: " + fallbackRetryCount);
-      }
-      fallbackRetryCount++;
-    }
-    if (!fallBack) {
-      throw new AssertionError("Didn't fall back within deadline");
-    }
-    for (int i = 0; i < 30; i++) {
-      assertEquals(
-          GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK,
-          doRpcAndGetPath(blockingStub, Deadline.after(20, TimeUnit.SECONDS)));
-      Thread.sleep(1000);
-    }
-  }
-
-  private void runFallbackBeforeStartup() throws Exception {
-    runShellCmd(induceFallbackCmd);
-    final Deadline fallbackDeadline = Deadline.after(
-        fallbackDeadlineSeconds, TimeUnit.SECONDS);
-    initStub();
-    waitForFallbackAndDoRpcs(fallbackDeadline);
-  }
-
-  private void runFallbackAfterStartup() throws Exception {
-    initStub();
-    assertEquals(
-        GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND,
-        doRpcAndGetPath(blockingStub, Deadline.after(20, TimeUnit.SECONDS)));
-    runShellCmd(induceFallbackCmd);
-    final Deadline fallbackDeadline = Deadline.after(
-        fallbackDeadlineSeconds, TimeUnit.SECONDS);
-    waitForFallbackAndDoRpcs(fallbackDeadline);
-  }
-
-  // The purpose of this warmup method is to get potentially expensive one-per-process
-  // initialization out of the way, so that we can use aggressive timeouts in the actual
-  // test cases. Note that the warmup phase is done using a separate channel from the
-  // actual test cases, so that we don't affect the states of LB policies in the channel
-  // of the actual test case.
-  private void warmup() throws Exception {
-    logger.info("Begin warmup, performing " + numWarmupRpcs + " RPCs on the warmup channel");
-    ManagedChannel channel = createChannel();
-    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel);
-    for (int i = 0; i < numWarmupRpcs; i++) {
-      doRpcAndGetPath(stub, Deadline.after(1, TimeUnit.SECONDS));
-    }
-    try {
-      channel.shutdownNow();
-      channel.awaitTermination(1, TimeUnit.SECONDS);
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
-    }
-  }
-
   private void run() throws Exception {
-    warmup();
     logger.info("Begin test case: " + testCase);
     if (testCase.equals("fallback_before_startup")) {
       runFallbackBeforeStartup();
