@@ -386,13 +386,13 @@ static void GrpcWriteServiceDocComment(Printer* printer,
       printer->Print(vars, " * A stub to allow clients to do asynchronous rpc calls to service $service$\n");
       break;
     case BLOCKING_CLIENT_IMPL:
-      printer->Print(" * A stub to allow clients to do synchronous rpc calls to service $service$\n");
+      printer->Print(vars, " * A stub to allow clients to do synchronous rpc calls to service $service$\n");
       break;
     case FUTURE_CLIENT_IMPL:
-      printer->Print(" * A stub to allow clients to do ListenableFuture-style rpc calls to service $service$\n");
+      printer->Print(vars, " * A stub to allow clients to do ListenableFuture-style rpc calls to service $service$\n");
       break;
     case ABSTRACT_CLASS:
-      printer->Print(" * Base class for the server implementation of the service $service$\n");
+      printer->Print(vars, " * Base class for the server implementation of the service $service$\n");
       break;
     default: ;
       // No extra description
