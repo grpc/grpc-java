@@ -383,16 +383,16 @@ static void GrpcWriteServiceDocComment(Printer* printer,
   std::map<std::string, std::string> vars = {{"service", service->name()}};
   switch (type) {
     case ASYNC_CLIENT_IMPL:
-      printer->Print(vars, " * A stub to allow clients to do asynchronous rpc calls to service $service$\n");
+      printer->Print(vars, " * A stub to allow clients to do asynchronous rpc calls to service $service$.\n");
       break;
     case BLOCKING_CLIENT_IMPL:
-      printer->Print(vars, " * A stub to allow clients to do synchronous rpc calls to service $service$\n");
+      printer->Print(vars, " * A stub to allow clients to do synchronous rpc calls to service $service$.\n");
       break;
     case FUTURE_CLIENT_IMPL:
-      printer->Print(vars, " * A stub to allow clients to do ListenableFuture-style rpc calls to service $service$\n");
+      printer->Print(vars, " * A stub to allow clients to do ListenableFuture-style rpc calls to service $service$.\n");
       break;
     case ABSTRACT_CLASS:
-      printer->Print(vars, " * Base class for the server implementation of the service $service$\n");
+      printer->Print(vars, " * Base class for the server implementation of the service $service$.\n");
       break;
     default: ;
       // No extra description
@@ -561,7 +561,7 @@ static void PrintStub(
     case ASYNC_INTERFACE:
       call_type = ASYNC_CALL;
       interface = true;
-      stub_name = (*vars)["interface_name"];
+      stub_name ="AsyncService";
       break;
     case ASYNC_CLIENT_IMPL:
       call_type = ASYNC_CALL;
@@ -809,16 +809,12 @@ static void PrintAbstractClassStub(
   p->Print(
       *vars,
       "public static abstract class $service_name$ImplBase\n"
-      "    implements $BindableService$, AsyncService {\n");
-  p->Indent();
-  p->Print(
-      *vars,
+      "    implements $BindableService$, AsyncService {\n"
       "\n"
-      "@$Override$ public final $ServerServiceDefinition$ bindService() {\n"
-      "  return $service_class_name$.bindService(this);\n"
-      "}\n");
-  p->Outdent();
-  p->Print("}\n\n");
+      "  @$Override$ public final $ServerServiceDefinition$ bindService() {\n"
+      "    return $service_class_name$.bindService(this);\n"
+      "  }\n"
+      "}\n\n");
 }
 
 static bool CompareMethodClientStreaming(const MethodDescriptor* method1,
@@ -855,10 +851,10 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
       "    io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,\n"
       "    io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,\n"
       "    io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {\n"
-      "  private final $interface_name$ serviceImpl;\n"
+      "  private final AsyncService serviceImpl;\n"
       "  private final int methodId;\n"
       "\n"
-      "  MethodHandlers($interface_name$ serviceImpl, int methodId) {\n"
+      "  MethodHandlers(AsyncService serviceImpl, int methodId) {\n"
       "    this.serviceImpl = serviceImpl;\n"
       "    this.methodId = methodId;\n"
       "  }\n\n");
@@ -1041,7 +1037,7 @@ static void PrintBindServiceMethod(const ServiceDescriptor* service,
   (*vars)["service_name"] = service->name();
   p->Print(*vars,
            "public static final io.grpc.ServerServiceDefinition "
-           "bindService($interface_name$ service) {\n");
+           "bindService(AsyncService service) {\n");
 
   p->Indent();
   p->Print(*vars,
@@ -1236,8 +1232,6 @@ void GenerateService(const ServiceDescriptor* service,
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
-
-  vars["interface_name"] = "AsyncService";
 
   Printer printer(out, '$');
   std::string package_name = ServiceJavaPackage(service->file());
