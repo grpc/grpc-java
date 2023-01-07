@@ -97,6 +97,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
    */
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

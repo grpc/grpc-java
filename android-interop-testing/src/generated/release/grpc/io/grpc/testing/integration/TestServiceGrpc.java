@@ -309,6 +309,7 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**
