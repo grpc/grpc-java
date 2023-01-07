@@ -591,7 +591,7 @@ static void PrintStub(
   (*vars)["stub_base_class_name"] = (*vars)[stub_base_class_name];
 
   // Class head
-    GrpcWriteServiceDocComment(p, service, type);
+  GrpcWriteServiceDocComment(p, service, type);
 
   if (service->options().deprecated()) {
     p->Print(*vars, "@$Deprecated$\n");
@@ -802,7 +802,7 @@ static void PrintAbstractClassStub(
   const std::string service_name = service->name();
   (*vars)["service_name"] = service_name;
 
-  GrpcWriteServiceDocComment(p, service, type);
+  GrpcWriteServiceDocComment(p, service, ABSTRACT_CLASS);
   if (service->options().deprecated()) {
     p->Print(*vars, "@$Deprecated$\n");
   }
