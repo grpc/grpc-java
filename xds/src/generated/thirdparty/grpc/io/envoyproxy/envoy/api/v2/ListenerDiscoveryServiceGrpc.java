@@ -192,7 +192,7 @@ public final class ListenerDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service ListenerDiscoveryService
+   * Base class for the server implementation of the service ListenerDiscoveryService.
    * <pre>
    * The Envoy instance initiates an RPC at startup to discover a list of
    * listeners. Updates are delivered via streaming from the LDS server and
@@ -209,7 +209,7 @@ public final class ListenerDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service ListenerDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service ListenerDiscoveryService.
    * <pre>
    * The Envoy instance initiates an RPC at startup to discover a list of
    * listeners. Updates are delivered via streaming from the LDS server and
@@ -256,7 +256,7 @@ public final class ListenerDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service ListenerDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service ListenerDiscoveryService.
    * <pre>
    * The Envoy instance initiates an RPC at startup to discover a list of
    * listeners. Updates are delivered via streaming from the LDS server and
@@ -286,7 +286,7 @@ public final class ListenerDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service ListenerDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ListenerDiscoveryService.
    * <pre>
    * The Envoy instance initiates an RPC at startup to discover a list of
    * listeners. Updates are delivered via streaming from the LDS server and

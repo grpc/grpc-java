@@ -180,7 +180,7 @@ public final class SecretDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service SecretDiscoveryService
+   * Base class for the server implementation of the service SecretDiscoveryService.
    */
   public static abstract class SecretDiscoveryServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -191,7 +191,7 @@ public final class SecretDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service SecretDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service SecretDiscoveryService.
    */
   public static final class SecretDiscoveryServiceStub
       extends io.grpc.stub.AbstractAsyncStub<SecretDiscoveryServiceStub> {
@@ -232,7 +232,7 @@ public final class SecretDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service SecretDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service SecretDiscoveryService.
    */
   public static final class SecretDiscoveryServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
@@ -256,7 +256,7 @@ public final class SecretDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service SecretDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service SecretDiscoveryService.
    */
   public static final class SecretDiscoveryServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<SecretDiscoveryServiceFutureStub> {

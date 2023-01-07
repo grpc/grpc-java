@@ -115,7 +115,7 @@ public final class TestDeprecatedServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service TestDeprecatedService
+   * Base class for the server implementation of the service TestDeprecatedService.
    * <pre>
    * Test service that has been deprecated and should generate with Java's &#64;Deprecated annotation
    * </pre>
@@ -130,7 +130,7 @@ public final class TestDeprecatedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service TestDeprecatedService
+   * A stub to allow clients to do asynchronous rpc calls to service TestDeprecatedService.
    * <pre>
    * Test service that has been deprecated and should generate with Java's &#64;Deprecated annotation
    * </pre>
@@ -163,7 +163,7 @@ public final class TestDeprecatedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service TestDeprecatedService
+   * A stub to allow clients to do synchronous rpc calls to service TestDeprecatedService.
    * <pre>
    * Test service that has been deprecated and should generate with Java's &#64;Deprecated annotation
    * </pre>
@@ -195,7 +195,7 @@ public final class TestDeprecatedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service TestDeprecatedService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service TestDeprecatedService.
    * <pre>
    * Test service that has been deprecated and should generate with Java's &#64;Deprecated annotation
    * </pre>

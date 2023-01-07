@@ -104,7 +104,7 @@ public final class AnotherReflectableServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service AnotherReflectableService
+   * Base class for the server implementation of the service AnotherReflectableService.
    */
   public static abstract class AnotherReflectableServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -115,7 +115,7 @@ public final class AnotherReflectableServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service AnotherReflectableService
+   * A stub to allow clients to do asynchronous rpc calls to service AnotherReflectableService.
    */
   public static final class AnotherReflectableServiceStub
       extends io.grpc.stub.AbstractAsyncStub<AnotherReflectableServiceStub> {
@@ -140,7 +140,7 @@ public final class AnotherReflectableServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service AnotherReflectableService
+   * A stub to allow clients to do synchronous rpc calls to service AnotherReflectableService.
    */
   public static final class AnotherReflectableServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub> {
@@ -164,7 +164,7 @@ public final class AnotherReflectableServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service AnotherReflectableService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service AnotherReflectableService.
    */
   public static final class AnotherReflectableServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<AnotherReflectableServiceFutureStub> {

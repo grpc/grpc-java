@@ -107,7 +107,7 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service ReportQpsScenarioService
+   * Base class for the server implementation of the service ReportQpsScenarioService.
    */
   public static abstract class ReportQpsScenarioServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -118,7 +118,7 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service ReportQpsScenarioService
+   * A stub to allow clients to do asynchronous rpc calls to service ReportQpsScenarioService.
    */
   public static final class ReportQpsScenarioServiceStub
       extends io.grpc.stub.AbstractAsyncStub<ReportQpsScenarioServiceStub> {
@@ -146,7 +146,7 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service ReportQpsScenarioService
+   * A stub to allow clients to do synchronous rpc calls to service ReportQpsScenarioService.
    */
   public static final class ReportQpsScenarioServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub> {
@@ -173,7 +173,7 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service ReportQpsScenarioService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ReportQpsScenarioService.
    */
   public static final class ReportQpsScenarioServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<ReportQpsScenarioServiceFutureStub> {

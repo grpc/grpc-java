@@ -161,7 +161,7 @@ public final class HealthGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service Health
+   * Base class for the server implementation of the service Health.
    */
   public static abstract class HealthImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -172,7 +172,7 @@ public final class HealthGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service Health
+   * A stub to allow clients to do asynchronous rpc calls to service Health.
    */
   public static final class HealthStub
       extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
@@ -224,7 +224,7 @@ public final class HealthGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service Health
+   * A stub to allow clients to do synchronous rpc calls to service Health.
    */
   public static final class HealthBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
@@ -275,7 +275,7 @@ public final class HealthGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service Health
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service Health.
    */
   public static final class HealthFutureStub
       extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {

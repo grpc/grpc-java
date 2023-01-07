@@ -142,7 +142,7 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service EchoTestService
+   * Base class for the server implementation of the service EchoTestService.
    */
   public static abstract class EchoTestServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -153,7 +153,7 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service EchoTestService
+   * A stub to allow clients to do asynchronous rpc calls to service EchoTestService.
    */
   public static final class EchoTestServiceStub
       extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub> {
@@ -186,7 +186,7 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service EchoTestService
+   * A stub to allow clients to do synchronous rpc calls to service EchoTestService.
    */
   public static final class EchoTestServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {
@@ -217,7 +217,7 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service EchoTestService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service EchoTestService.
    */
   public static final class EchoTestServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub> {

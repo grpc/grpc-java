@@ -148,7 +148,7 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service XdsUpdateHealthService
+   * Base class for the server implementation of the service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>
@@ -162,7 +162,7 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service XdsUpdateHealthService
+   * A stub to allow clients to do asynchronous rpc calls to service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>
@@ -198,7 +198,7 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service XdsUpdateHealthService
+   * A stub to allow clients to do synchronous rpc calls to service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>
@@ -232,7 +232,7 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service XdsUpdateHealthService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>

@@ -115,7 +115,7 @@ public final class UnimplementedServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service UnimplementedService
+   * Base class for the server implementation of the service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.
@@ -130,7 +130,7 @@ public final class UnimplementedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service UnimplementedService
+   * A stub to allow clients to do asynchronous rpc calls to service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.
@@ -162,7 +162,7 @@ public final class UnimplementedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service UnimplementedService
+   * A stub to allow clients to do synchronous rpc calls to service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.
@@ -193,7 +193,7 @@ public final class UnimplementedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service UnimplementedService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.

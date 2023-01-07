@@ -198,7 +198,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service ScopedRoutesDiscoveryService
+   * Base class for the server implementation of the service ScopedRoutesDiscoveryService.
    * <pre>
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
@@ -218,7 +218,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service ScopedRoutesDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service ScopedRoutesDiscoveryService.
    * <pre>
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
@@ -268,7 +268,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service ScopedRoutesDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service ScopedRoutesDiscoveryService.
    * <pre>
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
@@ -301,7 +301,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service ScopedRoutesDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ScopedRoutesDiscoveryService.
    * <pre>
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`

@@ -149,7 +149,7 @@ public final class MetricsServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service MetricsService
+   * Base class for the server implementation of the service MetricsService.
    */
   public static abstract class MetricsServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -160,7 +160,7 @@ public final class MetricsServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service MetricsService
+   * A stub to allow clients to do asynchronous rpc calls to service MetricsService.
    */
   public static final class MetricsServiceStub
       extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
@@ -200,7 +200,7 @@ public final class MetricsServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service MetricsService
+   * A stub to allow clients to do synchronous rpc calls to service MetricsService.
    */
   public static final class MetricsServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
@@ -239,7 +239,7 @@ public final class MetricsServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service MetricsService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service MetricsService.
    */
   public static final class MetricsServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {

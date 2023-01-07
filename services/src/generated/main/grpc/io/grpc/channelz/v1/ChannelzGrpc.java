@@ -362,7 +362,7 @@ public final class ChannelzGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service Channelz
+   * Base class for the server implementation of the service Channelz.
    * <pre>
    * Channelz is a service exposed by gRPC servers that provides detailed debug
    * information.
@@ -377,7 +377,7 @@ public final class ChannelzGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service Channelz
+   * A stub to allow clients to do asynchronous rpc calls to service Channelz.
    * <pre>
    * Channelz is a service exposed by gRPC servers that provides detailed debug
    * information.
@@ -476,7 +476,7 @@ public final class ChannelzGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service Channelz
+   * A stub to allow clients to do synchronous rpc calls to service Channelz.
    * <pre>
    * Channelz is a service exposed by gRPC servers that provides detailed debug
    * information.
@@ -568,7 +568,7 @@ public final class ChannelzGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service Channelz
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service Channelz.
    * <pre>
    * Channelz is a service exposed by gRPC servers that provides detailed debug
    * information.

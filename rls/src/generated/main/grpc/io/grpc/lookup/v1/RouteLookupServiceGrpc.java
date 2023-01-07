@@ -107,7 +107,7 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service RouteLookupService
+   * Base class for the server implementation of the service RouteLookupService.
    */
   public static abstract class RouteLookupServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -118,7 +118,7 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service RouteLookupService
+   * A stub to allow clients to do asynchronous rpc calls to service RouteLookupService.
    */
   public static final class RouteLookupServiceStub
       extends io.grpc.stub.AbstractAsyncStub<RouteLookupServiceStub> {
@@ -146,7 +146,7 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service RouteLookupService
+   * A stub to allow clients to do synchronous rpc calls to service RouteLookupService.
    */
   public static final class RouteLookupServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub> {
@@ -173,7 +173,7 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteLookupService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteLookupService.
    */
   public static final class RouteLookupServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<RouteLookupServiceFutureStub> {

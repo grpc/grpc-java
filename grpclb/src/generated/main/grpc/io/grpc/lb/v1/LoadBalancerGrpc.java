@@ -107,7 +107,7 @@ public final class LoadBalancerGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service LoadBalancer
+   * Base class for the server implementation of the service LoadBalancer.
    */
   public static abstract class LoadBalancerImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -118,7 +118,7 @@ public final class LoadBalancerGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service LoadBalancer
+   * A stub to allow clients to do asynchronous rpc calls to service LoadBalancer.
    */
   public static final class LoadBalancerStub
       extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub> {
@@ -146,7 +146,7 @@ public final class LoadBalancerGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service LoadBalancer
+   * A stub to allow clients to do synchronous rpc calls to service LoadBalancer.
    */
   public static final class LoadBalancerBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {
@@ -163,7 +163,7 @@ public final class LoadBalancerGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadBalancer
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadBalancer.
    */
   public static final class LoadBalancerFutureStub
       extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub> {

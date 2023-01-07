@@ -236,7 +236,7 @@ public final class SimpleServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service SimpleService
+   * Base class for the server implementation of the service SimpleService.
    * <pre>
    * A simple service for test.
    * </pre>
@@ -250,7 +250,7 @@ public final class SimpleServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service SimpleService
+   * A stub to allow clients to do asynchronous rpc calls to service SimpleService.
    * <pre>
    * A simple service for test.
    * </pre>
@@ -314,7 +314,7 @@ public final class SimpleServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service SimpleService
+   * A stub to allow clients to do synchronous rpc calls to service SimpleService.
    * <pre>
    * A simple service for test.
    * </pre>
@@ -355,7 +355,7 @@ public final class SimpleServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service SimpleService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service SimpleService.
    * <pre>
    * A simple service for test.
    * </pre>

@@ -112,7 +112,7 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service HandshakerService
+   * Base class for the server implementation of the service HandshakerService.
    */
   public static abstract class HandshakerServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -123,7 +123,7 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service HandshakerService
+   * A stub to allow clients to do asynchronous rpc calls to service HandshakerService.
    */
   public static final class HandshakerServiceStub
       extends io.grpc.stub.AbstractAsyncStub<HandshakerServiceStub> {
@@ -156,7 +156,7 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service HandshakerService
+   * A stub to allow clients to do synchronous rpc calls to service HandshakerService.
    */
   public static final class HandshakerServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
@@ -173,7 +173,7 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service HandshakerService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service HandshakerService.
    */
   public static final class HandshakerServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<HandshakerServiceFutureStub> {

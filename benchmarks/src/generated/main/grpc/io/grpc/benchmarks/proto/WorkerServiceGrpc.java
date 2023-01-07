@@ -240,7 +240,7 @@ public final class WorkerServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service WorkerService
+   * Base class for the server implementation of the service WorkerService.
    */
   public static abstract class WorkerServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -251,7 +251,7 @@ public final class WorkerServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service WorkerService
+   * A stub to allow clients to do asynchronous rpc calls to service WorkerService.
    */
   public static final class WorkerServiceStub
       extends io.grpc.stub.AbstractAsyncStub<WorkerServiceStub> {
@@ -322,7 +322,7 @@ public final class WorkerServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service WorkerService
+   * A stub to allow clients to do synchronous rpc calls to service WorkerService.
    */
   public static final class WorkerServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub> {
@@ -359,7 +359,7 @@ public final class WorkerServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service WorkerService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service WorkerService.
    */
   public static final class WorkerServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<WorkerServiceFutureStub> {

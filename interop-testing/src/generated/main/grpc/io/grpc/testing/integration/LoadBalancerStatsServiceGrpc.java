@@ -154,7 +154,7 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service LoadBalancerStatsService
+   * Base class for the server implementation of the service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
@@ -168,7 +168,7 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service LoadBalancerStatsService
+   * A stub to allow clients to do asynchronous rpc calls to service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
@@ -210,7 +210,7 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service LoadBalancerStatsService
+   * A stub to allow clients to do synchronous rpc calls to service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
@@ -250,7 +250,7 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadBalancerStatsService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>

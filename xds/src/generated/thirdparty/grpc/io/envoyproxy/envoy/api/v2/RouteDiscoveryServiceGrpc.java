@@ -194,7 +194,7 @@ public final class RouteDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service RouteDiscoveryService
+   * Base class for the server implementation of the service RouteDiscoveryService.
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and
@@ -212,7 +212,7 @@ public final class RouteDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service RouteDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service RouteDiscoveryService.
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and
@@ -260,7 +260,7 @@ public final class RouteDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service RouteDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service RouteDiscoveryService.
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and
@@ -291,7 +291,7 @@ public final class RouteDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteDiscoveryService.
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and

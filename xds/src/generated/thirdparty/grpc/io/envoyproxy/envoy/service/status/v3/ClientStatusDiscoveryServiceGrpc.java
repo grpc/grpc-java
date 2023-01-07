@@ -152,7 +152,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service ClientStatusDiscoveryService
+   * Base class for the server implementation of the service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can
@@ -168,7 +168,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service ClientStatusDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can
@@ -206,7 +206,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service ClientStatusDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can
@@ -235,7 +235,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service ClientStatusDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can

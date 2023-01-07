@@ -133,7 +133,7 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service LoadReportingService
+   * Base class for the server implementation of the service LoadReportingService.
    */
   public static abstract class LoadReportingServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -144,7 +144,7 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service LoadReportingService
+   * A stub to allow clients to do asynchronous rpc calls to service LoadReportingService.
    */
   public static final class LoadReportingServiceStub
       extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub> {
@@ -198,7 +198,7 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service LoadReportingService
+   * A stub to allow clients to do synchronous rpc calls to service LoadReportingService.
    */
   public static final class LoadReportingServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
@@ -215,7 +215,7 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadReportingService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadReportingService.
    */
   public static final class LoadReportingServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub> {

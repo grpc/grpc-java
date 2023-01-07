@@ -148,7 +148,7 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service ReconnectService
+   * Base class for the server implementation of the service ReconnectService.
    * <pre>
    * A service used to control reconnect server.
    * </pre>
@@ -162,7 +162,7 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service ReconnectService
+   * A stub to allow clients to do asynchronous rpc calls to service ReconnectService.
    * <pre>
    * A service used to control reconnect server.
    * </pre>
@@ -198,7 +198,7 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service ReconnectService
+   * A stub to allow clients to do synchronous rpc calls to service ReconnectService.
    * <pre>
    * A service used to control reconnect server.
    * </pre>
@@ -232,7 +232,7 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service ReconnectService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ReconnectService.
    * <pre>
    * A service used to control reconnect server.
    * </pre>

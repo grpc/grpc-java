@@ -113,7 +113,7 @@ public final class DynamicServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service DynamicService
+   * Base class for the server implementation of the service DynamicService.
    * <pre>
    * A DynamicService
    * </pre>
@@ -127,7 +127,7 @@ public final class DynamicServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service DynamicService
+   * A stub to allow clients to do asynchronous rpc calls to service DynamicService.
    * <pre>
    * A DynamicService
    * </pre>
@@ -158,7 +158,7 @@ public final class DynamicServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service DynamicService
+   * A stub to allow clients to do synchronous rpc calls to service DynamicService.
    * <pre>
    * A DynamicService
    * </pre>
@@ -188,7 +188,7 @@ public final class DynamicServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service DynamicService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service DynamicService.
    * <pre>
    * A DynamicService
    * </pre>

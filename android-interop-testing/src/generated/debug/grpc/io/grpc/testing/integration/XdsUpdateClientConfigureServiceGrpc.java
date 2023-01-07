@@ -112,7 +112,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service XdsUpdateClientConfigureService
+   * Base class for the server implementation of the service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
@@ -126,7 +126,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service XdsUpdateClientConfigureService
+   * A stub to allow clients to do asynchronous rpc calls to service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
@@ -157,7 +157,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service XdsUpdateClientConfigureService
+   * A stub to allow clients to do synchronous rpc calls to service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
@@ -187,7 +187,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service XdsUpdateClientConfigureService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>

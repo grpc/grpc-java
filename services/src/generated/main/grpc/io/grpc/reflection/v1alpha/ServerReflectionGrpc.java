@@ -108,7 +108,7 @@ public final class ServerReflectionGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service ServerReflection
+   * Base class for the server implementation of the service ServerReflection.
    */
   public static abstract class ServerReflectionImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -119,7 +119,7 @@ public final class ServerReflectionGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service ServerReflection
+   * A stub to allow clients to do asynchronous rpc calls to service ServerReflection.
    */
   public static final class ServerReflectionStub
       extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
@@ -148,7 +148,7 @@ public final class ServerReflectionGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service ServerReflection
+   * A stub to allow clients to do synchronous rpc calls to service ServerReflection.
    */
   public static final class ServerReflectionBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
@@ -165,7 +165,7 @@ public final class ServerReflectionGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service ServerReflection
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ServerReflection.
    */
   public static final class ServerReflectionFutureStub
       extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {

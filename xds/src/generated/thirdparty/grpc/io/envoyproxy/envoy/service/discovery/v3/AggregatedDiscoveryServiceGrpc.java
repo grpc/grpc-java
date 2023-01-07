@@ -161,7 +161,7 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service AggregatedDiscoveryService
+   * Base class for the server implementation of the service AggregatedDiscoveryService.
    * <pre>
    * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
    * ADS and how it is intended to be used by a management server. ADS requests
@@ -180,7 +180,7 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service AggregatedDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service AggregatedDiscoveryService.
    * <pre>
    * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
    * ADS and how it is intended to be used by a management server. ADS requests
@@ -224,7 +224,7 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service AggregatedDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service AggregatedDiscoveryService.
    * <pre>
    * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
    * ADS and how it is intended to be used by a management server. ADS requests
@@ -249,7 +249,7 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service AggregatedDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service AggregatedDiscoveryService.
    * <pre>
    * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
    * ADS and how it is intended to be used by a management server. ADS requests

@@ -404,7 +404,7 @@ public final class TestServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service TestService
+   * Base class for the server implementation of the service TestService.
    * <pre>
    * A simple service to test the various types of RPCs and experiment with
    * performance with various types of payload.
@@ -419,7 +419,7 @@ public final class TestServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service TestService
+   * A stub to allow clients to do asynchronous rpc calls to service TestService.
    * <pre>
    * A simple service to test the various types of RPCs and experiment with
    * performance with various types of payload.
@@ -538,7 +538,7 @@ public final class TestServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service TestService
+   * A stub to allow clients to do synchronous rpc calls to service TestService.
    * <pre>
    * A simple service to test the various types of RPCs and experiment with
    * performance with various types of payload.
@@ -614,7 +614,7 @@ public final class TestServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service TestService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service TestService.
    * <pre>
    * A simple service to test the various types of RPCs and experiment with
    * performance with various types of payload.

@@ -186,7 +186,7 @@ public final class ClusterDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service ClusterDiscoveryService
+   * Base class for the server implementation of the service ClusterDiscoveryService.
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>
@@ -200,7 +200,7 @@ public final class ClusterDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service ClusterDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service ClusterDiscoveryService.
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>
@@ -244,7 +244,7 @@ public final class ClusterDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service ClusterDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service ClusterDiscoveryService.
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>
@@ -271,7 +271,7 @@ public final class ClusterDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service ClusterDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ClusterDiscoveryService.
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>

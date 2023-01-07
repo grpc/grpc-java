@@ -128,7 +128,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service VirtualHostDiscoveryService
+   * Base class for the server implementation of the service VirtualHostDiscoveryService.
    * <pre>
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
@@ -151,7 +151,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service VirtualHostDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service VirtualHostDiscoveryService.
    * <pre>
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
@@ -188,7 +188,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service VirtualHostDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service VirtualHostDiscoveryService.
    * <pre>
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
@@ -217,7 +217,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service VirtualHostDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service VirtualHostDiscoveryService.
    * <pre>
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered

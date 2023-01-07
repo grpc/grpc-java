@@ -184,7 +184,7 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
-   * Base class for the server implementation of the service EndpointDiscoveryService
+   * Base class for the server implementation of the service EndpointDiscoveryService.
    */
   public static abstract class EndpointDiscoveryServiceImplBase
       implements io.grpc.BindableService, AsyncService {
@@ -195,7 +195,7 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service EndpointDiscoveryService
+   * A stub to allow clients to do asynchronous rpc calls to service EndpointDiscoveryService.
    */
   public static final class EndpointDiscoveryServiceStub
       extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
@@ -240,7 +240,7 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service EndpointDiscoveryService
+   * A stub to allow clients to do synchronous rpc calls to service EndpointDiscoveryService.
    */
   public static final class EndpointDiscoveryServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
@@ -264,7 +264,7 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service EndpointDiscoveryService
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service EndpointDiscoveryService.
    */
   public static final class EndpointDiscoveryServiceFutureStub
       extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
