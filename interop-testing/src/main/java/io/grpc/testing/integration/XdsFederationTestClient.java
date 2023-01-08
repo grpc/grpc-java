@@ -170,6 +170,32 @@ public final class XdsFederationTestClient {
     }
   }
 
+  class InnerClient extends AbstractInteropTest {
+    private String credentialsType;
+    private String serverUri;
+
+    public InnerClient(String credentialsType, String serverUri) {
+      this.credentialsType = credentialsType;
+      this.serverUri = serverUri;
+    }
+
+    @Override
+    protected ManagedChannelBuilder<?> createChannelBuilder() {
+      ChannelCredentials channelCredentials;
+      if (customCredentialsType.equals("compute_engine_channel_creds")) {
+        channelCredentials = ComputeEngineChannelCredentials.create();
+      } else if (customCredentialsType.equals("INSECURE_CREDENTIALS")) {
+        channelCredentials = InsecureChannelCredentials.create();
+      } else {
+        throw new IllegalArgumentException(
+              "Unknown custom credentials: " + customCredentialsType);
+      }
+      return NettyChannelBuilder.forTarget(serverUri, channelCredentials)
+          .keepAliveTime(3600, TimeUnit.SECONDS)
+          .keepAliveTimeout(20, TimeUnit.SECONDS);
+    }
+  }
+
   private void run() throws Exception {
     logger.info("Begin test case: " + testCase);
     // create threads according to server URIs
