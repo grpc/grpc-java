@@ -145,7 +145,7 @@ public final class XdsFederationTestClient {
           + "\n                                        or exceeding the per-iteration max "
           + "\n                                        acceptable latency). Default: "
           + c.soakMaxFailures
-          + "\n  --soak_per_iteration_max_acceptable_latency_ms
+          + "\n  --soak_per_iteration_max_acceptable_latency_ms"
           + "\n                                        The number of milliseconds a "
           + "\n                                        single iteration in the two soak "
           + "\n                                        tests (rpc_soak and channel_soak) "
