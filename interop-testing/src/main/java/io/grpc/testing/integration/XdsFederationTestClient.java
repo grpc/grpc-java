@@ -205,8 +205,21 @@ public final class XdsFederationTestClient {
       this.serverUri = serverUri;
     }
 
-    public String getServerUri() {
-      return serverUri;
+    public run() {
+      try {
+        c.performSoakTest(
+            serverUri,
+            resetChannelPerIteration,
+            soakIterations,
+            soakMaxFailures,
+            soakPerIterationMaxAcceptableLatencyMs,
+            soakMinTimeMsBetweenRPCs,
+            soakOverallTimeoutSeconds);
+        logger.info("Test case: " + testCase + " done for server: " + serverUri);
+      } catch (Exception e) {
+        logger.info("Test case: " + testCase + " failed for server: " + serverUri);
+        throw new RuntimeException(e);
+      }
     }
 
     @Override
@@ -242,20 +255,7 @@ public final class XdsFederationTestClient {
       Thread t = new Thread(new Runnable() {
         @Override
         public void run() {
-          try {
-            c.performSoakTest(
-                c.getServerUri(),
-                resetChannelPerIteration,
-                soakIterations,
-                soakMaxFailures,
-                soakPerIterationMaxAcceptableLatencyMs,
-                soakMinTimeMsBetweenRPCs,
-                soakOverallTimeoutSeconds);
-            logger.info("Test case: " + testCase + " done for server: " + c.getServerUri());
-          } catch (Exception e) {
-            logger.info("Test case: " + testCase + " failed for server: " + c.getServerUri());
-            throw new RuntimeException(e);
-          }
+          c.run();
         }
       });
       t.start();
