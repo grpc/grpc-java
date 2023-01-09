@@ -33,12 +33,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
- * Test client that verifies that grpclb failover into fallback mode works under
- * different failure modes.
- * This client is suitable for testing fallback with any "grpclb" load-balanced
- * service, but is particularly meant to implement a set of test cases described
- * in an internal doc titled "DirectPath Cloud-to-Prod End-to-End Test Cases",
- * section "gRPC DirectPath-to-CFE fallback".
+ * Test client that can be used to verify that XDS federation works. A list of
+ * server URIs (which can each be load balanced by different XDS servers), can
+ * be configured via flags. A separate thread is created for each of these clients
+ * and the configured test (either rpc_soak or channel_soak) is ran for each client
+ * on each thread.
  */
 public final class XdsFederationTestClient {
   private static final Logger logger =
