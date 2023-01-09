@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -195,6 +195,10 @@ public final class XdsFederationTestClient {
     }
   }
 
+  /**
+   * Wraps a single client stub configuration and executes a
+   * soak test case with that configuration.
+   */
   class InnerClient extends AbstractInteropTest {
     private String credentialsType;
     private String serverUri;
@@ -204,6 +208,9 @@ public final class XdsFederationTestClient {
       this.serverUri = serverUri;
     }
 
+    /**
+     * Run the intended soak test the client.
+     */
     public void run() {
       boolean resetChannelPerIteration;
       if (testCase.equals("rpc_soak")) {
