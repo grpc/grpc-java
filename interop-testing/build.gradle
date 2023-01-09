@@ -14,7 +14,7 @@ configurations {
     alpnagent
 }
 
-evaluationDependsOn(project(':grpc-context').path)
+evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
