@@ -19,7 +19,6 @@ package io.grpc.testing.integration;
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.StatusRuntimeException;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.netty.NettyChannelBuilder;
 import java.util.ArrayList;
@@ -70,7 +69,7 @@ public final class XdsFederationTestClient {
   private int soakMaxFailures = 0;
   private int soakPerIterationMaxAcceptableLatencyMs = 1000;
   private int soakOverallTimeoutSeconds = 10;
-  private int soakMinTimeMsBetweenRPCs = 0;
+  private int soakMinTimeMsBetweenRpcs = 0;
   private String testCase = "rpc_soak";
   private ArrayList<InnerClient> clients = new ArrayList<InnerClient>();
 
@@ -107,7 +106,7 @@ public final class XdsFederationTestClient {
       } else if ("soak_overall_timeout_seconds".equals(key)) {
         soakOverallTimeoutSeconds = Integer.valueOf(value);
       } else if ("soak_min_time_ms_between_rpcs".equals(key)) {
-        soakMinTimeMsBetweenRPCs = Integer.valueOf(value);
+        soakMinTimeMsBetweenRpcs = Integer.valueOf(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -155,7 +154,7 @@ public final class XdsFederationTestClient {
           + "\n                                        between consecutive RPCs in a soak "
           + "\n                                        test (rpc_soak or channel_soak), "
           + "\n                                        useful for limiting QPS. Default: "
-          + c.soakMinTimeMsBetweenRPCs
+          + c.soakMinTimeMsBetweenRpcs
           + "\n  --test_case=TEST_CASE                 Test case to run. Valid options are:"
           + "\n      rpc_soak: sends --soak_iterations large_unary RPCs"
           + "\n      channel_soak: sends --soak_iterations RPCs, rebuilding the channel "
@@ -221,7 +220,7 @@ public final class XdsFederationTestClient {
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
-            soakMinTimeMsBetweenRPCs,
+            soakMinTimeMsBetweenRpcs,
             soakOverallTimeoutSeconds);
         logger.info("Test case: " + testCase + " done for server: " + serverUri);
       } catch (Exception e) {
