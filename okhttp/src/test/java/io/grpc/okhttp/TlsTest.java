@@ -173,8 +173,8 @@ public class TlsTest {
   @Test
   public void untrustedServer_fails() throws Exception {
     ServerCredentials serverCreds;
-    try (InputStream serverCert = TlsTesting.loadCert("badserver.pem");
-         InputStream serverPrivateKey = TlsTesting.loadCert("badserver.key");
+    try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key");
          InputStream caCert = TlsTesting.loadCert("ca.pem")) {
       serverCreds = TlsServerCredentials.newBuilder()
           .keyManager(serverCert, serverPrivateKey)
@@ -183,11 +183,9 @@ public class TlsTest {
     }
     ChannelCredentials channelCreds;
     try (InputStream clientCertChain = TlsTesting.loadCert("client.pem");
-         InputStream clientPrivateKey = TlsTesting.loadCert("client.key");
-         InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+         InputStream clientPrivateKey = TlsTesting.loadCert("client.key")) {
       channelCreds = TlsChannelCredentials.newBuilder()
           .keyManager(clientCertChain, clientPrivateKey)
-          .trustManager(caCert)
           .build();
     }
     Server server = grpcCleanupRule.register(server(serverCreds));
