@@ -2095,7 +2095,7 @@ public abstract class AbstractInteropTest {
             totalFailures,
             latencies.getValueAtPercentile(50),
             latencies.getValueAtPercentile(90),
-            latencies.getValueAtPercentile(100));
+            latencies.getValueAtPercentile(100)));
     // check if we timed out
     String timeoutErrorMessage =
         String.format(
