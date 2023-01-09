@@ -16,18 +16,12 @@
 
 package io.grpc.testing.integration;
 
-import static com.google.common.base.Charsets.UTF_8;
-import static org.junit.Assert.assertEquals;
-
-import com.google.common.io.CharStreams;
-import io.grpc.Deadline;
-import io.grpc.ManagedChannel;
+import io.grpc.ChannelCredentials;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
-import io.grpc.alts.ComputeEngineChannelBuilder;
-import io.grpc.testing.integration.Messages.GrpclbRouteType;
-import io.grpc.testing.integration.Messages.SimpleRequest;
-import io.grpc.testing.integration.Messages.SimpleResponse;
-import java.io.InputStreamReader;
+import io.grpc.alts.ComputeEngineChannelCredentials;
+import io.grpc.netty.NettyChannelBuilder;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
@@ -121,7 +115,7 @@ public final class XdsFederationTestClient {
       }
     }
     if (usage) {
-      XdsFederationTestClinet c = new XdsFederationTestClient();
+      XdsFederationTestClient c = new XdsFederationTestClient();
       System.out.println(
           "Usage: [ARGS...]"
           + "\n"
@@ -183,7 +177,7 @@ public final class XdsFederationTestClient {
           + "does not match number of entries in --credentials_types");
     }
     for (int i = 0; i < uris.length; i++) {
-      clients.add(new InnerClient(creds[i], uri[i]));
+      clients.add(new InnerClient(creds[i], uris[i]));
     }
     for (InnerClient c : clients) {
       c.setUp();
@@ -218,13 +212,13 @@ public final class XdsFederationTestClient {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
       ChannelCredentials channelCredentials;
-      if (customCredentialsType.equals("compute_engine_channel_creds")) {
+      if (credentialsType.equals("compute_engine_channel_creds")) {
         channelCredentials = ComputeEngineChannelCredentials.create();
-      } else if (customCredentialsType.equals("INSECURE_CREDENTIALS")) {
+      } else if (credentialsType.equals("INSECURE_CREDENTIALS")) {
         channelCredentials = InsecureChannelCredentials.create();
       } else {
         throw new IllegalArgumentException(
-              "Unknown custom credentials: " + customCredentialsType);
+              "Unknown custom credentials: " + credentialsType);
       }
       return NettyChannelBuilder.forTarget(serverUri, channelCredentials)
           .keepAliveTime(3600, TimeUnit.SECONDS)
@@ -248,14 +242,20 @@ public final class XdsFederationTestClient {
       Thread t = new Thread(new Runnable() {
         @Override
         public void run() {
-          c.performSoakTest(
-              resetChannelPerIteration,
-              soakIterations,
-              soakMaxFailures,
-              soakPerIterationMaxAcceptableLatencyMs,
-              soakMinTimeMsBetweenRpcs,
-              soakOverallTimeoutSeconds);
-          logger.info("Test case: " + testCase + " done for server: " + c.getServerUri());
+          try {
+            c.performSoakTest(
+                c.getServerUri(),
+                resetChannelPerIteration,
+                soakIterations,
+                soakMaxFailures,
+                soakPerIterationMaxAcceptableLatencyMs,
+                soakMinTimeMsBetweenRPCs,
+                soakOverallTimeoutSeconds);
+            logger.info("Test case: " + testCase + " done for server: " + c.getServerUri());
+          } catch (Exception e) {
+            logger.info("Test case: " + testCase + " failed for server: " + c.getServerUri());
+            throw new RuntimeException(e);
+          }
         }
       });
       t.start();
