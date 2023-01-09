@@ -28,6 +28,7 @@ import io.grpc.testing.integration.Messages.GrpclbRouteType;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -61,6 +62,7 @@ public final class XdsFederationTestClient {
         }
       }
     });
+    client.setUp();
     try {
       client.run();
     } finally {
@@ -77,6 +79,7 @@ public final class XdsFederationTestClient {
   private int soakOverallTimeoutSeconds = 10;
   private int soakMinTimeMsBetweenRPCs = 0;
   private String testCase = "rpc_soak";
+  private ArrayList<InnerClient> clients = new ArrayList<InnerClient>();
 
   private void parseArgs(String[] args) {
     boolean usage = false;
@@ -170,6 +173,36 @@ public final class XdsFederationTestClient {
     }
   }
 
+  void setUp() {
+    String[] uris = serverUris.split(",", -1);
+    String[] creds = credentialsTypes.split(",", -1);
+    if (uris.length == 0) {
+      throw new IllegalArgumentException("--server_uris is empty");
+    }
+    if (uris.length != creds.length) {
+      throw new IllegalArgumentException("Number of entries in --server_uris "
+          + "does not match number of entries in --credentials_types");
+    }
+    for (int i = 0; i < uris.length; i++) {
+      clients.add(new InnerClient(creds[i], uri[i]));
+    }
+    for (InnerClient c : clients) {
+      c.setUp();
+    }
+  }
+
+  private synchronized void tearDown() {
+    try {
+      for (InnerClient c : clients) {
+        c.tearDown();
+      }
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+
   class InnerClient extends AbstractInteropTest {
     private String credentialsType;
     private String serverUri;
@@ -177,6 +210,10 @@ public final class XdsFederationTestClient {
     public InnerClient(String credentialsType, String serverUri) {
       this.credentialsType = credentialsType;
       this.serverUri = serverUri;
+    }
+
+    public String getServerUri() {
+      return serverUri;
     }
 
     @Override
@@ -198,24 +235,36 @@ public final class XdsFederationTestClient {
 
   private void run() throws Exception {
     logger.info("Begin test case: " + testCase);
-    // create threads according to server URIs
-    // class InnerClient extends AbstractInteropTest {
-    //   constructed with: server_uri, credentials_type param
-    //   create channel builder uses those
-    //   we create a thread and pass that to the thread and run
-    //   the soak test o that thread.
-    //   then join  threads
-    // }
-    // start threads
-    // join threads
-    // log that all threads done
-    if (testCase.equals("fallback_before_startup")) {
-      runFallbackBeforeStartup();
-    } else if (testCase.equals("fallback_after_startup")) {
-      runFallbackAfterStartup();
+    boolean resetChannelPerIteration;
+    if (testCase.equals("rpc_soak")) {
+      resetChannelPerIteration = false;
+    } else if (testCase.equals("channel_soak")) {
+      resetChannelPerIteration = true;
     } else {
       throw new RuntimeException("invalid testcase: " + testCase);
     }
-    logger.info("Test case: " + testCase + " done!");
+    // Run soak tests with each client on separate threads
+    ArrayList<Thread> threads = new ArrayList<Thread>();
+    for (InnerClient c : clients) {
+      Thread t = new Thread(new Runnable() {
+        @Override
+        public void run() {
+          c.performSoakTest(
+              resetChannelPerIteration,
+              soakIterations,
+              soakMaxFailures,
+              soakPerIterationMaxAcceptableLatencyMs,
+              soakMinTimeMsBetweenRpcs,
+              soakOverallTimeoutSeconds);
+          logger.info("Test case: " + testCase + " done for server: " + c.getServerUri());
+        }
+      });
+      t.start();
+      threads.add(t);
+    }
+    for (Thread t : threads) {
+      t.join();
+    }
+    logger.info("Test case: " + testCase + " done for all clients!");
   }
 }
