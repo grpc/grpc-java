@@ -207,7 +207,7 @@ public final class XdsFederationTestClient {
 
     public void run() {
       try {
-        c.performSoakTest(
+        performSoakTest(
             serverUri,
             resetChannelPerIteration,
             soakIterations,
@@ -241,15 +241,6 @@ public final class XdsFederationTestClient {
 
   private void run() throws Exception {
     logger.info("Begin test case: " + testCase);
-    boolean resetChannelPerIteration;
-    if (testCase.equals("rpc_soak")) {
-      resetChannelPerIteration = false;
-    } else if (testCase.equals("channel_soak")) {
-      resetChannelPerIteration = true;
-    } else {
-      throw new RuntimeException("invalid testcase: " + testCase);
-    }
-    // Run soak tests with each client on separate threads
     ArrayList<Thread> threads = new ArrayList<Thread>();
     for (InnerClient c : clients) {
       Thread t = new Thread(new Runnable() {
