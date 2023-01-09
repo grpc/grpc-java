@@ -15,6 +15,8 @@ configurations {
 }
 
 evaluationDependsOn(project(':grpc-core').path)
+evaluationDependsOn(project(':grpc-context').path)
+evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
