@@ -206,6 +206,14 @@ public final class XdsFederationTestClient {
     }
 
     public void run() {
+      boolean resetChannelPerIteration;
+      if (testCase.equals("rpc_soak")) {
+        resetChannelPerIteration = false;
+      } else if (testCase.equals("channel_soak")) {
+        resetChannelPerIteration = true;
+      } else {
+        throw new RuntimeException("invalid testcase: " + testCase);
+      }
       try {
         performSoakTest(
             serverUri,
