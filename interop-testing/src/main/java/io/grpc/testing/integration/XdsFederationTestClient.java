@@ -205,7 +205,7 @@ public final class XdsFederationTestClient {
       this.serverUri = serverUri;
     }
 
-    public run() {
+    public void run() {
       try {
         c.performSoakTest(
             serverUri,
