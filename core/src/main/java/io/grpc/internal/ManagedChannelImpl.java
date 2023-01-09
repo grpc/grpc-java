@@ -494,6 +494,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private final class ChannelStreamProvider implements ClientStreamProvider {
+    volatile Throttle throttle;
+
     private ClientTransport getTransport(PickSubchannelArgs args) {
       SubchannelPicker pickerCopy = subchannelPicker;
       if (shutdown.get()) {
@@ -549,7 +551,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           context.detach(origContext);
         }
       } else {
-        final Throttle throttle = lastServiceConfig.getRetryThrottling();
         MethodInfo methodInfo = callOptions.getOption(MethodInfo.KEY);
         final RetryPolicy retryPolicy = methodInfo == null ? null : methodInfo.retryPolicy;
         final HedgingPolicy hedgingPolicy = methodInfo == null ? null : methodInfo.hedgingPolicy;
@@ -602,7 +603,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private final ClientStreamProvider transportProvider = new ChannelStreamProvider();
+  private final ChannelStreamProvider transportProvider = new ChannelStreamProvider();
 
   private final Rescheduler idleTimer;
 
@@ -1830,6 +1831,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   "Service config changed{0}",
                   effectiveServiceConfig == EMPTY_SERVICE_CONFIG ? " to empty" : "");
               lastServiceConfig = effectiveServiceConfig;
+              transportProvider.throttle = effectiveServiceConfig.getRetryThrottling();
             }
 
             try {
