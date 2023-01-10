@@ -176,7 +176,6 @@ subprojects {
     if (!project.hasProperty('errorProne') || errorProne.toBoolean()) {
         dependencies {
             errorprone libs.errorprone.core
-            errorproneJavac libs.errorprone.javac
         }
     } else {
         // Disable Error Prone

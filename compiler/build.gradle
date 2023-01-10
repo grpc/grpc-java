@@ -164,6 +164,10 @@ tasks.named("compileTestLiteJava").configure {
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
+tasks.named("checkstyleTestLite").configure {
+    enabled = false
+}
+
 protobuf {
     protoc {
         if (project.hasProperty('protoc')) {
