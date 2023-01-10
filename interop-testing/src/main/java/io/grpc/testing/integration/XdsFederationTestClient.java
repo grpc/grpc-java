@@ -95,6 +95,8 @@ public final class XdsFederationTestClient {
       String value = parts[1];
       if ("server_uris".equals(key)) {
         serverUris = value;
+      } else if ("credentials_types".equals(key)) {
+        credentialsTypes = value;
       } else if ("test_case".equals(key)) {
         testCase = value;
       } else if ("soak_iterations".equals(key)) {
