@@ -222,7 +222,7 @@ public final class XdsFederationTestClient {
     }
 
     /**
-     * Run the intended soak test
+     * Run the intended soak test.
      */
     public void run() {
       boolean resetChannelPerIteration;
