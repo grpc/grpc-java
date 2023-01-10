@@ -196,7 +196,7 @@ def xds_federation_test_client = tasks.register("xds_federation_test_client", Cr
     mainClass = "io.grpc.testing.integration.XdsFederationTestClient"
     applicationName = "xds-federation-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    //classPath = startScriptsClasspath.get()
+    // TODO(apolcyn): set classPath?
 }
 
 distributions.shadow.contents.into("bin") {
