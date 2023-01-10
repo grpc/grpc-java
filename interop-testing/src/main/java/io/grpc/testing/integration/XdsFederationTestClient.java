@@ -16,6 +16,8 @@
 
 package io.grpc.testing.integration;
 
+import static org.junit.Assert.assertTrue;
+
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannelBuilder;
@@ -204,6 +206,7 @@ public final class XdsFederationTestClient {
   class InnerClient extends AbstractInteropTest {
     private String credentialsType;
     private String serverUri;
+    private boolean runSucceeded = false;
 
     public InnerClient(String credentialsType, String serverUri) {
       this.credentialsType = credentialsType;
@@ -211,7 +214,15 @@ public final class XdsFederationTestClient {
     }
 
     /**
-     * Run the intended soak test the client.
+     * Indicates whether run succeeded or not. This must only be called
+     * after run() has finished.
+     */
+    public boolean runSucceeded() {
+      return runSucceeded;
+    }
+
+    /**
+     * Run the intended soak test
      */
     public void run() {
       boolean resetChannelPerIteration;
@@ -232,6 +243,7 @@ public final class XdsFederationTestClient {
             soakMinTimeMsBetweenRpcs,
             soakOverallTimeoutSeconds);
         logger.info("Test case: " + testCase + " done for server: " + serverUri);
+        runSucceeded = true;
       } catch (Exception e) {
         logger.info("Test case: " + testCase + " failed for server: " + serverUri);
         throw new RuntimeException(e);
@@ -270,6 +282,9 @@ public final class XdsFederationTestClient {
     }
     for (Thread t : threads) {
       t.join();
+    }
+    for (InnerClient c : clients) {
+      assertTrue(c.runSucceeded());
     }
     logger.info("Test case: " + testCase + " done for all clients!");
   }
