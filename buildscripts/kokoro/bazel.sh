@@ -3,7 +3,7 @@
 set -exu -o pipefail
 cat /VERSION
 
-use_bazel.sh 4.0.0
+use_bazel.sh 5.0.0
 bazel version
 
 cd github/grpc-java
