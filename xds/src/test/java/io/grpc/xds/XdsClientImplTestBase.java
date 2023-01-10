@@ -117,6 +117,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -3576,13 +3577,18 @@ public abstract class XdsClientImplTestBase {
               .build()
               .start());
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
+      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+      fakeClock.forwardTime(20, TimeUnit.SECONDS); // Trigger rpcRetryTimer
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      if (call == null) { // The first rpcRetry may have happened before the channel was ready
+        fakeClock.forwardTime(50, TimeUnit.SECONDS);
+        call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      }
 
       // NOTE:  There is a ScheduledExecutorService that may get involved due to the reconnect
       // so you cannot rely on the logic being single threaded.  The timeout() in verifyRequest
       // is therefore necessary to avoid flakiness.
       // Send a response and do verifications
-      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
       call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
       call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE);
       verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
@@ -3619,8 +3625,13 @@ public abstract class XdsClientImplTestBase {
     client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
 
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isNotEmpty();
+    verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
+    fakeClock.forwardTime(50, TimeUnit.SECONDS); // Trigger rpcRetry if appropriate
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    // Get rid of rpcRetryTask that should have been scheduled since still cannot talk to server
+    for (ScheduledTask task : fakeClock.getPendingTasks()) {
+      task.cancel(true);
+    }
   }
 
   private XdsClientImpl createXdsClient(String serverUri) {
