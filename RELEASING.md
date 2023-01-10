@@ -75,7 +75,8 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
      $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-5. Continue with Google-internal steps at go/grpc/java/releasing.
+5. Continue with Google-internal steps at go/grpc/java/releasing, but stop 
+   before `Auto releasing using kokoro`.
 6. Create a milestone for the next release.
 7. Move items out of the release milestone that didn't make the cut. Issues that
    may be backported should stay in the release milestone. Treat issues with the
@@ -113,6 +114,9 @@ Tagging the Release
    $ ${EDITOR:-nano -w} README.md
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
    $ ${EDITOR:-nano -w} cronet/README.md
+   # Bump protobuf plugin version if needed in README.md and multiple examples
+   # build.gradle files.
+   $ ${EDITOR:-nano -w} examples/*/build.gradle examples/android/*/build.gradle examples/build.gradle
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 4. Change root build files to remove "-SNAPSHOT" for the next release version
