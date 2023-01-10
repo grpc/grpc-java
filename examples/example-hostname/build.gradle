@@ -1,6 +1,7 @@
 plugins {
     id 'application' // Provide convenience executables for trying out the examples.
     id 'java'
+    id 'net.ltgt.errorprone'
 
     id "com.google.protobuf" version "0.8.17"
     id 'com.google.cloud.tools.jib' version '3.1.4' // For releasing to Docker Hub
@@ -30,6 +31,9 @@ dependencies {
     implementation "io.grpc:grpc-services:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+    annotationProcessor 'io.grpc:grpc-java-api-checker:1.1.0'
+    errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
+    errorprone 'com.google.errorprone:error_prone_core:2.3.2'
 
     testImplementation 'junit:junit:4.12'
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
@@ -64,3 +68,13 @@ jib {
     imageId = 'build/example-hostname.id'
   }
 }
+
+compileJava {
+    // you can specify the settings
+    options.errorprone {
+        disableAllChecks = true
+        check("GrpcExperimentalApi", CheckSeverity.ERROR)
+        check("GrpcInternal", CheckSeverity.ERROR)
+    }
+}
+
