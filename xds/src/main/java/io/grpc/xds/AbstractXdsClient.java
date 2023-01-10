@@ -430,7 +430,7 @@ final class AbstractXdsClient {
           });
         }
       };
-      requestWriter = stub.withWaitForReady().streamAggregatedResources(responseReader);
+      requestWriter = stub.streamAggregatedResources(responseReader);
     }
 
     @Override

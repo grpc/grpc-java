@@ -117,6 +117,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -3590,8 +3591,12 @@ public abstract class XdsClientImplTestBase {
     client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
 
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isNotEmpty();
+    verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
+    fakeClock.runDueTasks();
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    for (ScheduledTask task : fakeClock.getPendingTasks()) {
+      task.cancel(true);
+    }
   }
 
   private XdsClientImpl createXdsClient(String serverUri) {
