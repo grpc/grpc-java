@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.NameResolver;
-import io.grpc.SynchronizationContext;
-import java.util.concurrent.ScheduledExecutorService;
+import io.grpc.Status;
 
 /**
  * This wrapper class can add retry capability to any polling {@link NameResolver} implementation
@@ -32,23 +32,25 @@ final class RetryingNameResolver extends ForwardingNameResolver {
   private final NameResolver retriedNameResolver;
   private final RetryScheduler retryScheduler;
 
+  static final Attributes.Key<ResolutionResultListener> RESOLUTION_RESULT_LISTENER_KEY
+      = Attributes.Key.create(
+          "io.grpc.internal.RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY");
+
   /**
    * Creates a new {@link RetryingNameResolver}.
    *
    * @param retriedNameResolver A {@link NameResolver} that will have failed attempt retried.
-   * @param backoffPolicyProvider Provides the policy used to backoff from retry attempts
-   * @param scheduledExecutorService Executes any retry attempts
-   * @param syncContext All retries happen within the given {@code SyncContext}
+   * @param retryScheduler Used to schedule the retry attempts.
    */
-  RetryingNameResolver(NameResolver retriedNameResolver,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      ScheduledExecutorService scheduledExecutorService,
-      SynchronizationContext syncContext) {
+  RetryingNameResolver(NameResolver retriedNameResolver, RetryScheduler retryScheduler) {
     super(retriedNameResolver);
     this.retriedNameResolver = retriedNameResolver;
-    this.retriedNameResolver.addResolutionResultListener(new RetryResolutionResultListener());
-    this.retryScheduler = new RetryScheduler(new DelayedNameResolverRefresh(),
-        scheduledExecutorService, syncContext, backoffPolicyProvider);
+    this.retryScheduler = retryScheduler;
+  }
+
+  @Override
+  public void start(Listener2 listener) {
+    super.start(new RetryingListener(listener));
   }
 
   @Override
@@ -58,9 +60,10 @@ final class RetryingNameResolver extends ForwardingNameResolver {
   }
 
   /**
-   * @return The {@link NameResolver} that is getting its failed attempts retried.
+   * Used to get the underlying {@link NameResolver} that is getting its failed attempts retried.
    */
-  public NameResolver getRetriedNameResolver() {
+  @VisibleForTesting
+  NameResolver getRetriedNameResolver() {
     return retriedNameResolver;
   }
 
@@ -72,14 +75,39 @@ final class RetryingNameResolver extends ForwardingNameResolver {
     }
   }
 
-  private class RetryResolutionResultListener implements ResolutionResultListener {
+  private class RetryingListener extends Listener2 {
+    private Listener2 delegateListener;
+
+    RetryingListener(Listener2 delegateListener) {
+      this.delegateListener = delegateListener;
+    }
 
     @Override
+    public void onResult(ResolutionResult resolutionResult) {
+      delegateListener.onResult(resolutionResult.toBuilder().setAttributes(
+              resolutionResult.getAttributes().toBuilder()
+                  .set(RESOLUTION_RESULT_LISTENER_KEY, new ResolutionResultListener()).build())
+          .build());
+    }
+
+    @Override
+    public void onError(Status error) {
+      delegateListener.onError(error);
+      retryScheduler.schedule(new DelayedNameResolverRefresh());
+    }
+  }
+
+  /**
+   * Simple callback class to store in {@link ResolutionResult} attributes so that
+   * ManagedChannel can indicate if the resolved addresses were accepted. Temporary until
+   * the Listener2.onResult() API can be changed to return a boolean for this purpose.
+   */
+  class ResolutionResultListener {
     public void resolutionAttempted(boolean successful) {
       if (successful) {
         retryScheduler.reset();
       } else {
-        retryScheduler.schedule();
+        retryScheduler.schedule(new DelayedNameResolverRefresh());
       }
     }
   }

@@ -563,9 +563,10 @@ public class ServiceConfigErrorHandlingTest {
       assertEquals(DEFAULT_PORT, args.getDefaultPort());
       RetryingNameResolver resolver = new RetryingNameResolver(
           new FakeNameResolver(args.getServiceConfigParser()),
-          new FakeBackoffPolicyProvider(),
-          args.getScheduledExecutorService(),
-          args.getSynchronizationContext());
+          new BackoffPolicyRetryScheduler(
+              new FakeBackoffPolicyProvider(),
+              args.getScheduledExecutorService(),
+              args.getSynchronizationContext()));
       resolvers.add(resolver);
       return resolver;
     }
@@ -617,7 +618,7 @@ public class ServiceConfigErrorHandlingTest {
               .setServiceConfig(serviceConfigParser.parseServiceConfig(rawServiceConfig));
         }
 
-        fireResolutionResultEvent(listener.onResult(builder.build()));
+        listener.onResult(builder.build());
       }
 
       @Override public void shutdown() {

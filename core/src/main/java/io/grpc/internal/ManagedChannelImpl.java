@@ -85,6 +85,7 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
+import io.grpc.internal.RetryingNameResolver.ResolutionResultListener;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -1697,7 +1698,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private final class NameResolverListener extends NameResolver.Listener2 {
+  final class NameResolverListener extends NameResolver.Listener2 {
     final LbHelperImpl helper;
     final NameResolver resolver;
 
@@ -1707,7 +1708,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public boolean onResult(final ResolutionResult resolutionResult) {
+    public void onResult(final ResolutionResult resolutionResult) {
       final class NamesResolved implements Runnable {
 
         @SuppressWarnings("ReferenceEquality")
@@ -1848,7 +1849,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
       if (lastAddressesAccepted == null) {
         lastAddressesAccepted = false;
       }
-      return lastAddressesAccepted;
+
+      // If a listener is provided, let it know if the addresses were accepted.
+      // TODO(tmwilson): Once we are ready to change the onResult() API and return a boolean
+      // this hacky callback in an attribute approach can be removed.
+      ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
+          .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
+      if (resolutionResultListener != null) {
+        resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
+      }
     }
 
     @Override

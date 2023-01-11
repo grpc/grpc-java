@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,65 +16,22 @@
 
 package io.grpc.internal;
 
-import io.grpc.SynchronizationContext;
-import io.grpc.SynchronizationContext.ScheduledHandle;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
-
 /**
- * Schedules a retry operation according to a {@link BackoffPolicy}. The retry is run within a
- * {@link SynchronizationContext}. At most one retry is scheduled at a time.
+ * This interface is used to schedule future retry attempts for a failed operation. The retry delay
+ * and the number of attempt is defined by implementing classes. Implementations should assure
+ * that only one future retry operation is ever scheduled at a time.
  */
-final class RetryScheduler {
-  private final Runnable retryOperation;
-  private final ScheduledExecutorService scheduledExecutorService;
-  private final SynchronizationContext syncContext;
-  private final BackoffPolicy.Provider policyProvider;
-
-  private BackoffPolicy policy;
-  private ScheduledHandle scheduledHandle;
-
-  private static final Logger logger = Logger.getLogger(RetryScheduler.class.getName());
-
-  RetryScheduler(Runnable retryOperation, ScheduledExecutorService scheduledExecutorService,
-      SynchronizationContext syncContext, BackoffPolicy.Provider policyProvider) {
-    this.retryOperation = retryOperation;
-    this.scheduledExecutorService = scheduledExecutorService;
-    this.syncContext = syncContext;
-    this.policyProvider = policyProvider;
-  }
+public interface RetryScheduler {
 
   /**
-   * Schedules a future retry operation. Only allows one retry to be scheduled at any given time.
+   * A request to schedule a future retry (or retries) for a failed operation.
    *
    * @return The delay in nanos before the operation fires or -1 if it was not scheduled.
    */
-  long schedule() {
-    if (policy == null) {
-      policy = policyProvider.get();
-    }
-    // If a retry is already scheduled, take no further action.
-    if (scheduledHandle != null && scheduledHandle.isPending()) {
-      return -1;
-    }
-    long delayNanos = policy.nextBackoffNanos();
-    scheduledHandle = syncContext.schedule(retryOperation, delayNanos, TimeUnit.NANOSECONDS,
-        scheduledExecutorService);
-    logger.fine("Scheduling DNS resolution backoff for " + delayNanos + "ns");
-
-    return delayNanos;
-  }
+  long schedule(Runnable retryOperation);
 
   /**
-   * Resets the {@link RetryScheduler} and cancels any pending retry task. The policy will be
-   * cleared thus also resetting any state associated with it (e.g. a backoff multiplier).
+   * Resets the scheduler, effectively cancelling any future retry operation.
    */
-  void reset() {
-    if (scheduledHandle != null && scheduledHandle.isPending()) {
-      scheduledHandle.cancel();
-    }
-    policy = null;
-  }
-
+  void reset();
 }

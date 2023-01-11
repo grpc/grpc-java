@@ -61,9 +61,10 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
               GrpcUtil.SHARED_CHANNEL_EXECUTOR,
               Stopwatch.createUnstarted(),
               InternalServiceProviders.isAndroid(getClass().getClassLoader())),
-          new ExponentialBackoffPolicy.Provider(),
-          args.getScheduledExecutorService(),
-          args.getSynchronizationContext());
+          new BackoffPolicyRetryScheduler(
+              new ExponentialBackoffPolicy.Provider(),
+              args.getScheduledExecutorService(),
+              args.getSynchronizationContext()));
     } else {
       return null;
     }
