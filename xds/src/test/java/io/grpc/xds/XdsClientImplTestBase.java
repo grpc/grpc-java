@@ -926,7 +926,7 @@ public abstract class XdsClientImplTestBase {
   }
 
   @Test
-  public void ldsResourceUpdated_() {
+  public void cancelResourceWatcherNotRemoveUrlSubscribers() {
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);
     verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
@@ -940,7 +940,8 @@ public abstract class XdsClientImplTestBase {
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
         LDS_RESOURCE + "1", ldsResourceWatcher);
-    xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), LDS_RESOURCE + "1",ldsResourceWatcher);
+    xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), LDS_RESOURCE + "1",
+        ldsResourceWatcher);
 
     // Updated LDS response.
     Any testListenerVhosts2 = Any.pack(mf.buildListenerWithApiListener(LDS_RESOURCE,
@@ -949,7 +950,8 @@ public abstract class XdsClientImplTestBase {
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
-    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts2, VERSION_2, TIME_INCREMENT * 2);
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts2, VERSION_2,
+        TIME_INCREMENT * 2);
   }
 
   @Test
