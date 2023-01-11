@@ -939,6 +939,35 @@ public abstract class XdsClientImplTestBase {
   }
 
   @Test
+  public void cancelResourceWatcherNotRemoveUrlSubscribers() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+
+    // Initial LDS response.
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+        LDS_RESOURCE + "1", ldsResourceWatcher);
+    xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), LDS_RESOURCE + "1",
+        ldsResourceWatcher);
+
+    // Updated LDS response.
+    Any testListenerVhosts2 = Any.pack(mf.buildListenerWithApiListener(LDS_RESOURCE,
+        mf.buildRouteConfiguration("new", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts2, VERSION_2, "0001");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts2, VERSION_2,
+        TIME_INCREMENT * 2);
+  }
+
+  @Test
   public void ldsResourceUpdated_withXdstpResourceName() {
     BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
