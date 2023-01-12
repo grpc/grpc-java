@@ -814,6 +814,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   private void safeCloseMasterListener(Status status, RpcProgress progress, Metadata metadata) {
+    savedCloseMasterListenerReason = new SavedCloseMasterListenerReason(status, progress,
+        metadata);
     if (inFlightSubStreams.addAndGet(Integer.MIN_VALUE) == Integer.MIN_VALUE) {
       listenerSerializeExecutor.execute(
           new Runnable() {
@@ -823,9 +825,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               masterListener.closed(status, progress, metadata);
             }
           });
-    } else {
-      savedCloseMasterListenerReason = new SavedCloseMasterListenerReason(status, progress,
-          metadata);
     }
   }
 
