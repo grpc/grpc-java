@@ -322,13 +322,13 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
         if (!subscriber.isWatched()) {
           subscriber.cancelResourceWatch();
           resourceSubscribers.get(type).remove(resourceName);
-          subscribedResourceTypeUrls.remove(type.typeUrl());
-          subscribedResourceTypeUrls.remove(type.typeUrlV2());
           if (subscriber.xdsChannel != null) {
             subscriber.xdsChannel.adjustResourceSubscription(type);
           }
           if (resourceSubscribers.get(type).isEmpty()) {
             resourceSubscribers.remove(type);
+            subscribedResourceTypeUrls.remove(type.typeUrl());
+            subscribedResourceTypeUrls.remove(type.typeUrlV2());
           }
         }
       }
