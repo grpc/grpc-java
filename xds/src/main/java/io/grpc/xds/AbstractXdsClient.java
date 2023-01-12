@@ -301,13 +301,12 @@ final class AbstractXdsClient {
 
     final void handleRpcResponse(XdsResourceType<?> type, String versionInfo, List<Any> resources,
                                  String nonce) {
+      checkNotNull(type, "type");
       if (closed) {
         return;
       }
       responseReceived = true;
-      if (type != null) {
-        respNonces.put(type, nonce);
-      }
+      respNonces.put(type, nonce);
       xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce);
     }
 
@@ -390,6 +389,13 @@ final class AbstractXdsClient {
                 logger.log(
                     XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
                     MessagePrinter.print(response));
+              }
+              if (type == null) {
+                logger.log(
+                    XdsLogLevel.WARNING,
+                    "Ignore an unknown type of DiscoveryResponse: {0}",
+                    response.getTypeUrl());
+                return;
               }
               handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
                   response.getNonce());

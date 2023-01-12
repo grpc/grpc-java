@@ -167,11 +167,8 @@ final class XdsClientImpl extends XdsClient
   public void handleResourceResponse(
       XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
       List<Any> resources, String nonce) {
+    checkNotNull(xdsResourceType, "xdsResourceType");
     syncContext.throwIfNotInThisSynchronizationContext();
-    if (xdsResourceType == null) {
-      logger.log(XdsLogLevel.WARNING, "Ignore an unknown type of DiscoveryResponse");
-      return;
-    }
     Set<String> toParseResourceNames = null;
     if (!(xdsResourceType == XdsListenerResource.getInstance()
         || xdsResourceType == XdsRouteConfigureResource.getInstance())
