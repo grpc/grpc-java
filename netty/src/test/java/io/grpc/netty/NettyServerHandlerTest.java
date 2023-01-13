@@ -60,7 +60,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
-import io.grpc.internal.AbstractStream;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.KeepAliveManager;
@@ -112,6 +111,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Rule
   public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
+
+  private static final int STREAM_ID = 3;
 
   private static final AsciiString HTTP_FAKE_METHOD = AsciiString.of("FAKE");
 
@@ -773,7 +774,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     fakeClock().forwardNanos(keepAliveTimeoutInNanos);
 
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   @Test
@@ -906,7 +907,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   @Test
@@ -936,7 +937,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   @Test
@@ -980,7 +981,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   @Test
@@ -1024,7 +1025,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   @Test
@@ -1078,7 +1079,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   @Test
@@ -1109,7 +1110,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   @Test
@@ -1177,7 +1178,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardTime(2, TimeUnit.MILLISECONDS);
 
     // channel closed
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   @Test
@@ -1217,7 +1218,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardTime(2, TimeUnit.MILLISECONDS);
 
     // channel closed
-    assertFalse(channel().isOpen());
+    assertTrue(!channel().isOpen());
   }
 
   private void createStream() throws Exception {
@@ -1267,8 +1268,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
-        Attributes.EMPTY,
-        fakeClock().getTicker());
+        Attributes.EMPTY);
   }
 
   @Override
@@ -1280,14 +1280,4 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   protected void makeStream() throws Exception {
     createStream();
   }
-
-  @Override
-  protected AbstractStream stream() throws Exception {
-    if (stream == null) {
-      makeStream();
-    }
-
-    return stream;
-  }
-
 }
