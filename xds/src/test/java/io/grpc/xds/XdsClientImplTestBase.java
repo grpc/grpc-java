@@ -3597,8 +3597,9 @@ public abstract class XdsClientImplTestBase {
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
 
     verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
-    fakeClock.runDueTasks();
+    fakeClock.forwardTime(50, TimeUnit.SECONDS); // Trigger rpcRetry if appropriate
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    // Get rid of rpcRetryTask that should have been scheduled since still cannot talk to server
     for (ScheduledTask task : fakeClock.getPendingTasks()) {
       task.cancel(true);
     }
