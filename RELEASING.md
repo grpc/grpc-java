@@ -75,8 +75,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
      $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-5. Continue with Google-internal steps at go/grpc/java/releasing, but stop
-   before `Auto releasing using kokoro`.
+5. Continue with Google-internal steps at go/grpc/java/releasing.
 6. Create a milestone for the next release.
 7. Move items out of the release milestone that didn't make the cut. Issues that
    may be backported should stay in the release milestone. Treat issues with the
@@ -105,7 +104,7 @@ Tagging the Release
    version. _Also_ update the version numbers for protoc if the protobuf library
    version was updated since the last release.
 
-   ```shell
+   ```bash
    $ git checkout v$MAJOR.$MINOR.x
    $ git pull upstream v$MAJOR.$MINOR.x
    $ git checkout -b release
