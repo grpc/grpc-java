@@ -2025,6 +2025,7 @@ public abstract class AbstractInteropTest {
     * and channel creation behavior.
    */
   public void performSoakTest(
+      String serverUri,
       boolean resetChannelPerIteration,
       int soakIterations,
       int maxFailures,
@@ -2057,21 +2058,22 @@ public abstract class AbstractInteropTest {
       SoakIterationResult result = performOneSoakIteration(soakStub);
       SocketAddress peer = clientCallCapture
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
-      System.err.print(
+      StringBuilder logStr = new StringBuilder(
           String.format(
               Locale.US,
-              "soak iteration: %d elapsed_ms: %d peer: %s",
-              i, result.getLatencyMs(), peer != null ? peer.toString() : "null"));
+              "soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
+              i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
       if (!result.getStatus().equals(Status.OK)) {
         totalFailures++;
-        System.err.println(String.format(" failed: %s", result.getStatus()));
+        logStr.append(String.format(" failed: %s", result.getStatus()));
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
         totalFailures++;
-        System.err.println(
+        logStr.append(
             " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
       } else {
-        System.err.println(" succeeded");
+        logStr.append(" succeeded");
       }
+      System.err.println(logStr.toString());
       iterationsDone++;
       latencies.recordValue(result.getLatencyMs());
       long remainingNs = earliestNextStartNs - System.nanoTime();
@@ -2084,20 +2086,12 @@ public abstract class AbstractInteropTest {
     System.err.println(
         String.format(
             Locale.US,
-            "soak test ran: %d / %d iterations\n"
-                + "total failures: %d\n"
-                + "max failures threshold: %d\n"
-                + "max acceptable per iteration latency ms: %d\n"
-                + " p50 soak iteration latency: %d ms\n"
-                + " p90 soak iteration latency: %d ms\n"
-                + "p100 soak iteration latency: %d ms\n"
-                + "See breakdown above for which iterations succeeded, failed, and "
-                + "why for more info.",
+            "(server_uri: %s) soak test ran: %d / %d iterations. total failures: %d. "
+                + "p50: %d ms, p90: %d ms, p100: %d ms",
+            serverUri,
             iterationsDone,
             soakIterations,
             totalFailures,
-            maxFailures,
-            maxAcceptablePerIterationLatencyMs,
             latencies.getValueAtPercentile(50),
             latencies.getValueAtPercentile(90),
             latencies.getValueAtPercentile(100)));
@@ -2105,8 +2099,9 @@ public abstract class AbstractInteropTest {
     String timeoutErrorMessage =
         String.format(
             Locale.US,
-            "soak test consumed all %d seconds of time and quit early, only "
-                + "having ran %d out of desired %d iterations.",
+            "(server_uri: %s) soak test consumed all %d seconds of time and quit early, "
+                + "only having ran %d out of desired %d iterations.",
+            serverUri,
             overallTimeoutSeconds,
             iterationsDone,
             soakIterations);
@@ -2115,8 +2110,9 @@ public abstract class AbstractInteropTest {
     String tooManyFailuresErrorMessage =
         String.format(
             Locale.US,
-            "soak test total failures: %d exceeds max failures threshold: %d.",
-            totalFailures, maxFailures);
+            "(server_uri: %s) soak test total failures: %d exceeds max failures "
+                + "threshold: %d.",
+            serverUri, totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
   }
 
