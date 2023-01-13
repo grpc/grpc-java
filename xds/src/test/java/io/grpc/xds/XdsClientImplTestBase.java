@@ -3548,13 +3548,18 @@ public abstract class XdsClientImplTestBase {
               .build()
               .start());
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
+      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+      fakeClock.forwardTime(20, TimeUnit.SECONDS); // Trigger rpcRetryTimer
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      if (call == null) { // The first rpcRetry may have happened before the channel was ready
+        fakeClock.forwardTime(50, TimeUnit.SECONDS);
+        call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      }
 
       // NOTE:  There is a ScheduledExecutorService that may get involved due to the reconnect
       // so you cannot rely on the logic being single threaded.  The timeout() in verifyRequest
       // is therefore necessary to avoid flakiness.
       // Send a response and do verifications
-      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
       call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
       call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE);
       verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
