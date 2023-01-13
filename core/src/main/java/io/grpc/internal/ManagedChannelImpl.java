@@ -281,10 +281,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be mutated and read from constructor or syncContext
   // used for channel tracing when value changed
   private ManagedChannelServiceConfig lastServiceConfig = EMPTY_SERVICE_CONFIG;
-  // Must be mutated and read from constructor or syncContext
-  // Denotes if the last resolved addresses were accepted by the load balancer. A {@code null}
-  // value indicates no attempt has been made yet.
-  private Boolean lastAddressesAccepted;
 
   @Nullable
   private final ManagedChannelServiceConfig defaultServiceConfig;
@@ -1309,8 +1305,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         if (shutdown.get()) {
           return;
         }
-        if (lastAddressesAccepted != null && !lastAddressesAccepted) {
-          checkState(nameResolverStarted, "name resolver must be started");
+        if (nameResolverStarted) {
           refreshNameResolution();
         }
         for (InternalSubchannel subchannel : subchannels) {
@@ -1717,7 +1712,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           if (ManagedChannelImpl.this.nameResolver != resolver) {
             return;
           }
-          lastAddressesAccepted = false;
+          boolean lastAddressesAccepted;
 
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
           channelLogger.log(
@@ -1838,26 +1833,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     .setAttributes(attributes)
                     .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
+          } else {
+            lastAddressesAccepted = false;
+          }
+
+          // If a listener is provided, let it know if the addresses were accepted.
+          ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
+              .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
+          if (resolutionResultListener != null) {
+            resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
           }
         }
       }
 
       syncContext.execute(new NamesResolved());
-
-      // If NameResolved did not assign a value to lastAddressesAccepted, we assume there was an
-      // exception and set it to false.
-      if (lastAddressesAccepted == null) {
-        lastAddressesAccepted = false;
-      }
-
-      // If a listener is provided, let it know if the addresses were accepted.
-      // TODO(tmwilson): Once we are ready to change the onResult() API and return a boolean
-      // this hacky callback in an attribute approach can be removed.
-      ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
-          .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
-      if (resolutionResultListener != null) {
-        resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
-      }
     }
 
     @Override

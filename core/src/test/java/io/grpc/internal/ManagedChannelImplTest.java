@@ -2871,22 +2871,6 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void resetConnectBackoff_noOpWithoutPendingResolverBackoff() {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
-            .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
-    FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
-    assertEquals(0, nameResolver.refreshCalled);
-
-    channel.resetConnectBackoff();
-
-    assertEquals(0, nameResolver.refreshCalled);
-  }
-
-  @Test
   public void resetConnectBackoff_noOpWhenChannelShutdown() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();

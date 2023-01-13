@@ -20,6 +20,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -62,7 +63,7 @@ final class BackoffPolicyRetryScheduler implements RetryScheduler {
     long delayNanos = policy.nextBackoffNanos();
     scheduledHandle = syncContext.schedule(retryOperation, delayNanos, TimeUnit.NANOSECONDS,
         scheduledExecutorService);
-    logger.fine("Scheduling DNS resolution backoff for " + delayNanos + "ns");
+    logger.log(Level.FINE, "Scheduling DNS resolution backoff for {0}ns", delayNanos);
 
     return delayNanos;
   }
