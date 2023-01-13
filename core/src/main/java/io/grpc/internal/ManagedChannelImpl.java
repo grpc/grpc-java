@@ -1460,7 +1460,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.throwIfNotInThisSynchronizationContext();
       // No new subchannel should be created after load balancer has been shutdown.
       checkState(!terminating, "Channel is being terminated");
-      return new SubchannelImpl(args, this);
+      return new SubchannelImpl(args);
     }
 
     @Override
@@ -1931,7 +1931,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final class SubchannelImpl extends AbstractSubchannel {
     final CreateSubchannelArgs args;
-    final LbHelperImpl helper;
     final InternalLogId subchannelLogId;
     final ChannelLoggerImpl subchannelLogger;
     final ChannelTracer subchannelTracer;
@@ -1941,7 +1940,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     boolean shutdown;
     ScheduledHandle delayedShutdownTask;
 
-    SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
+    SubchannelImpl(CreateSubchannelArgs args) {
       checkNotNull(args, "args");
       addressGroups = args.getAddresses();
       if (authorityOverride != null) {
@@ -1950,7 +1949,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
       }
       this.args = args;
-      this.helper = checkNotNull(helper, "helper");
       subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ authority());
       subchannelTracer = new ChannelTracer(
           subchannelLogId, maxTraceEvents, timeProvider.currentTimeNanos(),
