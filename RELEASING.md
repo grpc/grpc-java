@@ -187,12 +187,14 @@ Update README.md
 ----------------
 After waiting ~1 day and verifying that the release appears on [Maven
 Central](https://search.maven.org/search?q=g:io.grpc), cherry-pick the commit
-that updated the README into the master branch and go through review process.
+that updated the README into the master branch.
 
-```
+```bash
 $ git checkout -b bump-readme master
 $ git cherry-pick v$MAJOR.$MINOR.$PATCH^
+$ git push
 ```
+Create a PR and go through the review process
 
 Update version referenced by tutorials
 --------------------------------------
