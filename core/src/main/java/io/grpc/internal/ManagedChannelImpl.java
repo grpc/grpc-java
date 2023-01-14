@@ -750,7 +750,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (overrideAuthority == null) {
       return resolver;
     }
-    return new ForwardingNameResolver(resolver) {
+
+    // If the nameResolver is not already a RetryingNameResolver, then wrap it with it.
+    // This helps guarantee that name resolution retry remains supported even as it has been
+    // removed from ManagedChannelImpl.
+    // TODO: After a transition period, all NameResolver implementations that need retry should use
+    //       RetryingNameResolver directly and this step can be removed.
+    NameResolver usedNameResolver;
+    if (resolver instanceof RetryingNameResolver) {
+      usedNameResolver = resolver;
+    } else {
+      usedNameResolver = new RetryingNameResolver(resolver,
+          new BackoffPolicyRetryScheduler(new ExponentialBackoffPolicy.Provider(),
+              nameResolverArgs.getScheduledExecutorService(),
+              nameResolverArgs.getSynchronizationContext()));
+    }
+
+    return new ForwardingNameResolver(usedNameResolver) {
       @Override
       public String getServiceAuthority() {
         return overrideAuthority;
