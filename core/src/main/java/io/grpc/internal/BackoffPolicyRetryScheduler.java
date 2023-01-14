@@ -48,24 +48,20 @@ final class BackoffPolicyRetryScheduler implements RetryScheduler {
 
   /**
    * Schedules a future retry operation. Only allows one retry to be scheduled at any given time.
-   *
-   * @return The delay in nanos before the operation fires or -1 if it was not scheduled.
    */
   @Override
-  public long schedule(Runnable retryOperation) {
+  public void schedule(Runnable retryOperation) {
     if (policy == null) {
       policy = policyProvider.get();
     }
     // If a retry is already scheduled, take no further action.
     if (scheduledHandle != null && scheduledHandle.isPending()) {
-      return -1;
+      return;
     }
     long delayNanos = policy.nextBackoffNanos();
     scheduledHandle = syncContext.schedule(retryOperation, delayNanos, TimeUnit.NANOSECONDS,
         scheduledExecutorService);
     logger.log(Level.FINE, "Scheduling DNS resolution backoff for {0}ns", delayNanos);
-
-    return delayNanos;
   }
 
   /**
@@ -74,10 +70,12 @@ final class BackoffPolicyRetryScheduler implements RetryScheduler {
    */
   @Override
   public void reset() {
-    if (scheduledHandle != null && scheduledHandle.isPending()) {
-      scheduledHandle.cancel();
-    }
-    policy = null;
+    syncContext.execute(() -> {
+      if (scheduledHandle != null && scheduledHandle.isPending()) {
+        scheduledHandle.cancel();
+      }
+      policy = null;
+    });
   }
 
 }

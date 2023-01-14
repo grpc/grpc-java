@@ -24,11 +24,10 @@ package io.grpc.internal;
 public interface RetryScheduler {
 
   /**
-   * A request to schedule a future retry (or retries) for a failed operation.
-   *
-   * @return The delay in nanos before the operation fires or -1 if it was not scheduled.
+   * A request to schedule a future retry (or retries) for a failed operation. Noop if an operation
+   * has already been scheduled.
    */
-  long schedule(Runnable retryOperation);
+  void schedule(Runnable retryOperation);
 
   /**
    * Resets the scheduler, effectively cancelling any future retry operation.

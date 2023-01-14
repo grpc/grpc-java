@@ -21,6 +21,8 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.SynchronizationContext;
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -46,30 +48,51 @@ public class BackoffPolicyRetrySchedulerTest {
 
   @Test
   public void schedule() {
-    long delayNanos = scheduler.schedule(() -> {
-    });
-    assertThat(delayNanos).isEqualTo(1);
+    AtomicInteger retryCount = new AtomicInteger();
+    Runnable retry = retryCount::incrementAndGet;
+    scheduler.schedule(retry);
 
-    // Second schedule should have no effect.
-    delayNanos = scheduler.schedule(() -> {
-    });
-    assertThat(delayNanos).isEqualTo(-1);
+    fakeClock.forwardTime(2, TimeUnit.NANOSECONDS);
 
+    assertThat(retryCount.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void schedule_noMultiple() {
+    AtomicInteger retryCount = new AtomicInteger();
+    Runnable retry = retryCount::incrementAndGet;
+
+    // We schedule multiple retries...
+    scheduler.schedule(retry);
+    scheduler.schedule(retry);
+
+    fakeClock.forwardTime(2, TimeUnit.NANOSECONDS);
+
+    // But only one of them should have run.
+    assertThat(retryCount.get()).isEqualTo(1);
   }
 
   @Test
   public void reset() {
-    long delayNanos = scheduler.schedule(() -> {
-    });
-    assertThat(delayNanos).isEqualTo(1);
+    AtomicInteger retryCount = new AtomicInteger();
+    Runnable retry = retryCount::incrementAndGet;
+    Runnable retryTwo = () -> {
+      retryCount.getAndAdd(2);
+    };
 
-    // Reset should make another schedule possible
+    // We schedule one retry.
+    scheduler.schedule(retry);
+
+    // But then reset.
     scheduler.reset();
 
-    // Second schedule should now work.
-    delayNanos = scheduler.schedule(() -> {
-    });
-    assertThat(delayNanos).isEqualTo(1);
+    // And schedule a different retry.
+    scheduler.schedule(retryTwo);
+
+    fakeClock.forwardTime(2, TimeUnit.NANOSECONDS);
+
+    // The retry after the reset should have been run.
+    assertThat(retryCount.get()).isEqualTo(2);
   }
 
   private static class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
