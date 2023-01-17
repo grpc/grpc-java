@@ -17,12 +17,14 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Listener2;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.Status;
 import io.grpc.internal.RetryingNameResolver.ResolutionResultListener;
 import org.junit.Before;
 import org.junit.Rule;
@@ -53,7 +55,7 @@ public class RetryingNameResolverTest {
   @Captor
   private ArgumentCaptor<Listener2> listenerCaptor;
   @Captor
-  private ArgumentCaptor<ResolutionResult> resolutionResultCaptor;
+  private ArgumentCaptor<ResolutionResult> onResultCaptor;
 
   private RetryingNameResolver retryingNameResolver;
 
@@ -69,15 +71,15 @@ public class RetryingNameResolverTest {
   }
 
   // Make sure the ResolutionResultListener callback is added to the ResolutionResult attributes,
-  // and the retry scheduler is reset since the name resolution was successful..
+  // and the retry scheduler is reset since the name resolution was successful.
   @Test
   public void onResult_sucess() {
     retryingNameResolver.start(mockListener);
     verify(mockNameResolver).start(listenerCaptor.capture());
 
     listenerCaptor.getValue().onResult(ResolutionResult.newBuilder().build());
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResultListener resolutionResultListener = resolutionResultCaptor.getValue()
+    verify(mockListener).onResult(onResultCaptor.capture());
+    ResolutionResultListener resolutionResultListener = onResultCaptor.getValue()
         .getAttributes()
         .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
     assertThat(resolutionResultListener).isNotNull();
@@ -87,15 +89,15 @@ public class RetryingNameResolverTest {
   }
 
   // Make sure the ResolutionResultListener callback is added to the ResolutionResult attributes,
-  // and the retry scheduler is reset since the name resolution was successful..
+  // and that a retry gets scheduled when the resolution results are rejected.
   @Test
   public void onResult_failure() {
     retryingNameResolver.start(mockListener);
     verify(mockNameResolver).start(listenerCaptor.capture());
 
     listenerCaptor.getValue().onResult(ResolutionResult.newBuilder().build());
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResultListener resolutionResultListener = resolutionResultCaptor.getValue()
+    verify(mockListener).onResult(onResultCaptor.capture());
+    ResolutionResultListener resolutionResultListener = onResultCaptor.getValue()
         .getAttributes()
         .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
     assertThat(resolutionResultListener).isNotNull();
@@ -104,8 +106,31 @@ public class RetryingNameResolverTest {
     verify(mockRetryScheduler).schedule(isA(Runnable.class));
   }
 
+  // Wrapping a NameResolver more than once is a misconfiguration.
+  @Test
+  public void onResult_failure_doubleWrapped() {
+    NameResolver doubleWrappedResolver = new RetryingNameResolver(retryingNameResolver,
+        mockRetryScheduler);
+
+    doubleWrappedResolver.start(mockListener);
+    verify(mockNameResolver).start(listenerCaptor.capture());
+
+    try {
+      listenerCaptor.getValue().onResult(ResolutionResult.newBuilder().build());
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("can only be used once");
+      return;
+    }
+    fail("An exception should have been thrown for a double wrapped NAmeResolver");
+  }
+
+  // A retry should get scheduled when name resolution fails.
   @Test
   public void onError() {
-
+    retryingNameResolver.start(mockListener);
+    verify(mockNameResolver).start(listenerCaptor.capture());
+    listenerCaptor.getValue().onError(Status.DEADLINE_EXCEEDED);
+    verify(mockListener).onError(Status.DEADLINE_EXCEEDED);
+    verify(mockRetryScheduler).schedule(isA(Runnable.class));
   }
 }

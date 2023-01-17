@@ -59,7 +59,6 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public abstract class NameResolver {
-
   /**
    * Returns the authority used to authenticate connections to servers.  It <strong>must</strong> be
    * from a trusted source, because if the authority is tampered with, RPCs may be sent to the

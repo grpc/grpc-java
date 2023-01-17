@@ -84,6 +84,13 @@ final class RetryingNameResolver extends ForwardingNameResolver {
 
     @Override
     public void onResult(ResolutionResult resolutionResult) {
+      // If the resolution result listener is already an attribute it indicates that a name resolver
+      // has already been wrapped with this class. This indicates a misconfiguration.
+      if (resolutionResult.getAttributes().get(RESOLUTION_RESULT_LISTENER_KEY) != null) {
+        throw new IllegalStateException(
+            "RetryingNameResolver can only be used once to wrap a NameResolver");
+      }
+
       delegateListener.onResult(resolutionResult.toBuilder().setAttributes(
               resolutionResult.getAttributes().toBuilder()
                   .set(RESOLUTION_RESULT_LISTENER_KEY, new ResolutionResultListener()).build())
