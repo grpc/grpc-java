@@ -854,6 +854,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void headersRead(final Metadata headers) {
+      if (substream.previousAttemptCount > 0) {
+        headers.discardAll(GRPC_PREVIOUS_RPC_ATTEMPTS);
+        headers.put(GRPC_PREVIOUS_RPC_ATTEMPTS, String.valueOf(substream.previousAttemptCount));
+      }
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
         if (throttle != null) {
