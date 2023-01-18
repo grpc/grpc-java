@@ -146,7 +146,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     private float lastBandwidth; // bytes per second
     private long lastPingTime;
     private int lastTargetWindow;
-    private int pingFrequencyMultiplier = 1;
+    private int pingFrequencyMultiplier;
 
     public FlowControlPinger(PingLimiter pingLimiter) {
       Preconditions.checkNotNull(pingLimiter, "pingLimiter");
@@ -202,7 +202,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         return;
       }
 
-      pingFrequencyMultiplier = 1; // react more quickly when size is changing
+      pingFrequencyMultiplier = 0; // react quickly when size is changing
       lastBandwidth = bandwidth;
       lastTargetWindow = targetWindow;
       int increase = targetWindow - currentWindow;
