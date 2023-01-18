@@ -16,6 +16,7 @@
 
 package io.grpc.testing.integration;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertTrue;
 
 import io.grpc.ChannelCredentials;
@@ -24,7 +25,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.netty.NettyChannelBuilder;
 import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
@@ -44,18 +44,20 @@ public final class XdsFederationTestClient {
   public static void main(String[] args) throws Exception {
     final XdsFederationTestClient client = new XdsFederationTestClient();
     client.parseArgs(args);
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      @SuppressWarnings("CatchAndPrintStackTrace")
-      public void run() {
-        System.out.println("Shutting down");
-        try {
-          client.tearDown();
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    });
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread() {
+              @Override
+              @SuppressWarnings("CatchAndPrintStackTrace")
+              public void run() {
+                System.out.println("Shutting down");
+                try {
+                  client.tearDown();
+                } catch (RuntimeException e) {
+                  e.printStackTrace();
+                }
+              }
+            });
     client.setUp();
     try {
       client.run();
@@ -73,7 +75,7 @@ public final class XdsFederationTestClient {
   private int soakOverallTimeoutSeconds = 10;
   private int soakMinTimeMsBetweenRpcs = 0;
   private String testCase = "rpc_soak";
-  private ArrayList<InnerClient> clients = new ArrayList<InnerClient>();
+  private final ArrayList<InnerClient> clients = new ArrayList<>();
 
   private void parseArgs(String[] args) {
     boolean usage = false;
@@ -85,7 +87,7 @@ public final class XdsFederationTestClient {
       }
       String[] parts = arg.substring(2).split("=", 2);
       String key = parts[0];
-      if ("help".equals(key)) {
+      if (key.equals("help")) {
         usage = true;
         break;
       }
@@ -95,26 +97,35 @@ public final class XdsFederationTestClient {
         break;
       }
       String value = parts[1];
-      if ("server_uris".equals(key)) {
-        serverUris = value;
-      } else if ("credentials_types".equals(key)) {
-        credentialsTypes = value;
-      } else if ("test_case".equals(key)) {
-        testCase = value;
-      } else if ("soak_iterations".equals(key)) {
-        soakIterations = Integer.valueOf(value);
-      } else if ("soak_max_failures".equals(key)) {
-        soakMaxFailures = Integer.valueOf(value);
-      } else if ("soak_per_iteration_max_acceptable_latency_ms".equals(key)) {
-        soakPerIterationMaxAcceptableLatencyMs = Integer.valueOf(value);
-      } else if ("soak_overall_timeout_seconds".equals(key)) {
-        soakOverallTimeoutSeconds = Integer.valueOf(value);
-      } else if ("soak_min_time_ms_between_rpcs".equals(key)) {
-        soakMinTimeMsBetweenRpcs = Integer.valueOf(value);
-      } else {
-        System.err.println("Unknown argument: " + key);
-        usage = true;
-        break;
+      switch (key) {
+        case "server_uris":
+          serverUris = value;
+          break;
+        case "credentials_types":
+          credentialsTypes = value;
+          break;
+        case "test_case":
+          testCase = value;
+          break;
+        case "soak_iterations":
+          soakIterations = Integer.parseInt(value);
+          break;
+        case "soak_max_failures":
+          soakMaxFailures = Integer.parseInt(value);
+          break;
+        case "soak_per_iteration_max_acceptable_latency_ms":
+          soakPerIterationMaxAcceptableLatencyMs = Integer.parseInt(value);
+          break;
+        case "soak_overall_timeout_seconds":
+          soakOverallTimeoutSeconds = Integer.parseInt(value);
+          break;
+        case "soak_min_time_ms_between_rpcs":
+          soakMinTimeMsBetweenRpcs = Integer.parseInt(value);
+          break;
+        default:
+          System.err.println("Unknown argument: " + key);
+          usage = true;
+          break;
       }
     }
     if (usage) {
@@ -188,14 +199,8 @@ public final class XdsFederationTestClient {
   }
 
   private synchronized void tearDown() {
-    try {
-      for (InnerClient c : clients) {
-        c.tearDown();
-      }
-    } catch (RuntimeException ex) {
-      throw ex;
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
+    for (InnerClient c : clients) {
+      c.tearDown();
     }
   }
 
@@ -204,8 +209,8 @@ public final class XdsFederationTestClient {
    * soak test case with that configuration.
    */
   class InnerClient extends AbstractInteropTest {
-    private String credentialsType;
-    private String serverUri;
+    private final String credentialsType;
+    private final String serverUri;
     private boolean runSucceeded = false;
 
     public InnerClient(String credentialsType, String serverUri) {
@@ -226,12 +231,15 @@ public final class XdsFederationTestClient {
      */
     public void run() {
       boolean resetChannelPerIteration;
-      if (testCase.equals("rpc_soak")) {
-        resetChannelPerIteration = false;
-      } else if (testCase.equals("channel_soak")) {
-        resetChannelPerIteration = true;
-      } else {
-        throw new RuntimeException("invalid testcase: " + testCase);
+      switch (testCase) {
+        case "rpc_soak":
+          resetChannelPerIteration = false;
+          break;
+        case "channel_soak":
+          resetChannelPerIteration = true;
+          break;
+        default:
+          throw new RuntimeException("invalid testcase: " + testCase);
       }
       try {
         performSoakTest(
@@ -253,30 +261,27 @@ public final class XdsFederationTestClient {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
       ChannelCredentials channelCredentials;
-      if (credentialsType.equals("compute_engine_channel_creds")) {
-        channelCredentials = ComputeEngineChannelCredentials.create();
-      } else if (credentialsType.equals("INSECURE_CREDENTIALS")) {
-        channelCredentials = InsecureChannelCredentials.create();
-      } else {
-        throw new IllegalArgumentException(
-              "Unknown custom credentials: " + credentialsType);
+      switch (credentialsType) {
+        case "compute_engine_channel_creds":
+          channelCredentials = ComputeEngineChannelCredentials.create();
+          break;
+        case "INSECURE_CREDENTIALS":
+          channelCredentials = InsecureChannelCredentials.create();
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown custom credentials: " + credentialsType);
       }
       return NettyChannelBuilder.forTarget(serverUri, channelCredentials)
-          .keepAliveTime(3600, TimeUnit.SECONDS)
-          .keepAliveTimeout(20, TimeUnit.SECONDS);
+          .keepAliveTime(3600, SECONDS)
+          .keepAliveTimeout(20, SECONDS);
     }
   }
 
   private void run() throws Exception {
     logger.info("Begin test case: " + testCase);
-    ArrayList<Thread> threads = new ArrayList<Thread>();
+    ArrayList<Thread> threads = new ArrayList<>();
     for (InnerClient c : clients) {
-      Thread t = new Thread(new Runnable() {
-        @Override
-        public void run() {
-          c.run();
-        }
-      });
+      Thread t = new Thread(c::run);
       t.start();
       threads.add(t);
     }
