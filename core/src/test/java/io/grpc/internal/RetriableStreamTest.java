@@ -60,6 +60,8 @@ import io.grpc.internal.RetriableStream.Throttle;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Executor;
@@ -995,6 +997,27 @@ public class RetriableStreamTest {
     MessageProducer messageProducer = mock(MessageProducer.class);
     listener.messagesAvailable(messageProducer);
     verify(masterListener).messagesAvailable(messageProducer);
+  }
+
+  @Test
+  public void inboundMessagesClosedOnCancel() throws Exception {
+    ClientStream mockStream1 = mock(ClientStream.class);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+
+    retriableStream.start(masterListener);
+    retriableStream.request(1);
+    retriableStream.cancel(Status.CANCELLED.withDescription("on purpose"));
+
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream1).start(sublistenerCaptor1.capture());
+
+    ClientStreamListener listener = sublistenerCaptor1.getValue();
+    listener.headersRead(new Metadata());
+    InputStream is = mock(InputStream.class);
+    listener.messagesAvailable(new FakeMessageProducer(is));
+    verify(masterListener, never()).messagesAvailable(any(MessageProducer.class));
+    verify(is).close();
   }
 
   @Test
@@ -2722,5 +2745,23 @@ public class RetriableStreamTest {
     ClientStream newSubstream(int previousAttempts);
 
     Status prestart();
+  }
+
+  private static final class FakeMessageProducer implements MessageProducer {
+    private final Iterator<InputStream> iterator;
+
+    public FakeMessageProducer(InputStream... iss) {
+      this.iterator = Arrays.asList(iss).iterator();
+    }
+
+    @Override
+    @Nullable
+    public InputStream next() {
+      if (iterator.hasNext()) {
+        return iterator.next();
+      } else {
+        return null;
+      }
+    }
   }
 }
