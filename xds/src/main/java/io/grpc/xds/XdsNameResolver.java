@@ -437,12 +437,12 @@ final class XdsNameResolver extends NameResolver {
         if (action.cluster() != null) {
           cluster = prefixedClusterName(action.cluster());
         } else if (action.weightedClusters() != null) {
-          int totalWeight = 0;
+          long totalWeight = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             totalWeight += weightedCluster.weight();
           }
-          int select = random.nextInt(totalWeight);
-          int accumulator = 0;
+          long select = random.nextLong(totalWeight);
+          long accumulator = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
