@@ -325,10 +325,6 @@ final class AbstractXdsClient {
 
     private void handleRpcStreamClosed(Status error) {
       if (shutdown) {
-        closed = true;
-        if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
-          rpcRetryTimer.cancel();
-        }
         return;
       }
 
