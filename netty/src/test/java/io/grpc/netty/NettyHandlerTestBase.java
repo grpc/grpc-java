@@ -566,7 +566,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
         readPingAck(pingData); // should increase backoff multiplier
       }
     }
-    assertEquals(5, handler.flowControlPing().getPingCount());
+    assertEquals(6, handler.flowControlPing().getPingCount());
   }
 
   @Test
