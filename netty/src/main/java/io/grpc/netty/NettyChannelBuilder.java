@@ -23,6 +23,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Ticker;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.google.errorprone.annotations.InlineMe;
@@ -738,7 +739,7 @@ public final class NettyChannelBuilder extends
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
           tooManyPingsRunnable, transportTracerFactory.create(), options.getEagAttributes(),
-          localSocketPicker, channelLogger, useGetForSafeMethods);
+          localSocketPicker, channelLogger, useGetForSafeMethods, Ticker.systemTicker());
       return transport;
     }
 

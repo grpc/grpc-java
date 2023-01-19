@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.base.Ticker;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz;
@@ -143,7 +144,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       TransportTracer transportTracer,
       Attributes eagAttributes,
       String authority,
-      ChannelLogger negotiationLogger) {
+      ChannelLogger negotiationLogger,
+      Ticker ticker) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
@@ -169,7 +171,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         transportTracer,
         eagAttributes,
         authority,
-        negotiationLogger);
+        negotiationLogger,
+        ticker);
   }
 
   @VisibleForTesting
@@ -187,7 +190,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       TransportTracer transportTracer,
       Attributes eagAttributes,
       String authority,
-      ChannelLogger negotiationLogger) {
+      ChannelLogger negotiationLogger,
+      Ticker ticker) {
     Preconditions.checkNotNull(connection, "connection");
     Preconditions.checkNotNull(frameReader, "frameReader");
     Preconditions.checkNotNull(lifecycleManager, "lifecycleManager");
@@ -237,7 +241,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         eagAttributes,
         authority,
         autoFlowControl,
-        pingCounter);
+        pingCounter,
+        ticker);
   }
 
   private NettyClientHandler(
@@ -253,9 +258,10 @@ class NettyClientHandler extends AbstractNettyHandler {
       Attributes eagAttributes,
       String authority,
       boolean autoFlowControl,
-      PingLimiter pingLimiter) {
+      PingLimiter pingLimiter,
+      Ticker ticker) {
     super(/* channelUnused= */ null, decoder, encoder, settings,
-        negotiationLogger, autoFlowControl, pingLimiter);
+        negotiationLogger, autoFlowControl, pingLimiter, ticker);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;
