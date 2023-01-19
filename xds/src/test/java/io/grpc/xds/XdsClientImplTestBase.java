@@ -3611,11 +3611,10 @@ public abstract class XdsClientImplTestBase {
       fakeClock.forwardTime(20, TimeUnit.SECONDS);
     } catch (AssertionError e) {
       assertThat(e.getCause()).isInstanceOf(IllegalArgumentException.class);
+      client.shutdown();
       return;
     }
     Assert.fail("Expected exception for bad url not thrown");
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
-    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isNotEmpty();
   }
 
   @Test
@@ -3628,10 +3627,7 @@ public abstract class XdsClientImplTestBase {
     verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
     fakeClock.forwardTime(50, TimeUnit.SECONDS); // Trigger rpcRetry if appropriate
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
-    // Get rid of rpcRetryTask that should have been scheduled since still cannot talk to server
-    for (ScheduledTask task : fakeClock.getPendingTasks()) {
-      task.cancel(true);
-    }
+    client.shutdown();
   }
 
   private XdsClientImpl createXdsClient(String serverUri) {
