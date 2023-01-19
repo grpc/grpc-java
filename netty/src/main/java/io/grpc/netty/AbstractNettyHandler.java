@@ -143,7 +143,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     private int pingReturn;
     private boolean pinging;
     private int dataSizeSincePing;
-    private float lastBandwidth; // bytes per second
+    private long lastBandwidth; // bytes per nanosecond
     private long lastPingTime;
     private int lastTargetWindow;
     private int pingFrequencyMultiplier;
@@ -166,8 +166,14 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         return;
       }
 
+      // Note that we are double counting around the ping initiation as the current data will be
+      // added at the end of this method, so will be available in the next check.  This at worst
+      // causes us to send a ping one data packet earlier, but makes startup faster if there are
+      // small packets before big ones.
+      int dataForCheck = getDataSincePing() + dataLength + paddingLength;
+      // Need to double the data here to account for targetWindow being set to twice the data below
       if (!isPinging() && pingLimiter.isPingAllowed()
-          && getDataSincePing() * 2 >= lastTargetWindow * pingFrequencyMultiplier) {
+          && dataForCheck * 2 >= lastTargetWindow * pingFrequencyMultiplier) {
         setPinging(true);
         sendPing(ctx());
       }
