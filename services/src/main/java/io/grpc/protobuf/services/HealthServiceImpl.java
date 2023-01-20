@@ -18,8 +18,8 @@ package io.grpc.protobuf.services;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.Context.CancellationListener;
 import io.grpc.Context;
+import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.health.v1.HealthCheckRequest;

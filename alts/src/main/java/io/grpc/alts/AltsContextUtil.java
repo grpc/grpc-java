@@ -26,7 +26,7 @@ import io.grpc.alts.internal.AltsProtocolNegotiator;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7864")
 public final class AltsContextUtil {
 
-  private AltsContextUtil(){}
+  private AltsContextUtil() {}
 
   /**
    * Creates a {@link AltsContext} from ALTS context information in the {@link ServerCall}.

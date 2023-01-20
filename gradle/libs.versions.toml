@@ -2,7 +2,7 @@
 # Breaks on upgrade: https://github.com/mojohaus/animal-sniffer/issues/131
 animalsniffer = "1.18"
 autovalue = "1.9"
-checkstyle = "6.17"
+checkstyle = "8.28"
 googleauth = "1.4.0"
 guava = "31.1-android"
 netty = '4.1.79.Final'
@@ -28,7 +28,6 @@ cronet-api = "org.chromium.net:cronet-api:92.4515.131"
 cronet-embedded = "org.chromium.net:cronet-embedded:102.5005.125"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.14.0"
 errorprone-core = "com.google.errorprone:error_prone_core:2.10.0"
-errorprone-javac = "com.google.errorprone:javac:9+181-r4173-1"
 google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.9.0"
 google-auth-credentials = { module = "com.google.auth:google-auth-library-credentials", version.ref = "googleauth" }
 google-auth-oauth2Http = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleauth" }

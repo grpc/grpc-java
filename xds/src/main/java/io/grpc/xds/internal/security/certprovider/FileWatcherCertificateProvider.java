@@ -22,7 +22,6 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
-
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;

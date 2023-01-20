@@ -52,12 +52,8 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 class XdsListenerResource extends XdsResourceType<LdsUpdate> {
-  static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
   static final String ADS_TYPE_URL_LDS =
       "type.googleapis.com/envoy.config.listener.v3.Listener";
-  private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
-      "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
-          + ".HttpConnectionManager";
   static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
@@ -93,17 +89,12 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   }
 
   @Override
-  String typeUrlV2() {
-    return ADS_TYPE_URL_LDS_V2;
-  }
-
-  @Override
   boolean isFullStateOfTheWorld() {
     return true;
   }
 
   @Override
-  LdsUpdate doParse(Args args, Message unpackedMessage, boolean isResourceV3)
+  LdsUpdate doParse(Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof Listener)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
@@ -112,10 +103,10 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
 
     if (listener.hasApiListener()) {
       return processClientSideListener(
-          listener, args, enableFaultInjection && isResourceV3);
+          listener, args, enableFaultInjection);
     } else {
       return processServerSideListener(
-          listener, args, enableRbac && isResourceV3);
+          listener, args, enableRbac);
     }
   }
 
@@ -126,7 +117,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     try {
       hcm = unpackCompatibleType(
           listener.getApiListener().getApiListener(), HttpConnectionManager.class,
-          TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
+          TYPE_URL_HTTP_CONNECTION_MANAGER, null);
     } catch (InvalidProtocolBufferException e) {
       throw new ResourceInvalidException(
           "Could not parse HttpConnectionManager config from ApiListener", e);

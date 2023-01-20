@@ -26,7 +26,10 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Multiset;
 import com.google.common.collect.Sets;
+import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -37,14 +40,17 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -84,11 +90,10 @@ final class RingHashLoadBalancer extends LoadBalancer {
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     List<EquivalentAddressGroup> addrList = resolvedAddresses.getAddresses();
-    if (addrList.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
-          + "resolution was successful, but returned server addresses are empty."));
+    if (!validateAddrList(addrList)) {
       return false;
     }
+
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
     Set<EquivalentAddressGroup> removedAddrs =
         Sets.newHashSet(Sets.difference(subchannels.keySet(), latestAddrs.keySet()));
@@ -164,6 +169,76 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
 
     return true;
+  }
+
+  private boolean validateAddrList(List<EquivalentAddressGroup> addrList) {
+    if (addrList.isEmpty()) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+          + "resolution was successful, but returned server addresses are empty."));
+      return false;
+    }
+
+    String dupAddrString = validateNoDuplicateAddresses(addrList);
+    if (dupAddrString != null) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+          + "resolution was successful, but there were duplicate addresses: " + dupAddrString));
+      return false;
+    }
+
+    long totalWeight = 0;
+    for (EquivalentAddressGroup eag : addrList) {
+      Long weight = eag.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT);
+
+      if (weight == null) {
+        weight = 1L;
+      }
+
+      if (weight < 0) {
+        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+            String.format("Ring hash lb error: EDS resolution was successful, but returned a "
+                + "negative weight for %s.", stripAttrs(eag))));
+        return false;
+      }
+      if (weight > UnsignedInteger.MAX_VALUE.longValue()) {
+        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+            String.format("Ring hash lb error: EDS resolution was successful, but returned a weight"
+                + " too large to fit in an unsigned int for %s.", stripAttrs(eag))));
+        return false;
+      }
+      totalWeight += weight;
+    }
+
+    if (totalWeight > UnsignedInteger.MAX_VALUE.longValue()) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+          String.format(
+              "Ring hash lb error: EDS resolution was successful, but returned a sum of weights too"
+              + " large to fit in an unsigned int (%d).", totalWeight)));
+      return false;
+    }
+
+    return true;
+  }
+
+  @Nullable
+  private String validateNoDuplicateAddresses(List<EquivalentAddressGroup> addrList) {
+    Set<SocketAddress> addresses = new HashSet<>();
+    Multiset<String> dups = HashMultiset.create();
+    for (EquivalentAddressGroup eag : addrList) {
+      for (SocketAddress address : eag.getAddresses()) {
+        if (!addresses.add(address)) {
+          dups.add(address.toString());
+        }
+      }
+    }
+
+    if (!dups.isEmpty()) {
+      return dups.entrySet().stream()
+          .map((dup) ->
+              String.format("Address: %s, count: %d", dup.getElement(), dup.getCount() + 1))
+          .collect(Collectors.joining("; "));
+    }
+
+    return null;
   }
 
   private static List<RingEntry> buildRing(

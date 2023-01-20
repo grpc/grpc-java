@@ -108,7 +108,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final AtomicBoolean noMoreTransparentRetry = new AtomicBoolean();
   private final AtomicInteger localOnlyTransparentRetries = new AtomicInteger();
   private final AtomicInteger inFlightSubStreams = new AtomicInteger();
-  private Status savedCancellationReason;
+  private SavedCloseMasterListenerReason savedCloseMasterListenerReason;
 
   // Used for recording the share of buffer used for the current call out of the channel buffer.
   // This field would not be necessary if there is no channel buffer limit.
@@ -222,9 +222,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  @Nullable // returns null when cancelled
+  // returns null means we should not create new sub streams, e.g. cancelled or
+  // other close condition is met for retriableStream.
+  @Nullable
   private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry) {
-    // increment only when >= 0, i.e. not cancelled
     int inFlight;
     do {
       inFlight = inFlightSubStreams.get();
@@ -506,11 +507,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Runnable runnable = commit(noopSubstream);
 
     if (runnable != null) {
-      savedCancellationReason = reason;
       runnable.run();
-      if (inFlightSubStreams.addAndGet(Integer.MIN_VALUE) == Integer.MIN_VALUE) {
-        safeCloseMasterListener(reason, RpcProgress.PROCESSED, new Metadata());
-      }
+      safeCloseMasterListener(reason, RpcProgress.PROCESSED, new Metadata());
       return;
     }
 
@@ -816,14 +814,30 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   private void safeCloseMasterListener(Status status, RpcProgress progress, Metadata metadata) {
-    listenerSerializeExecutor.execute(
-        new Runnable() {
-          @Override
-          public void run() {
-            isClosed = true;
-            masterListener.closed(status, progress, metadata);
-          }
-        });
+    savedCloseMasterListenerReason = new SavedCloseMasterListenerReason(status, progress,
+        metadata);
+    if (inFlightSubStreams.addAndGet(Integer.MIN_VALUE) == Integer.MIN_VALUE) {
+      listenerSerializeExecutor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              isClosed = true;
+              masterListener.closed(status, progress, metadata);
+            }
+          });
+    }
+  }
+
+  private static final class SavedCloseMasterListenerReason {
+    private final Status status;
+    private final RpcProgress progress;
+    private final Metadata metadata;
+
+    SavedCloseMasterListenerReason(Status status, RpcProgress progress, Metadata metadata) {
+      this.status = status;
+      this.progress = progress;
+      this.metadata = metadata;
+    }
   }
 
   private interface BufferEntry {
@@ -840,6 +854,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void headersRead(final Metadata headers) {
+      if (substream.previousAttemptCount > 0) {
+        headers.discardAll(GRPC_PREVIOUS_RPC_ATTEMPTS);
+        headers.put(GRPC_PREVIOUS_RPC_ATTEMPTS, String.valueOf(substream.previousAttemptCount));
+      }
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
         if (throttle != null) {
@@ -864,8 +882,17 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
 
       if (inFlightSubStreams.decrementAndGet() == Integer.MIN_VALUE) {
-        assert savedCancellationReason != null;
-        safeCloseMasterListener(savedCancellationReason, RpcProgress.PROCESSED, new Metadata());
+        assert savedCloseMasterListenerReason != null;
+        listenerSerializeExecutor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                isClosed = true;
+                masterListener.closed(savedCloseMasterListenerReason.status,
+                    savedCloseMasterListenerReason.progress,
+                    savedCloseMasterListenerReason.metadata);
+              }
+            });
         return;
       }
 

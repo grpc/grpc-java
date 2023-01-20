@@ -84,7 +84,7 @@ public class CdsLoadBalancer2Test {
   private static final String EDS_SERVICE_NAME = "backend-service-1.googleapis.com";
   private static final String DNS_HOST_NAME = "backend-service-dns.googleapis.com:443";
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
   private final UpstreamTlsContext upstreamTlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
   private final OutlierDetection outlierDetection = OutlierDetection.create(

@@ -40,7 +40,6 @@ import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.util.AdvancedTlsX509TrustManager.SslSocketAndEnginePeerVerifier;
 import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import io.grpc.util.CertificateUtils;
-
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;

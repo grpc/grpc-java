@@ -180,9 +180,8 @@ final class XdsServerWrapper extends Server {
       return;
     }
     xdsClient = xdsClientPool.getObject();
-    boolean useProtocolV3 = xdsClient.getBootstrapInfo().servers().get(0).useProtocolV3();
     String listenerTemplate = xdsClient.getBootstrapInfo().serverListenerResourceNameTemplate();
-    if (!useProtocolV3 || listenerTemplate == null) {
+    if (listenerTemplate == null) {
       StatusException statusException =
           Status.UNAVAILABLE.withDescription(
               "Can only support xDS v3 with listener resource name template").asException();

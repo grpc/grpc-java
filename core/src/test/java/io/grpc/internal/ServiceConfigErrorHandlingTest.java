@@ -186,7 +186,7 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     assertEquals(numExpectedTasks, timer.numPendingTasks());
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
   }
 

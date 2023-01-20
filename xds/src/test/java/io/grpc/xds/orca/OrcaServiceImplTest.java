@@ -132,7 +132,7 @@ public class OrcaServiceImplTest {
     oobServer.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
     assertThat(((OrcaServiceImpl)orcaServiceImpl).clientCount.get()).isEqualTo(0);
-    ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(Status.class);
     verify(listener).onClose(callCloseCaptor.capture(), any());
     assertThat(callCloseCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
   }
@@ -232,7 +232,7 @@ public class OrcaServiceImplTest {
     channel.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
     assertThat(((OrcaServiceImpl)orcaServiceImpl).clientCount.get()).isEqualTo(0);
-    ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(Status.class);
     verify(listener, times(2)).onClose(callCloseCaptor.capture(), any());
     assertThat(callCloseCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
   }

@@ -494,6 +494,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private final class ChannelStreamProvider implements ClientStreamProvider {
+    volatile Throttle throttle;
+
     private ClientTransport getTransport(PickSubchannelArgs args) {
       SubchannelPicker pickerCopy = subchannelPicker;
       if (shutdown.get()) {
@@ -549,7 +551,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           context.detach(origContext);
         }
       } else {
-        final Throttle throttle = lastServiceConfig.getRetryThrottling();
         MethodInfo methodInfo = callOptions.getOption(MethodInfo.KEY);
         final RetryPolicy retryPolicy = methodInfo == null ? null : methodInfo.retryPolicy;
         final HedgingPolicy hedgingPolicy = methodInfo == null ? null : methodInfo.hedgingPolicy;
@@ -602,7 +603,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private final ClientStreamProvider transportProvider = new ChannelStreamProvider();
+  private final ChannelStreamProvider transportProvider = new ChannelStreamProvider();
 
   private final Rescheduler idleTimer;
 
@@ -1460,7 +1461,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.throwIfNotInThisSynchronizationContext();
       // No new subchannel should be created after load balancer has been shutdown.
       checkState(!terminating, "Channel is being terminated");
-      return new SubchannelImpl(args, this);
+      return new SubchannelImpl(args);
     }
 
     @Override
@@ -1830,6 +1831,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   "Service config changed{0}",
                   effectiveServiceConfig == EMPTY_SERVICE_CONFIG ? " to empty" : "");
               lastServiceConfig = effectiveServiceConfig;
+              transportProvider.throttle = effectiveServiceConfig.getRetryThrottling();
             }
 
             try {
@@ -1931,7 +1933,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final class SubchannelImpl extends AbstractSubchannel {
     final CreateSubchannelArgs args;
-    final LbHelperImpl helper;
     final InternalLogId subchannelLogId;
     final ChannelLoggerImpl subchannelLogger;
     final ChannelTracer subchannelTracer;
@@ -1941,7 +1942,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     boolean shutdown;
     ScheduledHandle delayedShutdownTask;
 
-    SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
+    SubchannelImpl(CreateSubchannelArgs args) {
       checkNotNull(args, "args");
       addressGroups = args.getAddresses();
       if (authorityOverride != null) {
@@ -1950,7 +1951,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
       }
       this.args = args;
-      this.helper = checkNotNull(helper, "helper");
       subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ authority());
       subchannelTracer = new ChannelTracer(
           subchannelLogId, maxTraceEvents, timeProvider.currentTimeNanos(),
@@ -2287,7 +2287,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public <T> T invokeAny(Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit)
-      throws InterruptedException, ExecutionException, TimeoutException {
+        throws InterruptedException, ExecutionException, TimeoutException {
       return delegate.invokeAny(tasks, timeout, unit);
     }
 

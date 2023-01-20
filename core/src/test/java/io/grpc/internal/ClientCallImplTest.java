@@ -395,7 +395,7 @@ public class ClientCallImplTest {
 
   @Test
   public void methodInfoDeadlinePropagatedToStream() {
-    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     CallOptions callOptions = baseCallOptions.withDeadline(Deadline.after(2000, SECONDS));
 
     // Case: config Deadline expires later than CallOptions Deadline

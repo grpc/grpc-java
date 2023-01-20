@@ -373,4 +373,12 @@ abstract class XdsClient {
 
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
   }
+
+  interface TimerLaunch {
+    /**
+     * For all subscriber's for the specified server, if the resource hasn't yet been
+     * resolved then start a timer for it.
+     */
+    void startSubscriberTimersIfNeeded(ServerInfo serverInfo);
+  }
 }

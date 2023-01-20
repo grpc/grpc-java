@@ -55,7 +55,7 @@ public class XdsServerTestHelper {
       Bootstrapper.BootstrapInfo.builder()
           .servers(Arrays.asList(
               Bootstrapper.ServerInfo.create(
-                  SERVER_URI, InsecureChannelCredentials.create(), true)))
+                  SERVER_URI, InsecureChannelCredentials.create())))
           .node(BOOTSTRAP_NODE)
           .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
           .build();
