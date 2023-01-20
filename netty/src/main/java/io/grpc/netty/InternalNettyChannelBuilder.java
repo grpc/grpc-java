@@ -16,10 +16,12 @@
 
 package io.grpc.netty;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Internal;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourcePool;
+import io.grpc.internal.TransportTracer;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
 /**
@@ -105,6 +107,12 @@ public final class InternalNettyChannelBuilder {
 
   public static ClientTransportFactory buildTransportFactory(NettyChannelBuilder builder) {
     return builder.buildTransportFactory();
+  }
+
+  @VisibleForTesting
+  public static void setTransportTracerFactory(
+      NettyChannelBuilder builder, TransportTracer.Factory factory) {
+    builder.setTransportTracerFactory(factory);
   }
 
   private InternalNettyChannelBuilder() {}
