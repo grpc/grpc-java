@@ -41,13 +41,13 @@ public class CallMetricRecorderTest {
     recorder.recordUtilizationMetric("util1", 154353.423);
     recorder.recordUtilizationMetric("util2", 0.1367);
     recorder.recordUtilizationMetric("util3", 1437.34);
-    recorder.recordCallMetric("cost1", 37465.12);
-    recorder.recordCallMetric("cost2", 10293.0);
-    recorder.recordCallMetric("cost3", 1.0);
+    recorder.recordRequestCostMetric("cost1", 37465.12);
+    recorder.recordRequestCostMetric("cost2", 10293.0);
+    recorder.recordRequestCostMetric("cost3", 1.0);
     recorder.recordCpuUtilizationMetric(0.1928);
     recorder.recordMemoryUtilizationMetric(47.4);
 
-    CallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    MetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.getUtilizationMetrics())
         .containsExactly("util1", 154353.423, "util2", 0.1367, "util3", 1437.34);
     Truth.assertThat(dump.getRequestCostMetrics())
@@ -65,18 +65,18 @@ public class CallMetricRecorderTest {
 
   @Test
   public void lastValueWinForMetricsWithSameName() {
-    recorder.recordCallMetric("cost1", 3412.5435);
-    recorder.recordCallMetric("cost2", 6441.341);
-    recorder.recordCallMetric("cost1", 6441.341);
-    recorder.recordCallMetric("cost1", 4654.67);
-    recorder.recordCallMetric("cost2", 75.83);
+    recorder.recordRequestCostMetric("cost1", 3412.5435);
+    recorder.recordRequestCostMetric("cost2", 6441.341);
+    recorder.recordRequestCostMetric("cost1", 6441.341);
+    recorder.recordRequestCostMetric("cost1", 4654.67);
+    recorder.recordRequestCostMetric("cost2", 75.83);
     recorder.recordMemoryUtilizationMetric(1.3);
     recorder.recordMemoryUtilizationMetric(3.1);
     recorder.recordUtilizationMetric("util1", 28374.21);
     recorder.recordMemoryUtilizationMetric(9384.0);
     recorder.recordUtilizationMetric("util1", 84323.3);
 
-    CallMetricRecorder.CallMetricReport dump = recorder.finalizeAndDump2();
+    MetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.getRequestCostMetrics())
         .containsExactly("cost1", 4654.67, "cost2", 75.83);
     Truth.assertThat(dump.getMemoryUtilization()).isEqualTo(9384.0);

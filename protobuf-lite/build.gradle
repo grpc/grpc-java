@@ -21,7 +21,7 @@ dependencies {
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
-compileTestJava {
+tasks.named("compileTestJava").configure {
     options.compilerArgs += [
         "-Xlint:-cast"
     ]

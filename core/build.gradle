@@ -46,7 +46,7 @@ dependencies {
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     exclude 'io/grpc/internal/**'
     exclude 'io/grpc/inprocess/Internal*'
     // Disabled until kinda stable.
@@ -87,7 +87,7 @@ def replaceConstant(File file, String needle, String replacement) {
 }
 
 plugins.withId("java") {
-    compileJava {
+    tasks.named("compileJava").configure {
         doLast {
             // Replace value of Signature Attribute.
             // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.7.9
@@ -109,13 +109,13 @@ plugins.withId("java") {
         }
     }
 
-    compileJmhJava {
+    tasks.named("compileJmhJava").configure {
         // This project targets Java 7 (no method references)
         options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
     }
 }
 
-task versionFile() {
+tasks.register("versionFile") {
     doLast {
         new File(buildDir, "version").write("${project.version}\n")
     }

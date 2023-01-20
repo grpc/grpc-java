@@ -16,9 +16,8 @@
 
 package io.grpc.services;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.InlineMe;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
@@ -45,41 +44,6 @@ public final class CallMetricRecorder {
   private double cpuUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
   private volatile boolean disabled;
-
-  public static final class CallMetricReport {
-    private double cpuUtilization;
-    private double memoryUtilization;
-    private Map<String, Double> requestCostMetrics;
-    private Map<String, Double> utilizationMetrics;
-
-    /**
-     * Create a report for all backend metrics.
-     */
-    CallMetricReport(double cpuUtilization, double memoryUtilization,
-                            Map<String, Double> requestCostMetrics,
-                            Map<String, Double> utilizationMetrics) {
-      this.cpuUtilization = cpuUtilization;
-      this.memoryUtilization = memoryUtilization;
-      this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
-      this.utilizationMetrics = checkNotNull(utilizationMetrics, "utilizationMetrics");
-    }
-
-    public double getCpuUtilization() {
-      return cpuUtilization;
-    }
-
-    public double getMemoryUtilization() {
-      return memoryUtilization;
-    }
-
-    public Map<String, Double> getRequestCostMetrics() {
-      return requestCostMetrics;
-    }
-
-    public Map<String, Double> getUtilizationMetrics() {
-      return utilizationMetrics;
-    }
-  }
 
   /**
    * Returns the call metric recorder attached to the current {@link Context}.  If there is none,
@@ -129,8 +93,25 @@ public final class CallMetricRecorder {
    *
    * @return this recorder object
    * @since 1.47.0
+   * @deprecated use {@link #recordRequestCostMetric} instead.
+   *     This method will be removed in the future.
    */
+  @Deprecated
+  @InlineMe(replacement = "this.recordRequestCostMetric(name, value)")
   public CallMetricRecorder recordCallMetric(String name, double value) {
+    return recordRequestCostMetric(name, value);
+  }
+
+  /**
+   * Records a call metric measurement for request cost.
+   * If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   * @since 1.48.1
+   */
+  public CallMetricRecorder recordRequestCostMetric(String name, double value) {
     if (disabled) {
       return this;
     }
@@ -200,13 +181,13 @@ public final class CallMetricRecorder {
    *
    * @return a per-request ORCA reports containing all saved metrics.
    */
-  CallMetricReport finalizeAndDump2() {
+  MetricReport finalizeAndDump2() {
     Map<String, Double> savedRequestCostMetrics = finalizeAndDump();
     Map<String, Double> savedUtilizationMetrics = utilizationMetrics.get();
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    return new CallMetricReport(cpuUtilizationMetric,
+    return new MetricReport(cpuUtilizationMetric,
         memoryUtilizationMetric, Collections.unmodifiableMap(savedRequestCostMetrics),
         Collections.unmodifiableMap(savedUtilizationMetrics)
     );

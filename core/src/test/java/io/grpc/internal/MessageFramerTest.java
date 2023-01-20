@@ -34,6 +34,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.Locale;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -382,7 +383,8 @@ public class MessageFramerTest {
     for (int i = 0; i < count; i++) {
       assertEquals("outboundMessage(" + i + ")", tracer.nextOutboundEvent());
       assertEquals(
-          String.format("outboundMessageSent(%d, %d, %d)", i, sizes[i * 2], sizes[i * 2 + 1]),
+          String.format(
+              Locale.US, "outboundMessageSent(%d, %d, %d)", i, sizes[i * 2], sizes[i * 2 + 1]),
           tracer.nextOutboundEvent());
       expectedWireSize += sizes[i * 2];
       expectedUncompressedSize += sizes[i * 2 + 1];

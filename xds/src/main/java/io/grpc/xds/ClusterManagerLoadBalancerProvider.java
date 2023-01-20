@@ -110,7 +110,7 @@ public class ClusterManagerLoadBalancerProvider extends LoadBalancerProvider {
       }
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-          Status.fromThrowable(e).withDescription(
+          Status.INTERNAL.withCause(e).withDescription(
               "Failed to parse cluster_manager LB config: " + rawConfig));
     }
     return ConfigOrError.fromConfig(new ClusterManagerConfig(parsedChildPolicies));

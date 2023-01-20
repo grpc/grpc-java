@@ -35,9 +35,11 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.InternalGlobalInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.StaticTestingClassLoader;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
@@ -47,12 +49,14 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -78,6 +82,14 @@ public class ManagedChannelImplBuilderTest {
           return next.newCall(method, callOptions);
         }
       };
+  private static final ClientInterceptor DUMMY_USER_INTERCEPTOR1 =
+      new ClientInterceptor() {
+        @Override
+        public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+            MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+          return next.newCall(method, callOptions);
+        }
+      };
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
@@ -90,7 +102,12 @@ public class ManagedChannelImplBuilderTest {
   private ManagedChannelImplBuilder builder;
   private ManagedChannelImplBuilder directAddressBuilder;
   private final FakeClock clock = new FakeClock();
-
+  private final StaticTestingClassLoader classLoader =
+      new StaticTestingClassLoader(
+          getClass().getClassLoader(),
+          Pattern.compile(
+              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
+                  + "io\\.grpc\\.internal\\.[^.]+"));
 
   @Before
   public void setUp() throws Exception {
@@ -445,6 +462,86 @@ public class ManagedChannelImplBuilderTest {
     builder.setTracingEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertThat(effectiveInterceptors).containsExactly(DUMMY_USER_INTERCEPTOR);
+  }
+
+  @Test
+  public void getEffectiveInterceptors_callsGetGlobalInterceptors() throws Exception {
+    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsGet.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  // UsedReflectively
+  public static final class StaticTestingClassLoaderCallsGet implements Runnable {
+
+    @Override
+    public void run() {
+      ManagedChannelImplBuilder builder =
+          new ManagedChannelImplBuilder(
+              DUMMY_TARGET,
+              new UnsupportedClientTransportFactoryBuilder(),
+              new FixedPortProvider(DUMMY_PORT));
+      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      assertThat(effectiveInterceptors).hasSize(2);
+      try {
+        InternalGlobalInterceptors.setInterceptorsTracers(
+            Arrays.asList(DUMMY_USER_INTERCEPTOR),
+            Collections.emptyList(),
+            Collections.emptyList());
+        fail("exception expected");
+      } catch (IllegalStateException e) {
+        assertThat(e).hasMessageThat().contains("Set cannot be called after any get call");
+      }
+    }
+  }
+
+  @Test
+  public void getEffectiveInterceptors_callsSetGlobalInterceptors() throws Exception {
+    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsSet.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  // UsedReflectively
+  public static final class StaticTestingClassLoaderCallsSet implements Runnable {
+
+    @Override
+    public void run() {
+      InternalGlobalInterceptors.setInterceptorsTracers(
+          Arrays.asList(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1),
+          Collections.emptyList(),
+          Collections.emptyList());
+      ManagedChannelImplBuilder builder =
+          new ManagedChannelImplBuilder(
+              DUMMY_TARGET,
+              new UnsupportedClientTransportFactoryBuilder(),
+              new FixedPortProvider(DUMMY_PORT));
+      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      assertThat(effectiveInterceptors)
+          .containsExactly(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1);
+    }
+  }
+
+  @Test
+  public void getEffectiveInterceptors_setEmptyGlobalInterceptors() throws Exception {
+    Class<?> runnable =
+        classLoader.loadClass(StaticTestingClassLoaderCallsSetEmpty.class.getName());
+    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+  }
+
+  // UsedReflectively
+  public static final class StaticTestingClassLoaderCallsSetEmpty implements Runnable {
+
+    @Override
+    public void run() {
+      InternalGlobalInterceptors.setInterceptorsTracers(
+          Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+      ManagedChannelImplBuilder builder =
+          new ManagedChannelImplBuilder(
+              DUMMY_TARGET,
+              new UnsupportedClientTransportFactoryBuilder(),
+              new FixedPortProvider(DUMMY_PORT));
+      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      assertThat(effectiveInterceptors).isEmpty();
+    }
   }
 
   @Test

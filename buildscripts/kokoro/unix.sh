@@ -9,6 +9,8 @@
 #  ARCH=x86_32 ./buildscripts/kokoro/unix.sh
 # For aarch64 arch:
 #  ARCH=aarch_64 ./buildscripts/kokoro/unix.sh
+# For ppc64le arch:
+#  ARCH=ppcle_64 ./buildscripts/kokoro/unix.sh
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
 set -exu -o pipefail
@@ -37,7 +39,7 @@ GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
 GRADLE_FLAGS+=" -PskipAndroid=true"
 GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
-export GRADLE_OPTS="-Xmx512m"
+export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 
 # Make protobuf discoverable by :grpc-compiler
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
@@ -81,12 +83,15 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   ../gradlew build $GRADLE_FLAGS
   popd
   # TODO(zpencer): also build the GAE examples
+  pushd examples/example-orca
+  ../gradlew build $GRADLE_FLAGS
+  popd
 fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
-  if [[ $ARCH == "aarch_64" ]]; then
+  if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" ]]; then
     GRADLE_FLAGS+=" -x grpc-compiler:generateTestProto -x grpc-compiler:generateTestLiteProto"
     GRADLE_FLAGS+=" -x grpc-compiler:testGolden -x grpc-compiler:testLiteGolden"
     GRADLE_FLAGS+=" -x grpc-compiler:testDeprecatedGolden -x grpc-compiler:testDeprecatedLiteGolden"

@@ -41,7 +41,13 @@ public final class InternalCallMetricRecorder {
     return recorder.finalizeAndDump();
   }
 
-  public static CallMetricRecorder.CallMetricReport finalizeAndDump2(CallMetricRecorder recorder) {
+  public static MetricReport finalizeAndDump2(CallMetricRecorder recorder) {
     return recorder.finalizeAndDump2();
+  }
+
+  public static MetricReport createMetricReport(double cpuUtilization, double memoryUtilization,
+      Map<String, Double> requestCostMetrics, Map<String, Double> utilizationMetrics) {
+    return new MetricReport(cpuUtilization, memoryUtilization,
+        requestCostMetrics, utilizationMetrics);
   }
 }

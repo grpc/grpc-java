@@ -37,11 +37,13 @@ java_library(
     srcs = [
         "src/main/java/io/grpc/services/CallMetricRecorder.java",
         "src/main/java/io/grpc/services/MetricRecorder.java",
+        "src/main/java/io/grpc/services/MetricReport.java",
     ],
     deps = [
         "//api",
         "//context",
         "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_errorprone_error_prone_annotations//jar",
         "@com_google_guava_guava//jar",
     ],
 )

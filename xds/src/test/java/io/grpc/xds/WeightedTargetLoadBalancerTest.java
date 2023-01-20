@@ -402,4 +402,73 @@ public class WeightedTargetLoadBalancerTest {
     weightedChildHelper0.updateBalancingState(READY, mock(SubchannelPicker.class));
     verifyNoMoreInteractions(helper);
   }
+
+  // When the ChildHelper is asked to update the overall balancing state, it should not do that if
+  // the update was triggered by the parent LB that will handle triggering the overall state update.
+  @Test
+  public void noDuplicateOverallBalancingStateUpdate() {
+    FakeLoadBalancerProvider fakeLbProvider = new FakeLoadBalancerProvider();
+
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", new WeightedPolicySelection(
+            weights[0], new PolicySelection(fakeLbProvider, configs[0])),
+        "target3", new WeightedPolicySelection(
+            weights[3], new PolicySelection(fakeLbProvider, configs[3])));
+    weightedTargetLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+
+    // Both of the two child LB policies will call the helper to update the balancing state.
+    // But since those calls happen during the handling of teh resolved addresses of the parent
+    // WeightedTargetLLoadBalancer, the overall balancing state should only be updated once.
+    verify(helper, times(1)).updateBalancingState(any(), any());
+
+  }
+
+  private static class FakeLoadBalancerProvider extends LoadBalancerProvider {
+
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    @Override
+    public String getPolicyName() {
+      return "foo";
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      return new FakeLoadBalancer(helper);
+    }
+  }
+
+  static class FakeLoadBalancer extends LoadBalancer {
+
+    private Helper helper;
+
+    FakeLoadBalancer(Helper helper) {
+      this.helper = helper;
+    }
+
+    @Override
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
+    }
+
+    @Override
+    public void handleNameResolutionError(Status error) {
+    }
+
+    @Override
+    public void shutdown() {
+    }
+  }
 }

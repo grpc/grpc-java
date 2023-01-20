@@ -310,9 +310,7 @@ public final class XdsTestServer {
         } catch (NumberFormatException e) {
           newCall.close(
               Status.INVALID_ARGUMENT.withDescription(
-                  String.format(
-                      "Invalid format for grpc-previous-rpc-attempts header (%s)",
-                      attemptNumHeader)),
+                  "Invalid format for grpc-previous-rpc-attempts header: " + attemptNumHeader),
               new Metadata());
           return noopListener;
         }
@@ -329,7 +327,7 @@ public final class XdsTestServer {
           } else {
             newCall.close(
                 Status.INVALID_ARGUMENT.withDescription(
-                    String.format("Invalid format for rpc-behavior header (%s)", callBehavior)),
+                    "Invalid format for rpc-behavior header: " + callBehavior),
                 new Metadata()
             );
             return noopListener;
@@ -344,7 +342,7 @@ public final class XdsTestServer {
           } catch (NumberFormatException e) {
             newCall.close(
                 Status.INVALID_ARGUMENT.withDescription(
-                    String.format("Invalid format for rpc-behavior header (%s)", callBehavior)),
+                    "Invalid format for rpc-behavior header: " + callBehavior),
                 new Metadata());
             return noopListener;
           } catch (InterruptedException e) {
@@ -364,7 +362,7 @@ public final class XdsTestServer {
           } catch (NumberFormatException e) {
             newCall.close(
                 Status.INVALID_ARGUMENT.withDescription(
-                    String.format("Invalid format for rpc-behavior header (%s)", callBehavior)),
+                    "Invalid format for rpc-behavior header: " + callBehavior),
                 new Metadata());
             return noopListener;
           }
@@ -390,7 +388,7 @@ public final class XdsTestServer {
           } catch (NumberFormatException e) {
             newCall.close(
                 Status.INVALID_ARGUMENT.withDescription(
-                    String.format("Invalid format for rpc-behavior header (%s)", callBehavior)),
+                    "Invalid format for rpc-behavior header: " + callBehavior),
                 new Metadata());
             return noopListener;
           }

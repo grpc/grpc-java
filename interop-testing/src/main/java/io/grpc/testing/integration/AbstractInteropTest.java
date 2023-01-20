@@ -115,6 +115,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -2004,15 +2005,10 @@ public abstract class AbstractInteropTest {
     private Status status = Status.OK;
   }
 
-  private SoakIterationResult performOneSoakIteration(boolean resetChannel) throws Exception {
+  private SoakIterationResult performOneSoakIteration(
+      TestServiceGrpc.TestServiceBlockingStub soakStub) throws Exception {
     long startNs = System.nanoTime();
     Status status = Status.OK;
-    ManagedChannel soakChannel = channel;
-    TestServiceGrpc.TestServiceBlockingStub soakStub = blockingStub;
-    if (resetChannel) {
-      soakChannel = createChannel();
-      soakStub = TestServiceGrpc.newBlockingStub(soakChannel);
-    }
     try {
       final SimpleRequest request =
           SimpleRequest.newBuilder()
@@ -2028,10 +2024,6 @@ public abstract class AbstractInteropTest {
       status = e.getStatus();
     }
     long elapsedNs = System.nanoTime() - startNs;
-    if (resetChannel) {
-      soakChannel.shutdownNow();
-      soakChannel.awaitTermination(10, TimeUnit.SECONDS);
-    }
     return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
   }
 
@@ -2044,36 +2036,61 @@ public abstract class AbstractInteropTest {
       int soakIterations,
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
+      int minTimeMsBetweenRpcs,
       int overallTimeoutSeconds)
       throws Exception {
     int iterationsDone = 0;
     int totalFailures = 0;
     Histogram latencies = new Histogram(4 /* number of significant value digits */);
     long startNs = System.nanoTime();
+    ManagedChannel soakChannel = createChannel();
+    TestServiceGrpc.TestServiceBlockingStub soakStub = TestServiceGrpc
+        .newBlockingStub(soakChannel)
+        .withInterceptors(recordClientCallInterceptor(clientCallCapture));
     for (int i = 0; i < soakIterations; i++) {
       if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
       }
-      SoakIterationResult result = performOneSoakIteration(resetChannelPerIteration);
+      long earliestNextStartNs = System.nanoTime()
+          + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
+      if (resetChannelPerIteration) {
+        soakChannel.shutdownNow();
+        soakChannel.awaitTermination(10, TimeUnit.SECONDS);
+        soakChannel = createChannel();
+        soakStub = TestServiceGrpc
+            .newBlockingStub(soakChannel)
+            .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+      }
+      SoakIterationResult result = performOneSoakIteration(soakStub);
+      SocketAddress peer = clientCallCapture
+          .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       System.err.print(
           String.format(
-              "soak iteration: %d elapsed: %d ms", i, result.getLatencyMs()));
+              Locale.US,
+              "soak iteration: %d elapsed_ms: %d peer: %s",
+              i, result.getLatencyMs(), peer != null ? peer.toString() : "null"));
       if (!result.getStatus().equals(Status.OK)) {
         totalFailures++;
         System.err.println(String.format(" failed: %s", result.getStatus()));
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
         totalFailures++;
         System.err.println(
-            String.format(
-                " exceeds max acceptable latency: %d", maxAcceptablePerIterationLatencyMs));
+            " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
       } else {
         System.err.println(" succeeded");
       }
       iterationsDone++;
       latencies.recordValue(result.getLatencyMs());
+      long remainingNs = earliestNextStartNs - System.nanoTime();
+      if (remainingNs > 0) {
+        TimeUnit.NANOSECONDS.sleep(remainingNs);
+      }
     }
+    soakChannel.shutdownNow();
+    soakChannel.awaitTermination(10, TimeUnit.SECONDS);
     System.err.println(
         String.format(
+            Locale.US,
             "soak test ran: %d / %d iterations\n"
                 + "total failures: %d\n"
                 + "max failures threshold: %d\n"
@@ -2094,6 +2111,7 @@ public abstract class AbstractInteropTest {
     // check if we timed out
     String timeoutErrorMessage =
         String.format(
+            Locale.US,
             "soak test consumed all %d seconds of time and quit early, only "
                 + "having ran %d out of desired %d iterations.",
             overallTimeoutSeconds,
@@ -2103,6 +2121,7 @@ public abstract class AbstractInteropTest {
     // check if we had too many failures
     String tooManyFailuresErrorMessage =
         String.format(
+            Locale.US,
             "soak test total failures: %d exceeds max failures threshold: %d.",
             totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
@@ -2345,9 +2364,10 @@ public abstract class AbstractInteropTest {
     long uncompressedSentSize = 0;
     int seqNo = 0;
     for (MessageLite msg : sentMessages) {
-      assertThat(tracer.nextOutboundEvent()).isEqualTo(String.format("outboundMessage(%d)", seqNo));
+      assertThat(tracer.nextOutboundEvent())
+          .isEqualTo(String.format(Locale.US, "outboundMessage(%d)", seqNo));
       assertThat(tracer.nextOutboundEvent()).matches(
-          String.format("outboundMessageSent\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
+          String.format(Locale.US, "outboundMessageSent\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
       seqNo++;
       uncompressedSentSize += msg.getSerializedSize();
     }
@@ -2355,9 +2375,10 @@ public abstract class AbstractInteropTest {
     long uncompressedReceivedSize = 0;
     seqNo = 0;
     for (MessageLite msg : receivedMessages) {
-      assertThat(tracer.nextInboundEvent()).isEqualTo(String.format("inboundMessage(%d)", seqNo));
+      assertThat(tracer.nextInboundEvent())
+          .isEqualTo(String.format(Locale.US, "inboundMessage(%d)", seqNo));
       assertThat(tracer.nextInboundEvent()).matches(
-          String.format("inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
+          String.format(Locale.US, "inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
       uncompressedReceivedSize += msg.getSerializedSize();
       seqNo++;
     }

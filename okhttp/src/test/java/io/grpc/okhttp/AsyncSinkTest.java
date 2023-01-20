@@ -56,7 +56,7 @@ public class AsyncSinkTest {
   private final QueueingExecutor queueingExecutor = new QueueingExecutor();
   private final TransportExceptionHandler exceptionHandler = mock(TransportExceptionHandler.class);
   private final AsyncSink sink =
-      AsyncSink.sink(new SerializingExecutor(queueingExecutor), exceptionHandler);
+      AsyncSink.sink(new SerializingExecutor(queueingExecutor), exceptionHandler, 10000);
 
   @Test
   public void noCoalesceRequired() throws IOException {

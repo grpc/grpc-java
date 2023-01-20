@@ -73,7 +73,7 @@ public final class RlsLoadBalancerProvider extends LoadBalancerProvider {
           new LbPolicyConfiguration(routeLookupConfig, routeLookupChannelServiceConfig, lbPolicy));
     } catch (Exception e) {
       return ConfigOrError.fromError(
-          Status.INVALID_ARGUMENT
+          Status.UNAVAILABLE
               .withDescription("can't parse config: " + e.getMessage())
               .withCause(e));
     }

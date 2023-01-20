@@ -408,12 +408,13 @@ public abstract class AbstractTransportTest {
     }
     assumeTrue("transport is not using InetSocketAddress", port != -1);
     server.shutdown();
+    assertTrue(serverListener.waitForShutdown(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     server = newServer(port, Arrays.asList(serverStreamTracerFactory));
     boolean success;
     Thread.currentThread().interrupt();
     try {
-      server.start(serverListener);
+      server.start(serverListener = new MockServerListener());
       success = true;
     } catch (Exception ex) {
       success = false;

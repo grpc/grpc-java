@@ -20,6 +20,7 @@ import static com.google.common.math.LongMath.checkedAdd;
 
 import java.text.ParseException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -244,7 +245,8 @@ public class JsonUtil {
     for (int i = 0; i < rawList.size(); i++) {
       if (!(rawList.get(i) instanceof Map)) {
         throw new ClassCastException(
-            String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
+            String.format(
+                Locale.US, "value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
       }
     }
     return (List<Map<String, ?>>) rawList;
@@ -260,6 +262,7 @@ public class JsonUtil {
       if (!(rawList.get(i) instanceof String)) {
         throw new ClassCastException(
             String.format(
+                Locale.US,
                 "value '%s' for idx %d in '%s' is not string", rawList.get(i), i, rawList));
       }
     }

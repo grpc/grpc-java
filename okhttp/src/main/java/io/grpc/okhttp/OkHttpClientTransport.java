@@ -80,6 +80,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -105,10 +106,10 @@ import okio.Timeout;
 /**
  * A okhttp-based {@link ConnectionClientTransport} implementation.
  */
-class OkHttpClientTransport implements ConnectionClientTransport, TransportExceptionHandler {
+class OkHttpClientTransport implements ConnectionClientTransport, TransportExceptionHandler,
+      OutboundFlowController.Transport {
   private static final Map<ErrorCode, Status> ERROR_CODE_TO_STATUS = buildErrorCodeToStatusMap();
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
-  private static final OkHttpClientStream[] EMPTY_STREAM_ARRAY = new OkHttpClientStream[0];
 
   private static Map<ErrorCode, Status> buildErrorCodeToStatusMap() {
     Map<ErrorCode, Status> errorToStatus = new EnumMap<>(ErrorCode.class);
@@ -323,8 +324,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         @Override
         public TransportTracer.FlowControlWindows read() {
           synchronized (lock) {
-            long local = -1; // okhttp does not track the local window size
-            long remote = outboundFlow == null ? -1 : outboundFlow.windowUpdate(null, 0);
+            long local = outboundFlow == null ? -1 : outboundFlow.windowUpdate(null, 0);
+            // connectionUnacknowledgedBytesRead is only readable by ClientFrameHandler, so we
+            // provide a lower bound.
+            long remote = (long) (initialWindowSize * DEFAULT_WINDOW_UPDATE_RATIO);
             return new TransportTracer.FlowControlWindows(local, remote);
           }
         }
@@ -422,7 +425,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private void startStream(OkHttpClientStream stream) {
     Preconditions.checkState(
-        stream.id() == OkHttpClientStream.ABSENT_ID, "StreamId already assigned");
+        stream.transportState().id() == OkHttpClientStream.ABSENT_ID, "StreamId already assigned");
     streams.put(nextStreamId, stream);
     setInUse(stream);
     // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock'; instead
@@ -478,8 +481,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       keepAliveManager.onTransportStarted();
     }
 
-    final AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this);
-    FrameWriter rawFrameWriter = variant.newWriter(Okio.buffer(asyncSink), true);
+    int maxQueuedControlFrames = 10000;
+    final AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this, maxQueuedControlFrames);
+    FrameWriter rawFrameWriter = asyncSink.limitControlFramesWriter(
+        variant.newWriter(Okio.buffer(asyncSink), true));
 
     synchronized (lock) {
       // Handle FrameWriter exceptions centrally, since there are many callers. Note that errors
@@ -638,7 +643,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       // Prepare headers and request method line
       Request proxyRequest = createHttpProxyRequest(address, proxyUsername, proxyPassword);
       HttpUrl url = proxyRequest.httpUrl();
-      String requestLine = String.format("CONNECT %s:%d HTTP/1.1", url.host(), url.port());
+      String requestLine =
+          String.format(Locale.US, "CONNECT %s:%d HTTP/1.1", url.host(), url.port());
 
       // Write request to socket
       sink.writeUtf8(requestLine).writeUtf8("\r\n");
@@ -670,6 +676,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           // ignored
         }
         String message = String.format(
+            Locale.US,
             "Response returned from proxy was not successful (expected 2xx, got %d %s). "
               + "Response body:\n%s",
             statusLine.code, statusLine.message, body.readUtf8());
@@ -806,9 +813,16 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   /**
    * Gets all active streams as an array.
    */
-  OkHttpClientStream[] getActiveStreams() {
+  @Override
+  public OutboundFlowController.StreamState[] getActiveStreams() {
     synchronized (lock) {
-      return streams.values().toArray(EMPTY_STREAM_ARRAY);
+      OutboundFlowController.StreamState[] flowStreams =
+          new OutboundFlowController.StreamState[streams.size()];
+      int i = 0;
+      for (OkHttpClientStream stream : streams.values()) {
+        flowStreams[i++] = stream.transportState().getOutboundFlowState();
+      }
+      return flowStreams;
     }
   }
 
@@ -1123,7 +1137,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       if (stream == null) {
         if (mayHaveCreatedStream(streamId)) {
           synchronized (lock) {
-            frameWriter.rstStream(streamId, ErrorCode.INVALID_STREAM);
+            frameWriter.rstStream(streamId, ErrorCode.STREAM_CLOSED);
           }
           in.skip(length);
         } else {
@@ -1174,6 +1188,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         if (metadataSize > maxInboundMetadataSize) {
           failedStatus = Status.RESOURCE_EXHAUSTED.withDescription(
               String.format(
+                  Locale.US,
                   "Response %s metadata larger than %d: %d",
                   inFinished ? "trailer" : "header",
                   maxInboundMetadataSize,
@@ -1184,7 +1199,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         OkHttpClientStream stream = streams.get(streamId);
         if (stream == null) {
           if (mayHaveCreatedStream(streamId)) {
-            frameWriter.rstStream(streamId, ErrorCode.INVALID_STREAM);
+            frameWriter.rstStream(streamId, ErrorCode.STREAM_CLOSED);
           } else {
             unknownStream = true;
           }
@@ -1289,8 +1304,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
               p = ping;
               ping = null;
             } else {
-              log.log(Level.WARNING, String.format("Received unexpected ping ack. "
-                  + "Expecting %d, got %d", ping.payload(), ackPayload));
+              log.log(Level.WARNING, String.format(
+                  Locale.US, "Received unexpected ping ack. Expecting %d, got %d",
+                  ping.payload(), ackPayload));
             }
           } else {
             log.warning("Received unexpected ping ack. No ping outstanding");
@@ -1363,7 +1379,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
         OkHttpClientStream stream = streams.get(streamId);
         if (stream != null) {
-          outboundFlow.windowUpdate(stream, (int) delta);
+          outboundFlow.windowUpdate(stream.transportState().getOutboundFlowState(), (int) delta);
         } else if (!mayHaveCreatedStream(streamId)) {
           unknownStream = true;
         }

@@ -26,9 +26,9 @@ import com.google.protobuf.util.Durations;
 import io.grpc.BindableService;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.SynchronizationContext;
-import io.grpc.services.CallMetricRecorder;
 import io.grpc.services.InternalMetricRecorder;
 import io.grpc.services.MetricRecorder;
+import io.grpc.services.MetricReport;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import java.util.concurrent.ScheduledExecutorService;
@@ -146,7 +146,7 @@ public final class OrcaServiceImpl implements BindableService {
   }
 
   private OrcaLoadReport generateMetricsReport() {
-    CallMetricRecorder.CallMetricReport internalReport =
+    MetricReport internalReport =
         InternalMetricRecorder.getMetricReport(metricRecorder);
     return OrcaLoadReport.newBuilder().setCpuUtilization(internalReport.getCpuUtilization())
         .setMemUtilization(internalReport.getMemoryUtilization())

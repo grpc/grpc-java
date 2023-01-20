@@ -52,6 +52,7 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -854,6 +855,9 @@ class NettyServerHandler extends AbstractNettyHandler {
         keepAliveManager.onDataReceived();
       }
       NettyServerHandler.this.onHeadersRead(ctx, streamId, headers);
+      if (endStream) {
+        NettyServerHandler.this.onDataRead(streamId, Unpooled.EMPTY_BUFFER, 0, endStream);
+      }
     }
 
     @Override
@@ -890,10 +894,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       }
       if (data == flowControlPing().payload()) {
         flowControlPing().updateWindow();
-        if (logger.isLoggable(Level.FINE)) {
-          logger.log(Level.FINE, String.format("Window: %d",
-              decoder().flowController().initialWindowSize(connection().connectionStream())));
-        }
+        logger.log(Level.FINE, "Window: {0}",
+            decoder().flowController().initialWindowSize(connection().connectionStream()));
       } else if (data == GRACEFUL_SHUTDOWN_PING) {
         if (gracefulShutdown == null) {
           // this should never happen

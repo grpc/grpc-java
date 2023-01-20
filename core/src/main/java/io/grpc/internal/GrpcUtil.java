@@ -203,7 +203,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.48.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.49.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -797,6 +797,12 @@ public final class GrpcUtil {
       // do nothing except log
       log.log(Level.WARNING, "exception caught in closeQuietly", ioException);
     }
+  }
+
+  /** Reads {@code in} until end of stream. */
+  public static void exhaust(InputStream in) throws IOException {
+    byte[] buf = new byte[256];
+    while (in.read(buf) != -1) {}
   }
 
   /**

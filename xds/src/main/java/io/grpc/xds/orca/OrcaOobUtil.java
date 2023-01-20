@@ -51,6 +51,7 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import java.util.HashMap;
@@ -168,9 +169,9 @@ public final class OrcaOobUtil {
      * <p>Note this callback will be invoked from the {@link SynchronizationContext} of the
      * delegated helper, implementations should not block.
      *
-     * @param report load report in the format of ORCA protocol.
+     * @param report load report in the format of grpc {@link MetricReport}.
      */
-    void onLoadReport(OrcaLoadReport report);
+    void onLoadReport(MetricReport report);
   }
 
   static final Attributes.Key<SubchannelImpl> ORCA_REPORTING_STATE_KEY =
@@ -450,8 +451,9 @@ public final class OrcaOobUtil {
           callHasResponded = true;
           backoffPolicy = null;
           subchannelLogger.log(ChannelLogLevel.DEBUG, "Received an ORCA report: {0}", response);
+          MetricReport metricReport = OrcaPerRequestUtil.fromOrcaLoadReport(response);
           for (OrcaOobReportListener listener : configs.keySet()) {
-            listener.onLoadReport(response);
+            listener.onLoadReport(metricReport);
           }
           call.request(1);
         }

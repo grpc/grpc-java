@@ -32,7 +32,7 @@ public class StatusRuntimeException extends RuntimeException {
   private final boolean fillInStackTrace;
 
   /**
-   * Constructs the exception with both a status.  See also {@link Status#asException()}.
+   * Constructs the exception with both a status. See also {@link Status#asRuntimeException()}.
    *
    * @since 1.0.0
    */
@@ -41,8 +41,8 @@ public class StatusRuntimeException extends RuntimeException {
   }
 
   /**
-   * Constructs the exception with both a status and trailers.  See also
-   * {@link Status#asException(Metadata)}.
+   * Constructs the exception with both a status and trailers. See also {@link
+   * Status#asRuntimeException(Metadata)}.
    *
    * @since 1.0.0
    */

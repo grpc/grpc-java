@@ -29,17 +29,17 @@ dependencies {
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
-jar {
+tasks.named("jar").configure {
     classifier = 'original'
 }
 
 // TODO(ashithasantosh): Remove javadoc exclusion on adding authorization
 // interceptor implementations.
-javadoc {
+tasks.named("javadoc").configure {
     exclude "io/grpc/authz/*"
 }
 
-shadowJar {
+tasks.named("shadowJar").configure {
     classifier = null
     dependencies {
         exclude(dependency {true})
@@ -74,4 +74,6 @@ publishing {
     }
 }
 
-publishMavenPublicationToMavenRepository.enabled = false
+tasks.named("publishMavenPublicationToMavenRepository").configure {
+    enabled = false
+}

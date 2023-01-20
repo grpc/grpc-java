@@ -111,6 +111,7 @@ final class XdsNameResolver extends NameResolver {
   @Nullable
   private final String targetAuthority;
   private final String serviceAuthority;
+  private final String overrideAuthority;
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService scheduler;
@@ -134,22 +135,25 @@ final class XdsNameResolver extends NameResolver {
   private boolean receivedConfig;
 
   XdsNameResolver(
-      @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
+      @Nullable String targetAuthority, String name, @Nullable String overrideAuthority,
+      ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride) {
-    this(targetAuthority, name, serviceConfigParser, syncContext, scheduler,
+    this(targetAuthority, name, overrideAuthority, serviceConfigParser, syncContext, scheduler,
         SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
         FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting
   XdsNameResolver(
-      @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
+      @Nullable String targetAuthority, String name, @Nullable String overrideAuthority,
+      ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
     serviceAuthority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
+    this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
@@ -277,7 +281,7 @@ final class XdsNameResolver extends NameResolver {
     Map<String, ?> rawServiceConfig = ImmutableMap.of(
         "loadBalancingConfig",
         ImmutableList.of(ImmutableMap.of(
-            "cluster_manager_experimental",
+            XdsLbPolicies.CLUSTER_MANAGER_POLICY_NAME,
             ImmutableMap.of("childPolicy", childPolicy.buildOrThrow()))));
 
     if (logger.isLoggable(XdsLogLevel.INFO)) {
@@ -669,14 +673,22 @@ final class XdsNameResolver extends NameResolver {
     return "cluster_specifier_plugin:" + pluginName;
   }
 
+  private static final class FailingConfigSelector extends InternalConfigSelector {
+    private final Result result;
+
+    public FailingConfigSelector(Status error) {
+      this.result = Result.forError(error);
+    }
+
+    @Override
+    public Result selectConfig(PickSubchannelArgs args) {
+      return result;
+    }
+  }
+
   private class ResolveState implements LdsResourceWatcher {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
-    private final ResolutionResult emptyResult =
-        ResolutionResult.newBuilder()
-            .setServiceConfig(emptyServiceConfig)
-            // let channel take action for no config selector
-            .build();
     private final String ldsResourceName;
     private boolean stopped;
     @Nullable
@@ -738,9 +750,10 @@ final class XdsNameResolver extends NameResolver {
           if (stopped) {
             return;
           }
-          logger.log(XdsLogLevel.INFO, "LDS resource {0} unavailable", resourceName);
+          String error = "LDS resource does not exist: " + resourceName;
+          logger.log(XdsLogLevel.INFO, error);
           cleanUpRouteDiscoveryState();
-          cleanUpRoutes();
+          cleanUpRoutes(error);
         }
       });
     }
@@ -760,11 +773,12 @@ final class XdsNameResolver extends NameResolver {
     // called in syncContext
     private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
-      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, ldsResourceName);
+      String authority = overrideAuthority != null ? overrideAuthority : ldsResourceName;
+      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, authority);
       if (virtualHost == null) {
-        logger.log(XdsLogLevel.WARNING,
-            "Failed to find virtual host matching hostname {0}", ldsResourceName);
-        cleanUpRoutes();
+        String error = "Failed to find virtual host matching hostname: " + authority;
+        logger.log(XdsLogLevel.WARNING, error);
+        cleanUpRoutes(error);
         return;
       }
 
@@ -860,7 +874,7 @@ final class XdsNameResolver extends NameResolver {
       }
     }
 
-    private void cleanUpRoutes() {
+    private void cleanUpRoutes(String error) {
       if (existingClusters != null) {
         for (String cluster : existingClusters) {
           int count = clusterRefs.get(cluster).refCount.decrementAndGet();
@@ -871,7 +885,17 @@ final class XdsNameResolver extends NameResolver {
         existingClusters = null;
       }
       routingConfig = RoutingConfig.empty;
-      listener.onResult(emptyResult);
+      // Without addresses the default LB (normally pick_first) should become TRANSIENT_FAILURE, and
+      // the config selector handles the error message itself. Once the LB API allows providing
+      // failure information for addresses yet still providing a service config, the config seector
+      // could be avoided.
+      listener.onResult(ResolutionResult.newBuilder()
+          .setAttributes(Attributes.newBuilder()
+            .set(InternalConfigSelector.KEY,
+              new FailingConfigSelector(Status.UNAVAILABLE.withDescription(error)))
+            .build())
+          .setServiceConfig(emptyServiceConfig)
+          .build());
       receivedConfig = true;
     }
 
@@ -938,8 +962,9 @@ final class XdsNameResolver extends NameResolver {
             if (RouteDiscoveryState.this != routeDiscoveryState) {
               return;
             }
-            logger.log(XdsLogLevel.INFO, "RDS resource {0} unavailable", resourceName);
-            cleanUpRoutes();
+            String error = "RDS resource does not exist: " + resourceName;
+            logger.log(XdsLogLevel.INFO, error);
+            cleanUpRoutes(error);
           }
         });
       }
@@ -989,13 +1014,15 @@ final class XdsNameResolver extends NameResolver {
 
     private Map<String, ?> toLbPolicy() {
       if (traditionalCluster != null) {
-        return ImmutableMap.of("cds_experimental", ImmutableMap.of("cluster", traditionalCluster));
+        return ImmutableMap.of(
+            XdsLbPolicies.CDS_POLICY_NAME,
+            ImmutableMap.of("cluster", traditionalCluster));
       } else {
         ImmutableMap<String, ?> rlsConfig = new ImmutableMap.Builder<String, Object>()
             .put("routeLookupConfig", rlsPluginConfig.config())
             .put(
                 "childPolicy",
-                ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
+                ImmutableList.of(ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of())))
             .put("childPolicyConfigTargetFieldName", "cluster")
             .buildOrThrow();
         return ImmutableMap.of("rls_experimental", rlsConfig);

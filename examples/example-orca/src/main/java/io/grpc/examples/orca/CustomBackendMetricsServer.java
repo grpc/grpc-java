@@ -16,6 +16,7 @@
 
 package io.grpc.examples.orca;
 
+import com.google.common.collect.ImmutableMap;
 import io.grpc.BindableService;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -23,12 +24,13 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
-import io.grpc.xds.shaded.com.github.xds.data.orca.v3.OrcaLoadReport;
 import java.io.IOException;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -108,29 +110,30 @@ public class CustomBackendMetricsServer {
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
       HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
-      OrcaLoadReport randomPerRpcMetrics = OrcaLoadReport.newBuilder()
-          .setCpuUtilization(random.nextDouble())
-          .setMemUtilization(random.nextDouble())
-          .putUtilization("util", random.nextDouble())
-          .putRequestCost("cost", random.nextDouble())
-          .build();
+      double cpuUtilization = random.nextDouble();
+      double memoryUtilization = random.nextDouble();
+      Map<String, Double> utilization = ImmutableMap.of("util", random.nextDouble());
+      Map<String, Double> requestCost = ImmutableMap.of("cost", random.nextDouble());
       // Sets per-query backend metrics to a random test report.
       CallMetricRecorder.getCurrent()
-          .recordMemoryUtilizationMetric(randomPerRpcMetrics.getMemUtilization())
-          .recordCallMetric("cost", randomPerRpcMetrics.getRequestCostOrDefault("cost", 0.0))
-          .recordUtilizationMetric("util", randomPerRpcMetrics.getUtilizationOrDefault("util", 0.0));
-      System.out.println("Hello World Server updates RPC metrics data:\n" + randomPerRpcMetrics);
+          .recordCpuUtilizationMetric(cpuUtilization)
+          .recordMemoryUtilizationMetric(memoryUtilization)
+          .recordCallMetric("cost", requestCost.get("cost"))
+          .recordUtilizationMetric("util", utilization.get("util"));
+      System.out.println(String.format("Hello World Server updates RPC metrics data:\n" +
+          "cpu: %s, memory: %s, request cost: %s, utilization: %s\n",
+          cpuUtilization, memoryUtilization, requestCost,  utilization));
 
-      OrcaLoadReport randomOobMetrics = OrcaLoadReport.newBuilder()
-          .setCpuUtilization(random.nextDouble())
-          .setMemUtilization(random.nextDouble())
-          .putUtilization("util", random.nextDouble())
-          .build();
+      cpuUtilization = random.nextDouble();
+      memoryUtilization = random.nextDouble();
+      utilization = ImmutableMap.of("util", random.nextDouble());
       // Sets OOB backend metrics to a random test report.
-      metricRecorder.setCpuUtilizationMetric(randomOobMetrics.getCpuUtilization());
-      metricRecorder.setMemoryUtilizationMetric(randomOobMetrics.getMemUtilization());
-      metricRecorder.setAllUtilizationMetrics(randomOobMetrics.getUtilizationMap());
-      System.out.println("Hello World Server updates OOB metrics data:\n" + randomOobMetrics);
+      metricRecorder.setCpuUtilizationMetric(cpuUtilization);
+      metricRecorder.setMemoryUtilizationMetric(memoryUtilization);
+      metricRecorder.setAllUtilizationMetrics(utilization);
+      System.out.println(String.format("Hello World Server updates OOB metrics data:\n" +
+              "cpu: %s, memory: %s, utilization: %s\n",
+          cpuUtilization, memoryUtilization, utilization));
       responseObserver.onNext(reply);
       responseObserver.onCompleted();
     }

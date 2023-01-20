@@ -58,9 +58,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -342,6 +346,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private final class EdsClusterState extends ClusterState implements EdsResourceWatcher {
       @Nullable
       private final String edsServiceName;
+      private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
+      int priorityNameGenId = 1;
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
@@ -385,10 +391,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             List<DropOverload> dropOverloads = update.dropPolicies;
             List<EquivalentAddressGroup> addresses = new ArrayList<>();
             Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
+            List<String> sortedPriorityNames = generatePriorityNames(name, localityLbEndpoints);
             for (Locality locality : localityLbEndpoints.keySet()) {
               LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
-              int priority = localityLbInfo.priority();
-              String priorityName = priorityName(name, priority);
+              String priorityName = localityPriorityNames.get(locality);
               boolean discard = true;
               for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
                 if (endpoint.isHealthy()) {
@@ -426,21 +432,54 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               logger.log(XdsLogLevel.INFO,
                   "Cluster {0} has no usable priority/locality/endpoint", update.clusterName);
             }
-            List<String> priorities = new ArrayList<>(prioritizedLocalityWeights.keySet());
-            Collections.sort(priorities);
+            sortedPriorityNames.retainAll(prioritizedLocalityWeights.keySet());
             Map<String, PriorityChildConfig> priorityChildConfigs =
                 generateEdsBasedPriorityChildConfigs(
                     name, edsServiceName, lrsServerInfo, maxConcurrentRequests, tlsContext,
                     endpointLbPolicy, lbRegistry, prioritizedLocalityWeights, dropOverloads);
             status = Status.OK;
             resolved = true;
-            result = new ClusterResolutionResult(addresses, priorityChildConfigs, priorities,
-                localityWeights);
+            result = new ClusterResolutionResult(addresses, priorityChildConfigs,
+                sortedPriorityNames, localityWeights);
             handleEndpointResourceUpdate();
           }
         }
 
         syncContext.execute(new EndpointsUpdated());
+      }
+
+      private List<String> generatePriorityNames(String name,
+          Map<Locality, LocalityLbEndpoints> localityLbEndpoints) {
+        TreeMap<Integer, List<Locality>> todo = new TreeMap<>();
+        for (Locality locality : localityLbEndpoints.keySet()) {
+          int priority = localityLbEndpoints.get(locality).priority();
+          if (!todo.containsKey(priority)) {
+            todo.put(priority, new ArrayList<>());
+          }
+          todo.get(priority).add(locality);
+        }
+        Map<Locality, String> newNames = new HashMap<>();
+        Set<String> usedNames = new HashSet<>();
+        List<String> ret = new ArrayList<>();
+        for (Integer priority: todo.keySet()) {
+          String foundName = "";
+          for (Locality locality : todo.get(priority)) {
+            if (localityPriorityNames.containsKey(locality)
+                && usedNames.add(localityPriorityNames.get(locality))) {
+              foundName = localityPriorityNames.get(locality);
+              break;
+            }
+          }
+          if ("".equals(foundName)) {
+            foundName = String.format(Locale.US, "%s[child%d]", name, priorityNameGenId++);
+          }
+          for (Locality locality : todo.get(priority)) {
+            newNames.put(locality, foundName);
+          }
+          ret.add(foundName);
+        }
+        localityPriorityNames = newNames;
+        return ret;
       }
 
       @Override
@@ -718,7 +757,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * The ordering is undefined for priorities in different clusters.
    */
   private static String priorityName(String cluster, int priority) {
-    return cluster + "[priority" + priority + "]";
+    return cluster + "[child" + priority + "]";
   }
 
   /**

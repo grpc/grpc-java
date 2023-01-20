@@ -38,7 +38,8 @@ dependencies {
     testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
-    testRuntimeOnly libraries.netty.tcnative
+    testRuntimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
     testRuntimeOnly (libraries.netty.transport.epoll) {
         artifact {
             classifier = "linux-x86_64"
@@ -51,28 +52,28 @@ configureProtoCompilation()
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
-[compileJava, compileTestJava].each() {
+[tasks.named("compileJava"), tasks.named("compileTestJava")]*.configure {
     // protobuf calls valueof. Will be fixed in next release (google/protobuf#4046)
-    it.options.compilerArgs += [
+    options.compilerArgs += [
         "-Xlint:-deprecation"
     ]
     // ALTS returns a lot of futures that we mostly don't care about.
-    it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
+    options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
-javadoc {
+tasks.named("javadoc").configure {
     exclude 'io/grpc/alts/internal/**'
     exclude 'io/grpc/alts/Internal*'
 }
 
-jar {
+tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
 }
 
 // We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
 // source to work with Bazel, so we rewrite the code as part of the build.
-shadowJar {
+tasks.named("shadowJar").configure {
     archiveClassifier = null
     dependencies {
         exclude(dependency {true})

@@ -16,6 +16,7 @@
 
 package io.grpc.okhttp;
 
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
@@ -23,8 +24,6 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.netty.InternalNettyServerBuilder;
-import io.grpc.netty.NettyServerBuilder;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -53,21 +52,17 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   @Override
   protected InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    NettyServerBuilder builder = NettyServerBuilder
-        .forPort(0)
-        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW);
-    InternalNettyServerBuilder.setTransportTracerFactory(builder, fakeClockTransportTracer);
-    return InternalNettyServerBuilder.buildTransportServers(builder, streamTracerFactories);
+    return newServer(0, streamTracerFactories);
   }
 
   @Override
   protected InternalServer newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
-    NettyServerBuilder builder = NettyServerBuilder
-        .forAddress(new InetSocketAddress(port))
-        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW);
-    InternalNettyServerBuilder.setTransportTracerFactory(builder, fakeClockTransportTracer);
-    return InternalNettyServerBuilder.buildTransportServers(builder, streamTracerFactories);
+    return OkHttpServerBuilder
+        .forPort(port, InsecureServerCredentials.create())
+        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
+        .setTransportTracerFactory(fakeClockTransportTracer)
+        .buildTransportServers(streamTracerFactories);
   }
 
   @Override
@@ -99,12 +94,5 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   @Override
   protected boolean haveTransportTracer() {
     return true;
-  }
-
-  @Override
-  @org.junit.Test
-  @org.junit.Ignore
-  public void clientChecksInboundMetadataSize_trailer() {
-    // Server-side is flaky due to https://github.com/netty/netty/pull/8332
   }
 }

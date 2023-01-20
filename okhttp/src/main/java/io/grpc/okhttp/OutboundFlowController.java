@@ -33,17 +33,16 @@ import okio.Buffer;
  * streams.
  */
 class OutboundFlowController {
-  private final OkHttpClientTransport transport;
+  private final Transport transport;
   private final FrameWriter frameWriter;
   private int initialWindowSize;
-  private final OutboundFlowState connectionState;
+  private final StreamState connectionState;
 
-  OutboundFlowController(
-      OkHttpClientTransport transport, FrameWriter frameWriter) {
+  public OutboundFlowController(Transport transport, FrameWriter frameWriter) {
     this.transport = Preconditions.checkNotNull(transport, "transport");
     this.frameWriter = Preconditions.checkNotNull(frameWriter, "frameWriter");
     this.initialWindowSize = DEFAULT_WINDOW_SIZE;
-    connectionState = new OutboundFlowState(CONNECTION_STREAM_ID, DEFAULT_WINDOW_SIZE);
+    connectionState = new StreamState(CONNECTION_STREAM_ID, DEFAULT_WINDOW_SIZE, null);
   }
 
   /**
@@ -55,22 +54,15 @@ class OutboundFlowController {
    *
    * @return true, if new window size is increased, false otherwise.
    */
-  boolean initialOutboundWindowSize(int newWindowSize) {
+  public boolean initialOutboundWindowSize(int newWindowSize) {
     if (newWindowSize < 0) {
       throw new IllegalArgumentException("Invalid initial window size: " + newWindowSize);
     }
 
     int delta = newWindowSize - initialWindowSize;
     initialWindowSize = newWindowSize;
-    for (OkHttpClientStream stream : transport.getActiveStreams()) {
-      OutboundFlowState state = (OutboundFlowState) stream.getOutboundFlowState();
-      if (state == null) {
-        // Create the OutboundFlowState with the new window size.
-        state = new OutboundFlowState(stream, initialWindowSize);
-        stream.setOutboundFlowState(state);
-      } else {
-        state.incrementStreamWindow(delta);
-      }
+    for (StreamState state : transport.getActiveStreams()) {
+      state.incrementStreamWindow(delta);
     }
 
     return delta > 0;
@@ -82,15 +74,14 @@ class OutboundFlowController {
    *
    * <p>Must be called with holding transport lock.
    */
-  int windowUpdate(@Nullable OkHttpClientStream stream, int delta) {
+  public int windowUpdate(@Nullable StreamState state, int delta) {
     final int updatedWindow;
-    if (stream == null) {
+    if (state == null) {
       // Update the connection window and write any pending frames for all streams.
       updatedWindow = connectionState.incrementStreamWindow(delta);
       writeStreams();
     } else {
       // Update the stream window and write any pending frames for the stream.
-      OutboundFlowState state = state(stream);
       updatedWindow = state.incrementStreamWindow(delta);
 
       WriteStatus writeStatus = new WriteStatus();
@@ -105,18 +96,9 @@ class OutboundFlowController {
   /**
    * Must be called with holding transport lock.
    */
-  void data(boolean outFinished, int streamId, Buffer source, boolean flush) {
+  public void data(boolean outFinished, StreamState state, Buffer source, boolean flush) {
     Preconditions.checkNotNull(source, "source");
 
-    OkHttpClientStream stream = transport.getStream(streamId);
-    if (stream == null) {
-      // This is possible for a stream that has received end-of-stream from server (but hasn't sent
-      // end-of-stream), and was removed from the transport stream map.
-      // In such case, we just throw away the data.
-      return;
-    }
-
-    OutboundFlowState state = state(stream);
     int window = state.writableWindow();
     boolean framesAlreadyQueued = state.hasPendingData();
     int size = (int) source.size();
@@ -130,7 +112,7 @@ class OutboundFlowController {
         state.write(source, window, false);
       }
       // Queue remaining data in the buffer
-      state.enqueue(source, (int) source.size(), outFinished);
+      state.enqueueData(source, (int) source.size(), outFinished);
     }
 
     if (flush) {
@@ -138,7 +120,19 @@ class OutboundFlowController {
     }
   }
 
-  void flush() {
+  /**
+   * Transport lock must be held when calling.
+   */
+  public void notifyWhenNoPendingData(StreamState state, Runnable noPendingDataRunnable) {
+    Preconditions.checkNotNull(noPendingDataRunnable, "noPendingDataRunnable");
+    if (state.hasPendingData()) {
+      state.notifyWhenNoPendingData(noPendingDataRunnable);
+    } else {
+      noPendingDataRunnable.run();
+    }
+  }
+
+  public void flush() {
     try {
       frameWriter.flush();
     } catch (IOException e) {
@@ -146,13 +140,9 @@ class OutboundFlowController {
     }
   }
 
-  private OutboundFlowState state(OkHttpClientStream stream) {
-    OutboundFlowState state = (OutboundFlowState) stream.getOutboundFlowState();
-    if (state == null) {
-      state = new OutboundFlowState(stream, initialWindowSize);
-      stream.setOutboundFlowState(state);
-    }
-    return state;
+  public StreamState createState(Stream stream, int streamId) {
+    return new StreamState(
+        streamId, initialWindowSize, Preconditions.checkNotNull(stream, "stream"));
   }
 
   /**
@@ -160,15 +150,14 @@ class OutboundFlowController {
    *
    * <p>Must be called with holding transport lock.
    */
-  void writeStreams() {
-    OkHttpClientStream[] streams = transport.getActiveStreams();
+  public void writeStreams() {
+    StreamState[] states = transport.getActiveStreams();
     int connectionWindow = connectionState.window();
-    for (int numStreams = streams.length; numStreams > 0 && connectionWindow > 0;) {
+    for (int numStreams = states.length; numStreams > 0 && connectionWindow > 0;) {
       int nextNumStreams = 0;
       int windowSlice = (int) ceil(connectionWindow / (float) numStreams);
       for (int index = 0; index < numStreams && connectionWindow > 0; ++index) {
-        OkHttpClientStream stream = streams[index];
-        OutboundFlowState state = state(stream);
+        StreamState state = states[index];
 
         int bytesForStream = min(connectionWindow, min(state.unallocatedBytes(), windowSlice));
         if (bytesForStream > 0) {
@@ -179,7 +168,7 @@ class OutboundFlowController {
         if (state.unallocatedBytes() > 0) {
           // There is more data to process for this stream. Add it to the next
           // pass.
-          streams[nextNumStreams++] = stream;
+          states[nextNumStreams++] = state;
         }
       }
       numStreams = nextNumStreams;
@@ -187,8 +176,7 @@ class OutboundFlowController {
 
     // Now take one last pass through all of the streams and write any allocated bytes.
     WriteStatus writeStatus = new WriteStatus();
-    for (OkHttpClientStream stream : transport.getActiveStreams()) {
-      OutboundFlowState state = state(stream);
+    for (StreamState state : transport.getActiveStreams()) {
       state.writeBytes(state.allocatedBytes(), writeStatus);
       state.clearAllocatedBytes();
     }
@@ -213,25 +201,29 @@ class OutboundFlowController {
     }
   }
 
+  public interface Transport {
+    StreamState[] getActiveStreams();
+  }
+
+  public interface Stream {
+    void onSentBytes(int frameBytes);
+  }
+
   /**
    * The outbound flow control state for a single stream.
    */
-  private final class OutboundFlowState {
-    final Buffer pendingWriteBuffer;
-    final int streamId;
-    int window;
-    int allocatedBytes;
-    OkHttpClientStream stream;
-    boolean pendingBufferHasEndOfStream = false;
+  public final class StreamState {
+    private final Buffer pendingWriteBuffer = new Buffer();
+    private Runnable noPendingDataRunnable;
+    private final int streamId;
+    private int window;
+    private int allocatedBytes;
+    private final Stream stream;
+    private boolean pendingBufferHasEndOfStream = false;
 
-    OutboundFlowState(int streamId, int initialWindowSize) {
+    StreamState(int streamId, int initialWindowSize, Stream stream) {
       this.streamId = streamId;
       window = initialWindowSize;
-      pendingWriteBuffer = new Buffer();
-    }
-
-    OutboundFlowState(OkHttpClientStream stream, int initialWindowSize) {
-      this(stream.id(), initialWindowSize);
       this.stream = stream;
     }
 
@@ -305,6 +297,10 @@ class OutboundFlowController {
         // Update the threshold.
         maxBytes = min(bytes - bytesAttempted, writableWindow());
       }
+      if (!hasPendingData() && noPendingDataRunnable != null) {
+        noPendingDataRunnable.run();
+        noPendingDataRunnable = null;
+      }
       return bytesAttempted;
     }
 
@@ -328,14 +324,20 @@ class OutboundFlowController {
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
-        stream.transportState().onSentBytes(frameBytes);
+        stream.onSentBytes(frameBytes);
         bytesToWrite -= frameBytes;
       } while (bytesToWrite > 0);
     }
 
-    void enqueue(Buffer buffer, int size, boolean endOfStream) {
+    void enqueueData(Buffer buffer, int size, boolean endOfStream) {
       this.pendingWriteBuffer.write(buffer, size);
       this.pendingBufferHasEndOfStream |= endOfStream;
+    }
+
+    void notifyWhenNoPendingData(Runnable noPendingDataRunnable) {
+      Preconditions.checkState(
+          this.noPendingDataRunnable == null, "pending data notification already requested");
+      this.noPendingDataRunnable = noPendingDataRunnable;
     }
   }
 }

@@ -54,15 +54,22 @@ class BootstrapperImpl extends Bootstrapper {
   private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY = "io.grpc.xds.bootstrapConfig";
   @VisibleForTesting
   static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY);
-  private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
+
+  // Feature-gating environment variables.
+  static boolean enableFederation =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
+          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
+
+  // Client features.
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
   @VisibleForTesting
   static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
-  static boolean enableFederation =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
-          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
+
+  // Server features.
+  private static final String SERVER_FEATURE_XDS_V3 = "xds_v3";
+  private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
 
   private final XdsLogger logger;
   private FileReader reader = LocalFileReader.INSTANCE;
@@ -275,12 +282,15 @@ class BootstrapperImpl extends Bootstrapper {
       }
 
       boolean useProtocolV3 = false;
+      boolean ignoreResourceDeletion = false;
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        useProtocolV3 = serverFeatures.contains(XDS_V3_SERVER_FEATURE);
+        useProtocolV3 = serverFeatures.contains(SERVER_FEATURE_XDS_V3);
+        ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
       }
-      servers.add(ServerInfo.create(serverUri, channelCredentials, useProtocolV3));
+      servers.add(
+          ServerInfo.create(serverUri, channelCredentials, useProtocolV3, ignoreResourceDeletion));
     }
     return servers.build();
   }

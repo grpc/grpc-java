@@ -26,12 +26,14 @@ import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
-
+import io.opencensus.trace.Sampler;
+import io.opencensus.trace.samplers.Samplers;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -77,36 +79,51 @@ public class ObservabilityConfigImplTest {
       + "}";
 
   private static final String ENABLE_CLOUD_MONITORING_AND_TRACING = "{\n"
-          + "    \"enable_cloud_monitoring\": true,\n"
-          + "    \"enable_cloud_tracing\": true\n"
-          + "}";
+      + "    \"enable_cloud_monitoring\": true,\n"
+      + "    \"enable_cloud_tracing\": true\n"
+      + "}";
 
   private static final String GLOBAL_TRACING_ALWAYS_SAMPLER = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampler\": \"always\"\n"
-          + "}";
+      + "    \"enable_cloud_tracing\": true,\n"
+      + "    \"global_trace_sampling_rate\": 1.00\n"
+      + "}";
 
   private static final String GLOBAL_TRACING_NEVER_SAMPLER = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampler\": \"never\"\n"
-          + "}";
+      + "    \"enable_cloud_tracing\": true,\n"
+      + "    \"global_trace_sampling_rate\": 0.00\n"
+      + "}";
 
   private static final String GLOBAL_TRACING_PROBABILISTIC_SAMPLER = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampling_rate\": 0.75\n"
-          + "}";
+      + "    \"enable_cloud_tracing\": true,\n"
+      + "    \"global_trace_sampling_rate\": 0.75\n"
+      + "}";
 
-  private static final String GLOBAL_TRACING_BOTH_SAMPLER_ERROR = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampler\": \"never\",\n"
-          + "    \"global_trace_sampling_rate\": 0.75\n"
-          + "}";
+  private static final String GLOBAL_TRACING_DEFAULT_SAMPLER = "{\n"
+      + "    \"enable_cloud_tracing\": true\n"
+      + "}";
 
   private static final String GLOBAL_TRACING_BADPROBABILISTIC_SAMPLER = "{\n"
-          + "    \"enable_cloud_tracing\": true,\n"
-          + "    \"global_trace_sampling_rate\": -0.75\n"
+      + "    \"enable_cloud_tracing\": true,\n"
+      + "    \"global_trace_sampling_rate\": -0.75\n"
+      + "}";
+
+  private static final String CUSTOM_TAGS = "{\n"
+          + "    \"enable_cloud_logging\": true,\n"
+          + "    \"custom_tags\": {\n"
+          + "      \"SOURCE_VERSION\" : \"J2e1Cf\",\n"
+          + "      \"SERVICE_NAME\" : \"payment-service\",\n"
+          + "      \"ENTRYPOINT_SCRIPT\" : \"entrypoint.sh\"\n"
+          + "    }\n"
           + "}";
 
+  private static final String BAD_CUSTOM_TAGS = "{\n"
+          + "    \"enable_cloud_monitoring\": true,\n"
+          + "    \"custom_tags\": {\n"
+          + "      \"SOURCE_VERSION\" : \"J2e1Cf\",\n"
+          + "      \"SERVICE_NAME\" : { \"SUB_SERVICE_NAME\" : \"payment-service\"},\n"
+          + "      \"ENTRYPOINT_SCRIPT\" : \"entrypoint.sh\"\n"
+          + "    }\n"
+          + "}";
 
   ObservabilityConfigImpl observabilityConfig = new ObservabilityConfigImpl();
 
@@ -198,41 +215,36 @@ public class ObservabilityConfigImplTest {
   public void alwaysSampler() throws IOException {
     observabilityConfig.parse(GLOBAL_TRACING_ALWAYS_SAMPLER);
     assertTrue(observabilityConfig.isEnableCloudTracing());
-    ObservabilityConfig.Sampler sampler = observabilityConfig.getSampler();
+    Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
-    assertThat(sampler.getType()).isEqualTo(ObservabilityConfig.SamplerType.ALWAYS);
+    assertThat(sampler).isEqualTo(Samplers.alwaysSample());
   }
 
   @Test
   public void neverSampler() throws IOException {
     observabilityConfig.parse(GLOBAL_TRACING_NEVER_SAMPLER);
     assertTrue(observabilityConfig.isEnableCloudTracing());
-    ObservabilityConfig.Sampler sampler = observabilityConfig.getSampler();
+    Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
-    assertThat(sampler.getType()).isEqualTo(ObservabilityConfig.SamplerType.NEVER);
+    assertThat(sampler).isEqualTo(Samplers.probabilitySampler(0.0));
   }
 
   @Test
   public void probabilisticSampler() throws IOException {
     observabilityConfig.parse(GLOBAL_TRACING_PROBABILISTIC_SAMPLER);
     assertTrue(observabilityConfig.isEnableCloudTracing());
-    ObservabilityConfig.Sampler sampler = observabilityConfig.getSampler();
+    Sampler sampler = observabilityConfig.getSampler();
     assertThat(sampler).isNotNull();
-    assertThat(sampler.getType()).isEqualTo(ObservabilityConfig.SamplerType.PROBABILISTIC);
-    assertThat(sampler.getProbability()).isEqualTo(0.75);
+    assertThat(sampler).isEqualTo(Samplers.probabilitySampler(0.75));
   }
 
   @Test
-  public void bothSamplerAndSamplingRate_error() throws IOException {
-    try {
-      observabilityConfig.parse(GLOBAL_TRACING_BOTH_SAMPLER_ERROR);
-      fail("exception expected!");
-    } catch (IllegalArgumentException iae) {
-      assertThat(iae.getMessage())
-          .isEqualTo(
-              "only one of 'global_trace_sampler' or 'global_trace_sampling_rate' can be"
-                  + " specified");
-    }
+  public void defaultSampler() throws IOException {
+    observabilityConfig.parse(GLOBAL_TRACING_DEFAULT_SAMPLER);
+    assertTrue(observabilityConfig.isEnableCloudTracing());
+    Sampler sampler = observabilityConfig.getSampler();
+    assertThat(sampler).isNotNull();
+    assertThat(sampler).isEqualTo(Samplers.probabilitySampler(0.00));
   }
 
   @Test
@@ -242,7 +254,7 @@ public class ObservabilityConfigImplTest {
       fail("exception expected!");
     } catch (IllegalArgumentException iae) {
       assertThat(iae.getMessage()).isEqualTo(
-              "'global_trace_sampling_rate' needs to be between 0.0 and 1.0");
+          "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
     }
   }
 
@@ -262,5 +274,27 @@ public class ObservabilityConfigImplTest {
     assertThat(logFilters.get(1).pattern).isEqualTo("service1/Method2");
     assertThat(logFilters.get(1).headerBytes).isNull();
     assertThat(logFilters.get(1).messageBytes).isNull();
+  }
+
+  @Test
+  public void customTags() throws IOException {
+    observabilityConfig.parse(CUSTOM_TAGS);
+    assertTrue(observabilityConfig.isEnableCloudLogging());
+    Map<String, String> customTags = observabilityConfig.getCustomTags();
+    assertThat(customTags).hasSize(3);
+    assertThat(customTags).containsEntry("SOURCE_VERSION", "J2e1Cf");
+    assertThat(customTags).containsEntry("SERVICE_NAME", "payment-service");
+    assertThat(customTags).containsEntry("ENTRYPOINT_SCRIPT", "entrypoint.sh");
+  }
+
+  @Test
+  public void badCustomTags() throws IOException {
+    try {
+      observabilityConfig.parse(BAD_CUSTOM_TAGS);
+      fail("exception expected!");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae.getMessage()).isEqualTo(
+              "'custom_tags' needs to be a map of <string, string>");
+    }
   }
 }
