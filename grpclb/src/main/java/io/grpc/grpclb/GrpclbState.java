@@ -262,7 +262,7 @@ final class GrpclbState {
       List<EquivalentAddressGroup> newBackendServers) {
     logger.log(
         ChannelLogLevel.DEBUG,
-        "[grpclb-<{0}>] Resolved addresses: lb addresses {0}, backends: {1}",
+        "[grpclb-<{0}>] Resolved addresses: lb addresses {1}, backends: {2}",
         serviceName,
         newLbAddressGroups,
         newBackendServers);

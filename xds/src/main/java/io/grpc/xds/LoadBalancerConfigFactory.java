@@ -35,8 +35,8 @@ import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.Wr
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonParser;
-import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.LoadBalancerConfigFactory.LoadBalancingPolicyConverter.MaxRecursionReachedException;
+import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.util.Map;
