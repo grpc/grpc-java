@@ -107,10 +107,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
     return ADS_TYPE_URL_RDS_V2;
   }
 
-  @Nullable
   @Override
-  XdsResourceType<?> dependentResource() {
-    return null;
+  boolean isFullStateOfTheWorld() {
+    return false;
   }
 
   @Override
@@ -119,8 +118,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage,
-                         Set<String> retainedResources, boolean isResourceV3)
+  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage, boolean isResourceV3)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
@@ -513,6 +511,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           return StructOrError.fromError("No cluster found in weighted cluster list");
         }
         List<ClusterWeight> weightedClusters = new ArrayList<>();
+        int clusterWeightSum = 0;
         for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
             : clusterWeights) {
           StructOrError<ClusterWeight> clusterWeightOrError =
@@ -521,9 +520,12 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
             return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
                 + clusterWeightOrError.getErrorDetail());
           }
+          clusterWeightSum += clusterWeight.getWeight().getValue();
           weightedClusters.add(clusterWeightOrError.getStruct());
         }
-        // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
+        if (clusterWeightSum <= 0) {
+          return StructOrError.fromError("Sum of cluster weights should be above 0.");
+        }
         return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy));
       case CLUSTER_SPECIFIER_PLUGIN:

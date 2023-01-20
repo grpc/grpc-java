@@ -1,13 +1,6 @@
 gRPC-Java - An RPC library and framework
 ========================================
 
-gRPC-Java works with JDK 8. gRPC-Java clients are supported on Android API
-levels 19 and up (KitKat and later). Deploying gRPC servers on an Android
-device is not supported.
-
-TLS usage typically requires using Java 8, or Play Services Dynamic Security
-Provider on Android. Please see the [Security Readme](SECURITY.md).
-
 <table>
   <tr>
     <td><b>Homepage:</b></td>
@@ -24,6 +17,26 @@ Provider on Android. Please see the [Security Readme](SECURITY.md).
 [![Line Coverage Status](https://coveralls.io/repos/grpc/grpc-java/badge.svg?branch=master&service=github)](https://coveralls.io/github/grpc/grpc-java?branch=master)
 [![Branch-adjusted Line Coverage Status](https://codecov.io/gh/grpc/grpc-java/branch/master/graph/badge.svg)](https://codecov.io/gh/grpc/grpc-java)
 
+Supported Platforms
+-------------------
+
+gRPC-Java supports Java 8 and later. Android minSdkVersion 19 (KitKat) and
+later are supported with [Java 8 language desugaring][android-java-8].
+
+TLS usage on Android typically requires Play Services Dynamic Security Provider.
+Please see the [Security Readme](SECURITY.md).
+
+Older Java versions are not directly supported, but a branch remains available
+for fixes and releases. See [gRFC P5 JDK Version Support
+Policy][P5-jdk-version-support].
+
+Java version | gRPC Branch
+------------ | -----------
+7            | 1.41.x
+
+[android-java-8]: https://developer.android.com/studio/write/java8-support#supported_features
+[P5-jdk-version-support]: https://github.com/grpc/proposal/blob/master/P5-jdk-version-support.md#proposal
+
 Getting Started
 ---------------
 
@@ -31,8 +44,8 @@ For a guided tour, take a look at the [quick start
 guide](https://grpc.io/docs/languages/java/quickstart) or the more explanatory [gRPC
 basics](https://grpc.io/docs/languages/java/basics).
 
-The [examples](https://github.com/grpc/grpc-java/tree/v1.50.2/examples) and the
-[Android example](https://github.com/grpc/grpc-java/tree/v1.50.2/examples/android)
+The [examples](https://github.com/grpc/grpc-java/tree/v1.51.0/examples) and the
+[Android example](https://github.com/grpc/grpc-java/tree/v1.51.0/examples/android)
 are standalone projects that showcase the usage of gRPC.
 
 Download
@@ -43,18 +56,18 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
-  <version>1.50.2</version>
+  <version>1.51.0</version>
   <scope>runtime</scope>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.50.2</version>
+  <version>1.51.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.50.2</version>
+  <version>1.51.0</version>
 </dependency>
 <dependency> <!-- necessary for Java 9+ -->
   <groupId>org.apache.tomcat</groupId>
@@ -66,23 +79,23 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-runtimeOnly 'io.grpc:grpc-netty-shaded:1.50.2'
-implementation 'io.grpc:grpc-protobuf:1.50.2'
-implementation 'io.grpc:grpc-stub:1.50.2'
+runtimeOnly 'io.grpc:grpc-netty-shaded:1.51.0'
+implementation 'io.grpc:grpc-protobuf:1.51.0'
+implementation 'io.grpc:grpc-stub:1.51.0'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-implementation 'io.grpc:grpc-okhttp:1.50.2'
-implementation 'io.grpc:grpc-protobuf-lite:1.50.2'
-implementation 'io.grpc:grpc-stub:1.50.2'
+implementation 'io.grpc:grpc-okhttp:1.51.0'
+implementation 'io.grpc:grpc-protobuf-lite:1.51.0'
+implementation 'io.grpc:grpc-stub:1.51.0'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 [the JARs]:
-https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.50.2
+https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.51.0
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
@@ -114,7 +127,7 @@ For protobuf-based codegen integrated with the Maven build system, you can use
       <configuration>
         <protocArtifact>com.google.protobuf:protoc:3.21.7:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.50.2:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.51.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -144,7 +157,7 @@ protobuf {
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.50.2'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.51.0'
     }
   }
   generateProtoTasks {
@@ -177,7 +190,7 @@ protobuf {
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.50.2'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.51.0'
     }
   }
   generateProtoTasks {
@@ -243,12 +256,15 @@ wire. The interfaces to it are abstract just enough to allow plugging in of
 different implementations. Note the transport layer API is considered internal
 to gRPC and has weaker API guarantees than the core API under package `io.grpc`.
 
-gRPC comes with three Transport implementations:
+gRPC comes with multiple Transport implementations:
 
-1. The Netty-based transport is the main transport implementation based on
-   [Netty](https://netty.io). It is for both the client and the server.
-2. The OkHttp-based transport is a lightweight transport based on
-   [OkHttp](https://square.github.io/okhttp/). It is mainly for use on Android
-   and is for client only.
+1. The Netty-based HTTP/2 transport is the main transport implementation based
+   on [Netty](https://netty.io). It is not officially supported on Android.
+2. The OkHttp-based HTTP/2 transport is a lightweight transport based on
+   [Okio](https://square.github.io/okio/) and forked low-level parts of
+   [OkHttp](https://square.github.io/okhttp/). It is mainly for use on Android.
 3. The in-process transport is for when a server is in the same process as the
-   client. It is useful for testing, while also being safe for production use.
+   client. It is used frequently for testing, while also being safe for
+   production use.
+4. The Binder transport is for Android cross-process communication on a single
+   device.

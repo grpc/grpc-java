@@ -40,6 +40,7 @@ import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.OutlierDetection;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
+import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
@@ -806,19 +807,14 @@ public abstract class XdsClientImplTestBase {
       verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
     }
     call.verifyRequestNack(LDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
-    // {A.1} -> does not exist, missing from {A}
+    // {A.1} -> version 1
     // {B.1} -> version 1
     // {C.1} -> does not exist because {C} does not exist
-    verifyResourceMetadataDoesNotExist(RDS, "A.1");
+    verifyResourceMetadataAcked(RDS, "A.1", resourcesV11.get("A.1"), VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(RDS, "B.1", resourcesV11.get("B.1"), VERSION_1, TIME_INCREMENT * 2);
-    if (!ignoreResourceDeletion()) {
-      verifyResourceMetadataDoesNotExist(RDS, "C.1");
-    } else {
-      // When resource deletion is disabled, {C.1} is not deleted when {C} is deleted.
-      // Verify {C.1} stays in the previous version VERSION_1.
-      verifyResourceMetadataAcked(RDS, "C.1", resourcesV11.get("C.1"), VERSION_1,
-          TIME_INCREMENT * 2);
-    }
+    // Verify {C.1} stays in the previous version VERSION_1, no matter {C} is deleted or not.
+    verifyResourceMetadataAcked(RDS, "C.1", resourcesV11.get("C.1"), VERSION_1,
+        TIME_INCREMENT * 2);
   }
 
   @Test
@@ -1368,6 +1364,51 @@ public abstract class XdsClientImplTestBase {
     verify(rdsResourceWatcher).onChanged(any(RdsUpdate.class));
   }
 
+  @Test
+  public void rdsResponseErrorHandling_nackWeightedSumZero() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
+        RDS_RESOURCE, rdsResourceWatcher);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+
+    io.envoyproxy.envoy.config.route.v3.RouteAction routeAction =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setWeightedClusters(
+                WeightedCluster.newBuilder()
+                    .addClusters(
+                        WeightedCluster.ClusterWeight
+                            .newBuilder()
+                            .setName("cluster-foo")
+                            .setWeight(UInt32Value.newBuilder().setValue(0)))
+                    .addClusters(WeightedCluster.ClusterWeight
+                        .newBuilder()
+                        .setName("cluster-bar")
+                        .setWeight(UInt32Value.newBuilder().setValue(0))))
+            .build();
+    io.envoyproxy.envoy.config.route.v3.Route route =
+        io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
+            .setName("route-blade")
+            .setMatch(
+                io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
+                    .setPath("/service/method"))
+            .setRoute(routeAction)
+            .build();
+
+    Any zeroWeightSum = Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE,
+        Arrays.asList(mf.buildVirtualHost(Arrays.asList(route), ImmutableMap.of()))));
+    List<Any> resources = ImmutableList.of(zeroWeightSum);
+    call.sendResponse(RDS, resources, VERSION_1, "0000");
+
+    List<String> errors = ImmutableList.of(
+        "RDS response RouteConfiguration \'route-configuration.googleapis.com\' validation error: "
+            + "RouteConfiguration contains invalid virtual host: Virtual host [do not care] "
+            + "contains invalid route : Route [route-blade] contains invalid RouteAction: "
+            + "Sum of cluster weights should be above 0.");
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
+    // The response is NACKed with the same error message.
+    call.verifyRequestNack(RDS, RDS_RESOURCE, "", "0000", NODE, errors);
+    verify(rdsResourceWatcher, never()).onChanged(any(RdsUpdate.class));
+  }
+
   /**
    * Tests a subscribed RDS resource transitioned to and from the invalid state.
    *
@@ -1556,8 +1597,8 @@ public abstract class XdsClientImplTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_2, "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
     verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
-    verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
-    verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
+    verifyNoMoreInteractions(rdsResourceWatcher);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(
         LDS, LDS_RESOURCE, testListenerVhosts, VERSION_2, TIME_INCREMENT * 3);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
@@ -1624,8 +1665,8 @@ public abstract class XdsClientImplTestBase {
     parsedFilterChain = Iterables.getOnlyElement(
         ldsUpdateCaptor.getValue().listener().filterChains());
     assertThat(parsedFilterChain.httpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
-    verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
-    verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
+    verify(rdsResourceWatcher, never()).onResourceDoesNotExist(RDS_RESOURCE);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(
         LDS, LISTENER_RESOURCE, packedListener, VERSION_2, TIME_INCREMENT * 3);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
@@ -1896,19 +1937,14 @@ public abstract class XdsClientImplTestBase {
       verifyResourceMetadataAcked(CDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
     }
     call.verifyRequestNack(CDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
-    // {A.1} -> does not exist, missing from {A}
+    // {A.1} -> version 1
     // {B.1} -> version 1
     // {C.1} -> does not exist because {C} does not exist
-    verifyResourceMetadataDoesNotExist(EDS, "A.1");
+    verifyResourceMetadataAcked(EDS, "A.1", resourcesV11.get("A.1"), VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(EDS, "B.1", resourcesV11.get("B.1"), VERSION_1, TIME_INCREMENT * 2);
-    if (!ignoreResourceDeletion()) {
-      verifyResourceMetadataDoesNotExist(EDS, "C.1");
-    } else {
-      // When resource deletion is disabled, {C.1} is not deleted when {C} is deleted.
-      // Verify {C.1} stays in the previous version VERSION_1.
-      verifyResourceMetadataAcked(EDS, "C.1", resourcesV11.get("C.1"), VERSION_1,
-          TIME_INCREMENT * 2);
-    }
+    // Verify {C.1} stays in the previous version VERSION_1. {C1} deleted or not does not matter.
+    verifyResourceMetadataAcked(EDS, "C.1", resourcesV11.get("C.1"), VERSION_1,
+        TIME_INCREMENT * 2);
   }
 
   @Test
@@ -3026,10 +3062,11 @@ public abstract class XdsClientImplTestBase {
     assertThat(cdsUpdateCaptor.getValue().edsServiceName()).isNull();
     // Note that the endpoint must be deleted even if the ignore_resource_deletion feature.
     // This happens because the cluster CDS_RESOURCE is getting replaced, and not deleted.
-    verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
+    verify(edsResourceWatcher, never()).onResourceDoesNotExist(EDS_RESOURCE);
     verify(edsResourceWatcher, never()).onResourceDoesNotExist(resource);
     verifyNoMoreInteractions(cdsWatcher, edsWatcher);
-    verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
+    verifyResourceMetadataAcked(
+        EDS, EDS_RESOURCE, clusterLoadAssignments.get(0), VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(
         EDS, resource, clusterLoadAssignments.get(1), VERSION_1, TIME_INCREMENT * 2);  // no change
     verifyResourceMetadataAcked(CDS, resource, clusters.get(0), VERSION_2, TIME_INCREMENT * 3);

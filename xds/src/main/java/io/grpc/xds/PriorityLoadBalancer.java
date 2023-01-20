@@ -37,6 +37,8 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -59,6 +61,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
   // Includes all active and deactivated children. Mutable. New entries are only added from priority
   // 0 up to the selected priority. An entry is only deleted 15 minutes after its deactivation.
+  // Note that calling into a child can cause the child to call back into the LB policy and modify
+  // the map.  Therefore copy values before looping over them.
   private final Map<String, ChildLbState> children = new HashMap<>();
 
   // Following fields are only null initially.
@@ -91,15 +95,20 @@ final class PriorityLoadBalancer extends LoadBalancer {
     priorityNames = config.priorities;
     priorityConfigs = config.childConfigs;
     Set<String> prioritySet = new HashSet<>(config.priorities);
-    for (String priority : children.keySet()) {
+    ArrayList<String> childKeys = new ArrayList<>(children.keySet());
+    for (String priority : childKeys) {
       if (!prioritySet.contains(priority)) {
-        children.get(priority).deactivate();
+        ChildLbState childLbState = children.get(priority);
+        if (childLbState != null) {
+          childLbState.deactivate();
+        }
       }
     }
     handlingResolvedAddresses = true;
     for (String priority : priorityNames) {
-      if (children.containsKey(priority)) {
-        children.get(priority).updateResolvedAddresses();
+      ChildLbState childLbState = children.get(priority);
+      if (childLbState != null) {
+        childLbState.updateResolvedAddresses();
       }
     }
     handlingResolvedAddresses = false;
@@ -111,7 +120,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
     boolean gotoTransientFailure = true;
-    for (ChildLbState child : children.values()) {
+    Collection<ChildLbState> childValues = new ArrayList<>(children.values());
+    for (ChildLbState child : childValues) {
       if (priorityNames.contains(child.priority)) {
         child.lb.handleNameResolutionError(error);
         gotoTransientFailure = false;
@@ -125,7 +135,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    for (ChildLbState child : children.values()) {
+    Collection<ChildLbState> childValues = new ArrayList<>(children.values());
+    for (ChildLbState child : childValues) {
       child.tearDown();
     }
     children.clear();

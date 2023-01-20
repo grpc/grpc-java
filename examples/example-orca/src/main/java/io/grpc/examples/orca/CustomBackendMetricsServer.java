@@ -21,8 +21,9 @@ import io.grpc.BindableService;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.services.CallMetricRecorder;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricRecorder;
@@ -57,7 +58,7 @@ public class CustomBackendMetricsServer {
     // configuration to be as short as 1s, suitable for test demonstration.
     BindableService orcaOobService =
         OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         // Enable OOB custom backend metrics reporting.
         .addService(orcaOobService)

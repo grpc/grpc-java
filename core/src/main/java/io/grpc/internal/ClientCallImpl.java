@@ -72,6 +72,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
   private static final byte[] FULL_STREAM_DECOMPRESSION_ENCODINGS
       = "gzip".getBytes(Charset.forName("US-ASCII"));
+  private static final double NANO_TO_SECS = 1.0 * TimeUnit.SECONDS.toNanos(1);
 
   private final MethodDescriptor<ReqT, RespT> method;
   private final Tag tag;
@@ -259,10 +260,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     } else {
       ClientStreamTracer[] tracers =
           GrpcUtil.getClientStreamTracers(callOptions, headers, 0, false);
-      stream = new FailingClientStream(
-          DEADLINE_EXCEEDED.withDescription(
-              "ClientCall started after deadline exceeded: " + effectiveDeadline),
-          tracers);
+      String deadlineName =
+          isFirstMin(callOptions.getDeadline(), context.getDeadline()) ? "CallOptions" : "Context";
+      String description = String.format(
+          "ClientCall started after %s deadline was exceeded .9%f seconds ago", deadlineName,
+          effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS) / NANO_TO_SECS);
+      stream = new FailingClientStream(DEADLINE_EXCEEDED.withDescription(description), tracers);
     }
 
     if (callExecutorIsDirect) {
@@ -429,6 +432,16 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       return deadline0;
     }
     return deadline0.minimum(deadline1);
+  }
+
+  private static boolean isFirstMin(@Nullable Deadline deadline0, @Nullable Deadline deadline1) {
+    if (deadline0 == null) {
+      return false;
+    }
+    if (deadline1 == null) {
+      return true;
+    }
+    return deadline0.isBefore(deadline1);
   }
 
   @Override

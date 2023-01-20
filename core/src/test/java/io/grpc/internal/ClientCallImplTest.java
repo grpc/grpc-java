@@ -786,7 +786,7 @@ public class ClientCallImplTest {
     verify(callListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .startsWith("ClientCall started after deadline exceeded");
+        .startsWith("ClientCall started after CallOptions deadline was exceeded");
     verifyNoInteractions(clientStreamProvider);
   }
 
