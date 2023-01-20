@@ -16,8 +16,10 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -56,9 +58,7 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLEngine;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -88,9 +88,6 @@ public class AdvancedTlsTest {
   private X509Certificate[] clientCert0;
   private PrivateKey serverKeyBad;
   private X509Certificate[] serverCertBad;
-
-  @Rule
-  public ExpectedException exceptionRule = ExpectedException.none();
 
   @Before
   public void setUp()
@@ -427,24 +424,22 @@ public class AdvancedTlsTest {
 
   @Test
   public void onFileReloadingKeyManagerBadInitialContentTest() throws Exception {
-    exceptionRule.expect(GeneralSecurityException.class);
     AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
     // We swap the order of key and certificates to intentionally create an exception.
-    Closeable keyShutdown = keyManager.updateIdentityCredentialsFromFile(serverCert0File,
-        serverKey0File, 100, TimeUnit.MILLISECONDS, executor);
-    keyShutdown.close();
+    assertThrows(GeneralSecurityException.class,
+        () -> keyManager.updateIdentityCredentialsFromFile(serverCert0File,
+          serverKey0File, 100, TimeUnit.MILLISECONDS, executor));
   }
 
   @Test
   public void onFileReloadingTrustManagerBadInitialContentTest() throws Exception {
-    exceptionRule.expect(GeneralSecurityException.class);
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
     // We pass in a key as the trust certificates to intentionally create an exception.
-    Closeable trustShutdown = trustManager.updateTrustCredentialsFromFile(serverKey0File,
-        100, TimeUnit.MILLISECONDS, executor);
-    trustShutdown.close();
+    assertThrows(GeneralSecurityException.class,
+        () -> trustManager.updateTrustCredentialsFromFile(serverKey0File,
+          100, TimeUnit.MILLISECONDS, executor));
   }
 
   @Test
@@ -472,40 +467,38 @@ public class AdvancedTlsTest {
 
   @Test
   public void trustManagerCheckClientTrustedWithoutParameterTest() throws Exception {
-    exceptionRule.expect(CertificateException.class);
-    exceptionRule.expectMessage(
-        "Not enough information to validate peer. SSLEngine or Socket required.");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.INSECURELY_SKIP_ALL_VERIFICATION).build();
-    tm.checkClientTrusted(serverCert0, "RSA");
+    CertificateException ex =
+        assertThrows(CertificateException.class, () -> tm.checkClientTrusted(serverCert0, "RSA"));
+    assertThat(ex).hasMessageThat()
+        .isEqualTo("Not enough information to validate peer. SSLEngine or Socket required.");
   }
 
   @Test
   public void trustManagerCheckServerTrustedWithoutParameterTest() throws Exception {
-    exceptionRule.expect(CertificateException.class);
-    exceptionRule.expectMessage(
-        "Not enough information to validate peer. SSLEngine or Socket required.");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.INSECURELY_SKIP_ALL_VERIFICATION).build();
-    tm.checkServerTrusted(serverCert0, "RSA");
+    CertificateException ex =
+        assertThrows(CertificateException.class, () -> tm.checkServerTrusted(serverCert0, "RSA"));
+    assertThat(ex).hasMessageThat()
+        .isEqualTo("Not enough information to validate peer. SSLEngine or Socket required.");
   }
 
   @Test
   public void trustManagerEmptyChainTest() throws Exception {
-    exceptionRule.expect(IllegalArgumentException.class);
-    exceptionRule.expectMessage(
-        "Want certificate verification but got null or empty certificates");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
     tm.updateTrustCredentials(caCert);
-    tm.checkClientTrusted(null, "RSA", (SSLEngine) null);
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> tm.checkClientTrusted(null, "RSA", (SSLEngine) null));
+    assertThat(ex).hasMessageThat()
+        .isEqualTo("Want certificate verification but got null or empty certificates");
   }
 
   @Test
   public void trustManagerBadCustomVerificationTest() throws Exception {
-    exceptionRule.expect(CertificateException.class);
-    exceptionRule.expectMessage("Bad Custom Verification");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
@@ -523,7 +516,10 @@ public class AdvancedTlsTest {
               }
             }).build();
     tm.updateTrustCredentials(caCert);
-    tm.checkClientTrusted(serverCert0, "RSA", new Socket());
+    CertificateException ex = assertThrows(
+        CertificateException.class,
+        () -> tm.checkClientTrusted(serverCert0, "RSA", new Socket()));
+    assertThat(ex).hasMessageThat().isEqualTo("Bad Custom Verification");
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {

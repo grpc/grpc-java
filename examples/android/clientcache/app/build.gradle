@@ -59,7 +59,7 @@ dependencies {
     implementation 'io.grpc:grpc-stub:1.53.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'org.apache.tomcat:annotations-api:6.0.53'
 
-    testImplementation 'junit:junit:4.12'
+    testImplementation 'junit:junit:4.13.2'
     testImplementation 'com.google.truth:truth:1.0.1'
     testImplementation 'io.grpc:grpc-testing:1.53.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 }
