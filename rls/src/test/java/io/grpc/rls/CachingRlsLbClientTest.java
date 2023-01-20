@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -386,7 +387,7 @@ public class CachingRlsLbClientTest {
             headers,
             CallOptions.DEFAULT));
     assertThat(pickResult.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(pickResult.getStatus().getDescription()).isEqualTo("fallback not available");
+    assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
   }
 
   @Test
@@ -412,6 +413,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.getHeaderData()).isEqualTo("header");
 
     ChildPolicyWrapper childPolicyWrapper = resp.getChildPolicyWrapper();
+    assertNotNull(childPolicyWrapper);
     assertThat(childPolicyWrapper.getTarget()).isEqualTo("target");
     assertThat(childPolicyWrapper.getPicker()).isNotInstanceOf(RlsPicker.class);
 
@@ -566,7 +568,7 @@ public class CachingRlsLbClientTest {
       LoadBalancer loadBalancer = new LoadBalancer() {
 
         @Override
-        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           Map<?, ?> config = (Map<?, ?>) resolvedAddresses.getLoadBalancingPolicyConfig();
           if (DEFAULT_TARGET.equals(config.get("target"))) {
             helper.updateBalancingState(
@@ -575,7 +577,7 @@ public class CachingRlsLbClientTest {
                   @Override
                   public PickResult pickSubchannel(PickSubchannelArgs args) {
                     return PickResult.withError(
-                        Status.UNAVAILABLE.withDescription("fallback not available"));
+                            Status.UNAVAILABLE.withDescription("fallback not available"));
                   }
                 });
           } else {
@@ -588,6 +590,8 @@ public class CachingRlsLbClientTest {
                   }
                 });
           }
+
+          return true;
         }
 
         @Override

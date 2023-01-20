@@ -41,6 +41,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
@@ -90,6 +91,7 @@ import org.mockito.ArgumentCaptor;
 public class OkHttpServerTransportTest {
   private static final int TIME_OUT_MS = 2000;
   private static final int INITIAL_WINDOW_SIZE = 65535;
+  private static final long MAX_CONNECTION_IDLE = TimeUnit.SECONDS.toNanos(1);
 
   private MockServerTransportListener mockTransportListener = new MockServerTransportListener();
   private ServerTransportListener transportListener
@@ -105,10 +107,11 @@ public class OkHttpServerTransportTest {
   private ExecutorService threadPool = Executors.newCachedThreadPool();
   private HandshakerSocketFactory handshakerSocketFactory
       = mock(HandshakerSocketFactory.class, delegatesTo(new PlaintextHandshakerSocketFactory()));
+  private final FakeClock fakeClock = new FakeClock();
   private OkHttpServerBuilder serverBuilder
       = new OkHttpServerBuilder(new InetSocketAddress(1234), handshakerSocketFactory)
       .executor(new FakeClock().getScheduledExecutorService()) // Executor unused
-      .scheduledExecutorService(new FakeClock().getScheduledExecutorService())
+      .scheduledExecutorService(fakeClock.getScheduledExecutorService())
       .transportExecutor(new Executor() {
         @Override public void execute(Runnable runnable) {
           if (runnable instanceof OkHttpServerTransport.FrameHandler) {
@@ -119,7 +122,10 @@ public class OkHttpServerTransportTest {
           }
         }
       })
-      .flowControlWindow(INITIAL_WINDOW_SIZE);
+      .flowControlWindow(INITIAL_WINDOW_SIZE)
+      .maxConnectionIdle(MAX_CONNECTION_IDLE, TimeUnit.NANOSECONDS)
+      .permitKeepAliveWithoutCalls(true)
+      .permitKeepAliveTime(0, TimeUnit.SECONDS);
 
   @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
@@ -144,6 +150,64 @@ public class OkHttpServerTransportTest {
     initTransport();
     handshake();
     shutdownAndTerminate(/*lastStreamId=*/ 0);
+  }
+
+  @Test
+  public void maxConnectionIdleTimer() throws Exception {
+    initTransport();
+    handshake();
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER));
+    clientFrameWriter.synStream(true, false, 1, -1, Arrays.asList(
+        new Header("some-client-sent-trailer", "trailer-value")));
+    pingPong();
+
+    MockStreamListener streamListener = mockTransportListener.newStreams.pop();
+    assertThat(streamListener.messages.peek()).isNull();
+    assertThat(streamListener.halfClosedCalled).isTrue();
+
+    streamListener.stream.close(Status.OK, new Metadata());
+
+    List<Header> responseTrailers = Arrays.asList(
+        new Header(":status", "200"),
+        CONTENT_TYPE_HEADER,
+        new Header("grpc-status", "0"));
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead)
+        .headers(false, true, 1, -1, responseTrailers, HeadersMode.HTTP_20_HEADERS);
+
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    verifyGracefulShutdown(1);
+  }
+
+  @Test
+  public void maxConnectionIdleTimer_respondWithError() throws Exception {
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("host", "example.com:80"),
+        new Header("host", "example.com:80")));
+    clientFrameWriter.flush();
+
+    verifyHttpError(
+        1, 400, Status.Code.INTERNAL, "Multiple host headers disallowed. RFC7230 section 5.4");
+
+    pingPong();
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    verifyGracefulShutdown(1);
   }
 
   @Test
@@ -316,7 +380,8 @@ public class OkHttpServerTransportTest {
     clientFrameWriter.data(true, 1, requestMessageFrame, (int) requestMessageFrame.size());
     pingPong();
 
-    shutdownAndVerifyGraceful(1);
+    serverTransport.shutdown();
+    verifyGracefulShutdown(1);
     verify(transportListener, never()).transportTerminated();
 
     MockStreamListener streamListener = mockTransportListener.newStreams.pop();
@@ -992,6 +1057,101 @@ public class OkHttpServerTransportTest {
     assertThat(stats.remote).isEqualTo(new InetSocketAddress("127.0.0.2", 5000));
   }
 
+  @Test
+  public void keepAliveEnforcer_enforcesPings() throws Exception {
+    serverBuilder.permitKeepAliveTime(1, TimeUnit.HOURS)
+            .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES; i++) {
+      pingPong();
+    }
+    pingPongId++;
+    clientFrameWriter.ping(false, pingPongId, 0);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).goAway(0, ErrorCode.ENHANCE_YOUR_CALM,
+        ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII));
+  }
+
+  @Test
+  public void keepAliveEnforcer_sendingDataResetsCounters() throws Exception {
+    serverBuilder.permitKeepAliveTime(1, TimeUnit.HOURS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything")));
+    Buffer requestMessageFrame = createMessageFrame("Hello server");
+    clientFrameWriter.data(false, 1, requestMessageFrame, (int) requestMessageFrame.size());
+    pingPong();
+    MockStreamListener streamListener = mockTransportListener.newStreams.pop();
+
+    streamListener.stream.request(1);
+    pingPong();
+    assertThat(streamListener.messages.pop()).isEqualTo("Hello server");
+
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"));
+    streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+    streamListener.stream.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+
+    for (int i = 0; i < 10; i++) {
+      assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+      pingPong();
+      streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+      streamListener.stream.flush();
+    }
+  }
+
+  @Test
+  public void keepAliveEnforcer_initialIdle() throws Exception {
+    serverBuilder.permitKeepAliveTime(0, TimeUnit.SECONDS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES; i++) {
+      pingPong();
+    }
+    pingPongId++;
+    clientFrameWriter.ping(false, pingPongId, 0);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).goAway(0, ErrorCode.ENHANCE_YOUR_CALM,
+        ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII));
+  }
+
+  @Test
+  public void keepAliveEnforcer_noticesActive() throws Exception {
+    serverBuilder.permitKeepAliveTime(0, TimeUnit.SECONDS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything")));
+    for (int i = 0; i < 10; i++) {
+      pingPong();
+    }
+    verify(clientFramesRead, never()).goAway(anyInt(), eq(ErrorCode.ENHANCE_YOUR_CALM),
+        eq(ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII)));
+  }
+
   private void initTransport() throws Exception {
     serverTransport = new OkHttpServerTransport(
         new OkHttpServerTransport.Config(serverBuilder, Arrays.asList()),
@@ -1038,8 +1198,8 @@ public class OkHttpServerTransportTest {
     return metadata;
   }
 
-  private void shutdownAndVerifyGraceful(int lastStreamId) throws IOException {
-    serverTransport.shutdown();
+  private void verifyGracefulShutdown(int lastStreamId)
+      throws IOException {
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).goAway(2147483647, ErrorCode.NO_ERROR, ByteString.EMPTY);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
@@ -1052,7 +1212,8 @@ public class OkHttpServerTransportTest {
 
   private void shutdownAndTerminate(int lastStreamId) throws IOException {
     assertThat(serverTransport.getActiveStreams().length).isEqualTo(0);
-    shutdownAndVerifyGraceful(lastStreamId);
+    serverTransport.shutdown();
+    verifyGracefulShutdown(lastStreamId);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isFalse();
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }

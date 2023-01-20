@@ -121,6 +121,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     buf.append(seconds);
     buf.append(String.format(Locale.US, ".%09d", nanos));
     buf.append("s. ");
+
     /** Cancels the call if deadline exceeded prior to the real call being set. */
     class DeadlineExceededRunnable implements Runnable {
       @Override
@@ -151,9 +152,9 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
       setRealCall(checkNotNull(call, "call"));
     }
-    return new Runnable() {
+    return new ContextRunnable(context) {
       @Override
-      public void run() {
+      public void runInContext() {
         drainPendingCalls();
       }
     };

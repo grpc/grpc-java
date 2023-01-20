@@ -170,6 +170,36 @@ public class RlsLoadBalancerTest {
   }
 
   @Test
+  public void lb_serverStatusCodeConversion() throws Exception {
+    deliverResolvedAddresses();
+    InOrder inOrder = inOrder(helper);
+    inOrder.verify(helper)
+        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    Metadata headers = new Metadata();
+    PickSubchannelArgsImpl fakeSearchMethodArgs =
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
+    PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
+    FakeSubchannel subchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(subchannel).isNotNull();
+
+    // Ensure happy path is unaffected
+    subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    res = picker.pickSubchannel(fakeSearchMethodArgs);
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
+
+    // Check on conversion
+    Throwable cause = new Throwable("cause");
+    Status aborted = Status.ABORTED.withCause(cause).withDescription("base desc");
+    Status serverStatus = CachingRlsLbClient.convertRlsServerStatus(aborted, "conv.test");
+    assertThat(serverStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(serverStatus.getCause()).isEqualTo(cause);
+    assertThat(serverStatus.getDescription()).contains("RLS server returned: ");
+    assertThat(serverStatus.getDescription()).endsWith("ABORTED: base desc");
+    assertThat(serverStatus.getDescription()).contains("RLS server conv.test");
+  }
+
+  @Test
   public void lb_working_withDefaultTarget_rlsResponding() throws Exception {
     deliverResolvedAddresses();
     InOrder inOrder = inOrder(helper);
@@ -210,7 +240,7 @@ public class RlsLoadBalancerTest {
     FakeSubchannel rescueSubchannel = subchannels.getLast();
 
     // search subchannel is down, rescue subchannel is connecting
-    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
+    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -223,7 +253,7 @@ public class RlsLoadBalancerTest {
     // subchannel is in failure mode
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
   }
 
@@ -243,6 +273,7 @@ public class RlsLoadBalancerTest {
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     FakeSubchannel fallbackSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(fallbackSubchannel).isNotNull();
 
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
@@ -270,6 +301,7 @@ public class RlsLoadBalancerTest {
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
     FakeSubchannel searchSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(searchSubchannel).isNotNull();
     searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     // create rescue subchannel
@@ -278,16 +310,17 @@ public class RlsLoadBalancerTest {
     assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
     assertThat(res.getSubchannel()).isNotSameInstanceAs(searchSubchannel);
     FakeSubchannel rescueSubchannel = (FakeSubchannel) res.getSubchannel();
+    assertThat(rescueSubchannel).isNotNull();
     rescueSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
     // all channels are failed
-    rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
-    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
-    fallbackSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
+    rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    fallbackSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(res.getSubchannel()).isNull();
   }
 

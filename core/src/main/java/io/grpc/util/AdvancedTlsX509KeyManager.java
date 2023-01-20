@@ -246,7 +246,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * Mainly used to avoid throwing IO Exceptions in java.io.Closeable.
    */
   public interface Closeable extends java.io.Closeable {
-    @Override public void close();
+    @Override
+    void close();
   }
 }
 

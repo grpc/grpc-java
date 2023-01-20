@@ -16,8 +16,11 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChoiceServerCredentials;
 import io.grpc.ExperimentalApi;
@@ -62,6 +65,10 @@ import javax.net.ssl.TrustManager;
 public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpServerBuilder> {
   private static final Logger log = Logger.getLogger(OkHttpServerBuilder.class.getName());
   private static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
+
+  static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
+  private static final long MIN_MAX_CONNECTION_IDLE_NANO = TimeUnit.SECONDS.toNanos(1L);
+
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
   private static final ObjectPool<Executor> DEFAULT_TRANSPORT_EXECUTOR_POOL =
       OkHttpChannelBuilder.DEFAULT_TRANSPORT_EXECUTOR_POOL;
@@ -110,6 +117,9 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   int maxInboundMetadataSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+  long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
+  boolean permitKeepAliveWithoutCalls;
+  long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
 
   @VisibleForTesting
   OkHttpServerBuilder(
@@ -179,6 +189,27 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   }
 
   /**
+   * Sets a custom max connection idle time, connection being idle for longer than which will be
+   * gracefully terminated. Idleness duration is defined since the most recent time the number of
+   * outstanding RPCs became zero or the connection establishment. An unreasonably small value might
+   * be increased. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
+   * max connection idle.
+   */
+  @Override
+  public OkHttpServerBuilder maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
+    checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive: %s",
+        maxConnectionIdle);
+    maxConnectionIdleInNanos = timeUnit.toNanos(maxConnectionIdle);
+    if (maxConnectionIdleInNanos >= AS_LARGE_AS_INFINITE) {
+      maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
+    }
+    if (maxConnectionIdleInNanos < MIN_MAX_CONNECTION_IDLE_NANO) {
+      maxConnectionIdleInNanos = MIN_MAX_CONNECTION_IDLE_NANO;
+    }
+    return this;
+  }
+
+  /**
    * Sets a time waiting for read activity after sending a keepalive ping. If the time expires
    * without any read activity on the connection, the connection is considered dead. An unreasonably
    * small value might be increased. Defaults to 20 seconds.
@@ -192,6 +223,41 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     Preconditions.checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
     keepAliveTimeoutNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutNanos = KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutNanos);
+    return this;
+  }
+
+  /**
+   * Specify the most aggressive keep-alive time clients are permitted to configure. The server will
+   * try to detect clients exceeding this rate and when detected will forcefully close the
+   * connection. The default is 5 minutes.
+   *
+   * <p>Even though a default is defined that allows some keep-alives, clients must not use
+   * keep-alive without approval from the service owner. Otherwise, they may experience failures in
+   * the future if the service becomes more restrictive. When unthrottled, keep-alives can cause a
+   * significant amount of traffic and CPU usage, so clients and servers should be conservative in
+   * what they use and accept.
+   *
+   * @see #permitKeepAliveWithoutCalls(boolean)
+   */
+  @CanIgnoreReturnValue
+  @Override
+  public OkHttpServerBuilder permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative: %s",
+        keepAliveTime);
+    permitKeepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
+    return this;
+  }
+
+  /**
+   * Sets whether to allow clients to send keep-alive HTTP/2 PINGs even if there are no outstanding
+   * RPCs on the connection. Defaults to {@code false}.
+   *
+   * @see #permitKeepAliveTime(long, TimeUnit)
+   */
+  @CanIgnoreReturnValue
+  @Override
+  public OkHttpServerBuilder permitKeepAliveWithoutCalls(boolean permit) {
+    permitKeepAliveWithoutCalls = permit;
     return this;
   }
 

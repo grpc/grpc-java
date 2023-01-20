@@ -26,6 +26,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,8 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       // Hostname for resolving endpoints via DNS. Only valid for LOGICAL_DNS clusters.
       @Nullable
       final String dnsHostName;
+      @Nullable
+      final OutlierDetection outlierDetection;
 
       enum Type {
         EDS,
@@ -132,7 +135,8 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
 
       private DiscoveryMechanism(String cluster, Type type, @Nullable String edsServiceName,
           @Nullable String dnsHostName, @Nullable ServerInfo lrsServerInfo,
-          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
+          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
+          @Nullable OutlierDetection outlierDetection) {
         this.cluster = checkNotNull(cluster, "cluster");
         this.type = checkNotNull(type, "type");
         this.edsServiceName = edsServiceName;
@@ -140,20 +144,22 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         this.lrsServerInfo = lrsServerInfo;
         this.maxConcurrentRequests = maxConcurrentRequests;
         this.tlsContext = tlsContext;
+        this.outlierDetection = outlierDetection;
       }
 
       static DiscoveryMechanism forEds(String cluster, @Nullable String edsServiceName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext) {
+          @Nullable UpstreamTlsContext tlsContext,
+          OutlierDetection outlierDetection) {
         return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName, null, lrsServerInfo,
-            maxConcurrentRequests, tlsContext);
+            maxConcurrentRequests, tlsContext, outlierDetection);
       }
 
       static DiscoveryMechanism forLogicalDns(String cluster, String dnsHostName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable UpstreamTlsContext tlsContext) {
         return new DiscoveryMechanism(cluster, Type.LOGICAL_DNS, null, dnsHostName,
-            lrsServerInfo, maxConcurrentRequests, tlsContext);
+            lrsServerInfo, maxConcurrentRequests, tlsContext, null);
       }
 
       @Override

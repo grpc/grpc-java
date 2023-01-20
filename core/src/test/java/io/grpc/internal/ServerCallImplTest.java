@@ -20,6 +20,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -424,7 +425,7 @@ public class ServerCallImplTest {
 
     verify(callListener).onCancel();
     assertTrue(context.isCancelled());
-    assertNull(context.cancellationCause());
+    assertNotNull(context.cancellationCause());
   }
 
   @Test

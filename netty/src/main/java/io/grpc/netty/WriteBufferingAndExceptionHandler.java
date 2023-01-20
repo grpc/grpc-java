@@ -184,7 +184,7 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
    */
   @Override
   public void flush(ChannelHandlerContext ctx) {
-    /**
+    /*
      * Swallowing any flushes is not only an optimization but also required
      * for the SslHandler to work correctly. If the SslHandler receives multiple
      * flushes while the handshake is still ongoing, then the handshake "randomly"

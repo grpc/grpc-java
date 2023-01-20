@@ -3,6 +3,7 @@ plugins {
     id "maven-publish"
 
     id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Testing Protos"
@@ -13,6 +14,7 @@ dependencies {
     compileOnly libraries.javax.annotation
     testImplementation libraries.truth
     testRuntimeOnly libraries.javax.annotation
+    signature libraries.signature.java
 }
 
 configureProtoCompilation()

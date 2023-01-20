@@ -25,7 +25,8 @@ dependencies {
         exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     }
 
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 tasks.named("javadoc").configure {

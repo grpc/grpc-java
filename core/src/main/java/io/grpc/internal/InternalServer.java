@@ -50,7 +50,7 @@ public interface InternalServer {
   void shutdown();
 
   /**
-   * Returns the first listening socket address.  May change after {@link start(ServerListener)} is
+   * Returns the first listening socket address.  May change after {@link #start(ServerListener)} is
    * called.
    */
   SocketAddress getListenSocketAddress();
@@ -61,7 +61,7 @@ public interface InternalServer {
   @Nullable InternalInstrumented<SocketStats> getListenSocketStats();
 
   /**
-   * Returns a list of listening socket addresses.  May change after {@link start(ServerListener)}
+   * Returns a list of listening socket addresses.  May change after {@link #start(ServerListener)}
    * is called.
    */
   List<? extends SocketAddress> getListenSocketAddresses();
