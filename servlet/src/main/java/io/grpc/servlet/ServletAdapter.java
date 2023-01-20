@@ -193,7 +193,7 @@ public final class ServletAdapter {
     try {
       return new URI(req.getRequestURL().toString()).getAuthority();
     } catch (URISyntaxException e) {
-      logger.log(FINE, "Error getting authority from the request URL {0}" + req.getRequestURL());
+      logger.log(FINE, "Error getting authority from the request URL {0}", req.getRequestURL());
       return req.getServerName() + ":" + req.getServerPort();
     }
   }

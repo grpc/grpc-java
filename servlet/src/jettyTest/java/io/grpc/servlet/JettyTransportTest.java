@@ -160,7 +160,7 @@ public class JettyTransportTest extends AbstractTransportTest {
 
   @Override
   protected void advanceClock(long offset, TimeUnit unit) {
-    fakeClock.forwardNanos(unit.toNanos(offset));
+    fakeClock.forwardTime(offset, unit);
   }
 
   @Override
@@ -225,7 +225,7 @@ public class JettyTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  @Ignore("THis doesn't apply: Ensure that for a closed ServerStream, interactions are noops")
+  @Ignore("This doesn't apply: Ensure that for a closed ServerStream, interactions are noops")
   @Test
   public void interactionsAfterServerStreamCloseAreNoops() {
   }
@@ -243,7 +243,7 @@ public class JettyTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  @Ignore("regression since bumping grpc v1.46 to v1.47")
+  @Ignore("regression since bumping grpc v1.46 to v1.53")
   @Test
   public void messageProducerOnlyProducesRequestedMessages() {}
 }

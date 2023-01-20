@@ -88,8 +88,7 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
     writer = new AsyncServletOutputStreamWriter(
         writeAction,
         flushAction,
-        () -> {
-        },
+        () -> { },
         this::isReady,
         new Log() {});
   }

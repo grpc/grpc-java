@@ -298,7 +298,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
   public void clientCancel() {}
 
   @Override
-  @Ignore("regression since bumping grpc v1.46 to v1.47")
+  @Ignore("regression since bumping grpc v1.46 to v1.53")
   @Test
   public void messageProducerOnlyProducesRequestedMessages() {}
 }
