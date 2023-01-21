@@ -87,7 +87,8 @@ public class WeightedRandomPickerTest {
 
   private static final class FakeRandom implements ThreadSafeRandom {
     int nextInt;
-    int bound;
+    long bound;
+    Long nextLong;
 
     @Override
     public int nextInt(int bound) {
@@ -101,6 +102,24 @@ public class WeightedRandomPickerTest {
     @Override
     public long nextLong() {
       throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public long nextLong(long bound) {
+      this.bound = bound;
+
+      if (nextLong == null) {
+        assertThat(nextInt).isAtLeast(0);
+        assertThat(nextInt).isAtMost(Integer.MAX_VALUE);
+        if (bound <= Integer.MAX_VALUE) {
+          assertThat(nextInt).isLessThan((int)bound);
+        }
+        return nextInt;
+      }
+
+      assertThat(nextLong).isAtLeast(0);
+      assertThat(nextLong.longValue()).isLessThan(bound);
+      return nextInt;
     }
   }
 
