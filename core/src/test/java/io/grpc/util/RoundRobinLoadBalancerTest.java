@@ -22,7 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.util.RoundRobinLoadBalancer.STATE_INFO;
+import static io.grpc.util.RoundRobinLoadBalancerImpl.STATE_INFO;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -56,8 +56,8 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import io.grpc.util.RoundRobinLoadBalancer.EmptyPicker;
-import io.grpc.util.RoundRobinLoadBalancer.ReadyPicker;
 import io.grpc.util.RoundRobinLoadBalancer.Ref;
+import io.grpc.util.RoundRobinLoadBalancerImpl.ReadyPicker;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,12 +78,12 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-/** Unit test for {@link RoundRobinLoadBalancer}. */
+/** Unit test for {@link RoundRobinLoadBalancerImpl}. */
 @RunWith(JUnit4.class)
 public class RoundRobinLoadBalancerTest {
   private static final Attributes.Key<String> MAJOR_KEY = Attributes.Key.create("major-key");
 
-  private RoundRobinLoadBalancer loadBalancer;
+  private RoundRobinLoadBalancerImpl loadBalancer;
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
@@ -136,7 +136,7 @@ public class RoundRobinLoadBalancerTest {
           }
         });
 
-    loadBalancer = new RoundRobinLoadBalancer(mockHelper);
+    loadBalancer = new RoundRobinLoadBalancerImpl(mockHelper);
   }
 
   @After

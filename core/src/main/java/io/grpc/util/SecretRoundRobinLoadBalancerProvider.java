@@ -52,7 +52,7 @@ final class SecretRoundRobinLoadBalancerProvider {
 
     @Override
     public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-      return new RoundRobinLoadBalancer(helper);
+      return new RoundRobinLoadBalancerImpl(helper);
     }
 
     @Override

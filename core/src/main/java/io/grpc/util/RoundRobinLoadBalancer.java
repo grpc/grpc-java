@@ -43,14 +43,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import javax.annotation.Nonnull;
 
 /**
- * A {@link LoadBalancer} that provides round-robin load-balancing over the {@link
- * EquivalentAddressGroup}s from the {@link NameResolver}.
+ * A {@link LoadBalancer} that provides load-balancing over the {@link
+ * EquivalentAddressGroup}s from the {@link NameResolver}. It provides default implementation of
+ * accepting {@link io.grpc.LoadBalancer.ResolvedAddresses} updates, process aggregated load
+ * balancing state. The round-robin picker algorithm is implemented by method
+ * {@link #createReadyPicker}.
  */
-final class RoundRobinLoadBalancer extends LoadBalancer {
+abstract class RoundRobinLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
@@ -67,6 +69,11 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     this.helper = checkNotNull(helper, "helper");
     this.random = new Random();
   }
+
+  abstract Subchannel createSubchannel(Helper helper, CreateSubchannelArgs args);
+
+  abstract RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
+                                              int startIndex);
 
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -105,7 +112,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
               new Ref<>(ConnectivityStateInfo.forNonError(IDLE)));
 
       final Subchannel subchannel = checkNotNull(
-          helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+          createSubchannel(helper, CreateSubchannelArgs.newBuilder()
               .setAddresses(originalAddressGroup)
               .setAttributes(subchannelAttrs.build())
               .build()),
@@ -210,7 +217,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       // initialize the Picker to a random start index to ensure that a high frequency of Picker
       // churn does not skew subchannel selection.
       int startIndex = random.nextInt(activeList.size());
-      updateBalancingState(READY, new ReadyPicker(activeList, startIndex));
+      updateBalancingState(READY, createReadyPicker(activeList, startIndex));
     }
   }
 
@@ -275,61 +282,8 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   // Only subclasses are ReadyPicker or EmptyPicker
-  private abstract static class RoundRobinPicker extends SubchannelPicker {
+  abstract static class RoundRobinPicker extends SubchannelPicker {
     abstract boolean isEquivalentTo(RoundRobinPicker picker);
-  }
-
-  @VisibleForTesting
-  static final class ReadyPicker extends RoundRobinPicker {
-    private static final AtomicIntegerFieldUpdater<ReadyPicker> indexUpdater =
-        AtomicIntegerFieldUpdater.newUpdater(ReadyPicker.class, "index");
-
-    private final List<Subchannel> list; // non-empty
-    @SuppressWarnings("unused")
-    private volatile int index;
-
-    ReadyPicker(List<Subchannel> list, int startIndex) {
-      Preconditions.checkArgument(!list.isEmpty(), "empty list");
-      this.list = list;
-      this.index = startIndex - 1;
-    }
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withSubchannel(nextSubchannel());
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(ReadyPicker.class).add("list", list).toString();
-    }
-
-    private Subchannel nextSubchannel() {
-      int size = list.size();
-      int i = indexUpdater.incrementAndGet(this);
-      if (i >= size) {
-        int oldi = i;
-        i %= size;
-        indexUpdater.compareAndSet(this, oldi, i);
-      }
-      return list.get(i);
-    }
-
-    @VisibleForTesting
-    List<Subchannel> getList() {
-      return list;
-    }
-
-    @Override
-    boolean isEquivalentTo(RoundRobinPicker picker) {
-      if (!(picker instanceof ReadyPicker)) {
-        return false;
-      }
-      ReadyPicker other = (ReadyPicker) picker;
-      // the lists cannot contain duplicate subchannels
-      return other == this
-          || (list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list));
-    }
   }
 
   @VisibleForTesting
