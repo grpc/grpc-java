@@ -405,7 +405,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .build());
     assertThat(addressesAccepted).isTrue();
     assertThat(lb.getDelegate().getClass().getName())
-        .isEqualTo("io.grpc.util.RoundRobinLoadBalancer");
+        .isEqualTo("io.grpc.util.RoundRobinLoadBalancerImpl");
   }
 
   @Test
