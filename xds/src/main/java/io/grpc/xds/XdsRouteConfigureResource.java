@@ -50,6 +50,7 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
@@ -392,39 +393,11 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   @VisibleForTesting
   static StructOrError<HeaderMatcher> parseHeaderMatcher(
       io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
-    switch (proto.getHeaderMatchSpecifierCase()) {
-      case EXACT_MATCH:
-        return StructOrError.fromStruct(HeaderMatcher.forExactValue(
-            proto.getName(), proto.getExactMatch(), proto.getInvertMatch()));
-      case SAFE_REGEX_MATCH:
-        String rawPattern = proto.getSafeRegexMatch().getRegex();
-        Pattern safeRegExMatch;
-        try {
-          safeRegExMatch = Pattern.compile(rawPattern);
-        } catch (PatternSyntaxException e) {
-          return StructOrError.fromError(
-              "HeaderMatcher [" + proto.getName() + "] contains malformed safe regex pattern: "
-                  + e.getMessage());
-        }
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forSafeRegEx(
-            proto.getName(), safeRegExMatch, proto.getInvertMatch()));
-      case RANGE_MATCH:
-        Matchers.HeaderMatcher.Range rangeMatch = Matchers.HeaderMatcher.Range.create(
-            proto.getRangeMatch().getStart(), proto.getRangeMatch().getEnd());
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forRange(
-            proto.getName(), rangeMatch, proto.getInvertMatch()));
-      case PRESENT_MATCH:
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forPresent(
-            proto.getName(), proto.getPresentMatch(), proto.getInvertMatch()));
-      case PREFIX_MATCH:
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forPrefix(
-            proto.getName(), proto.getPrefixMatch(), proto.getInvertMatch()));
-      case SUFFIX_MATCH:
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forSuffix(
-            proto.getName(), proto.getSuffixMatch(), proto.getInvertMatch()));
-      case HEADERMATCHSPECIFIER_NOT_SET:
-      default:
-        return StructOrError.fromError("Unknown header matcher type");
+    try {
+      Matchers.HeaderMatcher headerMatcher = MatcherParser.parseHeaderMatcher(proto);
+      return StructOrError.fromStruct(headerMatcher);
+    } catch (IllegalArgumentException e) {
+      return StructOrError.fromError(e.getMessage());
     }
   }
 
