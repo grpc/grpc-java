@@ -162,7 +162,14 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         try {
           zone = queryZoneMetadata(METADATA_URL_ZONE);
           supportIpv6 = queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6);
-          rawBootstrap = generateBootstrap(zone, supportIpv6);
+
+          // User provided bootstrap configs are only supported with federation. If federation is
+          // not enabled or there is no user provided config, we set a custom bootstrap override.
+          // Otherwise, we don't set the override, which will allow a user provided bootstrap config
+          // to take effect.
+          if (!enableFederation || !xdsBootstrapProvided) {
+            rawBootstrap = generateBootstrap(zone, supportIpv6);
+          }
         } catch (IOException e) {
           listener.onError(Status.INTERNAL.withDescription("Unable to get metadata").withCause(e));
         } finally {
@@ -170,8 +177,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           syncContext.execute(new Runnable() {
             @Override
             public void run() {
-              if (!shutdown && finalRawBootstrap != null) {
-                bootstrapSetter.setBootstrap(finalRawBootstrap);
+              if (!shutdown) {
+                if (finalRawBootstrap != null) {
+                  bootstrapSetter.setBootstrap(finalRawBootstrap);
+                }
                 delegate.start(listener);
                 succeeded = true;
               }
