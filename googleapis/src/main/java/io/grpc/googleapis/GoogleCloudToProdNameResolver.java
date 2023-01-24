@@ -156,38 +156,35 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     class Resolve implements Runnable {
       @Override
       public void run() {
-        String zone;
-        boolean supportIpv6;
         ImmutableMap<String, ?> rawBootstrap = null;
-        try {
-          zone = queryZoneMetadata(METADATA_URL_ZONE);
-          supportIpv6 = queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6);
-
-          // User provided bootstrap configs are only supported with federation. If federation is
-          // not enabled or there is no user provided config, we set a custom bootstrap override.
-          // Otherwise, we don't set the override, which will allow a user provided bootstrap config
-          // to take effect.
-          if (!enableFederation || !xdsBootstrapProvided) {
-            rawBootstrap = generateBootstrap(zone, supportIpv6);
+        // User provided bootstrap configs are only supported with federation. If federation is
+        // not enabled or there is no user provided config, we set a custom bootstrap override.
+        // Otherwise, we don't set the override, which will allow a user provided bootstrap config
+        // to take effect.
+        if (!enableFederation || !xdsBootstrapProvided) {
+          try {
+            rawBootstrap = generateBootstrap(queryZoneMetadata(METADATA_URL_ZONE),
+                queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6));
+          } catch (IOException e) {
+            listener.onError(
+                Status.INTERNAL.withDescription("Unable to get metadata").withCause(e));
           }
-        } catch (IOException e) {
-          listener.onError(Status.INTERNAL.withDescription("Unable to get metadata").withCause(e));
-        } finally {
-          final ImmutableMap<String, ?> finalRawBootstrap = rawBootstrap;
-          syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              if (!shutdown) {
-                if (finalRawBootstrap != null) {
-                  bootstrapSetter.setBootstrap(finalRawBootstrap);
-                }
-                delegate.start(listener);
-                succeeded = true;
-              }
-              resolving = false;
-            }
-          });
         }
+
+        final ImmutableMap<String, ?> finalRawBootstrap = rawBootstrap;
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (!shutdown) {
+              if (finalRawBootstrap != null) {
+                bootstrapSetter.setBootstrap(finalRawBootstrap);
+              }
+              delegate.start(listener);
+              succeeded = true;
+            }
+            resolving = false;
+          }
+        });
       }
     }
 
