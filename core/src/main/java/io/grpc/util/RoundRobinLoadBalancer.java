@@ -36,12 +36,13 @@ final class RoundRobinLoadBalancer extends AbstractRoundRobinLoadBalancer {
   }
 
   @Override
-  Subchannel createSubchannel(Helper helper, CreateSubchannelArgs args) {
+  protected Subchannel createSubchannel(CreateSubchannelArgs args) {
     return helper.createSubchannel(args);
   }
 
   @Override
-  RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList, int startIndex) {
+  protected RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
+                                               int startIndex) {
     return new ReadyPicker(activeSubchannelList, startIndex);
   }
 
@@ -87,7 +88,7 @@ final class RoundRobinLoadBalancer extends AbstractRoundRobinLoadBalancer {
     }
 
     @Override
-    boolean isEquivalentTo(RoundRobinPicker picker) {
+    protected boolean isEquivalentTo(RoundRobinPicker picker) {
       if (!(picker instanceof ReadyPicker)) {
         return false;
       }

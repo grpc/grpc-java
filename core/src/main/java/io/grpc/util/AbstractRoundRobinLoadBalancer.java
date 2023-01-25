@@ -52,27 +52,27 @@ import javax.annotation.Nonnull;
  * balancing state. The round-robin picker algorithm is implemented by method
  * {@link #createReadyPicker}.
  */
-abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
+public abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
 
-  private final Helper helper;
-  private final Map<EquivalentAddressGroup, Subchannel> subchannels =
+  protected final Helper helper;
+  protected final Map<EquivalentAddressGroup, Subchannel> subchannels =
       new HashMap<>();
   private final Random random;
 
   private ConnectivityState currentState;
   private RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
 
-  AbstractRoundRobinLoadBalancer(Helper helper) {
+  public AbstractRoundRobinLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
     this.random = new Random();
   }
 
-  abstract Subchannel createSubchannel(Helper helper, CreateSubchannelArgs args);
+  protected abstract Subchannel createSubchannel(CreateSubchannelArgs args);
 
-  abstract RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
+  protected abstract RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
                                               int startIndex);
 
   @Override
@@ -112,7 +112,7 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
               new Ref<>(ConnectivityStateInfo.forNonError(IDLE)));
 
       final Subchannel subchannel = checkNotNull(
-          createSubchannel(helper, CreateSubchannelArgs.newBuilder()
+          createSubchannel(CreateSubchannelArgs.newBuilder()
               .setAddresses(originalAddressGroup)
               .setAttributes(subchannelAttrs.build())
               .build()),
@@ -282,12 +282,12 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
   }
 
   // Only subclasses are ReadyPicker or EmptyPicker
-  abstract static class RoundRobinPicker extends SubchannelPicker {
-    abstract boolean isEquivalentTo(RoundRobinPicker picker);
+  public abstract static class RoundRobinPicker extends SubchannelPicker {
+    protected abstract boolean isEquivalentTo(RoundRobinPicker picker);
   }
 
   @VisibleForTesting
-  static final class EmptyPicker extends RoundRobinPicker {
+  public static final class EmptyPicker extends RoundRobinPicker {
 
     private final Status status;
 
@@ -301,7 +301,7 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    boolean isEquivalentTo(RoundRobinPicker picker) {
+    protected boolean isEquivalentTo(RoundRobinPicker picker) {
       return picker instanceof EmptyPicker && (Objects.equal(status, ((EmptyPicker) picker).status)
           || (status.isOk() && ((EmptyPicker) picker).status.isOk()));
     }
