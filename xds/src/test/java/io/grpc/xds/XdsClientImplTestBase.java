@@ -109,7 +109,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
@@ -3230,7 +3229,8 @@ public abstract class XdsClientImplTestBase {
 
     // Management server closes the RPC stream with an error.
     call.sendError(Status.UNKNOWN.asException());
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
+        .onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
@@ -3340,7 +3340,8 @@ public abstract class XdsClientImplTestBase {
         RDS_RESOURCE, rdsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.sendError(Status.UNAVAILABLE.asException());
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
+        .onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
@@ -3606,15 +3607,10 @@ public abstract class XdsClientImplTestBase {
     // Setup xdsClient to fail on stream creation
     XdsClientImpl client = createXdsClient("some. garbage");
 
-    try {
-      client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
-      fakeClock.forwardTime(20, TimeUnit.SECONDS);
-    } catch (AssertionError e) {
-      assertThat(e.getCause()).isInstanceOf(IllegalArgumentException.class);
-      client.shutdown();
-      return;
-    }
-    Assert.fail("Expected exception for bad url not thrown");
+    client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    fakeClock.forwardTime(20, TimeUnit.SECONDS);
+    verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
+    client.shutdown();
   }
 
   @Test

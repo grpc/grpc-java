@@ -61,6 +61,8 @@ import javax.annotation.Nullable;
  * the xDS RPC stream.
  */
 final class AbstractXdsClient {
+
+  public static final String CLOSED_BY_SERVER = "Closed by server";
   private final SynchronizationContext syncContext;
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -320,19 +322,19 @@ final class AbstractXdsClient {
     }
 
     final void handleRpcCompleted() {
-      handleRpcStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
+      handleRpcStreamClosed(Status.UNAVAILABLE.withDescription(CLOSED_BY_SERVER));
     }
 
     private void handleRpcStreamClosed(Status error) {
-      if (shutdown) {
+      if (closed) {
         return;
       }
 
       checkArgument(!error.isOk(), "unexpected OK status");
-      String errorMsg =
-          closed
-              ? "ADS stream failed with status {0}: {1}. Cause: {2}"
-              : "ADS stream closed with status {0}: {1}. Cause: {2}";
+      String errorMsg = error.getDescription() != null
+          && error.getDescription().equals(CLOSED_BY_SERVER)
+              ? "ADS stream closed with status {0}: {1}. Cause: {2}"
+              : "ADS stream failed with status {0}: {1}. Cause: {2}";
       logger.log(
           XdsLogLevel.ERROR, errorMsg, error.getCode(), error.getDescription(), error.getCause());
       closed = true;
