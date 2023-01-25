@@ -123,7 +123,7 @@ public class OutlierDetectionLoadBalancerTest {
       "round_robin") {
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      return new RoundRobinLoadBalancerImpl(helper);
+      return new RoundRobinLoadBalancer(helper);
     }
   };
 
