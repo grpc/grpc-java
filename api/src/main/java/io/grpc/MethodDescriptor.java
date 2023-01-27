@@ -265,7 +265,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   /**
    * A convenience method for {@code extractBareMethodName(getFullMethodName())}.
    *
-   * @since 1.32.0
+   * @since 1.33.0
    */
   @Nullable
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5635")
@@ -413,7 +413,7 @@ public final class MethodDescriptor<ReqT, RespT> {
    * Extract the method name out of a fully qualified method name. May return {@code null}
    * if the input is malformed, but you cannot rely on it for the validity of the input.
    *
-   * @since 1.32.0
+   * @since 1.33.0
    */
   @Nullable
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5635")
