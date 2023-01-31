@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.primitives.UnsignedInteger;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -42,7 +43,7 @@ final class WeightedRandomPicker extends SubchannelPicker {
 
     WeightedChildPicker(long weight, SubchannelPicker childPicker) {
       checkArgument(weight >= 0, "weight is negative");
-      checkArgument(weight <= 2L * Integer.MAX_VALUE, "weight is too large");
+      checkArgument(weight <= UnsignedInteger.MAX_VALUE.longValue(), "weight is too large");
       checkNotNull(childPicker, "childPicker is null");
 
       this.weight = weight;
@@ -102,7 +103,7 @@ final class WeightedRandomPicker extends SubchannelPicker {
       totalWeight += weight;
     }
     this.totalWeight = totalWeight;
-    checkArgument(totalWeight <= 2L * Integer.MAX_VALUE,
+    checkArgument(totalWeight <= UnsignedInteger.MAX_VALUE.longValue(),
         "total weight greater than unsigned int can hold");
 
     this.random = random;
