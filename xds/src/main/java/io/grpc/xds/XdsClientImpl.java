@@ -514,11 +514,22 @@ final class XdsClientImpl extends XdsClient
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
       // is created but not yet requested because the client is in backoff.
       this.metadata = ResourceMetadata.newResourceMetadataUnknown();
-      maybeCreateXdsChannelWithLrs(serverInfo);
-      this.xdsChannel = serverChannelMap.get(serverInfo);
-      if (xdsChannel.isInBackoff()) {
+
+      AbstractXdsClient xdsChannelTemp = null;
+      try {
+        maybeCreateXdsChannelWithLrs(serverInfo);
+        xdsChannelTemp = serverChannelMap.get(serverInfo);
+        if (xdsChannelTemp.isInBackoff()) {
+          return;
+        }
+      } catch (IllegalArgumentException e) {
+        xdsChannelTemp = null;
+        this.errorDescription = "Bad configuration:  " + e.getMessage();
         return;
+      } finally {
+        this.xdsChannel = xdsChannelTemp;
       }
+
       restartTimer();
     }
 
