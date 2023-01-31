@@ -1,7 +1,7 @@
 gRPC Hostname Example
 =====================
 
-[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run?dir=examples/example-hostname)
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run?dir=examples/example-hostname&revision=v1.52.0)
 
 The hostname example is a Hello World server whose response includes its
 hostname. It also supports health and reflection services. This makes it a good
