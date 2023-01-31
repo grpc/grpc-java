@@ -110,7 +110,6 @@ public class WeightedRandomPickerTest {
 
       if (nextLong == null) {
         assertThat(nextInt).isAtLeast(0);
-        assertThat(nextInt).isAtMost(Integer.MAX_VALUE);
         if (bound <= Integer.MAX_VALUE) {
           assertThat(nextInt).isLessThan((int)bound);
         }
@@ -131,6 +130,12 @@ public class WeightedRandomPickerTest {
 
     thrown.expect(IllegalArgumentException.class);
     new WeightedRandomPicker(emptyList);
+  }
+
+  @Test
+  public void negativeWeight() {
+    thrown.expect(IllegalArgumentException.class);
+    new WeightedChildPicker(-1, childPicker0);
   }
 
   @Test
