@@ -506,7 +506,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           String pluginName = proto.getClusterSpecifierPlugin();
           PluginConfig pluginConfig = pluginConfigMap.get(pluginName);
           if (pluginConfig == null) {
-            // Skip route if the plugin is not registered, but it's optional.
+            // Skip route if the plugin is not registered, but it is optional.
             if (optionalPlugins.contains(pluginName)) {
               return null;
             }
