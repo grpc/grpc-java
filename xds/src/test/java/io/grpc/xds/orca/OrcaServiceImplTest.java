@@ -143,19 +143,23 @@ public class OrcaServiceImplTest {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
     defaultTestService.putUtilizationMetric("buffer", 0.2);
+    defaultTestService.setQps(1.9);
     call.start(listener, new Metadata());
     call.sendMessage(OrcaLoadReportRequest.newBuilder()
         .setReportInterval(Duration.newBuilder().setSeconds(0).setNanos(500).build()).build());
     call.halfClose();
     call.request(1);
-    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
+    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2)
+            .setRpsFractional(1.9).build();
     verify(listener).onMessage(eq(expect));
     reset(listener);
     defaultTestService.removeUtilizationMetric("buffer0");
+    defaultTestService.clearQps();
     assertThat(fakeClock.forwardTime(500, TimeUnit.NANOSECONDS)).isEqualTo(0);
     verifyNoInteractions(listener);
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(1);
     call.request(1);
+    expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
     verify(listener).onMessage(eq(expect));
   }
 
@@ -245,17 +249,20 @@ public class OrcaServiceImplTest {
         .setMemUtilization(random.nextDouble())
         .putAllUtilization(firstUtilization)
         .putUtilization("queue", 1.0)
+        .setRpsFractional(1239.01)
         .build();
     defaultTestService.setCpuUtilizationMetric(goldenReport.getCpuUtilization());
     defaultTestService.setMemoryUtilizationMetric(goldenReport.getMemUtilization());
     defaultTestService.setAllUtilizationMetrics(firstUtilization);
     defaultTestService.putUtilizationMetric("queue", 1.0);
+    defaultTestService.setQps(1239.01);
     Iterator<OrcaLoadReport> reports = OpenRcaServiceGrpc.newBlockingStub(channel)
         .streamCoreMetrics(OrcaLoadReportRequest.newBuilder().build());
     assertThat(reports.next()).isEqualTo(goldenReport);
 
     defaultTestService.clearCpuUtilizationMetric();
     defaultTestService.clearMemoryUtilizationMetric();
+    defaultTestService.clearQps();
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
     goldenReport = OrcaLoadReport.newBuilder()
         .putAllUtilization(firstUtilization)
