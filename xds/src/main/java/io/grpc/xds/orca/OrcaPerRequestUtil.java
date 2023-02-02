@@ -254,8 +254,8 @@ public abstract class OrcaPerRequestUtil {
 
   static MetricReport fromOrcaLoadReport(OrcaLoadReport loadReport) {
     return InternalCallMetricRecorder.createMetricReport(loadReport.getCpuUtilization(),
-        loadReport.getMemUtilization(), loadReport.getRequestCostMap(),
-        loadReport.getUtilizationMap());
+        loadReport.getMemUtilization(), loadReport.getRpsFractional(),
+        loadReport.getRequestCostMap(), loadReport.getUtilizationMap());
   }
 
   /**
