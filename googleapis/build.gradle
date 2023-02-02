@@ -12,7 +12,6 @@ dependencies {
     implementation project(':grpc-alts'),
                    project(':grpc-core'),
                    project(':grpc-xds'),
-                   project(':grpc-services'),
                    libraries.guava
     testImplementation project(':grpc-core').sourceSets.test.output
 

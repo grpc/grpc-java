@@ -72,6 +72,8 @@ public abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
 
   protected abstract Subchannel createSubchannel(CreateSubchannelArgs args);
 
+  protected void afterSubchannelUpdate() {}
+
   protected abstract RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
                                               int startIndex);
 
@@ -131,6 +133,7 @@ public abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
     for (EquivalentAddressGroup addressGroup : removedAddrs) {
       removedSubchannels.add(subchannels.remove(addressGroup));
     }
+    afterSubchannelUpdate();
 
     // Update the picker before shutting down the subchannels, to reduce the chance of the race
     // between picking a subchannel and shutting it down.

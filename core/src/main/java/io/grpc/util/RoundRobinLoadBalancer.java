@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
  * A {@link AbstractRoundRobinLoadBalancer} that provides round-robin load-balancing over the {@link
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
-final class RoundRobinLoadBalancer extends AbstractRoundRobinLoadBalancer {
+public final class RoundRobinLoadBalancer extends AbstractRoundRobinLoadBalancer {
 
   RoundRobinLoadBalancer(Helper helper) {
     super(helper);
@@ -47,7 +47,7 @@ final class RoundRobinLoadBalancer extends AbstractRoundRobinLoadBalancer {
   }
 
   @VisibleForTesting
-  static final class ReadyPicker extends RoundRobinPicker {
+  public static class ReadyPicker extends RoundRobinPicker {
     private static final AtomicIntegerFieldUpdater<ReadyPicker> indexUpdater =
         AtomicIntegerFieldUpdater.newUpdater(ReadyPicker.class, "index");
 
@@ -55,7 +55,7 @@ final class RoundRobinLoadBalancer extends AbstractRoundRobinLoadBalancer {
     @SuppressWarnings("unused")
     private volatile int index;
 
-    ReadyPicker(List<Subchannel> list, int startIndex) {
+    public ReadyPicker(List<Subchannel> list, int startIndex) {
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
       this.index = startIndex - 1;
