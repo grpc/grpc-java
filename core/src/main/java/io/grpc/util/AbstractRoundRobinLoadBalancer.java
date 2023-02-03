@@ -70,9 +70,21 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
     this.random = new Random();
   }
 
-  abstract Subchannel createSubchannel(Helper helper, CreateSubchannelArgs args);
+  /**
+   * Create a subchannel for a new {@link EquivalentAddressGroup} when handling new resolved
+   * addresses.
+   */
+  protected abstract Subchannel createSubchannel(Helper helper, CreateSubchannelArgs args);
 
-  abstract RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
+  /**
+  * An action point after accepting the most recent resolved addresses.
+  */
+  protected void afterSubchannelUpdate() {}
+
+  /**
+  * Returns the picker that selects a subchannel in the list for each incoming RPC.
+  */
+  protected abstract RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
                                               int startIndex);
 
   @Override
@@ -131,6 +143,8 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
     for (EquivalentAddressGroup addressGroup : removedAddrs) {
       removedSubchannels.add(subchannels.remove(addressGroup));
     }
+
+    afterSubchannelUpdate();
 
     // Update the picker before shutting down the subchannels, to reduce the chance of the race
     // between picking a subchannel and shutting it down.
