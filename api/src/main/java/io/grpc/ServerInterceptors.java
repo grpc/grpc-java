@@ -188,15 +188,14 @@ public final class ServerInterceptors {
   }
 
   /**
-   * Create a new {@code ServerServiceDefinition} with {@link MethodDescriptor} for deserializing requests and
-   * separate {@link MethodDescriptor} for serializing responses. The {@code ServerCallHandler} created will
-   * automatically convert back to the original types for request and response before calling the existing {@code
-   * ServerCallHandler}.  Calling this method combined with the intercept methods will allow the developer to choose
-   * whether to intercept messages of ReqT/RespT, or the modeled types of their application.  This can also be
-   * chained to
-   * allow for interceptors to handle messages as multiple different ReqT/RespT types within the chain if the added
-   * cost of
-   * serialization is not a concern.
+   * Create a new {@code ServerServiceDefinition} with {@link MethodDescriptor} for deserializing
+   * requests and separate {@link MethodDescriptor} for serializing responses. The {@code
+   * ServerCallHandler} created will automatically convert back to the original types for request
+   * and response before calling the existing {@code ServerCallHandler}.  Calling this method
+   * combined with the intercept methods will allow the developer to choose whether to intercept
+   * messages of ReqT/RespT, or the modeled types of their application. This can also be chained
+   * to allow for interceptors to handle messages as multiple different ReqT/RespT types within
+   * the chain if the added cost of serialization is not a concern.
    *
    * @param serviceDef         the sevice definition to add request and response marshallers to.
    * @param requestMarshaller  request marshaller
