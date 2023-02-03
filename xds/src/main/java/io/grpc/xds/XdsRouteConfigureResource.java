@@ -24,6 +24,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.primitives.UnsignedInteger;
 import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -477,7 +478,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           return StructOrError.fromError("No cluster found in weighted cluster list");
         }
         List<ClusterWeight> weightedClusters = new ArrayList<>();
-        int clusterWeightSum = 0;
+        long clusterWeightSum = 0;
         for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
             : clusterWeights) {
           StructOrError<ClusterWeight> clusterWeightOrError =
@@ -492,6 +493,12 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
         if (clusterWeightSum <= 0) {
           return StructOrError.fromError("Sum of cluster weights should be above 0.");
         }
+        if (clusterWeightSum > UnsignedInteger.MAX_VALUE.longValue()) {
+          return StructOrError.fromError(String.format(
+              "Sum of cluster weights should be less than the maximum unsigned integer (%d), but"
+                  + " was %d. ",
+              UnsignedInteger.MAX_VALUE.longValue(), clusterWeightSum));
+        }
         return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy));
       case CLUSTER_SPECIFIER_PLUGIN:
@@ -499,7 +506,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           String pluginName = proto.getClusterSpecifierPlugin();
           PluginConfig pluginConfig = pluginConfigMap.get(pluginName);
           if (pluginConfig == null) {
-            // Skip route if the plugin is not registered, but it's optional.
+            // Skip route if the plugin is not registered, but it is optional.
             if (optionalPlugins.contains(pluginName)) {
               return null;
             }
