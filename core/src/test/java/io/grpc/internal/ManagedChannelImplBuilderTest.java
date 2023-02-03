@@ -414,10 +414,14 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void makeTargetStringForDirectAddress_scopedIpv6() throws Exception {
     InetSocketAddress address = new InetSocketAddress("0:0:0:0:0:0:0:0%0", 10005);
-    assertEquals("/0:0:0:0:0:0:0:0%0:10005", address.toString());
     String target = ManagedChannelImplBuilder.makeTargetStringForDirectAddress(address);
     URI uri = new URI(target);
-    assertEquals("directaddress:////0:0:0:0:0:0:0:0%250:10005", target);
+    assertThat(address.toString()).isIn(
+        Arrays.asList("/[0:0:0:0:0:0:0:0%0]:10005", "/0:0:0:0:0:0:0:0%0:10005"));
+    assertThat(target).isIn(
+        Arrays.asList(
+            "directaddress:////%5B0:0:0:0:0:0:0:0%250%5D:10005",
+            "directaddress:////0:0:0:0:0:0:0:0%250:10005"));
     assertEquals(target, uri.toString());
   }
 
