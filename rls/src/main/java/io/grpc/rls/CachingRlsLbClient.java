@@ -282,7 +282,7 @@ final class CachingRlsLbClient {
   private Throwable getCause(Throwable t) {
     Status status = null;
     if (t instanceof StatusException) {
-       status = ((StatusException) t).getStatus();
+      status = ((StatusException) t).getStatus();
     } else if (t instanceof StatusRuntimeException) {
       status = ((StatusRuntimeException) t).getStatus();
     }
