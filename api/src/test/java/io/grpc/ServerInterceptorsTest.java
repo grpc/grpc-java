@@ -33,7 +33,6 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall.Listener;
 import io.grpc.internal.NoopServerCall;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -440,38 +439,26 @@ public class ServerInterceptorsTest {
       @Override
       public InputStream stream(String value) {
         requestFlowOrder.add("RequestStream");
-        return new ByteArrayInputStream(value.getBytes());
+        return null;
       }
 
       @Override
       public String parse(InputStream stream) {
         requestFlowOrder.add("RequestParse");
-        try {
-          byte[] bytes = new byte[stream.available()];
-          stream.read(bytes);
-          return new String(bytes);
-        } catch (IOException e) {
-          throw new RuntimeException(e);
-        }
+        return null;
       }
     };
     final Marshaller<String> responseMarshaller = new Marshaller<String>() {
       @Override
       public InputStream stream(String value) {
         requestFlowOrder.add("ResponseStream");
-        return new ByteArrayInputStream(value.getBytes());
+        return null;
       }
 
       @Override
       public String parse(InputStream stream) {
         requestFlowOrder.add("ResponseParse");
-        try {
-          byte[] bytes = new byte[stream.available()];
-          stream.read(bytes);
-          return new String(bytes);
-        } catch (IOException e) {
-          throw new RuntimeException(e);
-        }
+       return null;
       }
     };
     final Marshaller<Holder> dummyMarshaller = new Marshaller<Holder>() {
