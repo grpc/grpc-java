@@ -16,8 +16,6 @@
 
 package io.grpc.util;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -39,18 +37,12 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 final class RoundRobinLoadBalancer extends LoadBalancer {
 
   private final SubchannelListLoadBalancerCommons roundRobinCommons;
-  private final Helper helper;
   private final Random random;
 
   RoundRobinLoadBalancer(Helper helper) {
-    this.helper = checkNotNull(helper, "helper");
-    this.roundRobinCommons = new SubchannelListLoadBalancerCommons(helper, this::createSubchannel,
-        () -> { }, this::createReadyPicker);
+    this.roundRobinCommons = new SubchannelListLoadBalancerCommons(helper, () -> { },
+            this::createReadyPicker);
     this.random = new Random();
-  }
-
-  private Subchannel createSubchannel(CreateSubchannelArgs args) {
-    return helper.createSubchannel(args);
   }
 
   private RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList) {

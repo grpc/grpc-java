@@ -71,26 +71,21 @@ public class SubchannelListLoadBalancerCommons {
       new HashMap<>();
   private ConnectivityState currentState;
   private RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
-  private final Function<CreateSubchannelArgs, Subchannel> createSubchannelTask;
   private final Runnable afterUpdateTask;
   private final Function<List<Subchannel>, RoundRobinPicker> createReadyPickerTask;
 
   /**
    * Common new addresses list update handling.
    *
-   * @param createSubchannelTask Create a subchannel for a new {@link EquivalentAddressGroup}
-   *                             when handling new resolved addresses.
    * @param afterUpdateTask An action point after accepting the most recent resolved addresses.
    * @param createReadyPickerTask Returns the picker that selects a subchannel in the list for each
    *                              incoming RPC.
    */
   SubchannelListLoadBalancerCommons(Helper helper,
-                                    Function<CreateSubchannelArgs, Subchannel> createSubchannelTask,
                                     Runnable afterUpdateTask,
                                     Function<List<Subchannel>, RoundRobinPicker>
                                             createReadyPickerTask) {
     this.helper = checkNotNull(helper, "helper");
-    this.createSubchannelTask = checkNotNull(createSubchannelTask, "createSubchannelTask");
     this.afterUpdateTask = checkNotNull(afterUpdateTask, "afterUpdateTask");
     this.createReadyPickerTask = checkNotNull(createReadyPickerTask, "createReadyPickerTask");
   }
@@ -134,7 +129,7 @@ public class SubchannelListLoadBalancerCommons {
               new Ref<>(ConnectivityStateInfo.forNonError(IDLE)));
 
       final Subchannel subchannel = checkNotNull(
-              createSubchannelTask.apply(CreateSubchannelArgs.newBuilder()
+              helper.createSubchannel(CreateSubchannelArgs.newBuilder()
               .setAddresses(originalAddressGroup)
               .setAttributes(subchannelAttrs.build())
               .build()),
