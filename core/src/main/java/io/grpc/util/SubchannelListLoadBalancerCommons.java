@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -31,7 +32,16 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
+import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.ResolvedAddresses;
+import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import java.util.ArrayList;
@@ -41,53 +51,53 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import javax.annotation.Nonnull;
 
 /**
- * A {@link LoadBalancer} that provides load-balancing over the {@link
+ * A utility function that provides common processing for accepting a list of {@link
  * EquivalentAddressGroup}s from the {@link NameResolver}. It provides default implementation of
- * accepting {@link io.grpc.LoadBalancer.ResolvedAddresses} updates, process aggregated load
- * balancing state. The round-robin picker algorithm is implemented by method
- * {@link #createReadyPicker}.
+ * accepting {@link io.grpc.LoadBalancer.ResolvedAddresses} updates, process
+ * aggregated load balancing state. A {@link LoadBalancer} that has sunchannel list will provide
+ * creating subchannel task and load-balancing strategy over the subchannel list.
  */
-abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
+@Internal
+public class SubchannelListLoadBalancerCommons {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
-
-  private final Helper helper;
+  private final LoadBalancer.Helper helper;
   private final Map<EquivalentAddressGroup, Subchannel> subchannels =
       new HashMap<>();
-  private final Random random;
-
   private ConnectivityState currentState;
   private RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
+  private final Function<CreateSubchannelArgs, Subchannel> createSubchannelTask;
+  private final Runnable afterUpdateTask;
+  private final Function<List<Subchannel>, RoundRobinPicker> createReadyPickerTask;
 
-  AbstractRoundRobinLoadBalancer(Helper helper) {
+  /**
+   * Common new addresses list update handling.
+   *
+   * @param createSubchannelTask Create a subchannel for a new {@link EquivalentAddressGroup}
+   *                             when handling new resolved addresses.
+   * @param afterUpdateTask An action point after accepting the most recent resolved addresses.
+   * @param createReadyPickerTask Returns the picker that selects a subchannel in the list for each
+   *                              incoming RPC.
+   */
+  SubchannelListLoadBalancerCommons(Helper helper,
+                                    Function<CreateSubchannelArgs, Subchannel> createSubchannelTask,
+                                    Runnable afterUpdateTask,
+                                    Function<List<Subchannel>, RoundRobinPicker>
+                                            createReadyPickerTask) {
     this.helper = checkNotNull(helper, "helper");
-    this.random = new Random();
+    this.createSubchannelTask = checkNotNull(createSubchannelTask, "createSubchannelTask");
+    this.afterUpdateTask = checkNotNull(afterUpdateTask, "afterUpdateTask");
+    this.createReadyPickerTask = checkNotNull(createReadyPickerTask, "createReadyPickerTask");
   }
 
   /**
-   * Create a subchannel for a new {@link EquivalentAddressGroup} when handling new resolved
-   * addresses.
+   * Common new addresses list update handling.
    */
-  protected abstract Subchannel createSubchannel(Helper helper, CreateSubchannelArgs args);
-
-  /**
-  * An action point after accepting the most recent resolved addresses.
-  */
-  protected void afterSubchannelUpdate() {}
-
-  /**
-  * Returns the picker that selects a subchannel in the list for each incoming RPC.
-  */
-  protected abstract RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
-                                              int startIndex);
-
-  @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getAddresses().isEmpty()) {
       handleNameResolutionError(Status.UNAVAILABLE.withDescription(
@@ -124,7 +134,7 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
               new Ref<>(ConnectivityStateInfo.forNonError(IDLE)));
 
       final Subchannel subchannel = checkNotNull(
-          createSubchannel(helper, CreateSubchannelArgs.newBuilder()
+              createSubchannelTask.apply(CreateSubchannelArgs.newBuilder()
               .setAddresses(originalAddressGroup)
               .setAttributes(subchannelAttrs.build())
               .build()),
@@ -144,11 +154,11 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
       removedSubchannels.add(subchannels.remove(addressGroup));
     }
 
-    afterSubchannelUpdate();
+    afterUpdateTask.run();
 
     // Update the picker before shutting down the subchannels, to reduce the chance of the race
     // between picking a subchannel and shutting it down.
-    updateBalancingState();
+    updateBalancingState(createReadyPickerTask);
 
     // Shutdown removed subchannels
     for (Subchannel removedSubchannel : removedSubchannels) {
@@ -158,7 +168,9 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
     return true;
   }
 
-  @Override
+  /**
+   * Common error handling from the name resolver.
+   */
   public void handleNameResolutionError(Status error) {
     if (currentState != READY)  {
       updateBalancingState(TRANSIENT_FAILURE, new EmptyPicker(error));
@@ -182,7 +194,7 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
       }
     }
     subchannelStateRef.value = stateInfo;
-    updateBalancingState();
+    updateBalancingState(createReadyPickerTask);
   }
 
   private void shutdownSubchannel(Subchannel subchannel) {
@@ -191,7 +203,6 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
         ConnectivityStateInfo.forNonError(SHUTDOWN);
   }
 
-  @Override
   public void shutdown() {
     for (Subchannel subchannel : getSubchannels()) {
       shutdownSubchannel(subchannel);
@@ -205,7 +216,8 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
    * Updates picker with the list of active subchannels (state == READY).
    */
   @SuppressWarnings("ReferenceEquality")
-  private void updateBalancingState() {
+  private void updateBalancingState(Function<List<Subchannel>, RoundRobinPicker>
+                                              createReadyPickerTask) {
     List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
     if (activeList.isEmpty()) {
       // No READY subchannels, determine aggregate state and error status
@@ -228,10 +240,7 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
           // an arbitrary subchannel, otherwise return OK.
           new EmptyPicker(aggStatus));
     } else {
-      // initialize the Picker to a random start index to ensure that a high frequency of Picker
-      // churn does not skew subchannel selection.
-      int startIndex = random.nextInt(activeList.size());
-      updateBalancingState(READY, createReadyPicker(activeList, startIndex));
+      updateBalancingState(READY, createReadyPickerTask.apply(activeList));
     }
   }
 
@@ -274,7 +283,6 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
     return new EquivalentAddressGroup(eag.getAddresses());
   }
 
-  @VisibleForTesting
   Collection<Subchannel> getSubchannels() {
     return subchannels.values();
   }
@@ -296,8 +304,8 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
   }
 
   // Only subclasses are ReadyPicker or EmptyPicker
-  abstract static class RoundRobinPicker extends SubchannelPicker {
-    abstract boolean isEquivalentTo(RoundRobinPicker picker);
+  public abstract static class RoundRobinPicker extends SubchannelPicker {
+    public abstract boolean isEquivalentTo(RoundRobinPicker picker);
   }
 
   @VisibleForTesting
@@ -315,7 +323,7 @@ abstract class AbstractRoundRobinLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    boolean isEquivalentTo(RoundRobinPicker picker) {
+    public boolean isEquivalentTo(RoundRobinPicker picker) {
       return picker instanceof EmptyPicker && (Objects.equal(status, ((EmptyPicker) picker).status)
           || (status.isOk() && ((EmptyPicker) picker).status.isOk()));
     }
