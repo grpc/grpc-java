@@ -426,8 +426,8 @@ public class ServerInterceptorsTest {
   }
 
   /**
-   * Tests the {@link ServerInterceptors#useMarshalledMessages(ServerServiceDefinition, Marshaller, Marshaller)}.
-   * Makes sure that on incoming request the request marshaller's stream method is called and on response the
+   * Tests the ServerInterceptors#useMarshalledMessages()} with two marshallers. Makes sure that
+   * on incoming request the request marshaller's stream method is called and on response the
    * response marshaller's parse method is called
    */
   @Test
@@ -458,7 +458,7 @@ public class ServerInterceptorsTest {
       @Override
       public String parse(InputStream stream) {
         requestFlowOrder.add("ResponseParse");
-       return null;
+        return null;
       }
     };
     final Marshaller<Holder> dummyMarshaller = new Marshaller<Holder>() {
@@ -489,8 +489,8 @@ public class ServerInterceptorsTest {
     ServerServiceDefinition serviceDef = ServerServiceDefinition.builder(
             new ServiceDescriptor("basic", wrappedMethod))
         .addMethod(wrappedMethod, handler).build();
-    ServerServiceDefinition intercepted = ServerInterceptors.useMarshalledMessages(serviceDef, requestMarshaller,
-        responseMarshaller);
+    ServerServiceDefinition intercepted = ServerInterceptors.useMarshalledMessages(serviceDef,
+        requestMarshaller, responseMarshaller);
     ServerMethodDefinition<String, String> serverMethod =
         (ServerMethodDefinition<String, String>) intercepted.getMethod("basic/wrapped");
     ServerCall<String, String> serverCall = new NoopServerCall<>();
