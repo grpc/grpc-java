@@ -43,6 +43,7 @@ public class ManagedChannelImplGetNameResolverTest {
       .setSynchronizationContext(new SynchronizationContext(mock(UncaughtExceptionHandler.class)))
       .setServiceConfigParser(mock(ServiceConfigParser.class))
       .setChannelLogger(mock(ChannelLogger.class))
+      .setScheduledExecutorService(new FakeClock().getScheduledExecutorService())
       .build();
 
   @Test
