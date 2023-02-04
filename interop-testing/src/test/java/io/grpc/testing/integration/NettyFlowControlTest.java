@@ -217,7 +217,7 @@ public class NettyFlowControlTest {
           wasCompleted = true;
           lastWindow = curWindow;
           onCompleted();
-        } else {
+        } else if (!wasCompleted) {
           lastWindow = curWindow;
         }
       }
