@@ -64,7 +64,8 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
           new BackoffPolicyRetryScheduler(
               new ExponentialBackoffPolicy.Provider(),
               args.getScheduledExecutorService(),
-              args.getSynchronizationContext()));
+              args.getSynchronizationContext()),
+          args.getSynchronizationContext());
     } else {
       return null;
     }

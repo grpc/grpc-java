@@ -19,13 +19,16 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Listener2;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.RetryingNameResolver.ResolutionResultListener;
+import java.lang.Thread.UncaughtExceptionHandler;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -56,12 +59,15 @@ public class RetryingNameResolverTest {
   private ArgumentCaptor<Listener2> listenerCaptor;
   @Captor
   private ArgumentCaptor<ResolutionResult> onResultCaptor;
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      mock(UncaughtExceptionHandler.class));
 
   private RetryingNameResolver retryingNameResolver;
 
   @Before
   public void setup() {
-    retryingNameResolver = new RetryingNameResolver(mockNameResolver, mockRetryScheduler);
+    retryingNameResolver = new RetryingNameResolver(mockNameResolver, mockRetryScheduler,
+        syncContext);
   }
 
   @Test
@@ -110,7 +116,7 @@ public class RetryingNameResolverTest {
   @Test
   public void onResult_failure_doubleWrapped() {
     NameResolver doubleWrappedResolver = new RetryingNameResolver(retryingNameResolver,
-        mockRetryScheduler);
+        mockRetryScheduler, syncContext);
 
     doubleWrappedResolver.start(mockListener);
     verify(mockNameResolver).start(listenerCaptor.capture());

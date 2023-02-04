@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 
 /**
  * This wrapper class can add retry capability to any polling {@link NameResolver} implementation
@@ -31,6 +32,7 @@ final class RetryingNameResolver extends ForwardingNameResolver {
 
   private final NameResolver retriedNameResolver;
   private final RetryScheduler retryScheduler;
+  private final SynchronizationContext syncContext;
 
   static final Attributes.Key<ResolutionResultListener> RESOLUTION_RESULT_LISTENER_KEY
       = Attributes.Key.create(
@@ -42,10 +44,12 @@ final class RetryingNameResolver extends ForwardingNameResolver {
    * @param retriedNameResolver A {@link NameResolver} that will have failed attempt retried.
    * @param retryScheduler Used to schedule the retry attempts.
    */
-  RetryingNameResolver(NameResolver retriedNameResolver, RetryScheduler retryScheduler) {
+  RetryingNameResolver(NameResolver retriedNameResolver, RetryScheduler retryScheduler,
+      SynchronizationContext syncContext) {
     super(retriedNameResolver);
     this.retriedNameResolver = retriedNameResolver;
     this.retryScheduler = retryScheduler;
+    this.syncContext = syncContext;
   }
 
   @Override
@@ -100,7 +104,7 @@ final class RetryingNameResolver extends ForwardingNameResolver {
     @Override
     public void onError(Status error) {
       delegateListener.onError(error);
-      retryScheduler.schedule(new DelayedNameResolverRefresh());
+      syncContext.execute(() -> retryScheduler.schedule(new DelayedNameResolverRefresh()));
     }
   }
 

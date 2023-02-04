@@ -51,6 +51,8 @@ final class BackoffPolicyRetryScheduler implements RetryScheduler {
    */
   @Override
   public void schedule(Runnable retryOperation) {
+    syncContext.throwIfNotInThisSynchronizationContext();
+
     if (policy == null) {
       policy = policyProvider.get();
     }
@@ -70,6 +72,8 @@ final class BackoffPolicyRetryScheduler implements RetryScheduler {
    */
   @Override
   public void reset() {
+    syncContext.throwIfNotInThisSynchronizationContext();
+
     syncContext.execute(() -> {
       if (scheduledHandle != null && scheduledHandle.isPending()) {
         scheduledHandle.cancel();

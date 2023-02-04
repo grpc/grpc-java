@@ -50,7 +50,7 @@ public class BackoffPolicyRetrySchedulerTest {
   public void schedule() {
     AtomicInteger retryCount = new AtomicInteger();
     Runnable retry = retryCount::incrementAndGet;
-    scheduler.schedule(retry);
+    syncContext.execute(() -> scheduler.schedule(retry));
 
     fakeClock.forwardTime(2, TimeUnit.NANOSECONDS);
 
@@ -63,8 +63,8 @@ public class BackoffPolicyRetrySchedulerTest {
     Runnable retry = retryCount::incrementAndGet;
 
     // We schedule multiple retries...
-    scheduler.schedule(retry);
-    scheduler.schedule(retry);
+    syncContext.execute(() -> scheduler.schedule(retry));
+    syncContext.execute(() -> scheduler.schedule(retry));
 
     fakeClock.forwardTime(2, TimeUnit.NANOSECONDS);
 
@@ -81,13 +81,13 @@ public class BackoffPolicyRetrySchedulerTest {
     };
 
     // We schedule one retry.
-    scheduler.schedule(retry);
+    syncContext.execute(() -> scheduler.schedule(retry));
 
     // But then reset.
-    scheduler.reset();
+    syncContext.execute(() -> scheduler.reset());
 
     // And schedule a different retry.
-    scheduler.schedule(retryTwo);
+    syncContext.execute(() -> scheduler.schedule(retryTwo));
 
     fakeClock.forwardTime(2, TimeUnit.NANOSECONDS);
 

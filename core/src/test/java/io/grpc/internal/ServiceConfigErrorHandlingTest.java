@@ -566,7 +566,8 @@ public class ServiceConfigErrorHandlingTest {
           new BackoffPolicyRetryScheduler(
               new FakeBackoffPolicyProvider(),
               args.getScheduledExecutorService(),
-              args.getSynchronizationContext()));
+              args.getSynchronizationContext()),
+          args.getSynchronizationContext());
       resolvers.add(resolver);
       return resolver;
     }

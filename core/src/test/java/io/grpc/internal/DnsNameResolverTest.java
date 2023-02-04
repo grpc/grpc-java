@@ -215,7 +215,8 @@ public class DnsNameResolverTest {
             new ExponentialBackoffPolicy.Provider(),
             fakeExecutor.getScheduledExecutorService(),
             syncContext
-        ));
+        ),
+        syncContext);
   }
 
   @Before
@@ -227,8 +228,9 @@ public class DnsNameResolverTest {
     // By default the mock listener processes the result successfully.
     doAnswer(invocation -> {
       ResolutionResult result = invocation.getArgument(0);
-      result.getAttributes().get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)
-          .resolutionAttempted(true);
+      syncContext.execute(
+          () -> result.getAttributes().get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)
+              .resolutionAttempted(true));
       return null;
     }).when(mockListener).onResult(isA(ResolutionResult.class));
   }
@@ -328,7 +330,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
 
-    resolver.shutdown();
+    syncContext.execute(() -> resolver.shutdown());
 
     verify(mockResolver, times(2)).resolveAddress(anyString());
   }
@@ -350,7 +352,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
 
-    resolver.shutdown();
+    syncContext.execute(() -> resolver.shutdown());
 
     assertThat(fakeExecutorResource.createCount.get()).isEqualTo(1);
   }
@@ -392,7 +394,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
 
-    resolver.shutdown();
+    syncContext.execute(() -> resolver.shutdown());
 
     assertThat(fakeExecutorResource.createCount.get()).isEqualTo(0);
     assertThat(executions.get()).isEqualTo(1);
@@ -426,7 +428,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     verifyNoMoreInteractions(mockListener);
 
-    resolver.shutdown();
+    syncContext.execute(() -> resolver.shutdown());
 
     verify(mockResolver).resolveAddress(anyString());
   }
@@ -461,7 +463,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     verifyNoMoreInteractions(mockListener);
 
-    resolver.shutdown();
+    syncContext.execute(() -> resolver.shutdown());
 
     verify(mockResolver).resolveAddress(anyString());
   }
@@ -497,7 +499,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
 
-    resolver.shutdown();
+    syncContext.execute(() -> resolver.shutdown());
 
     verify(mockResolver, times(2)).resolveAddress(anyString());
   }
@@ -547,7 +549,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
 
-    resolver.shutdown();
+    syncContext.execute(() -> resolver.shutdown());
 
     verify(mockResolver, times(2)).resolveAddress(anyString());
   }
@@ -609,7 +611,7 @@ public class DnsNameResolverTest {
     dnsResolver.setResourceResolver(mockResourceResolver);
 
     resolver.start(mockListener);
-    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
+    syncContext.execute(() -> assertThat(fakeExecutor.runDueTasks()).isEqualTo(1));
 
     ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
     verify(mockListener).onResult(ac.capture());

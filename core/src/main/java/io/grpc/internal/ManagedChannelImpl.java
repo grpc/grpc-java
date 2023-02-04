@@ -763,7 +763,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       usedNameResolver = new RetryingNameResolver(resolver,
           new BackoffPolicyRetryScheduler(new ExponentialBackoffPolicy.Provider(),
               nameResolverArgs.getScheduledExecutorService(),
-              nameResolverArgs.getSynchronizationContext()));
+              nameResolverArgs.getSynchronizationContext()),
+          nameResolverArgs.getSynchronizationContext());
     }
 
     return new ForwardingNameResolver(usedNameResolver) {
