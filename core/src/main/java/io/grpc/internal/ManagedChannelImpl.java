@@ -1729,7 +1729,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           if (ManagedChannelImpl.this.nameResolver != resolver) {
             return;
           }
-          boolean lastAddressesAccepted;
 
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
           channelLogger.log(
@@ -1744,6 +1743,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           ConfigOrError configOrError = resolutionResult.getServiceConfig();
+          ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
+              .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
           InternalConfigSelector resolvedConfigSelector =
               resolutionResult.getAttributes().get(InternalConfigSelector.KEY);
           ManagedChannelServiceConfig validServiceConfig =
@@ -1800,7 +1801,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 // we later check for these error codes when investigating pick results in
                 // GrpcUtil.getTransportFromPickResult().
                 onError(configOrError.getError());
-                lastAddressesAccepted = false;
+                if (resolutionResultListener != null) {
+                  resolutionResultListener.resolutionAttempted(false);
+                }
                 return;
               } else {
                 effectiveServiceConfig = lastServiceConfig;
@@ -1831,6 +1834,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           Attributes effectiveAttrs = resolutionResult.getAttributes();
+          boolean lastAddressesAccepted;
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
             Attributes.Builder attrBuilder =
@@ -1855,8 +1859,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           // If a listener is provided, let it know if the addresses were accepted.
-          ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
-              .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
           if (resolutionResultListener != null) {
             resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
           }
