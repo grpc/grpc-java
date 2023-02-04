@@ -1834,7 +1834,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           Attributes effectiveAttrs = resolutionResult.getAttributes();
-          boolean lastAddressesAccepted;
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
             Attributes.Builder attrBuilder =
@@ -1848,19 +1847,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             Attributes attributes = attrBuilder.build();
 
-            lastAddressesAccepted = helper.lb.tryAcceptResolvedAddresses(
+            boolean lastAddressesAccepted = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(attributes)
                     .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
-          } else {
-            lastAddressesAccepted = false;
-          }
-
-          // If a listener is provided, let it know if the addresses were accepted.
-          if (resolutionResultListener != null) {
-            resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
+            // If a listener is provided, let it know if the addresses were accepted.
+            if (resolutionResultListener != null) {
+              resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
+            }
           }
         }
       }
