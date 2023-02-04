@@ -218,7 +218,6 @@ final class CachingRlsLbClient {
               public void onError(Throwable t) {
                 logger.log(ChannelLogLevel.DEBUG, "Error looking up route:", t);
                 response.setException(t);
-
                 throttler.registerBackendResponse(true);
                 helper.propagateRlsError();
               }
