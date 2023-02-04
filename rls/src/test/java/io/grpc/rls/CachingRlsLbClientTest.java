@@ -151,6 +151,7 @@ public class CachingRlsLbClientTest {
   private String rlsChannelOverriddenAuthority;
 
   private void setUpRlsLbClient() {
+    fakeThrottler.resetCounts();
     rlsLbClient =
         CachingRlsLbClient.newBuilder()
             .setBackoffProvider(fakeBackoffProvider)
@@ -362,6 +363,8 @@ public class CachingRlsLbClientTest {
     assertThat(pickResult.getStatus().isOk()).isTrue();
     assertThat(pickResult.getSubchannel()).isNotNull();
     assertThat(headers.get(RLS_DATA_KEY)).isEqualTo("header-rls-data-value");
+    assertThat(fakeThrottler.getNumThrottled()).isEqualTo(0);
+    assertThat(fakeThrottler.getNumUnthrottled()).isEqualTo(1);
 
     // move backoff further back to only test error behavior
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(100, TimeUnit.MILLISECONDS);
@@ -388,6 +391,8 @@ public class CachingRlsLbClientTest {
             CallOptions.DEFAULT));
     assertThat(pickResult.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
+    assertThat(fakeThrottler.getNumThrottled()).isEqualTo(1);
+    assertThat(fakeThrottler.getNumUnthrottled()).isEqualTo(1);
   }
 
   @Test
@@ -755,6 +760,8 @@ public class CachingRlsLbClientTest {
   }
 
   private static final class FakeThrottler implements Throttler {
+    int numUnthrottled;
+    int numThrottled;
 
     private boolean nextResult = false;
 
@@ -765,7 +772,24 @@ public class CachingRlsLbClientTest {
 
     @Override
     public void registerBackendResponse(boolean throttled) {
-      // no-op
+      if (throttled) {
+        numThrottled++;
+      } else {
+        numUnthrottled++;
+      }
+    }
+
+    public int getNumUnthrottled() {
+      return numUnthrottled;
+    }
+
+    public int getNumThrottled() {
+      return numThrottled;
+    }
+
+    public void resetCounts() {
+      numThrottled = 0;
+      numUnthrottled = 0;
     }
   }
 }

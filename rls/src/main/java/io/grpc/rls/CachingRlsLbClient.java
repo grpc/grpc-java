@@ -38,8 +38,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.StatusException;
-import io.grpc.StatusRuntimeException;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -221,7 +219,7 @@ final class CachingRlsLbClient {
                 logger.log(ChannelLogLevel.DEBUG, "Error looking up route:", t);
                 response.setException(t);
 
-                throttler.registerBackendResponse(getCause(t) instanceof ThrottledException);
+                throttler.registerBackendResponse(true);
                 helper.propagateRlsError();
               }
 
@@ -271,27 +269,6 @@ final class CachingRlsLbClient {
       rlsChannel.shutdownNow();
       rlsPicker.close();
     }
-  }
-
-  /**
-   * If passed a StatusException or a StatusRuntimeException extract the status
-   * and then return its cause.  Otherwise return the argument.
-   * @param t Value to parse
-   * @return Status.getCause() if status is available or t
-   */
-  private Throwable getCause(Throwable t) {
-    Status status = null;
-    if (t instanceof StatusException) {
-      status = ((StatusException) t).getStatus();
-    } else if (t instanceof StatusRuntimeException) {
-      status = ((StatusRuntimeException) t).getStatus();
-    }
-
-    if (status != null) {
-      return status.getCause();
-    }
-
-    return t;
   }
 
   /**
