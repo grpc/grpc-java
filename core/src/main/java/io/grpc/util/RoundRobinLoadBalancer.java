@@ -19,31 +19,70 @@ package io.grpc.util;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Internal;
+import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
+import io.grpc.Status;
+import io.grpc.util.SubchannelListLoadBalancerCommons.RoundRobinPicker;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * A {@link AbstractRoundRobinLoadBalancer} that provides round-robin load-balancing over the {@link
- * EquivalentAddressGroup}s from the {@link NameResolver}.
+ * A {@link SubchannelListLoadBalancerCommons} that provides round-robin load-balancing over the
+ * {@link EquivalentAddressGroup}s from the {@link NameResolver}.
  */
-public final class RoundRobinLoadBalancer extends AbstractRoundRobinLoadBalancer {
+@Internal
+public final class RoundRobinLoadBalancer extends LoadBalancer {
+
+  private final SubchannelListLoadBalancerCommons roundRobinCommons;
+  private final Random random;
+
+  private final AtomicReference<RoundRobinPicker> readyPickerRef = new AtomicReference<>();
+
+  private final SubchannelStateListener readyListener = new SubchannelStateListener() {
+    @Override
+    public void onSubchannelState(ConnectivityStateInfo newState) {
+      readyPickerRef.set(createReadyPicker());
+    }
+  };
 
   RoundRobinLoadBalancer(Helper helper) {
-    super(helper);
+    this.roundRobinCommons = new SubchannelListLoadBalancerCommons(helper, () -> { },
+            readyPickerRef, readyListener);
+    this.random = new Random();
+  }
+
+  private RoundRobinPicker createReadyPicker() {
+    // initialize the Picker to a random start index to ensure that a high frequency of Picker
+    // churn does not skew subchannel selection.
+    List<Subchannel> activeList = roundRobinCommons.getActiveSubchannels();
+    return new ReadyPicker(activeList, random.nextInt(activeList.size()));  }
+
+
+  @Override
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    return roundRobinCommons.acceptResolvedAddresses(resolvedAddresses);
   }
 
   @Override
-  protected Subchannel createSubchannel(CreateSubchannelArgs args) {
-    return helper.createSubchannel(args);
+  public void handleNameResolutionError(Status error) {
+    roundRobinCommons.handleNameResolutionError(error);
   }
 
   @Override
-  protected RoundRobinPicker createReadyPicker(List<Subchannel> activeSubchannelList,
-                                               int startIndex) {
-    return new ReadyPicker(activeSubchannelList, startIndex);
+  public void shutdown() {
+    roundRobinCommons.shutdown();
+  }
+
+  @VisibleForTesting
+  Collection<Subchannel> getSubchannels() {
+    return roundRobinCommons.getSubchannels();
   }
 
   @VisibleForTesting
@@ -88,7 +127,7 @@ public final class RoundRobinLoadBalancer extends AbstractRoundRobinLoadBalancer
     }
 
     @Override
-    protected boolean isEquivalentTo(RoundRobinPicker picker) {
+    public boolean isEquivalentTo(RoundRobinPicker picker) {
       if (!(picker instanceof ReadyPicker)) {
         return false;
       }
