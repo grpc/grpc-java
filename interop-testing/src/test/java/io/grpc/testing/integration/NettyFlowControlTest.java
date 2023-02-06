@@ -147,10 +147,11 @@ public class NettyFlowControlTest {
     // deal with cases that either don't cause a window update or hit max window
     expectedWindow = Math.min(MAX_WINDOW, Math.max(expectedWindow, REGULAR_WINDOW));
 
-    // Range looks large, but this allows for only one extra/missed window update
+    // Range looks large, but this allows for only one extra/missed window update plus
+    // bdpPing variations.
     // (one extra update causes a 2x difference and one missed update causes a .5x difference)
     assertTrue("Window was " + lastWindow + " expecting " + expectedWindow,
-        lastWindow < 2 * expectedWindow);
+        lastWindow < 2.2 * expectedWindow);
     assertTrue("Window was " + lastWindow + " expecting " + expectedWindow,
         expectedWindow < 2 * lastWindow);
   }
@@ -194,6 +195,7 @@ public class NettyFlowControlTest {
     final CountDownLatch latch = new CountDownLatch(1);
     final long expectedWindow;
     int lastWindow;
+    boolean wasCompleted;
 
     public TestStreamObserver(
         AtomicReference<GrpcHttp2ConnectionHandler> grpcHandlerRef, long window) {
@@ -206,9 +208,18 @@ public class NettyFlowControlTest {
     public void onNext(StreamingOutputCallResponse value) {
       GrpcHttp2ConnectionHandler grpcHandler = grpcHandlerRef.get();
       Http2Stream connectionStream = grpcHandler.connection().connectionStream();
-      lastWindow = grpcHandler.decoder().flowController().initialWindowSize(connectionStream);
-      if (lastWindow >= expectedWindow) {
-        onCompleted();
+      int curWindow = grpcHandler.decoder().flowController().initialWindowSize(connectionStream);
+      synchronized (this) {
+        if (curWindow >= expectedWindow) {
+          if (wasCompleted) {
+            return;
+          }
+          wasCompleted = true;
+          lastWindow = curWindow;
+          onCompleted();
+        } else if (!wasCompleted) {
+          lastWindow = curWindow;
+        }
       }
     }
 
