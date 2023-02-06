@@ -22,11 +22,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.TimeProvider;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.util.RoundRobinLoadBalancer;
@@ -55,10 +58,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private ScheduledHandle weightUpdateTimer;
   private WeightedRoundRobinPicker readyPicker;
 
-  WeightedRoundRobinLoadBalancer(Helper helper) {
+  private TimeProvider timeProvider;
+
+  WeightedRoundRobinLoadBalancer(Helper helper, TimeProvider timeProvider) {
     super(OrcaOobUtil.newOrcaReportingHelper(helper));
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
+    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
   }
 
   @Override
@@ -133,14 +139,27 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         return;
       }
       if (nonEmptySince == Integer.MAX_VALUE) {
-        nonEmptySince = System.currentTimeMillis();
+        nonEmptySince = timeProvider.currentTimeNanos();
       }
-      lastUpdated = System.currentTimeMillis();
+      lastUpdated = timeProvider.currentTimeNanos();
       weight = newWeight;
     }
 
+    @Override
+    public void start(SubchannelStateListener listener) {
+      delegate().start(new SubchannelStateListener() {
+        @Override
+        public void onSubchannelState(ConnectivityStateInfo newState) {
+          if (newState.getState().equals(ConnectivityState.READY)) {
+            nonEmptySince = Integer.MAX_VALUE;
+          }
+          listener.onSubchannelState(newState);
+        }
+      });
+    }
+
     double getWeight() {
-      double now = System.currentTimeMillis();
+      double now = timeProvider.currentTimeNanos();
       if (now - lastUpdated >= config.weightExpirationPeriodNanos) {
         nonEmptySince = Integer.MAX_VALUE;
         return 0;

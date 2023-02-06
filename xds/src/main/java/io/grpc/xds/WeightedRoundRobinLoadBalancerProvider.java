@@ -21,6 +21,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.JsonUtil;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import java.util.Map;
 
@@ -33,7 +34,7 @@ final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerProvider 
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new WeightedRoundRobinLoadBalancer(helper);
+    return new WeightedRoundRobinLoadBalancer(helper, TimeProvider.SYSTEM_TIME_PROVIDER);
   }
 
   @Override
