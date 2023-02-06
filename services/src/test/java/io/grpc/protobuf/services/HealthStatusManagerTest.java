@@ -20,8 +20,8 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import io.grpc.BindableService;
-import io.grpc.Context.CancellableContext;
 import io.grpc.Context;
+import io.grpc.Context.CancellableContext;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.health.v1.HealthCheckRequest;

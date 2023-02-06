@@ -914,7 +914,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   /**
-   * Called when a stream is closed, we do things like:
+   * Called when a stream is closed. We do things like:
    * <ul>
    * <li>Removing the stream from the map.
    * <li>Optionally reporting the status.

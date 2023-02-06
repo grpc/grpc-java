@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.xds.XdsClientImpl.XdsChannelFactory.DEFAULT_XDS_CHANNEL_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
@@ -70,6 +71,7 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
@@ -114,6 +116,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -693,7 +696,7 @@ public abstract class XdsClientImplTestBase {
    * Tests a subscribed LDS resource transitioned to and from the invalid state.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>.
+   * A40-csds-support.md</a>
    */
   @Test
   public void ldsResponseErrorHandling_subscribedResourceInvalid() {
@@ -936,6 +939,35 @@ public abstract class XdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
     assertThat(channelForCustomAuthority).isNull();
     assertThat(channelForEmptyAuthority).isNull();
+  }
+
+  @Test
+  public void cancelResourceWatcherNotRemoveUrlSubscribers() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+
+    // Initial LDS response.
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+        LDS_RESOURCE + "1", ldsResourceWatcher);
+    xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), LDS_RESOURCE + "1",
+        ldsResourceWatcher);
+
+    // Updated LDS response.
+    Any testListenerVhosts2 = Any.pack(mf.buildListenerWithApiListener(LDS_RESOURCE,
+        mf.buildRouteConfiguration("new", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts2, VERSION_2, "0001");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts2, VERSION_2,
+        TIME_INCREMENT * 2);
   }
 
   @Test
@@ -1430,7 +1462,7 @@ public abstract class XdsClientImplTestBase {
    * Tests a subscribed RDS resource transitioned to and from the invalid state.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>.
+   * A40-csds-support.md</a>
    */
   @Test
   public void rdsResponseErrorHandling_subscribedResourceInvalid() {
@@ -1803,7 +1835,7 @@ public abstract class XdsClientImplTestBase {
    * Tests a subscribed CDS resource transitioned to and from the invalid state.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>.
+   * A40-csds-support.md</a>
    */
   @Test
   public void cdsResponseErrorHandling_subscribedResourceInvalid() {
@@ -2813,7 +2845,7 @@ public abstract class XdsClientImplTestBase {
    * Tests a subscribed EDS resource transitioned to and from the invalid state.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>.
+   * A40-csds-support.md</a>
    */
   @Test
   public void edsResponseErrorHandling_subscribedResourceInvalid() {
@@ -3197,7 +3229,8 @@ public abstract class XdsClientImplTestBase {
 
     // Management server closes the RPC stream with an error.
     call.sendError(Status.UNKNOWN.asException());
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
+        .onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
@@ -3307,7 +3340,8 @@ public abstract class XdsClientImplTestBase {
         RDS_RESOURCE, rdsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.sendError(Status.UNAVAILABLE.asException());
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
+        .onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
@@ -3544,13 +3578,18 @@ public abstract class XdsClientImplTestBase {
               .build()
               .start());
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
+      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+      fakeClock.forwardTime(20, TimeUnit.SECONDS); // Trigger rpcRetryTimer
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      if (call == null) { // The first rpcRetry may have happened before the channel was ready
+        fakeClock.forwardTime(50, TimeUnit.SECONDS);
+        call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      }
 
       // NOTE:  There is a ScheduledExecutorService that may get involved due to the reconnect
       // so you cannot rely on the logic being single threaded.  The timeout() in verifyRequest
       // is therefore necessary to avoid flakiness.
       // Send a response and do verifications
-      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
       call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
       call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE);
       verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
@@ -3563,6 +3602,66 @@ public abstract class XdsClientImplTestBase {
     }
   }
 
+  @Test
+  public void sendToBadUrl() throws Exception {
+    // Setup xdsClient to fail on stream creation
+    XdsClientImpl client = createXdsClient("some. garbage");
+
+    client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    fakeClock.forwardTime(20, TimeUnit.SECONDS);
+    verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
+    client.shutdown();
+  }
+
+  @Test
+  public void sendToNonexistentHost() throws Exception {
+    // Setup xdsClient to fail on stream creation
+    XdsClientImpl client = createXdsClient("some.garbage");
+    client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    fakeClock.forwardTime(20, TimeUnit.SECONDS);
+
+    verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
+    fakeClock.forwardTime(50, TimeUnit.SECONDS); // Trigger rpcRetry if appropriate
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    client.shutdown();
+  }
+
+  private XdsClientImpl createXdsClient(String serverUri) {
+    BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
+    return new XdsClientImpl(
+        DEFAULT_XDS_CHANNEL_FACTORY,
+        bootstrapInfo,
+        Context.ROOT,
+        fakeClock.getScheduledExecutorService(),
+        backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier(),
+        timeProvider,
+        tlsContextManager);
+  }
+
+  private  BootstrapInfo buildBootStrap(String serverUri) {
+
+    ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
+        ignoreResourceDeletion());
+
+    return Bootstrapper.BootstrapInfo.builder()
+        .servers(Collections.singletonList(xdsServerInfo))
+        .node(NODE)
+        .authorities(ImmutableMap.of(
+            "authority.xds.com",
+            AuthorityInfo.create(
+                "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
+                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS))),
+            "",
+            AuthorityInfo.create(
+                "xdstp:///envoy.config.listener.v3.Listener/%s",
+                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
+        .certProviders(ImmutableMap.of("cert-instance-name",
+            CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
+        .build();
+  }
 
   private <T extends ResourceUpdate> DiscoveryRpcCall startResourceWatcher(
       XdsResourceType<T> type, String name, ResourceWatcher<T> watcher) {

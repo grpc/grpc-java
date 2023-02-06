@@ -495,6 +495,8 @@ public class MessageDeframerTest {
   }
 
   /**
+   * Verify stats were published through the tracer.
+   *
    * @param transportStats the transport level stats counters
    * @param clock the fakeClock to verify timestamp
    * @param sizes in the format {wire0, uncompressed0, wire1, uncompressed1, ...}

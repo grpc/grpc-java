@@ -95,10 +95,10 @@ def grpc_java_repositories():
     if not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",
-            strip_prefix = "xds-d92e9ce0af512a73a3a126b32fa4920bee12e180",
-            sha256 = "27be88b1ff2844885d3b2d0d579546f3a8b3f26b4871eed89082c9709e49a4bd",
+            strip_prefix = "xds-06c439db220b89134a8a49bad41994560d6537c6",
+            sha256 = "41ea212940ab44bf7f8a8b4169cfbc612ed2166dafabc0a56a8820ef665fc6a4",
             urls = [
-                "https://github.com/cncf/xds/archive/d92e9ce0af512a73a3a126b32fa4920bee12e180.tar.gz",
+                "https://github.com/cncf/xds/archive/06c439db220b89134a8a49bad41994560d6537c6.tar.gz",
             ],
         )
     if not native.existing_rule("com_github_grpc_grpc"):

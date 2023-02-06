@@ -167,11 +167,8 @@ final class XdsClientImpl extends XdsClient
   public void handleResourceResponse(
       XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
       List<Any> resources, String nonce) {
+    checkNotNull(xdsResourceType, "xdsResourceType");
     syncContext.throwIfNotInThisSynchronizationContext();
-    if (xdsResourceType == null) {
-      logger.log(XdsLogLevel.WARNING, "Ignore an unknown type of DiscoveryResponse");
-      return;
-    }
     Set<String> toParseResourceNames = null;
     if (!(xdsResourceType == XdsListenerResource.getInstance()
         || xdsResourceType == XdsRouteConfigureResource.getInstance())
@@ -332,12 +329,13 @@ final class XdsClientImpl extends XdsClient
         if (!subscriber.isWatched()) {
           subscriber.cancelResourceWatch();
           resourceSubscribers.get(type).remove(resourceName);
-          subscribedResourceTypeUrls.remove(type.typeUrl());
           if (subscriber.xdsChannel != null) {
             subscriber.xdsChannel.adjustResourceSubscription(type);
           }
           if (resourceSubscribers.get(type).isEmpty()) {
             resourceSubscribers.remove(type);
+            subscribedResourceTypeUrls.remove(type.typeUrl());
+
           }
         }
       }
@@ -516,11 +514,22 @@ final class XdsClientImpl extends XdsClient
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
       // is created but not yet requested because the client is in backoff.
       this.metadata = ResourceMetadata.newResourceMetadataUnknown();
-      maybeCreateXdsChannelWithLrs(serverInfo);
-      this.xdsChannel = serverChannelMap.get(serverInfo);
-      if (xdsChannel.isInBackoff()) {
+
+      AbstractXdsClient xdsChannelTemp = null;
+      try {
+        maybeCreateXdsChannelWithLrs(serverInfo);
+        xdsChannelTemp = serverChannelMap.get(serverInfo);
+        if (xdsChannelTemp.isInBackoff()) {
+          return;
+        }
+      } catch (IllegalArgumentException e) {
+        xdsChannelTemp = null;
+        this.errorDescription = "Bad configuration:  " + e.getMessage();
         return;
+      } finally {
+        this.xdsChannel = xdsChannelTemp;
       }
+
       restartTimer();
     }
 

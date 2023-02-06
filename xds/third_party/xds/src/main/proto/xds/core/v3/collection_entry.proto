@@ -20,15 +20,17 @@ option (xds.annotations.v3.file_status).work_in_progress = true;
 // appearing inside a list collection resource. List collection resources are
 // regular Resource messages of type:
 //
-// message <T>Collection {
-//   repeated CollectionEntry resources = 1;
-// }
+// .. code-block:: proto
+//
+//   message <T>Collection {
+//     repeated CollectionEntry resources = 1;
+//   }
 //
 message CollectionEntry {
   // Inlined resource entry.
   message InlineEntry {
-    // Optional name to describe the inlined resource. Resource names must
-    // [a-zA-Z0-9_-\./]+ (TODO(htuch): turn this into a PGV constraint once
+    // Optional name to describe the inlined resource. Resource names must match
+    // ``[a-zA-Z0-9_-\./]+`` (TODO(htuch): turn this into a PGV constraint once
     // finalized, probably should be a RFC3986 pchar). This name allows
     // reference via the #entry directive in ResourceLocator.
     string name = 1 [(validate.rules).string.pattern = "^[0-9a-zA-Z_\\-\\.~:]+$"];

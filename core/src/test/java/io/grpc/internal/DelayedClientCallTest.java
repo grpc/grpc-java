@@ -108,7 +108,8 @@ public class DelayedClientCallTest {
         callExecutor, fakeClock.getScheduledExecutorService(), Deadline.after(10, SECONDS));
     delayedClientCall.start(listener, new Metadata());
     callMeMaybe(delayedClientCall.setCall(mockRealCall));
-    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     Metadata metadata = new Metadata();
@@ -133,7 +134,8 @@ public class DelayedClientCallTest {
     callMeMaybe(delayedClientCall.setCall(mockRealCall));
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
-    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     verify(mockRealCall).request(1);
@@ -150,7 +152,8 @@ public class DelayedClientCallTest {
     Runnable r = delayedClientCall.setCall(mockRealCall);
     assertThat(r).isNotNull();
     r.run();
-    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     verify(mockRealCall).request(1);
@@ -185,7 +188,8 @@ public class DelayedClientCallTest {
     assertThat(r).isNotNull();
     r.run();
     delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
-    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     verify(mockRealCall).request(1);

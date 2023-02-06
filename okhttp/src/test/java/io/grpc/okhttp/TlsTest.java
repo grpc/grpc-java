@@ -69,6 +69,27 @@ public class TlsTest {
   }
 
   @Test
+  public void basicTls_succeeds() throws Exception {
+    ServerCredentials serverCreds;
+    try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+      serverCreds = TlsServerCredentials.newBuilder()
+          .keyManager(serverCert, serverPrivateKey)
+          .build();
+    }
+    ChannelCredentials channelCreds;
+    try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+      channelCreds = TlsChannelCredentials.newBuilder()
+          .trustManager(caCert)
+          .build();
+    }
+    Server server = grpcCleanupRule.register(server(serverCreds));
+    ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
+
+    SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance());
+  }
+
+  @Test
   public void mtls_succeeds() throws Exception {
     ServerCredentials serverCreds;
     try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
@@ -173,23 +194,13 @@ public class TlsTest {
   @Test
   public void untrustedServer_fails() throws Exception {
     ServerCredentials serverCreds;
-    try (InputStream serverCert = TlsTesting.loadCert("badserver.pem");
-         InputStream serverPrivateKey = TlsTesting.loadCert("badserver.key");
-         InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+    try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
       serverCreds = TlsServerCredentials.newBuilder()
           .keyManager(serverCert, serverPrivateKey)
-          .trustManager(caCert)
           .build();
     }
-    ChannelCredentials channelCreds;
-    try (InputStream clientCertChain = TlsTesting.loadCert("client.pem");
-         InputStream clientPrivateKey = TlsTesting.loadCert("client.key");
-         InputStream caCert = TlsTesting.loadCert("ca.pem")) {
-      channelCreds = TlsChannelCredentials.newBuilder()
-          .keyManager(clientCertChain, clientPrivateKey)
-          .trustManager(caCert)
-          .build();
-    }
+    ChannelCredentials channelCreds = TlsChannelCredentials.create();
     Server server = grpcCleanupRule.register(server(serverCreds));
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
@@ -200,19 +211,14 @@ public class TlsTest {
   public void unmatchedServerSubjectAlternativeNames_fails() throws Exception {
     ServerCredentials serverCreds;
     try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
-         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key");
-         InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
       serverCreds = TlsServerCredentials.newBuilder()
           .keyManager(serverCert, serverPrivateKey)
-          .trustManager(caCert)
           .build();
     }
     ChannelCredentials channelCreds;
-    try (InputStream clientCertChain = TlsTesting.loadCert("client.pem");
-         InputStream clientPrivateKey = TlsTesting.loadCert("client.key");
-         InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+    try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
       channelCreds = TlsChannelCredentials.newBuilder()
-          .keyManager(clientCertChain, clientPrivateKey)
           .trustManager(caCert)
           .build();
     }

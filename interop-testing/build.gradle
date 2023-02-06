@@ -14,7 +14,9 @@ configurations {
     alpnagent
 }
 
+evaluationDependsOn(project(':grpc-core').path)
 evaluationDependsOn(project(':grpc-context').path)
+evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
@@ -192,6 +194,13 @@ def xds_test_server = tasks.register("xds_test_server", CreateStartScripts) {
     classpath = startScriptsClasspath.get()
 }
 
+def xds_federation_test_client = tasks.register("xds_federation_test_client", CreateStartScripts) {
+    mainClass = "io.grpc.testing.integration.XdsFederationTestClient"
+    applicationName = "xds-federation-test-client"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScriptsClasspath.get()
+}
+
 distributions.shadow.contents.into("bin") {
     from(test_client)
     from(test_server)
@@ -202,6 +211,7 @@ distributions.shadow.contents.into("bin") {
     from(grpclb_fallback_test_client)
     from(xds_test_client)
     from(xds_test_server)
+    from(xds_federation_test_client)
     fileMode = 0755
 }
 

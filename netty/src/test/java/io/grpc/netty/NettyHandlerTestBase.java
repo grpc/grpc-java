@@ -566,12 +566,12 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
         readPingAck(pingData); // should increase backoff multiplier
       }
     }
-    assertEquals(5, handler.flowControlPing().getPingCount());
+    assertEquals(6, handler.flowControlPing().getPingCount());
   }
 
   @Test
   public void bdpPingWindowResizing() throws Exception {
-    this.flowControlWindow = 1024 * 100;
+    this.flowControlWindow = 1024 * 8;
     manualSetUp();
     makeStream();
 
@@ -581,31 +581,30 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     long pingData = handler.flowControlPing().payload();
     int initialWindowSize = localFlowController.initialWindowSize();
     byte[] data1Kb = initXkbBuffer(1);
-    byte[] data40Kb = initXkbBuffer(40);
+    byte[] data10Kb = initXkbBuffer(10);
 
     readXCopies(1, data1Kb); // initiate ping
     fakeClock().forwardNanos(2);
     readPingAck(pingData); // should not resize window because of small target window
     assertEquals(initialWindowSize, localFlowController.initialWindowSize());
 
-    readXCopies(2, data40Kb); // initiate ping
+    readXCopies(2, data10Kb); // initiate ping on first
     fakeClock().forwardNanos(200);
     readPingAck(pingData); // should resize window
     int windowSizeA = localFlowController.initialWindowSize();
     Assert.assertNotEquals(initialWindowSize, windowSizeA);
 
-    readXCopies(4, data40Kb); // initiate ping
-    fakeClock().forwardNanos(400);
+    readXCopies(3, data10Kb); // initiate ping w/ first 10K packet
+    fakeClock().forwardNanos(5000);
     readPingAck(pingData); // should not resize window as bandwidth didn't increase
     Assert.assertEquals(windowSizeA, localFlowController.initialWindowSize());
 
-    readXCopies(4, data40Kb); // initiate ping
-    fakeClock().forwardNanos(200);
+    readXCopies(6, data10Kb); // initiate ping with fist packet
+    fakeClock().forwardNanos(100);
     readPingAck(pingData); // should resize window
     int windowSizeB = localFlowController.initialWindowSize();
     Assert.assertNotEquals(windowSizeA, windowSizeB);
   }
-
 
   private void readPingAck(long pingData) throws Exception {
     channelRead(pingFrame(true, pingData));

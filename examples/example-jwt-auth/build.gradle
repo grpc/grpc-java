@@ -22,7 +22,7 @@ targetCompatibility = 1.8
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.53.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.54.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protobufVersion = '3.21.7'
 def protocVersion = protobufVersion
 
@@ -37,7 +37,7 @@ dependencies {
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
-    testImplementation "junit:junit:4.12"
+    testImplementation "junit:junit:4.13.2"
     testImplementation "org.mockito:mockito-core:3.4.0"
 }
 

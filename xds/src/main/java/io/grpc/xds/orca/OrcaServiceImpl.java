@@ -150,6 +150,7 @@ public final class OrcaServiceImpl implements BindableService {
         InternalMetricRecorder.getMetricReport(metricRecorder);
     return OrcaLoadReport.newBuilder().setCpuUtilization(internalReport.getCpuUtilization())
         .setMemUtilization(internalReport.getMemoryUtilization())
+        .setRpsFractional(internalReport.getQps())
         .putAllUtilization(internalReport.getUtilizationMetrics())
         .build();
   }

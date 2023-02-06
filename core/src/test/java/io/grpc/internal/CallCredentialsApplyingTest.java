@@ -144,7 +144,7 @@ public class CallCredentialsApplyingTest {
 
     transport.newStream(method, origHeaders, callOptions, tracers);
 
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
     verify(mockCreds).applyRequestMetadata(infoCaptor.capture(), same(mockExecutor),
         any(CallCredentials.MetadataApplier.class));
     RequestInfo info = infoCaptor.getValue();
@@ -169,7 +169,7 @@ public class CallCredentialsApplyingTest {
         callOptions.withAuthority("calloptions-authority").withExecutor(anotherExecutor),
         tracers);
 
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
     verify(mockCreds).applyRequestMetadata(infoCaptor.capture(),
         same(mockExecutor), any(CallCredentials.MetadataApplier.class));
     RequestInfo info = infoCaptor.getValue();
@@ -189,7 +189,7 @@ public class CallCredentialsApplyingTest {
 
     transport.newStream(method, origHeaders, callOptions, tracers);
 
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
     verify(mockCreds).applyRequestMetadata(
             infoCaptor.capture(), same(mockExecutor),
             any(io.grpc.CallCredentials.MetadataApplier.class));
@@ -213,7 +213,7 @@ public class CallCredentialsApplyingTest {
             callOptions.withAuthority("calloptions-authority").withExecutor(anotherExecutor),
             tracers);
 
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
     verify(mockCreds).applyRequestMetadata(
             infoCaptor.capture(), same(mockExecutor),
             any(io.grpc.CallCredentials.MetadataApplier.class));
@@ -333,7 +333,8 @@ public class CallCredentialsApplyingTest {
     DelayedStream stream = (DelayedStream) transport.newStream(
         method, origHeaders, callOptions, tracers);
 
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     verify(mockTransport, never()).newStream(
@@ -359,7 +360,8 @@ public class CallCredentialsApplyingTest {
   @Test
   public void delayedShutdown_shutdownShutdownNowThenApply() {
     transport.newStream(method, origHeaders, callOptions, tracers);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     transport.shutdown(Status.UNAVAILABLE);
@@ -380,7 +382,8 @@ public class CallCredentialsApplyingTest {
   @Test
   public void delayedShutdown_shutdownThenApplyThenShutdownNow() {
     transport.newStream(method, origHeaders, callOptions, tracers);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     transport.shutdown(Status.UNAVAILABLE);
@@ -408,7 +411,8 @@ public class CallCredentialsApplyingTest {
     transport.newStream(method, origHeaders, callOptions, tracers);
     transport.newStream(method, origHeaders, callOptions, tracers);
     transport.newStream(method, origHeaders, callOptions, tracers);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds, times(3)).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     applierCaptor.getAllValues().get(1).apply(headers);
@@ -436,7 +440,8 @@ public class CallCredentialsApplyingTest {
     DelayedStream stream = (DelayedStream) transport.newStream(
         method, origHeaders, callOptions, tracers);
 
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
 
