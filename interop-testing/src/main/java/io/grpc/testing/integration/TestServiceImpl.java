@@ -414,7 +414,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
         // Schedule the next response chunk if there is one.
         Chunk nextChunk = chunks.peek();
-        if (nextChunk != null) {
+        if (nextChunk != null && !executor.isShutdown()) {
           scheduled = true;
           // TODO(ejona): cancel future if RPC is cancelled
           Future<?> unused = executor.schedule(new LogExceptionRunnable(dispatchTask),
