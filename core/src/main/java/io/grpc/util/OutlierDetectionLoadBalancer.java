@@ -99,7 +99,6 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     logger.log(ChannelLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     OutlierDetectionLoadBalancerConfig config
         = (OutlierDetectionLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    logger.log(ChannelLogLevel.DEBUG, "LbPolicyConfiguration set to {0}", config);
 
     // The map should only retain entries for addresses in this latest update.
     ArrayList<SocketAddress> addresses = new ArrayList<>();
@@ -328,14 +327,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       ejected = true;
       subchannelStateListener.onSubchannelState(
           ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-      logger.log(ChannelLogLevel.INFO, "Subchannel ejected: {0}", delegate);
+      logger.log(ChannelLogLevel.INFO, "Subchannel ejected: {0}", this);
     }
 
     void uneject() {
       ejected = false;
       if (lastSubchannelState != null) {
         subchannelStateListener.onSubchannelState(lastSubchannelState);
-        logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", delegate);
+        logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
       }
     }
 
@@ -366,6 +365,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           delegate.onSubchannelState(newState);
         }
       }
+    }
+
+    @Override
+    public String toString() {
+      return "OutlierDetectionSubchannel{"
+              + "addresses=" + delegate.getAllAddresses()
+              + '}';
     }
   }
 
@@ -590,6 +596,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         failureCount.set(0);
       }
     }
+
+    @Override
+    public String toString() {
+      return "AddressTracker{"
+              + "subchannels=" + subchannels
+              + '}';
+    }
   }
 
   /**
@@ -753,7 +766,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
 
       logger.log(ChannelLogLevel.DEBUG,
-              "SuccessRate algoritm parameters: mean: {0}, stdev: {1}, requiredSuccessRate: {2}",
+              "SuccessRate algorithm parameters: mean: {0}, stdev: {1}, requiredSuccessRate: {2}",
               mean, stdev, requiredSuccessRate);
       for (AddressTracker tracker : trackersWithVolume) {
         // If we are above or equal to the max ejection percentage, don't eject any more. This will
@@ -766,7 +779,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
         // If success rate is below the threshold, eject the address.
         if (tracker.successRate() < requiredSuccessRate) {
-          logger.log(ChannelLogLevel.DEBUG, "SuccessRate algoritm detected outlier {0}", tracker);
+          logger.log(ChannelLogLevel.DEBUG,
+                  "SuccessRate algorithm detected outlier: {0}", tracker);
           // Only eject some addresses based on the enforcement percentage.
           if (new Random().nextInt(100) < config.successRateEjection.enforcementPercentage) {
             tracker.ejectSubchannels(ejectionTimeNanos);
@@ -842,7 +856,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         double maxFailureRate = ((double)config.failurePercentageEjection.threshold) / 100;
         if (tracker.failureRate() > maxFailureRate) {
           logger.log(ChannelLogLevel.DEBUG,
-                  "FailurePercentage algoritm detected outlier {0}", tracker);
+                  "FailurePercentage algorithm detected outlier: {0}", tracker);
           // ...but only enforce this based on the enforcement percentage.
           if (new Random().nextInt(100) < config.failurePercentageEjection.enforcementPercentage) {
             tracker.ejectSubchannels(ejectionTimeNanos);
