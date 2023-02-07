@@ -5,8 +5,8 @@ autovalue = "1.9"
 checkstyle = "8.28"
 googleauth = "1.4.0"
 guava = "31.1-android"
-netty = '4.1.79.Final'
-nettytcnative = '2.0.54.Final'
+netty = '4.1.87.Final'
+nettytcnative = '2.0.56.Final'
 opencensus = "0.31.0"
 protobuf = "3.21.7"
 
