@@ -31,17 +31,16 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.TimeProvider;
 import io.grpc.services.MetricReport;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.util.RoundRobinLoadBalancer;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.PriorityBlockingQueue;
+import java.util.PriorityQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -58,13 +57,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private ScheduledHandle weightUpdateTimer;
   private WeightedRoundRobinPicker readyPicker;
 
-  private TimeProvider timeProvider;
-
   WeightedRoundRobinLoadBalancer(Helper helper, TimeProvider timeProvider) {
-    super(OrcaOobUtil.newOrcaReportingHelper(helper));
+    super(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper), timeProvider));
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
-    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
   }
 
   @Override
@@ -100,7 +96,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private void afterSubchannelUpdate() {
     //todo: may optimize to use previous enabled oob to skip
     for (Subchannel subchannel : getSubchannels()) {
-      WeightedRoundRobinSubchannel weightedSubchannel = (WeightedRoundRobinSubchannel) subchannel;
+      WrrSubchannel weightedSubchannel = (WrrSubchannel) subchannel;
+      weightedSubchannel.setConfig(config);
       if (config.enableOobLoadReport) {
         OrcaOobUtil.setListener(weightedSubchannel, weightedSubchannel.oobListener,
                 OrcaOobUtil.OrcaReportingConfig.newBuilder()
@@ -120,16 +117,41 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     super.shutdown();
   }
 
-  final class WeightedRoundRobinSubchannel extends ForwardingSubchannel {
+  final static class WrrHelper extends ForwardingLoadBalancerHelper {
+    private final Helper delegate;
+    TimeProvider timeProvider;
+
+    WrrHelper(Helper helper, TimeProvider timeProvider) {
+      this.delegate = helper;
+      this.timeProvider = timeProvider;
+    }
+    @Override
+    protected Helper delegate() {
+      return delegate;
+    }
+    @Override
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
+      return new WrrSubchannel(delegate().createSubchannel(args), timeProvider);
+    }
+  }
+
+  final static class WrrSubchannel extends ForwardingSubchannel {
     private final Subchannel delegate;
     private final OrcaOobReportListener oobListener = this::onLoadReport;
     private final OrcaPerRequestReportListener perRpcListener = this::onLoadReport;
     volatile long lastUpdated;
     volatile long nonEmptySince;
     volatile double weight;
+    private final TimeProvider timeProvider;
+    private volatile WeightedRoundRobinLoadBalancerConfig config;
 
-    public WeightedRoundRobinSubchannel(Subchannel delegate) {
+    public WrrSubchannel(Subchannel delegate, TimeProvider timeProvider) {
       this.delegate = checkNotNull(delegate, "delegate");
+      this.timeProvider = checkNotNull(timeProvider, "timeProvider");
+    }
+
+    void setConfig(WeightedRoundRobinLoadBalancerConfig config) {
+      this.config = config;
     }
 
     void onLoadReport(MetricReport report) {
@@ -159,6 +181,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
 
     double getWeight() {
+      if (config == null) {
+        return 0;
+      }
       double now = timeProvider.currentTimeNanos();
       if (now - lastUpdated >= config.weightExpirationPeriodNanos) {
         nonEmptySince = Integer.MAX_VALUE;
@@ -196,7 +221,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         return super.pickSubchannel(args);
       }
       int pickIndex = schedulerRef.get().pick();
-      WeightedRoundRobinSubchannel subchannel = (WeightedRoundRobinSubchannel) list.get(pickIndex);
+      WrrSubchannel subchannel = (WrrSubchannel) list.get(pickIndex);
       if (config.enableOobLoadReport) {
         return PickResult.withSubchannel(
            subchannel,
@@ -208,11 +233,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
 
     private void updateWeight() {
-      EdfScheduler scheduler = new EdfScheduler(schedulerRef.get());
+      EdfScheduler scheduler = new EdfScheduler();
       int weightedChannelCount = 0;
       double avgWeight = 0;
       for (Subchannel value : list) {
-        double newWeight = ((WeightedRoundRobinSubchannel) value).getWeight();
+        double newWeight = ((WrrSubchannel) value).getWeight();
         if (newWeight > 0) {
           avgWeight += newWeight;
           weightedChannelCount++;
@@ -223,9 +248,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         return;
       }
       for (int i = 0; i < list.size(); i++) {
-        WeightedRoundRobinSubchannel subchannel = (WeightedRoundRobinSubchannel) list.get(i);
+        WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
         double newWeight = subchannel.getWeight();
-        scheduler.addOrUpdate(i, newWeight > 0 ? newWeight : avgWeight);
+        scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
       }
       schedulerRef.set(scheduler);
     }
@@ -294,8 +319,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
    *
    */
   private static final class EdfScheduler {
-    private final Map<Integer, ObjectState> objects;
-    private final PriorityBlockingQueue<ObjectState> prioQueue;
+    private final PriorityQueue<ObjectState> prioQueue;
 
     /**
      * Upon every pick() the "virtual time" is advanced closer to the period of next items.
@@ -304,18 +328,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      * Here we have an explicit "virtualTimeNow", which will be added to the period of all newly
      * scheduled objects (virtualTimeNow + period).
      */
-    private volatile double virtualTimeNow = 0.0;
+    private double virtualTimeNow = 0.0;
 
     /**
      * Weights below this value will be logged and upped to this minimum weight.
      */
     private static final double MINIMUM_WEIGHT = 0.0001;
-
-    /**
-     * At what threshold of virtualTimeNow to call periodReset().
-     * Simulate 100 picks of zero weights.
-     */
-    private static final double VIRTUAL_TIME_RESET_THRESHOLD = 1.0 / MINIMUM_WEIGHT * 100.0;
 
     private final Object lock = new Object();
 
@@ -324,11 +342,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      * use the index. Index should be unique.
      */
     EdfScheduler() {
-      this.objects = new HashMap<Integer, ObjectState>();
-      this.prioQueue = new PriorityBlockingQueue<>(10, (o1, o2) -> {
-        if (o1.priority == o2.priority) {
+      this.prioQueue = new PriorityQueue<ObjectState>(10, (o1, o2) -> {
+        if (o1.deadline == o2.deadline) {
           return o1.index - o2.index;
-        } else if (o1.priority < o2.priority) {
+        } else if (o1.deadline < o2.deadline) {
           return -1;
         } else {
           return 1;
@@ -337,37 +354,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
 
     /**
-     * Construct an EdfScheduler with a previous state.
-     */
-    EdfScheduler(EdfScheduler state) {
-      this.objects = new HashMap<Integer, ObjectState>(state.objects);
-      this.prioQueue = new PriorityBlockingQueue<>(state.objects.values());
-    }
-
-    /**
      * Adds (or updates) the item in the scheduler. This is not thread safe.
      *
      * @param index The field {@link ObjectState#index} to be added/updated
      * @param weight positive weight for the added/updated object
-     * @return whether the object was updated (true) or added (false)
      */
-    public boolean addOrUpdate(int index, double weight) {
+    public void add(int index, double weight) {
       checkArgument(weight > 0.0, "Weights need to be positive.");
-      boolean isUpdate = objects.containsKey(index);
-      ObjectState state = isUpdate ? objects.get(index) : new ObjectState();
-      double newWeight = Math.max(weight, MINIMUM_WEIGHT);
-
-      if (isUpdate) {
-        recordCompletionRatio(state);
-        double period = calculatePriorityAndSetWeight(state, newWeight);
-        updatePriority(state, period);
-      } else {
-        state.priority = calculatePriorityAndSetWeight(state, newWeight);
-        prioQueue.add(state);
-        objects.put(index, state);
-      }
-      state.completionRatio = 0;
-      return isUpdate;
+      ObjectState state = new ObjectState(Math.max(weight, MINIMUM_WEIGHT), index);
+      state.deadline = virtualTimeNow + 1 / state.weight;
+      prioQueue.add(state);
     }
 
     /**
@@ -378,73 +374,28 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      */
     public int pick() {
       synchronized (lock) {
-        ObjectState minObject = prioQueue.peek();
-        if (minObject == null) {
-          return -1;
-        }
+        ObjectState minObject = prioQueue.remove();
         // Simulate advancing in time by setting the current time to the period of the nearest item
         // on the "time horizon".
-        virtualTimeNow = minObject.priority;
-        // If virtualTimeNow becomes large, we need to reset everything for numerical stability.
-        if (virtualTimeNow > VIRTUAL_TIME_RESET_THRESHOLD) {
-          virtualTimeReset();
-        }
-        schedule(minObject);
+        virtualTimeNow = minObject.deadline;
+        minObject.deadline = virtualTimeNow + (1.0 / minObject.weight);
+        prioQueue.add(minObject);
         return minObject.index;
       }
-    }
-
-    private void updatePriority(ObjectState objectState, double newPriority) {
-      prioQueue.remove(objectState);
-      objectState.priority = newPriority;
-      prioQueue.add(objectState);
-    }
-
-    /**
-     * Schedules the given object at its original period + virtualTimeNow.
-     */
-    private void schedule(ObjectState state) {
-      updatePriority(state, virtualTimeNow + (1.0 / state.weight));
-    }
-
-    private void recordCompletionRatio(ObjectState state) {
-      state.completionRatio = Math.max(0,
-          1 + (virtualTimeNow - state.priority) * state.weight);
-    }
-
-    private double calculatePriorityAndSetWeight(ObjectState state, double newWeight) {
-      state.weight = newWeight;
-      return virtualTimeNow + Math.max(0, (1 - state.completionRatio) / state.weight);
-    }
-
-    /**
-     * Get number of objects in the scheduler.
-     */
-    public int size() {
-      return objects.size();
-    }
-
-    /**
-     * Decrease the periods in the prioQueue by virtualTimeNow. Reset virtualTimeNow to zero.
-     * Since the iterator on is iterating over the heap in the heap order
-     * and it is a min-heap, we will first be reducing the period of parent nodes in the heap.
-     * As such the siftUp() operation of setPriority() will be O(1) and thus the whole thing O(n).
-     */
-    private void virtualTimeReset() {
-      for (ObjectState state : objects.values()) {
-        updatePriority(state, Math.max(state.priority - virtualTimeNow, 0.0));
-      }
-      virtualTimeNow = 0.0;
     }
   }
 
   /** Holds the state of the object. */
   @VisibleForTesting
   static class ObjectState {
-    double weight;
-    double completionRatio;
-    volatile double priority;
-    int index;
+    private final double weight;
+    private final int index;
+    volatile double deadline;
+
+    ObjectState(double weight, int index) {
+      this.weight = weight;
+      this.index = index;
+    }
   }
 
   static final class WeightedRoundRobinLoadBalancerConfig {

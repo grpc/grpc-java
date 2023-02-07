@@ -305,18 +305,23 @@ public final class OrcaOobUtil {
             if (oldListener != null) {
               configs.remove(oldListener);
             }
+            if (listener != null) {
+              configs.put(listener, config);
+            }
             orcaSubchannel.reportListener = listener;
-            setReportingConfig(listener, config);
+            setReportingConfig(config);
           }
         });
       }
 
-      private void setReportingConfig(OrcaOobReportListener listener, OrcaReportingConfig config) {
+      private void setReportingConfig(OrcaReportingConfig config) {
         boolean reconfigured = false;
-        configs.put(listener, config);
         // Real reporting interval is the minimum of intervals requested by all participating
         // helpers.
-        if (overallConfig == null) {
+        if (configs.isEmpty()) {
+          overallConfig = null;
+          reconfigured = true;
+        } else if (overallConfig == null) {
           overallConfig = config.toBuilder().build();
           reconfigured = true;
         } else {
