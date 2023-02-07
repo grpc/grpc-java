@@ -178,6 +178,7 @@ public class OutlierDetectionLoadBalancerTest {
           public Subchannel answer(InvocationOnMock invocation) throws Throwable {
             CreateSubchannelArgs args = (CreateSubchannelArgs) invocation.getArguments()[0];
             final Subchannel subchannel = subchannels.get(args.getAddresses());
+            when(subchannel.getChannelLogger()).thenReturn(channelLogger);
             when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
             when(subchannel.getAttributes()).thenReturn(args.getAttributes());
             doAnswer(new Answer<Void>() {
