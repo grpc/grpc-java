@@ -212,7 +212,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       // Subchannels are wrapped so that we can monitor call results and to trigger failures when
       // we decide to eject the subchannel.
       OutlierDetectionSubchannel subchannel = new OutlierDetectionSubchannel(
-          delegate.createSubchannel(args), getChannelLogger());
+          delegate.createSubchannel(args));
 
       // If the subchannel is associated with a single address that is also already in the map
       // the subchannel will be added to the map and be included in outlier detection.
@@ -246,9 +246,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private SubchannelStateListener subchannelStateListener;
     private final ChannelLogger logger;
 
-    OutlierDetectionSubchannel(Subchannel delegate, ChannelLogger logger) {
+    OutlierDetectionSubchannel(Subchannel delegate) {
       this.delegate = delegate;
-      this.logger = logger;
+      this.logger = delegate.getChannelLogger();
     }
 
     @Override
