@@ -24,6 +24,7 @@ import static io.grpc.xds.FaultFilter.HEADER_DELAY_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_PERCENTAGE_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -994,6 +995,7 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_simpleCallSucceeds_routeToWeightedCluster() {
     when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
+    when(mockRandom.nextLong(anyLong())).thenReturn(90L, 10L);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(

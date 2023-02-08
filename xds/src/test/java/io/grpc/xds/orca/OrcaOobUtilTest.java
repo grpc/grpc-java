@@ -547,6 +547,34 @@ public class OrcaOobUtilTest {
   }
 
   @Test
+  public void removeListener() {
+    Subchannel created = createSubchannel(orcaHelper, 0, Attributes.EMPTY);
+    OrcaOobUtil.setListener(created, null, SHORT_INTERVAL_CONFIG);
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    verify(mockStateListeners[0])
+            .onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));
+
+    assertThat(orcaServiceImps[0].calls).isEmpty();
+    assertThat(subchannels[0].logs).isEmpty();
+    assertThat(unwrap(created)).isSameInstanceAs(subchannels[0]);
+
+    OrcaOobUtil.setListener(created, mockOrcaListener0, SHORT_INTERVAL_CONFIG);
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+            "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+    assertThat(orcaServiceImps[0].calls.peek().request)
+            .isEqualTo(buildOrcaRequestFromConfig(SHORT_INTERVAL_CONFIG));
+
+    OrcaOobUtil.setListener(created, null, null);
+    assertThat(orcaServiceImps[0].calls.poll().cancelled).isTrue();
+    assertThat(orcaServiceImps[0].calls).isEmpty();
+    assertThat(subchannels[0].logs).isEmpty();
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    verifyNoMoreInteractions(mockOrcaListener0);
+    verifyNoInteractions(backoffPolicyProvider);
+  }
+
+  @Test
   public void updateReportingIntervalBeforeCreatingSubchannel() {
     Subchannel created = createSubchannel(orcaHelper, 0, Attributes.EMPTY);
     OrcaOobUtil.setListener(created, mockOrcaListener0, SHORT_INTERVAL_CONFIG);

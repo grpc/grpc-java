@@ -85,6 +85,7 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
+import io.grpc.internal.RetryingNameResolver.ResolutionResultListener;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -367,7 +368,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(lbHelper != null, "lbHelper is null");
     }
     if (nameResolver != null) {
-      cancelNameResolverBackoff();
       nameResolver.shutdown();
       nameResolverStarted = false;
       if (channelIsActive) {
@@ -450,42 +450,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     idleTimer.reschedule(idleTimeoutMillis, TimeUnit.MILLISECONDS);
   }
 
-  // Run from syncContext
-  @VisibleForTesting
-  class DelayedNameResolverRefresh implements Runnable {
-    @Override
-    public void run() {
-      scheduledNameResolverRefresh = null;
-      refreshNameResolution();
-    }
-  }
-
-  // Must be used from syncContext
-  @Nullable private ScheduledHandle scheduledNameResolverRefresh;
-  // The policy to control backoff between name resolution attempts. Non-null when an attempt is
-  // scheduled. Must be used from syncContext
-  @Nullable private BackoffPolicy nameResolverBackoffPolicy;
-
-  // Must be run from syncContext
-  private void cancelNameResolverBackoff() {
-    syncContext.throwIfNotInThisSynchronizationContext();
-    if (scheduledNameResolverRefresh != null) {
-      scheduledNameResolverRefresh.cancel();
-      scheduledNameResolverRefresh = null;
-      nameResolverBackoffPolicy = null;
-    }
-  }
-
   /**
-   * Force name resolution refresh to happen immediately and reset refresh back-off. Must be run
+   * Force name resolution refresh to happen immediately. Must be run
    * from syncContext.
    */
-  private void refreshAndResetNameResolution() {
-    syncContext.throwIfNotInThisSynchronizationContext();
-    cancelNameResolverBackoff();
-    refreshNameResolution();
-  }
-
   private void refreshNameResolution() {
     syncContext.throwIfNotInThisSynchronizationContext();
     if (nameResolverStarted) {
@@ -783,7 +751,24 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (overrideAuthority == null) {
       return resolver;
     }
-    return new ForwardingNameResolver(resolver) {
+
+    // If the nameResolver is not already a RetryingNameResolver, then wrap it with it.
+    // This helps guarantee that name resolution retry remains supported even as it has been
+    // removed from ManagedChannelImpl.
+    // TODO: After a transition period, all NameResolver implementations that need retry should use
+    //       RetryingNameResolver directly and this step can be removed.
+    NameResolver usedNameResolver;
+    if (resolver instanceof RetryingNameResolver) {
+      usedNameResolver = resolver;
+    } else {
+      usedNameResolver = new RetryingNameResolver(resolver,
+          new BackoffPolicyRetryScheduler(new ExponentialBackoffPolicy.Provider(),
+              nameResolverArgs.getScheduledExecutorService(),
+              nameResolverArgs.getSynchronizationContext()),
+          nameResolverArgs.getSynchronizationContext());
+    }
+
+    return new ForwardingNameResolver(usedNameResolver) {
       @Override
       public String getServiceAuthority() {
         return overrideAuthority;
@@ -1291,7 +1276,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be called from syncContext
   private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
     if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-      refreshAndResetNameResolution();
+      refreshNameResolution();
     }
   }
 
@@ -1338,9 +1323,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         if (shutdown.get()) {
           return;
         }
-        if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
-          checkState(nameResolverStarted, "name resolver must be started");
-          refreshAndResetNameResolution();
+        if (nameResolverStarted) {
+          refreshNameResolution();
         }
         for (InternalSubchannel subchannel : subchannels) {
           subchannel.resetConnectBackoff();
@@ -1496,7 +1480,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
-          refreshAndResetNameResolution();
+          ManagedChannelImpl.this.refreshNameResolution();
         }
       }
 
@@ -1727,7 +1711,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private final class NameResolverListener extends NameResolver.Listener2 {
+  final class NameResolverListener extends NameResolver.Listener2 {
     final LbHelperImpl helper;
     final NameResolver resolver;
 
@@ -1759,8 +1743,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             lastResolutionState = ResolutionState.SUCCESS;
           }
 
-          nameResolverBackoffPolicy = null;
           ConfigOrError configOrError = resolutionResult.getServiceConfig();
+          ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
+              .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
           InternalConfigSelector resolvedConfigSelector =
               resolutionResult.getAttributes().get(InternalConfigSelector.KEY);
           ManagedChannelServiceConfig validServiceConfig =
@@ -1817,6 +1802,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 // we later check for these error codes when investigating pick results in
                 // GrpcUtil.getTransportFromPickResult().
                 onError(configOrError.getError());
+                if (resolutionResultListener != null) {
+                  resolutionResultListener.resolutionAttempted(false);
+                }
                 return;
               } else {
                 effectiveServiceConfig = lastServiceConfig;
@@ -1861,15 +1849,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             Attributes attributes = attrBuilder.build();
 
-            boolean addressesAccepted = helper.lb.tryAcceptResolvedAddresses(
+            boolean lastAddressesAccepted = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(attributes)
                     .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                     .build());
-
-            if (!addressesAccepted) {
-              scheduleExponentialBackOffInSyncContext();
+            // If a listener is provided, let it know if the addresses were accepted.
+            if (resolutionResultListener != null) {
+              resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
             }
           }
         }
@@ -1905,29 +1893,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       helper.lb.handleNameResolutionError(error);
-
-      scheduleExponentialBackOffInSyncContext();
-    }
-
-    private void scheduleExponentialBackOffInSyncContext() {
-      if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
-        // The name resolver may invoke onError multiple times, but we only want to
-        // schedule one backoff attempt
-        // TODO(ericgribkoff) Update contract of NameResolver.Listener or decide if we
-        // want to reset the backoff interval upon repeated onError() calls
-        return;
-      }
-      if (nameResolverBackoffPolicy == null) {
-        nameResolverBackoffPolicy = backoffPolicyProvider.get();
-      }
-      long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
-      channelLogger.log(
-          ChannelLogLevel.DEBUG,
-          "Scheduling DNS resolution backoff for {0} ns", delayNanos);
-      scheduledNameResolverRefresh =
-          syncContext.schedule(
-              new DelayedNameResolverRefresh(), delayNanos, TimeUnit.NANOSECONDS,
-              transportFactory .getScheduledExecutorService());
     }
   }
 

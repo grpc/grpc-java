@@ -151,6 +151,7 @@ public class CachingRlsLbClientTest {
   private String rlsChannelOverriddenAuthority;
 
   private void setUpRlsLbClient() {
+    fakeThrottler.resetCounts();
     rlsLbClient =
         CachingRlsLbClient.newBuilder()
             .setBackoffProvider(fakeBackoffProvider)
@@ -362,6 +363,8 @@ public class CachingRlsLbClientTest {
     assertThat(pickResult.getStatus().isOk()).isTrue();
     assertThat(pickResult.getSubchannel()).isNotNull();
     assertThat(headers.get(RLS_DATA_KEY)).isEqualTo("header-rls-data-value");
+    assertThat(fakeThrottler.getNumThrottled()).isEqualTo(0);
+    assertThat(fakeThrottler.getNumUnthrottled()).isEqualTo(1);
 
     // move backoff further back to only test error behavior
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(100, TimeUnit.MILLISECONDS);
@@ -388,6 +391,97 @@ public class CachingRlsLbClientTest {
             CallOptions.DEFAULT));
     assertThat(pickResult.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
+    assertThat(fakeThrottler.getNumThrottled()).isEqualTo(1);
+    assertThat(fakeThrottler.getNumUnthrottled()).isEqualTo(1);
+  }
+
+  @Test
+  public void get_withAdaptiveThrottler() throws Exception {
+    AdaptiveThrottler adaptiveThrottler =
+        new AdaptiveThrottler.Builder()
+            .setHistorySeconds(1)
+            .setRatioForAccepts(1.0f)
+            .setRequestsPadding(1)
+            .setTicker(fakeClock.getTicker())
+            .build();
+
+    this.rlsLbClient =
+        CachingRlsLbClient.newBuilder()
+            .setBackoffProvider(fakeBackoffProvider)
+            .setResolvedAddressesFactory(resolvedAddressFactory)
+            .setEvictionListener(evictionListener)
+            .setHelper(helper)
+            .setLbPolicyConfig(lbPolicyConfiguration)
+            .setThrottler(adaptiveThrottler)
+            .setTicker(fakeClock.getTicker())
+            .build();
+    InOrder inOrder = inOrder(helper);
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "service1", "method-key", "create"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequest,
+            RouteLookupResponse.create(
+                ImmutableList.of("primary.cloudbigtable.googleapis.com"),
+                "header-rls-data-value")));
+
+    // valid channel
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.isPending()).isTrue();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isTrue();
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
+    ArgumentCaptor<ConnectivityState> stateCaptor =
+        ArgumentCaptor.forClass(ConnectivityState.class);
+    inOrder.verify(helper, times(2))
+        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
+
+    Metadata headers = new Metadata();
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("service1/create")
+                .build(),
+            headers,
+            CallOptions.DEFAULT));
+    assertThat(pickResult.getSubchannel()).isNotNull();
+    assertThat(headers.get(RLS_DATA_KEY)).isEqualTo("header-rls-data-value");
+
+    // move backoff further back to only test error behavior
+    fakeBackoffProvider.nextPolicy = createBackoffPolicy(100, TimeUnit.MILLISECONDS);
+    // try to get invalid
+    RouteLookupRequest invalidRouteLookupRequest =
+        RouteLookupRequest.create(ImmutableMap.<String, String>of());
+    CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
+    assertThat(errorResp.isPending()).isTrue();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    errorResp = getInSyncContext(invalidRouteLookupRequest);
+    assertThat(errorResp.hasError()).isTrue();
+
+    // Channel is still READY because the subchannel for method /service1/create is still READY.
+    // Method /doesn/exists will use fallback child balancer and fail immediately.
+    inOrder.verify(helper)
+        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    PickSubchannelArgsImpl invalidArgs = getInvalidArgs(headers);
+    pickResult = pickerCaptor.getValue().pickSubchannel(invalidArgs);
+    assertThat(pickResult.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
+    long time = fakeClock.getTicker().read();
+    assertThat(adaptiveThrottler.requestStat.get(time)).isEqualTo(2L);
+    assertThat(adaptiveThrottler.throttledStat.get(time)).isEqualTo(1L);
+  }
+
+  private PickSubchannelArgsImpl getInvalidArgs(Metadata headers) {
+    PickSubchannelArgsImpl invalidArgs = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod().toBuilder()
+            .setFullMethodName("doesn/exists")
+            .build(),
+        headers,
+        CallOptions.DEFAULT);
+    return invalidArgs;
   }
 
   @Test
@@ -755,6 +849,8 @@ public class CachingRlsLbClientTest {
   }
 
   private static final class FakeThrottler implements Throttler {
+    int numUnthrottled;
+    int numThrottled;
 
     private boolean nextResult = false;
 
@@ -765,7 +861,24 @@ public class CachingRlsLbClientTest {
 
     @Override
     public void registerBackendResponse(boolean throttled) {
-      // no-op
+      if (throttled) {
+        numThrottled++;
+      } else {
+        numUnthrottled++;
+      }
+    }
+
+    public int getNumUnthrottled() {
+      return numUnthrottled;
+    }
+
+    public int getNumThrottled() {
+      return numThrottled;
+    }
+
+    public void resetCounts() {
+      numThrottled = 0;
+      numUnthrottled = 0;
     }
   }
 }

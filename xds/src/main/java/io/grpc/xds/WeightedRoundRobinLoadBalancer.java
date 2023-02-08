@@ -58,7 +58,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private WeightedRoundRobinPicker readyPicker;
 
   WeightedRoundRobinLoadBalancer(Helper helper, TimeProvider timeProvider) {
-    super(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper), timeProvider));
+    super(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper),
+            checkNotNull(timeProvider, "timeProvider")));
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
   }
@@ -74,7 +75,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-  public RoundRobinPicker createReadyPicker(List<Subchannel> activeList, int startIndex) {
+  protected RoundRobinPicker createReadyPicker(List<Subchannel> activeList, int startIndex) {
     this.readyPicker = new WeightedRoundRobinPicker(activeList, startIndex);
     return readyPicker;
   }
@@ -117,32 +118,35 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     super.shutdown();
   }
 
-  final static class WrrHelper extends ForwardingLoadBalancerHelper {
+  private static final class WrrHelper extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
-    TimeProvider timeProvider;
+    private final TimeProvider timeProvider;
 
     WrrHelper(Helper helper, TimeProvider timeProvider) {
       this.delegate = helper;
       this.timeProvider = timeProvider;
     }
+
     @Override
     protected Helper delegate() {
       return delegate;
     }
+
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       return new WrrSubchannel(delegate().createSubchannel(args), timeProvider);
     }
   }
 
-  final static class WrrSubchannel extends ForwardingSubchannel {
+  static final class WrrSubchannel extends ForwardingSubchannel {
     private final Subchannel delegate;
+
+    private final TimeProvider timeProvider;
     private final OrcaOobReportListener oobListener = this::onLoadReport;
     private final OrcaPerRequestReportListener perRpcListener = this::onLoadReport;
     volatile long lastUpdated;
     volatile long nonEmptySince;
     volatile double weight;
-    private final TimeProvider timeProvider;
     private volatile WeightedRoundRobinLoadBalancerConfig config;
 
     public WrrSubchannel(Subchannel delegate, TimeProvider timeProvider) {
@@ -150,10 +154,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     }
 
-    void setConfig(WeightedRoundRobinLoadBalancerConfig config) {
+    private void setConfig(WeightedRoundRobinLoadBalancerConfig config) {
       this.config = config;
     }
 
+    @VisibleForTesting
     void onLoadReport(MetricReport report) {
       double newWeight = report.getCpuUtilization() == 0 ? 0 :
               report.getQps() / report.getCpuUtilization();
@@ -180,7 +185,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       });
     }
 
-    double getWeight() {
+    private double getWeight() {
       if (config == null) {
         return 0;
       }
