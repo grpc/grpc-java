@@ -336,8 +336,7 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
     }
   }
 
-  @VisibleForTesting
-  static final class EmptyPicker extends RoundRobinPicker {
+  public static final class EmptyPicker extends RoundRobinPicker {
 
     private final Status status;
 

@@ -27,6 +27,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
+import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.TimeProvider;
@@ -66,8 +67,15 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    if (resolvedAddresses.getLoadBalancingPolicyConfig() == null) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no WeightedRoundRobinLoadBalancerConfig. addrs="
+                      + resolvedAddresses.getAddresses()
+                      + ", attrs=" + resolvedAddresses.getAttributes()));
+      return false;
+    }
     config =
-        (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+            (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     boolean accepted = super.acceptResolvedAddresses(resolvedAddresses);
     new UpdateWeightTask().run();
     afterSubchannelUpdate();
@@ -138,6 +146,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
   }
 
+  @VisibleForTesting
   static final class WrrSubchannel extends ForwardingSubchannel {
     private final Subchannel delegate;
 
@@ -210,7 +219,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   final class WeightedRoundRobinPicker extends ReadyPicker {
     private final List<Subchannel> list;
     private final AtomicReference<EdfScheduler> schedulerRef;
-    volatile boolean rrMode = false;
+    private volatile boolean rrMode = false;
 
     WeightedRoundRobinPicker(List<Subchannel> list, int startIndex) {
       super(list, startIndex);
@@ -227,7 +236,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
       int pickIndex = schedulerRef.get().pick();
       WrrSubchannel subchannel = (WrrSubchannel) list.get(pickIndex);
-      if (config.enableOobLoadReport) {
+      if (!config.enableOobLoadReport) {
         return PickResult.withSubchannel(
            subchannel,
            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
@@ -284,12 +293,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   /**
-   * An earliest deadline first implementation in which each object is
+   * The earliest deadline first implementation in which each object is
    * chosen deterministically and periodically with frequency proportional to its weight.
    *
    * <p>Specifically, each object added to chooser is given a period equal to the multiplicative
    * inverse of its weight. The place of each object in its period is tracked, and each call to
-   * choose returns the child with the least remaining time in its period (1/weight).
+   * choose returns the object with the least remaining time in its period (1/weight).
    * (Ties are broken by the order in which the children were added to the chooser.)
    * For example, if items A and B are added
    * with weights 0.5 and 0.2, successive chooses return:
@@ -328,8 +337,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     /**
      * Upon every pick() the "virtual time" is advanced closer to the period of next items.
-     * In the WeightedRoundRobinChooser implementation this is done by subtracting the period of the
-     * picked object from all other items yielding O(n).
      * Here we have an explicit "virtualTimeNow", which will be added to the period of all newly
      * scheduled objects (virtualTimeNow + period).
      */
@@ -364,7 +371,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      * @param index The field {@link ObjectState#index} to be added/updated
      * @param weight positive weight for the added/updated object
      */
-    public void add(int index, double weight) {
+    void add(int index, double weight) {
       checkArgument(weight > 0.0, "Weights need to be positive.");
       ObjectState state = new ObjectState(Math.max(weight, MINIMUM_WEIGHT), index);
       state.deadline = virtualTimeNow + 1 / state.weight;
@@ -373,11 +380,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     /**
      * Picks the next WRR object.
-     * Concurrent pick() has issue:
-     *
-     * @return next object index from WRR, -1 if empty;
      */
-    public int pick() {
+    int pick() {
       synchronized (lock) {
         ObjectState minObject = prioQueue.remove();
         // Simulate advancing in time by setting the current time to the period of the nearest item
@@ -410,6 +414,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     final Long oobReportingPeriodNanos;
     final Long weightUpdatePeriodNanos;
 
+    public static Builder newBuilder() {
+      return new Builder();
+    }
 
     private WeightedRoundRobinLoadBalancerConfig(Long blackoutPeriodNanos,
                                                  Long weightExpirationPeriodNanos,
@@ -423,12 +430,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.weightUpdatePeriodNanos = weightUpdatePeriodNanos;
     }
 
-    static class Builder {
+    static final class Builder {
       Long blackoutPeriodNanos = 10_000_000_000L; // 10s
       Long weightExpirationPeriodNanos = 180_000_000_000L; //3min
       Boolean enableOobLoadReport = false;
       Long oobReportingPeriodNanos = 10_000_000_000L; // 10s
       Long weightUpdatePeriodNanos = 100_000_000L; // 1s
+
+      private Builder() {
+
+      }
 
       Builder setBlackoutPeriodNanos(Long blackoutPeriodNanos) {
         checkArgument(blackoutPeriodNanos != null);

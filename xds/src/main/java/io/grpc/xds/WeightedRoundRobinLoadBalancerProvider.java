@@ -62,15 +62,18 @@ final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerProvider 
     Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
 
     WeightedRoundRobinLoadBalancerConfig.Builder configBuilder =
-            new WeightedRoundRobinLoadBalancerConfig.Builder();
+            WeightedRoundRobinLoadBalancerConfig.newBuilder();
     if (blackoutPeriodNanos != null) {
       configBuilder.setBlackoutPeriodNanos(blackoutPeriodNanos);
     }
     if (weightExpirationPeriodNanos != null) {
       configBuilder.setWeightExpirationPeriodNanos(weightExpirationPeriodNanos);
     }
-    if (oobReportingPeriodNanos != null) {
+    if (enableOobLoadReport != null) {
       configBuilder.setEnableOobLoadReport(enableOobLoadReport);
+    }
+    if (oobReportingPeriodNanos != null) {
+      configBuilder.setOobReportingPeriodNanos(oobReportingPeriodNanos);
     }
     if (weightUpdatePeriodNanos != null) {
       configBuilder.setWeightUpdatePeriodNanos(weightUpdatePeriodNanos);
