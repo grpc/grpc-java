@@ -765,9 +765,6 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       double requiredSuccessRate =
           mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
 
-      logger.log(ChannelLogLevel.DEBUG,
-              "SuccessRate algorithm parameters: mean: {0}, stdev: {1}, requiredSuccessRate: {2}",
-              mean, stdev, requiredSuccessRate);
       for (AddressTracker tracker : trackersWithVolume) {
         // If we are above or equal to the max ejection percentage, don't eject any more. This will
         // allow the total ejections to go one above the max, but at the same time it assures at
@@ -780,7 +777,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         // If success rate is below the threshold, eject the address.
         if (tracker.successRate() < requiredSuccessRate) {
           logger.log(ChannelLogLevel.DEBUG,
-                  "SuccessRate algorithm detected outlier: {0}", tracker);
+                  "SuccessRate algorithm detected outlier: {0}. "
+                          + "Parameters: mean={1}, stdev={2}, requiredSuccessRate={3}",
+                  tracker,  mean, stdev, requiredSuccessRate);
           // Only eject some addresses based on the enforcement percentage.
           if (new Random().nextInt(100) < config.successRateEjection.enforcementPercentage) {
             tracker.ejectSubchannels(ejectionTimeNanos);
