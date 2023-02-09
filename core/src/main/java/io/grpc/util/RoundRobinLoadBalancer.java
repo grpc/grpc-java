@@ -62,7 +62,7 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
       new HashMap<>();
   private final Random random;
   private ConnectivityState currentState;
-  private RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
+  protected RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
 
   public RoundRobinLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");

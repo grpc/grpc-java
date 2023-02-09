@@ -25,7 +25,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.Internal;
+import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
 import io.grpc.Status;
@@ -52,13 +52,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * the {@link EquivalentAddressGroup}s from the {@link NameResolver}. The subchannel weights are
  * determined by backend metrics using ORCA.
  */
-@Internal
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
 public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private volatile WeightedRoundRobinLoadBalancerConfig config;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private ScheduledHandle weightUpdateTimer;
-  private WeightedRoundRobinPicker readyPicker;
 
   public WeightedRoundRobinLoadBalancer(Helper helper, TimeProvider timeProvider) {
     super(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper),
@@ -86,8 +85,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
 
   @Override
   public RoundRobinPicker createReadyPicker(List<Subchannel> activeList, int startIndex) {
-    this.readyPicker = new WeightedRoundRobinPicker(activeList, startIndex);
-    return readyPicker;
+    return new WeightedRoundRobinPicker(activeList, startIndex);
   }
 
   private final class UpdateWeightTask implements Runnable {
@@ -96,8 +94,8 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
       if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
         return;
       }
-      if (readyPicker != null) {
-        readyPicker.updateWeight();
+      if (currentPicker != null && currentPicker instanceof WeightedRoundRobinPicker) {
+        ((WeightedRoundRobinPicker)currentPicker).updateWeight();
       }
       weightUpdateTimer = syncContext.schedule(new UpdateWeightTask(),
               config.weightUpdatePeriodNanos, TimeUnit.NANOSECONDS, timeService);
