@@ -33,12 +33,23 @@ import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Collection;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Contains certificate/key PEM file utility method(s).
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 public final class CertificateUtils {
+
+  // Regular expressions and their usage taken from
+  // https://github.com/netty/netty/blob/d010e63bf5bf744f2ab6d0fc4386611efe7954e6/handler/src/main/java/io/netty/
+  // handler/ssl/PemReader.java
+  private static final Pattern KEY_HEADER = Pattern.compile(
+          "-+BEGIN\\s[^-\\r\\n]*PRIVATE\\s+KEY[^-\\r\\n]*-+\\s*");
+  private static final Pattern KEY_FOOTER = Pattern.compile(
+          "-+END\\s[^-\\r\\n]*PRIVATE\\s+KEY[^-\\r\\n]*-+\\s*");
+
   /**
    * Generates X509Certificate array from a PEM file.
    * The PEM file should contain one or more items in Base64 encoding, each with
@@ -68,13 +79,15 @@ public final class CertificateUtils {
     BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
     String line;
     while ((line = reader.readLine()) != null) {
-      if ("-----BEGIN PRIVATE KEY-----".equals(line)) {
+      Matcher headerMatcher = KEY_HEADER.matcher(line);
+      if (headerMatcher.matches()) {
         break;
       }
     }
     StringBuilder keyContent = new StringBuilder();
     while ((line = reader.readLine()) != null) {
-      if ("-----END PRIVATE KEY-----".equals(line)) {
+      Matcher footerMatcher = KEY_FOOTER.matcher(line);
+      if (footerMatcher.matches()) {
         break;
       }
       keyContent.append(line);

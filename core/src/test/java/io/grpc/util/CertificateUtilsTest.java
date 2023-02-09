@@ -33,7 +33,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link CertificateUtilsTest}. */
+/** Unit tests for {@link CertificateUtils}. */
 @RunWith(JUnit4.class)
 public class CertificateUtilsTest {
   public static final String SERVER_0_PEM_FILE = "server0.pem";
@@ -44,6 +44,7 @@ public class CertificateUtilsTest {
       + "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDvdzKDTYvRgjBO\n"
       + "-----END PRIVATE KEY-----";
   public static final String ECDSA_KEY_FILE = "ecdsa.key";
+  public static final String RSA_KEY_FILE = "rsa.key";
 
   @Test
   public void readPemCertFile() throws CertificateException, IOException {
@@ -108,6 +109,15 @@ public class CertificateUtilsTest {
     PrivateKey key = CertificateUtils.getPrivateKey(in);
     // Checks some information on the test key.
     assertThat(key.getAlgorithm()).isEqualTo("EC");
+    assertThat(key.getFormat()).isEqualTo("PKCS#8");
+  }
+
+  @Test
+  public void readRsaKeyFile() throws Exception {
+    InputStream in = TestUtils.class.getResourceAsStream("/certs/" + RSA_KEY_FILE);
+    PrivateKey key = CertificateUtils.getPrivateKey(in);
+    // Checks some information on the test key.
+    assertThat(key.getAlgorithm()).isEqualTo("RSA");
     assertThat(key.getFormat()).isEqualTo("PKCS#8");
   }
 
