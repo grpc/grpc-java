@@ -31,6 +31,7 @@ import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.protobuf.Duration;
 import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
@@ -53,12 +54,13 @@ import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancer
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WrrSubchannel;
 import java.net.SocketAddress;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
@@ -94,8 +96,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
         Maps.newLinkedHashMap();
 
-  private final List<ClientCall<OrcaLoadReportRequest, OrcaLoadReport>>  oobCalls =
-          new ArrayList<>();
+  private final Queue<ClientCall<OrcaLoadReportRequest, OrcaLoadReport>> oobCalls =
+          new ConcurrentLinkedQueue<>();
 
   private WeightedRoundRobinLoadBalancer wrr;
 
@@ -110,6 +112,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
 
   private static final double EDF_PRECISE = 0.01;
+
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
           @Override
@@ -183,11 +186,15 @@ public class WeightedRoundRobinLoadBalancerTest {
     Subchannel readySubchannel2  = it.next();
     subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
+    Subchannel connectingSubchannel = it.next();
+    subchannelStateListeners.get(connectingSubchannel).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.CONNECTING));
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     assertThat(pickerCaptor.getAllValues().get(0).getList().size()).isEqualTo(1);
     WeightedRoundRobinPicker weightedPicker = pickerCaptor.getAllValues().get(1);
+    assertThat(weightedPicker.getList().size()).isEqualTo(2);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
@@ -235,6 +242,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(pickResult.getStreamTracerFactory()).isNotNull();
     assertThat(oobCalls.isEmpty()).isTrue();
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setEnableOobLoadReport(true)
+            .setOobReportingPeriodNanos(20_030_000_000L)
             .build();
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
@@ -242,7 +250,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNull();
+    OrcaLoadReportRequest golden = OrcaLoadReportRequest.newBuilder().setReportInterval(
+            Duration.newBuilder().setSeconds(20).setNanos(30000000).build()).build();
     assertThat(oobCalls.size()).isEqualTo(2);
+    verify(oobCalls.poll()).sendMessage(eq(golden));
+    verify(oobCalls.poll()).sendMessage(eq(golden));
   }
 
   @Test

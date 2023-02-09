@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
 import io.grpc.Status;
@@ -51,14 +52,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * the {@link EquivalentAddressGroup}s from the {@link NameResolver}. The subchannel weights are
  * determined by backend metrics using ORCA.
  */
-final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
+@Internal
+public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private volatile WeightedRoundRobinLoadBalancerConfig config;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private ScheduledHandle weightUpdateTimer;
   private WeightedRoundRobinPicker readyPicker;
 
-  WeightedRoundRobinLoadBalancer(Helper helper, TimeProvider timeProvider) {
+  public WeightedRoundRobinLoadBalancer(Helper helper, TimeProvider timeProvider) {
     super(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper),
             checkNotNull(timeProvider, "timeProvider")));
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -78,12 +80,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     boolean accepted = super.acceptResolvedAddresses(resolvedAddresses);
     new UpdateWeightTask().run();
-    afterSubchannelUpdate();
+    afterAcceptAddresses();
     return accepted;
   }
 
   @Override
-  protected RoundRobinPicker createReadyPicker(List<Subchannel> activeList, int startIndex) {
+  public RoundRobinPicker createReadyPicker(List<Subchannel> activeList, int startIndex) {
     this.readyPicker = new WeightedRoundRobinPicker(activeList, startIndex);
     return readyPicker;
   }
@@ -102,8 +104,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
   }
 
-  private void afterSubchannelUpdate() {
-    //todo: may optimize to use previous enabled oob to skip
+  private void afterAcceptAddresses() {
     for (Subchannel subchannel : getSubchannels()) {
       WrrSubchannel weightedSubchannel = (WrrSubchannel) subchannel;
       weightedSubchannel.setConfig(config);
@@ -149,7 +150,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @VisibleForTesting
   static final class WrrSubchannel extends ForwardingSubchannel {
     private final Subchannel delegate;
-
     private final TimeProvider timeProvider;
     private final OrcaOobReportListener oobListener = this::onLoadReport;
     private final OrcaPerRequestReportListener perRpcListener = this::onLoadReport;
@@ -158,7 +158,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     volatile double weight;
     private volatile WeightedRoundRobinLoadBalancerConfig config;
 
-    public WrrSubchannel(Subchannel delegate, TimeProvider timeProvider) {
+    WrrSubchannel(Subchannel delegate, TimeProvider timeProvider) {
       this.delegate = checkNotNull(delegate, "delegate");
       this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     }
@@ -435,7 +435,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       Long weightExpirationPeriodNanos = 180_000_000_000L; //3min
       Boolean enableOobLoadReport = false;
       Long oobReportingPeriodNanos = 10_000_000_000L; // 10s
-      Long weightUpdatePeriodNanos = 100_000_000L; // 1s
+      Long weightUpdatePeriodNanos = 1_000_000_000L; // 1s
 
       private Builder() {
 

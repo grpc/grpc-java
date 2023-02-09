@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -28,9 +30,11 @@ import java.util.Map;
 /**
  * Providers a {@link WeightedRoundRobinLoadBalancer}.
  * */
-final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerProvider {
+@Internal
+public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerProvider {
 
-  private static final long MIN_WEIGHT_UPDATE_PERIOD_NANOS = 10_000_000L; // 100ms
+  @VisibleForTesting
+  static final long MIN_WEIGHT_UPDATE_PERIOD_NANOS = 100_000_000L; // 100ms
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
