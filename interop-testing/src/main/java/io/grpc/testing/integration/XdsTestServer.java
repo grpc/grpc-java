@@ -338,7 +338,7 @@ public final class XdsTestServer {
           try {
             int timeout = Integer.parseInt(
                 callBehavior.substring(CALL_BEHAVIOR_SLEEP_VALUE.length()));
-            Thread.sleep(timeout * 1000);
+            Thread.sleep(timeout * 1000L);
           } catch (NumberFormatException e) {
             newCall.close(
                 Status.INVALID_ARGUMENT.withDescription(

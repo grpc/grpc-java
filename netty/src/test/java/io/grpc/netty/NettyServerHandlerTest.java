@@ -431,7 +431,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite().writeSettings(
         any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
 
-    assertEquals(maxConcurrentStreams, captor.getValue().maxConcurrentStreams().intValue());
+    assertEquals(maxConcurrentStreams, captor.getValue().maxConcurrentStreams().longValue());
   }
 
   @Test
@@ -443,7 +443,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite().writeSettings(
         any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
 
-    assertEquals(maxHeaderListSize, captor.getValue().maxHeaderListSize().intValue());
+    assertEquals(maxHeaderListSize, captor.getValue().maxHeaderListSize().longValue());
   }
 
   @Test

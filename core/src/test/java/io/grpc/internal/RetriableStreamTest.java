@@ -162,13 +162,17 @@ public class RetriableStreamTest {
     }
 
     @Override
+    @SuppressWarnings("DirectInvocationOnMock")
     void postCommit() {
       retriableStreamRecorder.postCommit();
     }
 
     @Override
+    @SuppressWarnings("DirectInvocationOnMock")
     ClientStream newSubstream(
-        Metadata metadata, ClientStreamTracer.Factory tracerFactory, int previousAttempts,
+        Metadata metadata,
+        ClientStreamTracer.Factory tracerFactory,
+        int previousAttempts,
         boolean isTransparentRetry) {
       bufferSizeTracer =
           tracerFactory.newClientStreamTracer(STREAM_INFO, metadata);
@@ -178,6 +182,7 @@ public class RetriableStreamTest {
     }
 
     @Override
+    @SuppressWarnings("DirectInvocationOnMock")
     Status prestart() {
       return retriableStreamRecorder.prestart();
     }

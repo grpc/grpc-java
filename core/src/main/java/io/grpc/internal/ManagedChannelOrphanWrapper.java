@@ -80,6 +80,8 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
 
     private static final boolean ENABLE_ALLOCATION_TRACKING =
         Boolean.parseBoolean(System.getProperty(ALLOCATION_SITE_PROPERTY_NAME, "true"));
+
+    @SuppressWarnings("StaticAssignmentOfThrowable")
     private static final RuntimeException missingCallSite = missingCallSite();
 
     private final ReferenceQueue<ManagedChannelOrphanWrapper> refqueue;

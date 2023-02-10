@@ -772,7 +772,7 @@ public abstract class LoadBalancer {
       Builder() {
       }
 
-      private <T> Builder copyCustomOptions(Object[][] options) {
+      private Builder copyCustomOptions(Object[][] options) {
         customOptions = new Object[options.length][2];
         System.arraycopy(options, 0, customOptions, 0, options.length);
         return this;

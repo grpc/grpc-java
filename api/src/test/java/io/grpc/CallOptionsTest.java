@@ -33,7 +33,6 @@ import com.google.common.base.Objects;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.internal.SerializingExecutor;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -258,17 +257,6 @@ public class CallOptionsTest {
     @Override
     public long nanoTime() {
       return time;
-    }
-
-    public void reset(long time) {
-      this.time = time;
-    }
-
-    public void increment(long period, TimeUnit unit) {
-      if (period < 0) {
-        throw new IllegalArgumentException();
-      }
-      this.time += unit.toNanos(period);
     }
   }
 

@@ -190,8 +190,6 @@ public class NettyFlowControlTest {
   private static class TestStreamObserver implements StreamObserver<StreamingOutputCallResponse> {
 
     final AtomicReference<GrpcHttp2ConnectionHandler> grpcHandlerRef;
-    final long startRequestNanos;
-    long endRequestNanos;
     final CountDownLatch latch = new CountDownLatch(1);
     final long expectedWindow;
     int lastWindow;
@@ -200,7 +198,6 @@ public class NettyFlowControlTest {
     public TestStreamObserver(
         AtomicReference<GrpcHttp2ConnectionHandler> grpcHandlerRef, long window) {
       this.grpcHandlerRef = grpcHandlerRef;
-      startRequestNanos = System.nanoTime();
       expectedWindow = window;
     }
 
@@ -232,10 +229,6 @@ public class NettyFlowControlTest {
     @Override
     public void onCompleted() {
       latch.countDown();
-    }
-
-    public long getElapsedTime() {
-      return endRequestNanos - startRequestNanos;
     }
 
     public int waitFor(long duration, TimeUnit unit) throws InterruptedException {

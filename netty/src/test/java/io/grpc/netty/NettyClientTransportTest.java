@@ -887,12 +887,10 @@ public class NettyClientTransportTest {
 
   private static final class EchoServerStreamListener implements ServerStreamListener {
     final ServerStream stream;
-    final String method;
     final Metadata headers;
 
-    EchoServerStreamListener(ServerStream stream, String method, Metadata headers) {
+    EchoServerStreamListener(ServerStream stream, Metadata headers) {
       this.stream = stream;
-      this.method = method;
       this.headers = headers;
     }
 
@@ -932,7 +930,7 @@ public class NettyClientTransportTest {
       return new ServerTransportListener() {
         @Override
         public void streamCreated(ServerStream stream, String method, Metadata headers) {
-          EchoServerStreamListener listener = new EchoServerStreamListener(stream, method, headers);
+          EchoServerStreamListener listener = new EchoServerStreamListener(stream, headers);
           stream.setListener(listener);
           stream.writeHeaders(new Metadata());
           stream.request(1);

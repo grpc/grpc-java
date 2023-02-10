@@ -587,8 +587,6 @@ public class ServiceConfigErrorHandlingTest {
 
       final ServiceConfigParser serviceConfigParser;
       Listener2 listener;
-      boolean shutdown;
-      int refreshCalled;
 
       FakeNameResolver(ServiceConfigParser serviceConfigParser) {
         this.serviceConfigParser = serviceConfigParser;
@@ -606,7 +604,6 @@ public class ServiceConfigErrorHandlingTest {
       }
 
       @Override public void refresh() {
-        refreshCalled++;
         resolved();
       }
 
@@ -623,7 +620,6 @@ public class ServiceConfigErrorHandlingTest {
       }
 
       @Override public void shutdown() {
-        shutdown = true;
       }
 
       @Override

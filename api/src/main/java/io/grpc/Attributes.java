@@ -115,6 +115,7 @@ public final class Attributes {
    * @param <T> type of the value in the key-value pair
    */
   @Immutable
+  @SuppressWarnings("UnusedTypeParameter")
   public static final class Key<T> {
     private final String debugString;
 

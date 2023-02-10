@@ -555,6 +555,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   }
 
   private class TransportStateImpl extends NettyClientStream.TransportState {
+    @SuppressWarnings("DirectInvocationOnMock")
     public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
       super(
           handler,
