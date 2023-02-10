@@ -151,9 +151,9 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     private final TimeProvider timeProvider;
     private final OrcaOobReportListener oobListener = this::onLoadReport;
     private final OrcaPerRequestReportListener perRpcListener = this::onLoadReport;
-    volatile long lastUpdated;
-    volatile long nonEmptySince;
-    volatile double weight;
+    private volatile long lastUpdated;
+    private volatile long nonEmptySince;
+    private volatile double weight;
     private volatile WeightedRoundRobinLoadBalancerConfig config;
 
     WrrSubchannel(Subchannel delegate, TimeProvider timeProvider) {
@@ -294,29 +294,27 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
    * The earliest deadline first implementation in which each object is
    * chosen deterministically and periodically with frequency proportional to its weight.
    *
-   * <p>Specifically, each object added to chooser is given a period equal to the multiplicative
-   * inverse of its weight. The place of each object in its period is tracked, and each call to
-   * choose returns the object with the least remaining time in its period (1/weight).
+   * <p>Specifically, each object added to chooser is given a deadline equal to the multiplicative
+   * inverse of its weight. The place of each object in its deadline is tracked, and each call to
+   * choose returns the object with the least remaining time in its deadline (1/weight).
    * (Ties are broken by the order in which the children were added to the chooser.)
-   * For example, if items A and B are added
-   * with weights 0.5 and 0.2, successive chooses return:
+   * For example, if items A and B are added with weights 0.5 and 0.2, successive chooses return:
    *
    * <ul>
-   *   <li>In the first call, the remaining periods are A=2 (1/0.5) and B=5 (1/0.2), so A is
-   *   returned. The period of A (as it was picked), is substracted from periods of all other
-   *   objects.
-   *   <li>Next, the remaining periods are A=2 and B=3, so A is returned. The period of A (2) is
-   *       substracted from all other objects (B=1) and A is re-added with A=2.
-   *   <li>Remaining periods are A=2 and B=1, so B is returned. The period of B (1) is substracted
-   *       from all other objects (A=1) and B is re-added with B=5.
-   *   <li>Remaining periods are A=1 and B=5, so A is returned. The period of A (1) is substracted
-   *       from all other objects (B=4) and A is re-added with A=2.
-   *   <li>Remaining periods are A=2 and B=4, so A is returned. The period of A (2) is substracted
-   *       from all other objects (B=2) and A is re-added with A=2.
-   *   <li>Remaining periods are A=2 and B=2, so A is returned. The period of A (2) is substracted
-   *       from all other objects (B=0) and A is re-added with A=2.
-   *   <li>Remaining periods are A=2 and B=0, so B is returned. The period of B (0) is substracted
-   *       from all other objects (A=2) and B is re-added with B=5.
+   *   <li>In the first call, the deadlines are A=2 (1/0.5) and B=5 (1/0.2), so A is returned.
+   *   The deadline of A is updated to 4.
+   *   <li>Next, the remaining deadlines are A=4 and B=5, so A is returned. The deadline of A (2) is
+   *       updated to A=6.
+   *   <li>Remaining deadlines are A=6 and B=5, so B is returned. The deadline of B is updated with
+   *       with B=10.
+   *   <li>Remaining deadlines are A=6 and B=10, so A is returned. The deadline of A is updated with
+   *        A=8.
+   *   <li>Remaining deadlines are A=8 and B=10, so A is returned. The deadline of A is updated with
+   *       A=10.
+   *   <li>Remaining deadlines are A=10 and B=10, so A is returned. The deadline of A is updated
+   *      with A=12.
+   *   <li>Remaining deadlines are A=12 and B=10, so B is returned. The deadline of B is updated
+   *      with B=15.
    *   <li>etc.
    * </ul>
    *
@@ -332,13 +330,6 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
    */
   private static final class EdfScheduler {
     private final PriorityQueue<ObjectState> prioQueue;
-
-    /**
-     * Upon every pick() the "virtual time" is advanced closer to the period of next items.
-     * Here we have an explicit "virtualTimeNow", which will be added to the period of all newly
-     * scheduled objects (virtualTimeNow + period).
-     */
-    private double virtualTimeNow = 0.0;
 
     /**
      * Weights below this value will be logged and upped to this minimum weight.
@@ -372,7 +363,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     void add(int index, double weight) {
       checkArgument(weight > 0.0, "Weights need to be positive.");
       ObjectState state = new ObjectState(Math.max(weight, MINIMUM_WEIGHT), index);
-      state.deadline = virtualTimeNow + 1 / state.weight;
+      state.deadline = 1 / state.weight;
       prioQueue.add(state);
     }
 
@@ -382,10 +373,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     int pick() {
       synchronized (lock) {
         ObjectState minObject = prioQueue.remove();
-        // Simulate advancing in time by setting the current time to the period of the nearest item
-        // on the "time horizon".
-        virtualTimeNow = minObject.deadline;
-        minObject.deadline = virtualTimeNow + (1.0 / minObject.weight);
+        minObject.deadline += 1.0 / minObject.weight;
         prioQueue.add(minObject);
         return minObject.index;
       }

@@ -32,6 +32,7 @@ java_library(
         ":envoy_service_load_stats_v3_java_grpc",
         ":envoy_service_status_v3_java_grpc",
         ":xds_protos_java",
+        ":orca",
         "//:auto_value_annotations",
         "//alts",
         "//api",
