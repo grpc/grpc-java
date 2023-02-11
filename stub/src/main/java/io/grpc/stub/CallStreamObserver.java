@@ -131,4 +131,12 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * @param enable whether to enable compression.
    */
   public abstract void setMessageCompression(boolean enable);
+
+  /**
+   * Sets a {@link Runnable} to be executed when the call is closed.
+   *
+   * @param onCloseHandler to call when the call is closed.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8467")
+  public abstract void setOnCloseHandler(Runnable onCloseHandler);
 }

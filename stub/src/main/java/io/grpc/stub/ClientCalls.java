@@ -352,6 +352,7 @@ public final class ClientCalls {
     private final ClientCall<ReqT, ?> call;
     private final boolean streamingResponse;
     private Runnable onReadyHandler;
+    private Runnable onCloseHandler;
     private int initialRequest = 1;
     private boolean autoRequestEnabled = true;
     private boolean aborted = false;
@@ -398,6 +399,15 @@ public final class ClientCalls {
             "Cannot alter onReadyHandler after call started. Use ClientResponseObserver");
       }
       this.onReadyHandler = onReadyHandler;
+    }
+
+    @Override
+    public void setOnCloseHandler(Runnable onCloseHandler) {
+      if (frozen) {
+        throw new IllegalStateException(
+            "Cannot alter onCloseHandler after call started. Use ClientResponseObserver");
+      }
+      this.onCloseHandler = onCloseHandler;
     }
 
     @Override
@@ -472,7 +482,6 @@ public final class ClientCalls {
       }
       firstResponseReceived = true;
       observer.onNext(message);
-
       if (adapter.streamingResponse && adapter.autoRequestEnabled) {
         // Request delivery of the next inbound message.
         adapter.request(1);
@@ -485,6 +494,9 @@ public final class ClientCalls {
         observer.onCompleted();
       } else {
         observer.onError(status.asRuntimeException(trailers));
+      }
+      if (adapter.onCloseHandler != null) {
+        adapter.onCloseHandler.run();
       }
     }
 

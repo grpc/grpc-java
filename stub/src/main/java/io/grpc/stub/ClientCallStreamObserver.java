@@ -109,4 +109,15 @@ public abstract class ClientCallStreamObserver<ReqT> extends CallStreamObserver<
    */
   @Override
   public abstract void setMessageCompression(boolean enable);
+
+  /**
+   * Sets a {@link Runnable} to be executed when the call is closed and the client is encouraged
+   * to abort processing to save resources.
+   *
+   * @param onCloseHandler to call when the call is closed.
+   */
+  @Override
+  public void setOnCloseHandler(Runnable onCloseHandler) {
+    throw new UnsupportedOperationException();
+  }
 }

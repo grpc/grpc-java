@@ -16,8 +16,6 @@
 
 package io.grpc.stub;
 
-import io.grpc.ExperimentalApi;
-
 /**
  * A refinement of {@link CallStreamObserver} to allows for interaction with call
  * cancellation events on the server side. An instance of this class is obtained by casting the
@@ -167,7 +165,7 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
    *
    * @param onCloseHandler to execute when the call has been closed cleanly.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8467")
+  @Override
   public void setOnCloseHandler(Runnable onCloseHandler) {
     throw new UnsupportedOperationException();
   }
