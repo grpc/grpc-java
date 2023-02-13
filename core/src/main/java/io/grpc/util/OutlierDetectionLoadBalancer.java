@@ -880,7 +880,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public static class Builder {
       Long intervalNanos = 10_000_000_000L; // 10s
       Long baseEjectionTimeNanos = 30_000_000_000L; // 30s
-      Long maxEjectionTimeNanos = 30_000_000_000L; // 30s
+      Long maxEjectionTimeNanos = 300_000_000_000L; // 300s
       Integer maxEjectionPercent = 10;
       SuccessRateEjection successRateEjection;
       FailurePercentageEjection failurePercentageEjection;
