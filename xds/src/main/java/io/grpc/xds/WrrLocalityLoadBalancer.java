@@ -21,6 +21,8 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
@@ -68,15 +70,33 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
     // to produce the weighted target LB config.
     WrrLocalityConfig wrrLocalityConfig
         = (WrrLocalityConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    Map<Locality, Integer> localityWeights = resolvedAddresses.getAttributes()
-        .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
 
-    // Not having locality weights is a misconfiguration, and we have to return with an error.
-    if (localityWeights == null) {
-      Status unavailable =
-          Status.UNAVAILABLE.withDescription("wrr_locality error: no locality weights provided");
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
-      return false;
+    // A map of locality weights is built up from the locality weight attributes in each address.
+    Map<Locality, Integer> localityWeights = new HashMap<>();
+    for (EquivalentAddressGroup eag : resolvedAddresses.getAddresses()) {
+      Attributes eagAttrs = eag.getAttributes();
+      Locality locality = eagAttrs.get(InternalXdsAttributes.ATTR_LOCALITY);
+      Integer localityWeight = eagAttrs.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT);
+
+      if (locality == null) {
+        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(
+            Status.UNAVAILABLE.withDescription("wrr_locality error: no locality provided")));
+        return false;
+      }
+      if (localityWeight == null) {
+        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(
+            Status.UNAVAILABLE.withDescription(
+                "wrr_locality error: no weight provided for locality " + locality)));
+        return false;
+      }
+
+      if (!localityWeights.containsKey(locality)) {
+        localityWeights.put(locality, localityWeight);
+      } else if (!localityWeights.get(locality).equals(localityWeight)) {
+        logger.log(XdsLogLevel.WARNING,
+            "Locality {0} has both weights {1} and {2}, using weight {1}", locality,
+            localityWeights.get(locality), localityWeight);
+      }
     }
 
     // Weighted target LB expects a WeightedPolicySelection for each locality as it will create a
@@ -87,14 +107,6 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
           new WeightedPolicySelection(localityWeights.get(locality),
               wrrLocalityConfig.childPolicy));
     }
-
-    // Remove the locality weights attribute now that we have consumed it. This is done simply for
-    // ease of debugging for the unsupported (and unlikely) scenario where WrrLocalityConfig has
-    // another wrr_locality as the child policy. The missing locality weight attribute would make
-    // the child wrr_locality fail early.
-    resolvedAddresses = resolvedAddresses.toBuilder()
-        .setAttributes(resolvedAddresses.getAttributes().toBuilder()
-            .discard(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS).build()).build();
 
     switchLb.switchTo(lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME));
     switchLb.handleResolvedAddresses(
