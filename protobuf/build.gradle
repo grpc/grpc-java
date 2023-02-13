@@ -30,5 +30,5 @@ dependencies {
 }
 
 tasks.named("javadoc").configure {
-    options.links 'https://developers.google.com/protocol-buffers/docs/reference/java/'
+    options.links 'https://protobuf.dev/reference/java/api-docs/'
 }
