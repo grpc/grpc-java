@@ -49,6 +49,7 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.services.InternalCallMetricRecorder;
+import io.grpc.services.MetricReport;
 import io.grpc.util.RoundRobinLoadBalancer.EmptyPicker;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
@@ -61,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
@@ -239,7 +241,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
-    assertThat(pickResult.getStreamTracerFactory()).isNotNull();
+    assertThat(pickResult.getStreamTracerFactory()).isNotNull(); // verify per-request listener
     assertThat(oobCalls.isEmpty()).isTrue();
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setEnableOobLoadReport(true)
             .setOobReportingPeriodNanos(20_030_000_000L)
@@ -257,8 +259,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(oobCalls.poll()).sendMessage(eq(golden));
   }
 
-  @Test
-  public void pickByWeight() {
+  private void pickByWeight(MetricReport r1, MetricReport r2, MetricReport r3,
+                       double p1, double p2, double p3) {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
@@ -282,25 +284,47 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.12, 0.1, 22, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.28, 0.1, 40, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel3.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.86, 0.1, 100, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.onLoadReport(r1);
+    weightedSubchannel2.onLoadReport(r2);
+    weightedSubchannel3.onLoadReport(r3);
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
       Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(3);
-    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0
-            - 22 / 0.12 / (22 / 0.12 + 40 / 0.28 + 100 / 0.86))).isAtMost(EDF_PRECISE);
-    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0
-            - 40 / 0.28 / (22 / 0.12 + 40 / 0.28 + 100 / 0.86) )).isAtMost(EDF_PRECISE);
-    assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 1000.0
-            - 100 / 0.86 / ( 22 / 0.12 + 40 / 0.28 + 100 / 0.86) )).isAtMost(EDF_PRECISE);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 10000.0 - p1)).isAtMost(EDF_PRECISE);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 10000.0 - p2 )).isAtMost(EDF_PRECISE);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 10000.0 - p3 )).isAtMost(EDF_PRECISE);
+  }
+
+  @Test
+  public void pickByWeight_LargeWeight() {
+    pickByWeight(InternalCallMetricRecorder.createMetricReport(
+                    0.1, 0.1, 2200, new HashMap<>(), new HashMap<>()),
+            InternalCallMetricRecorder.createMetricReport(
+                    0.9, 0.1, 2, new HashMap<>(), new HashMap<>()),
+            InternalCallMetricRecorder.createMetricReport(
+                    0.86, 0.1, 100, new HashMap<>(), new HashMap<>()),
+            2200 / 0.1 / (2200 / 0.1 + 2 / 0.9 + 100 / 0.86),
+            27 / 0.9 / (2200 / 0.1 + 2 / 0.9 + 100 / 0.86),
+            100 / 0.86 / ( 2200 / 0.1 + 2 / 0.9 + 100 / 0.86)
+    );
+  }
+
+  @Test
+  public void pickByWeight_normalWeight() {
+    pickByWeight(InternalCallMetricRecorder.createMetricReport(
+            0.12, 0.1, 22, new HashMap<>(), new HashMap<>()),
+            InternalCallMetricRecorder.createMetricReport(
+                    0.28, 0.1, 40, new HashMap<>(), new HashMap<>()),
+            InternalCallMetricRecorder.createMetricReport(
+                    0.86, 0.1, 100, new HashMap<>(), new HashMap<>()),
+            22 / 0.12 / (22 / 0.12 + 40 / 0.28 + 100 / 0.86),
+            40 / 0.28 / (22 / 0.12 + 40 / 0.28 + 100 / 0.86),
+            100 / 0.86 / ( 22 / 0.12 + 40 / 0.28 + 100 / 0.86)
+    );
   }
 
   @Test
@@ -420,6 +444,115 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5))
             .isAtMost(EDF_PRECISE);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5))
+            .isAtMost(EDF_PRECISE);
+  }
+
+  @Test
+  public void unknownWeightIsAvgWeight() {
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+            .setAttributes(affinity).build()));
+    verify(helper, times(3)).createSubchannel(
+            any(CreateSubchannelArgs.class));
+    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel1 = it.next();
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel2  = it.next();
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel3  = it.next();
+    subchannelStateListeners.get(readySubchannel3).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.READY));
+    verify(helper, times(3)).updateBalancingState(
+            eq(ConnectivityState.READY), pickerCaptor.capture());
+    WeightedRoundRobinPicker weightedPicker = pickerCaptor.getAllValues().get(2);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
+    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+            0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+            0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    Map<Subchannel, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    assertThat(pickCount.size()).isEqualTo(3);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 4.0 / 9))
+            .isAtMost(EDF_PRECISE);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 2.0 / 9))
+            .isAtMost(EDF_PRECISE);
+    // subchannel3's weight is average of subchannel1 and subchannel2
+    assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 1000.0 - 3.0 / 9))
+            .isAtMost(EDF_PRECISE);
+  }
+
+  @Test
+  public void pickFromOtherThread() throws Exception {
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+            .setAttributes(affinity).build()));
+    verify(helper, times(3)).createSubchannel(
+            any(CreateSubchannelArgs.class));
+    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel1 = it.next();
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel2  = it.next();
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.READY));
+    verify(helper, times(2)).updateBalancingState(
+            eq(ConnectivityState.READY), pickerCaptor.capture());
+    WeightedRoundRobinPicker weightedPicker = pickerCaptor.getAllValues().get(1);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+            0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+            0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    assertThat(weightedPicker.toString()).contains("rrMode=true");
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    new Thread(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          weightedPicker.pickSubchannel(mockArgs);
+          barrier.await();
+          Map<Subchannel, Integer> pickCount = new HashMap<>();
+          for (int i = 0; i < 1000; i++) {
+            Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
+            pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+          }
+          assertThat(pickCount.size()).isEqualTo(2);
+          // after blackout period
+          assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
+                  .isAtMost(EDF_PRECISE);
+          assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
+                  .isAtMost(EDF_PRECISE);
+        } catch (Exception ex) {
+          throw new AssertionError(ex);
+        }
+      }
+    }).start();
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    barrier.await();
+    Map<Subchannel, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    assertThat(pickCount.size()).isEqualTo(2);
+    // after blackout period
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
+            .isAtMost(EDF_PRECISE);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
             .isAtMost(EDF_PRECISE);
   }
 

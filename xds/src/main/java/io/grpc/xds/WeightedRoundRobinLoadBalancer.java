@@ -217,13 +217,13 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
   final class WeightedRoundRobinPicker extends ReadyPicker {
     private final List<Subchannel> list;
     private final AtomicReference<EdfScheduler> schedulerRef;
-    private volatile boolean rrMode = false;
+    private volatile boolean rrMode = true;
 
     WeightedRoundRobinPicker(List<Subchannel> list, int startIndex) {
-      super(list, startIndex);
+      super(checkNotNull(list, "list"), startIndex);
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
-      this.schedulerRef = new AtomicReference<>(new EdfScheduler());
+      this.schedulerRef = new AtomicReference<>(new EdfScheduler(list.size()));
       updateWeight();
     }
 
@@ -245,7 +245,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     }
 
     private void updateWeight() {
-      EdfScheduler scheduler = new EdfScheduler();
+      EdfScheduler scheduler = new EdfScheduler(list.size());
       int weightedChannelCount = 0;
       double avgWeight = 0;
       for (Subchannel value : list) {
@@ -255,22 +255,24 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
           weightedChannelCount++;
         }
       }
-      rrMode = weightedChannelCount < 2;
-      if (rrMode) {
+      if (weightedChannelCount < 2) {
+        rrMode = true;
         return;
       }
+      avgWeight /= 1.0 * weightedChannelCount;
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
         double newWeight = subchannel.getWeight();
         scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
       }
       schedulerRef.set(scheduler);
+      rrMode = false;
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(WeightedRoundRobinPicker.class)
-          .add("list", list).toString();
+          .add("list", list).add("rrMode", rrMode).toString();
     }
 
     @VisibleForTesting
@@ -342,8 +344,8 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
      * Use the item's deadline as the order in the priority queue. If the deadlines are the same,
      * use the index. Index should be unique.
      */
-    EdfScheduler() {
-      this.prioQueue = new PriorityQueue<ObjectState>(10, (o1, o2) -> {
+    EdfScheduler(int initialCapacity) {
+      this.prioQueue = new PriorityQueue<ObjectState>(initialCapacity, (o1, o2) -> {
         if (o1.deadline == o2.deadline) {
           return o1.index - o2.index;
         } else if (o1.deadline < o2.deadline) {
