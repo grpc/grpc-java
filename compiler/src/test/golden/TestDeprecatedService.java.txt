@@ -100,7 +100,6 @@ public final class TestDeprecatedServiceGrpc {
    * </pre>
    */
   @java.lang.Deprecated
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

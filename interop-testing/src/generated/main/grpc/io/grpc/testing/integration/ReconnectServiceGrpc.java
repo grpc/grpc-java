@@ -129,7 +129,6 @@ public final class ReconnectServiceGrpc {
    * A service used to control reconnect server.
    * </pre>
    */
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

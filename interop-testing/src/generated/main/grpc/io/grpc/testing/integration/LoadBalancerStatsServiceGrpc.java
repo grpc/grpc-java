@@ -129,7 +129,6 @@ public final class LoadBalancerStatsServiceGrpc {
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
    */
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

@@ -317,7 +317,6 @@ public final class TestServiceGrpc {
    * Test service that supports all call types.
    * </pre>
    */
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**
