@@ -116,7 +116,6 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

@@ -166,7 +166,6 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

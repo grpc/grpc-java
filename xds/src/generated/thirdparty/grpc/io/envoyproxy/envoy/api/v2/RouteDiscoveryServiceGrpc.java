@@ -168,7 +168,6 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**

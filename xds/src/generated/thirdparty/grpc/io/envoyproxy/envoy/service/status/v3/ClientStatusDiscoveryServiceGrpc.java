@@ -133,7 +133,6 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * also be used to get the current xDS states directly from the client.
    * </pre>
    */
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9702")
   public interface AsyncService {
 
     /**
