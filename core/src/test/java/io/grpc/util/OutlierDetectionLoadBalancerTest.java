@@ -31,6 +31,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -165,6 +166,9 @@ public class OutlierDetectionLoadBalancerTest {
     subchannel4 = subchannelIterator.next();
     subchannel5 = subchannelIterator.next();
 
+    ChannelLogger channelLogger = mock(ChannelLogger.class);
+
+    when(mockHelper.getChannelLogger()).thenReturn(channelLogger);
     when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
     when(mockHelper.getScheduledExecutorService()).thenReturn(
         fakeClock.getScheduledExecutorService());
@@ -174,6 +178,7 @@ public class OutlierDetectionLoadBalancerTest {
           public Subchannel answer(InvocationOnMock invocation) throws Throwable {
             CreateSubchannelArgs args = (CreateSubchannelArgs) invocation.getArguments()[0];
             final Subchannel subchannel = subchannels.get(args.getAddresses());
+            when(subchannel.getChannelLogger()).thenReturn(channelLogger);
             when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
             when(subchannel.getAttributes()).thenReturn(args.getAttributes());
             doAnswer(new Answer<Void>() {
