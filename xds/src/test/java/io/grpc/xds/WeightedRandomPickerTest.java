@@ -87,7 +87,8 @@ public class WeightedRandomPickerTest {
 
   private static final class FakeRandom implements ThreadSafeRandom {
     int nextInt;
-    int bound;
+    long bound;
+    Long nextLong;
 
     @Override
     public int nextInt(int bound) {
@@ -101,6 +102,23 @@ public class WeightedRandomPickerTest {
     @Override
     public long nextLong() {
       throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public long nextLong(long bound) {
+      this.bound = bound;
+
+      if (nextLong == null) {
+        assertThat(nextInt).isAtLeast(0);
+        if (bound <= Integer.MAX_VALUE) {
+          assertThat(nextInt).isLessThan((int)bound);
+        }
+        return nextInt;
+      }
+
+      assertThat(nextLong).isAtLeast(0);
+      assertThat(nextLong).isLessThan(bound);
+      return nextLong;
     }
   }
 
@@ -118,6 +136,24 @@ public class WeightedRandomPickerTest {
   public void negativeWeight() {
     thrown.expect(IllegalArgumentException.class);
     new WeightedChildPicker(-1, childPicker0);
+  }
+
+  @Test
+  public void overWeightSingle() {
+    thrown.expect(IllegalArgumentException.class);
+    new WeightedChildPicker(Integer.MAX_VALUE * 3L, childPicker0);
+  }
+
+  @Test
+  public void overWeightAggregate() {
+
+    List<WeightedChildPicker> weightedChildPickers = Arrays.asList(
+        new WeightedChildPicker(Integer.MAX_VALUE, childPicker0),
+        new WeightedChildPicker(Integer.MAX_VALUE, childPicker1),
+        new WeightedChildPicker(10, childPicker2));
+
+    thrown.expect(IllegalArgumentException.class);
+    new WeightedRandomPicker(weightedChildPickers, fakeRandom);
   }
 
   @Test
@@ -154,6 +190,36 @@ public class WeightedRandomPickerTest {
     fakeRandom.nextInt = 24;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult3);
     assertThat(fakeRandom.bound).isEqualTo(25);
+  }
+
+  @Test
+  public void pickFromLargeTotal() {
+
+    List<WeightedChildPicker> weightedChildPickers = Arrays.asList(
+        new WeightedChildPicker(10, childPicker0),
+        new WeightedChildPicker(Integer.MAX_VALUE, childPicker1),
+        new WeightedChildPicker(10, childPicker2));
+    WeightedRandomPicker xdsPicker = new WeightedRandomPicker(weightedChildPickers,fakeRandom);
+
+    long totalWeight = weightedChildPickers.stream()
+        .mapToLong(WeightedChildPicker::getWeight)
+        .reduce(0, Long::sum);
+
+    fakeRandom.nextLong = 5L;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult0);
+    assertThat(fakeRandom.bound).isEqualTo(totalWeight);
+
+    fakeRandom.nextLong = 16L;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
+    assertThat(fakeRandom.bound).isEqualTo(totalWeight);
+
+    fakeRandom.nextLong = Integer.MAX_VALUE + 10L;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult2);
+    assertThat(fakeRandom.bound).isEqualTo(totalWeight);
+
+    fakeRandom.nextLong = Integer.MAX_VALUE + 15L;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult2);
+    assertThat(fakeRandom.bound).isEqualTo(totalWeight);
   }
 
   @Test

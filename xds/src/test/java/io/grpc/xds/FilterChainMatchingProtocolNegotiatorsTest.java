@@ -64,7 +64,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;

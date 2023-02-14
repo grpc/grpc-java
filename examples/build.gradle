@@ -1,8 +1,7 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.18'
+    id 'com.google.protobuf' version '0.9.1'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
@@ -22,7 +21,7 @@ targetCompatibility = 1.8
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.51.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.54.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protobufVersion = '3.21.7'
 def protocVersion = protobufVersion
 
@@ -37,7 +36,7 @@ dependencies {
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
-    testImplementation "junit:junit:4.12"
+    testImplementation "junit:junit:4.13.2"
     testImplementation "org.mockito:mockito-core:3.4.0"
 }
 
@@ -140,6 +139,34 @@ task manualFlowControlServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task loadBalanceServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.loadbalance.LoadBalanceServer'
+    applicationName = 'load-balance-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task loadBalanceClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.loadbalance.LoadBalanceClient'
+    applicationName = 'load-balance-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task nameResolveServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.nameresolve.NameResolveServer'
+    applicationName = 'name-resolve-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task nameResolveClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.nameresolve.NameResolveClient'
+    applicationName = 'name-resolve-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -152,5 +179,9 @@ applicationDistribution.into('bin') {
     from(compressingHelloWorldClient)
     from(manualFlowControlClient)
     from(manualFlowControlServer)
+    from(loadBalanceServer)
+    from(loadBalanceClient)
+    from(nameResolveServer)
+    from(nameResolveClient)
     fileMode = 0755
 }

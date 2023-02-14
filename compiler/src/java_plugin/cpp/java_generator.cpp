@@ -14,6 +14,30 @@
  * limitations under the License.
  */
 
+// gRPC Java code generation
+//
+// The generated code should be very light-weight in terms of size. Although
+// less of a scaling problem than for protobuf messages, additions here are
+// multiplied many times and could easily bloat binaries if added to without
+// consideration. This is generally achieved by putting logic in io.grpc.stub
+// and limiting the generated code to API surface and inputs.
+//
+// gRPC is compatible with old versions of the generated code. New versions of
+// generated code are free to use new APIs, and thus require new gRPC versions.
+// But this isn't a special rule and is more just that the generated code is
+// best viewed as a library that depends on gRPC (as it may be used within a
+// library), and it should adhere to the normal rules of such. Notably, it can
+// only use stable API. Using experimental API, even if only exposing its own
+// experimental API, is not safe as libraries do not get to choose the version
+// of gRPC being used. The rule here is more "everything should behave like
+// normal to users" or "we don't require users to generate code for their
+// transitive dependency tree because OSS build tools don't support that."
+//
+// Java lite is designed for tools like Proguard to strip unused code. Be
+// careful not to add new references to methods that would retain them even when
+// unneeded. In particular, we want uncalled RPC methods to have their
+// descriptors and code pruned.
+
 #include "java_generator.h"
 
 #include <algorithm>

@@ -17,16 +17,13 @@
 package io.grpc.binder;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
-import android.app.Application;
-import android.content.ComponentName;
 import android.content.Context;
 import androidx.core.content.ContextCompat;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
@@ -124,6 +121,7 @@ public final class BinderChannelBuilder
   private SecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private BindServiceFlags bindServiceFlags;
+  private boolean strictLifecycleManagement;
 
   private BinderChannelBuilder(
       @Nullable AndroidComponentAddress directAddress,
@@ -164,6 +162,7 @@ public final class BinderChannelBuilder
               new BinderChannelTransportFactoryBuilder(),
               null);
     }
+    idleTimeout(60, TimeUnit.SECONDS);
   }
 
   @Override
@@ -221,6 +220,25 @@ public final class BinderChannelBuilder
   public BinderChannelBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
     this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
+    return this;
+  }
+
+  /** 
+   * Disables the channel idle timeout and prevents it from being enabled. This
+   * allows a centralized application method to configure the channel builder
+   * and return it, without worrying about another part of the application
+   * accidentally enabling the idle timeout.
+   */
+  public BinderChannelBuilder strictLifecycleManagement() {
+    strictLifecycleManagement = true;
+    super.idleTimeout(1000, TimeUnit.DAYS); // >30 days disables timeouts entirely.
+    return this;
+  }
+
+  @Override
+  public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
+    checkState(!strictLifecycleManagement, "Idle timeouts are not supported when strict lifecycle management is enabled");
+    super.idleTimeout(value, unit);
     return this;
   }
 

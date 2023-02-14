@@ -19,8 +19,9 @@ package io.grpc.examples.advanced;
 import static io.grpc.stub.ServerCalls.asyncUnaryCall;
 
 import io.grpc.BindableService;
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -50,7 +51,7 @@ public class HelloJsonServer {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .build()
         .start();

@@ -395,7 +395,7 @@ public class ClientCallImplTest {
 
   @Test
   public void methodInfoDeadlinePropagatedToStream() {
-    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     CallOptions callOptions = baseCallOptions.withDeadline(Deadline.after(2000, SECONDS));
 
     // Case: config Deadline expires later than CallOptions Deadline
@@ -786,7 +786,7 @@ public class ClientCallImplTest {
     verify(callListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .startsWith("ClientCall started after deadline exceeded");
+        .startsWith("ClientCall started after CallOptions deadline was exceeded");
     verifyNoInteractions(clientStreamProvider);
   }
 

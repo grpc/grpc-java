@@ -81,6 +81,17 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     initialDeadlineMonitor = scheduleDeadlineIfNeeded(scheduler, deadline);
   }
 
+  // If one argument is null, consider the other the "Before"
+  private boolean isAbeforeB(@Nullable Deadline a, @Nullable Deadline b) {
+    if (b == null) {
+      return true;
+    } else if (a == null) {
+      return false;
+    }
+
+    return a.isBefore(b);
+  }
+
   @Nullable
   private ScheduledFuture<?> scheduleDeadlineIfNeeded(
       ScheduledExecutorService scheduler, @Nullable Deadline deadline) {
@@ -90,8 +101,9 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
     long remainingNanos = Long.MAX_VALUE;
     if (deadline != null) {
-      remainingNanos = Math.min(remainingNanos, deadline.timeRemaining(NANOSECONDS));
+      remainingNanos = deadline.timeRemaining(NANOSECONDS);
     }
+
     if (contextDeadline != null && contextDeadline.timeRemaining(NANOSECONDS) < remainingNanos) {
       remainingNanos = contextDeadline.timeRemaining(NANOSECONDS);
       if (logger.isLoggable(Level.FINE)) {
@@ -110,13 +122,19 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         logger.fine(builder.toString());
       }
     }
+
     long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
     long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
     final StringBuilder buf = new StringBuilder();
+    String deadlineName = isAbeforeB(contextDeadline, deadline) ? "Context" : "CallOptions";
     if (remainingNanos < 0) {
-      buf.append("ClientCall started after deadline exceeded. Deadline exceeded after -");
+      buf.append("ClientCall started after ");
+      buf.append(deadlineName);
+      buf.append(" deadline was exceeded. Deadline has been exceeded for ");
     } else {
-      buf.append("Deadline exceeded after ");
+      buf.append("Deadline ");
+      buf.append(deadlineName);
+      buf.append(" will be exceeded in ");
     }
     buf.append(seconds);
     buf.append(String.format(Locale.US, ".%09d", nanos));

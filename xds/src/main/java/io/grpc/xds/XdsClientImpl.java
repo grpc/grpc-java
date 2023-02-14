@@ -47,9 +47,8 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.XdsClient.ResourceStore;
+import io.grpc.xds.XdsClient.TimerLaunch;
 import io.grpc.xds.XdsClient.XdsResponseHandler;
-import io.grpc.xds.XdsClusterResource.CdsUpdate;
-import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.net.URI;
 import java.util.Collection;
@@ -62,12 +61,19 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * XdsClient implementation for client side usages.
+ * XdsClient implementation.
  */
-final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
+final class XdsClientImpl extends XdsClient
+    implements XdsResponseHandler, ResourceStore, TimerLaunch {
+
+  private static boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
+      System.getenv("GRPC_LOG_XDS_NODE_ID"));
+  private static final Logger classLogger = Logger.getLogger(XdsClientImpl.class.getName());
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -107,7 +113,6 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
   private final XdsLogger logger;
   private volatile boolean isShutdown;
 
-  // TODO(zdapeng): rename to XdsClientImpl
   XdsClientImpl(
       XdsChannelFactory xdsChannelFactory,
       Bootstrapper.BootstrapInfo bootstrapInfo,
@@ -129,6 +134,9 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
+    if (LOG_XDS_NODE_ID) {
+      classLogger.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
+    }
   }
 
   private void maybeCreateXdsChannelWithLrs(ServerInfo serverInfo) {
@@ -146,10 +154,11 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
         timeService,
         syncContext,
         backoffPolicyProvider,
-        stopwatchSupplier);
+        stopwatchSupplier,
+        this);
     LoadReportClient lrsClient = new LoadReportClient(
-        loadStatsManager, xdsChannel.channel(), context, serverInfo.useProtocolV3(),
-        bootstrapInfo.node(), syncContext, timeService, backoffPolicyProvider, stopwatchSupplier);
+        loadStatsManager, xdsChannel.channel(), context, bootstrapInfo.node(), syncContext,
+        timeService, backoffPolicyProvider, stopwatchSupplier);
     serverChannelMap.put(serverInfo, xdsChannel);
     serverLrsClientMap.put(serverInfo, lrsClient);
   }
@@ -158,11 +167,8 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
   public void handleResourceResponse(
       XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
       List<Any> resources, String nonce) {
+    checkNotNull(xdsResourceType, "xdsResourceType");
     syncContext.throwIfNotInThisSynchronizationContext();
-    if (xdsResourceType == null) {
-      logger.log(XdsLogLevel.WARNING, "Ignore an unknown type of DiscoveryResponse");
-      return;
-    }
     Set<String> toParseResourceNames = null;
     if (!(xdsResourceType == XdsListenerResource.getInstance()
         || xdsResourceType == XdsRouteConfigureResource.getInstance())
@@ -182,7 +188,9 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
     for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
         resourceSubscribers.values()) {
       for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-        subscriber.onError(error);
+        if (!subscriber.hasResult()) {
+          subscriber.onError(error);
+        }
       }
     }
   }
@@ -291,7 +299,6 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
         if (!resourceSubscribers.containsKey(type)) {
           resourceSubscribers.put(type, new HashMap<>());
           subscribedResourceTypeUrls.put(type.typeUrl(), type);
-          subscribedResourceTypeUrls.put(type.typeUrlV2(), type);
         }
         ResourceSubscriber<T> subscriber =
             (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);;
@@ -322,13 +329,13 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
         if (!subscriber.isWatched()) {
           subscriber.cancelResourceWatch();
           resourceSubscribers.get(type).remove(resourceName);
-          subscribedResourceTypeUrls.remove(type.typeUrl());
-          subscribedResourceTypeUrls.remove(type.typeUrlV2());
           if (subscriber.xdsChannel != null) {
             subscriber.xdsChannel.adjustResourceSubscription(type);
           }
           if (resourceSubscribers.get(type).isEmpty()) {
             resourceSubscribers.remove(type);
+            subscribedResourceTypeUrls.remove(type.typeUrl());
+
           }
         }
       }
@@ -380,6 +387,30 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
     return logId.toString();
   }
 
+  @Override
+  public void startSubscriberTimersIfNeeded(ServerInfo serverInfo) {
+    if (isShutDown()) {
+      return;
+    }
+
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        if (isShutDown()) {
+          return;
+        }
+
+        for (Map<String, ResourceSubscriber<?>> subscriberMap : resourceSubscribers.values()) {
+          for (ResourceSubscriber<?> subscriber : subscriberMap.values()) {
+            if (subscriber.serverInfo.equals(serverInfo) && subscriber.respTimer == null) {
+              subscriber.restartTimer();
+            }
+          }
+        }
+      }
+    });
+  }
+
   private void cleanUpResourceTimers() {
     for (Map<String, ResourceSubscriber<?>> subscriberMap : resourceSubscribers.values()) {
       for (ResourceSubscriber<?> subscriber : subscriberMap.values()) {
@@ -398,7 +429,6 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
          xdsResourceType.typeName(), args.versionInfo, args.nonce, result.unpackedResources);
     Map<String, ParsedResource<T>> parsedResources = result.parsedResources;
     Set<String> invalidResources = result.invalidResources;
-    Set<String> retainedResources = result.retainedResources;
     List<String> errors = result.errors;
     String errorDetail = null;
     if (errors.isEmpty()) {
@@ -432,16 +462,14 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
       }
 
       // Nothing else to do for incremental ADS resources.
-      if (xdsResourceType.dependentResource() == null) {
+      if (!xdsResourceType.isFullStateOfTheWorld()) {
         continue;
       }
 
       // Handle State of the World ADS: invalid resources.
       if (invalidResources.contains(resourceName)) {
         // The resource is missing. Reuse the cached resource if possible.
-        if (subscriber.data != null) {
-          retainDependentResource(subscriber, retainedResources);
-        } else {
+        if (subscriber.data == null) {
           // No cached data. Notify the watchers of an invalid update.
           subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail));
         }
@@ -451,49 +479,6 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
       // For State of the World services, notify watchers when their watched resource is missing
       // from the ADS update.
       subscriber.onAbsent();
-      // Retain any dependent resources if the resource deletion is ignored
-      // per bootstrap ignore_resource_deletion server feature.
-      if (!subscriber.absent) {
-        retainDependentResource(subscriber, retainedResources);
-      }
-    }
-
-    // LDS/CDS responses represents the state of the world, RDS/EDS resources not referenced in
-    // LDS/CDS resources should be deleted.
-    if (xdsResourceType.dependentResource() != null) {
-      XdsResourceType<?> dependency = xdsResourceType.dependentResource();
-      Map<String, ResourceSubscriber<? extends ResourceUpdate>> dependentSubscribers =
-          resourceSubscribers.get(dependency);
-      if (dependentSubscribers == null) {
-        return;
-      }
-      for (String resource : dependentSubscribers.keySet()) {
-        if (!retainedResources.contains(resource)) {
-          dependentSubscribers.get(resource).onAbsent();
-        }
-      }
-    }
-  }
-
-  private void retainDependentResource(
-      ResourceSubscriber<? extends ResourceUpdate> subscriber, Set<String> retainedResources) {
-    if (subscriber.data == null) {
-      return;
-    }
-    String resourceName = null;
-    if (subscriber.type == XdsListenerResource.getInstance()) {
-      LdsUpdate ldsUpdate = (LdsUpdate) subscriber.data;
-      io.grpc.xds.HttpConnectionManager hcm = ldsUpdate.httpConnectionManager();
-      if (hcm != null) {
-        resourceName = hcm.rdsName();
-      }
-    } else if (subscriber.type == XdsClusterResource.getInstance()) {
-      CdsUpdate cdsUpdate = (CdsUpdate) subscriber.data;
-      resourceName = cdsUpdate.edsServiceName();
-    }
-
-    if (resourceName != null) {
-      retainedResources.add(resourceName);
     }
   }
 
@@ -529,11 +514,22 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
       // is created but not yet requested because the client is in backoff.
       this.metadata = ResourceMetadata.newResourceMetadataUnknown();
-      maybeCreateXdsChannelWithLrs(serverInfo);
-      this.xdsChannel = serverChannelMap.get(serverInfo);
-      if (xdsChannel.isInBackoff()) {
+
+      AbstractXdsClient xdsChannelTemp = null;
+      try {
+        maybeCreateXdsChannelWithLrs(serverInfo);
+        xdsChannelTemp = serverChannelMap.get(serverInfo);
+        if (xdsChannelTemp.isInBackoff()) {
+          return;
+        }
+      } catch (IllegalArgumentException e) {
+        xdsChannelTemp = null;
+        this.errorDescription = "Bad configuration:  " + e.getMessage();
         return;
+      } finally {
+        this.xdsChannel = xdsChannelTemp;
       }
+
       restartTimer();
     }
 
@@ -577,6 +573,10 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
       if (data != null || absent) {  // resource already resolved
         return;
       }
+      if (!xdsChannel.isReady()) { // When channel becomes ready, it will trigger a restartTimer
+        return;
+      }
+
       class ResourceNotFound implements Runnable {
         @Override
         public void run() {
@@ -594,6 +594,7 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
 
       // Initial fetch scheduled or rescheduled, transition metadata state to REQUESTED.
       metadata = ResourceMetadata.newResourceMetadataRequested();
+
       respTimer = syncContext.schedule(
           new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
           timeService);
@@ -623,6 +624,10 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
 
     boolean isWatched() {
       return !watchers.isEmpty();
+    }
+
+    boolean hasResult() {
+      return data != null || absent;
     }
 
     void onData(ParsedResource<T> parsedResource, String version, long updateTime) {
@@ -657,9 +662,7 @@ final class XdsClientImpl extends XdsClient implements XdsResponseHandler, Resou
       // and the resource is reusable.
       boolean ignoreResourceDeletionEnabled =
           serverInfo != null && serverInfo.ignoreResourceDeletion();
-      boolean isStateOfTheWorld = (type == XdsListenerResource.getInstance()
-          || type == XdsClusterResource.getInstance());
-      if (ignoreResourceDeletionEnabled && isStateOfTheWorld && data != null) {
+      if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.FORCE_WARNING,
               "xds server {0}: ignoring deletion for resource type {1} name {2}}",

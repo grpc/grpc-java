@@ -42,7 +42,6 @@ import java.util.List;
 
 /** Static factory methods for creating standard security policies. */
 @CheckReturnValue
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class SecurityPolicies {
 
   private static final int MY_UID = Process.myUid();
@@ -50,10 +49,15 @@ public final class SecurityPolicies {
 
   private SecurityPolicies() {}
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static ServerSecurityPolicy serverInternalOnly() {
     return new ServerSecurityPolicy();
   }
 
+  /**
+   * Creates a default {@link SecurityPolicy} that allows access only to callers with the same UID
+   * as the current process.
+   */
   public static SecurityPolicy internalOnly() {
     return new SecurityPolicy() {
       @Override
@@ -66,6 +70,7 @@ public final class SecurityPolicies {
     };
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy permissionDenied(String description) {
     Status denied = Status.PERMISSION_DENIED.withDescription(description);
     return new SecurityPolicy() {
@@ -84,6 +89,7 @@ public final class SecurityPolicies {
    * @param requiredSignature the allowed signature of the allowed package.
    * @throws NullPointerException if any of the inputs are {@code null}.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy hasSignature(
       PackageManager packageManager, String packageName, Signature requiredSignature) {
     return oneOfSignatures(
@@ -99,6 +105,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code requiredSignatureSha256Hash} is not of length 32.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy hasSignatureSha256Hash(
       PackageManager packageManager, String packageName, byte[] requiredSignatureSha256Hash) {
     return oneOfSignatureSha256Hash(
@@ -114,6 +121,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code requiredSignatures} is empty.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy oneOfSignatures(
       PackageManager packageManager,
       String packageName,

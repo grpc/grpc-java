@@ -80,7 +80,8 @@ public class SslContextProviderSupplierTest {
         .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
     verify(mockTlsContextManager, times(0))
         .releaseClientSslContextProvider(any(SslContextProvider.class));
-    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
+        ArgumentCaptor.forClass(SslContextProvider.Callback.class);
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
@@ -99,7 +100,8 @@ public class SslContextProviderSupplierTest {
   public void get_onException() {
     prepareSupplier();
     callUpdateSslContext();
-    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
+        ArgumentCaptor.forClass(SslContextProvider.Callback.class);
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();

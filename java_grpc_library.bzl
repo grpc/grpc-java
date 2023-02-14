@@ -30,12 +30,12 @@ java_rpc_toolchain = rule(
             providers = [JavaInfo],
         ),
         "plugin": attr.label(
-            cfg = "host",
+            cfg = "exec",
             executable = True,
         ),
         "plugin_arg": attr.string(),
         "_protoc": attr.label(
-            cfg = "host",
+            cfg = "exec",
             default = Label("@com_google_protobuf//:protoc"),
             executable = True,
         ),
@@ -85,7 +85,7 @@ def _java_rpc_library_impl(ctx):
     args = ctx.actions.args()
     args.add(toolchain.plugin, format = "--plugin=protoc-gen-rpc-plugin=%s")
     args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
-    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.host_configuration.host_path_separator)
+    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.configuration.host_path_separator)
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
     ctx.actions.run(

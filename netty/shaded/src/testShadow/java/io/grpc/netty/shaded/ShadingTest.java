@@ -39,7 +39,6 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceBlockingStub;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceImplBase;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -79,7 +78,8 @@ public final class ShadingTest {
   public void nettyResourcesUpdated() throws IOException {
     InputStream inputStream = NettyChannelBuilder.class.getClassLoader()
         .getResourceAsStream(
-            "META-INF/native-image/io.grpc.netty.shaded.io.netty/transport/reflection-config.json");
+            "META-INF/native-image/io.grpc.netty.shaded.io.netty/netty-transport/"
+                + "reflection-config.json");
     assertThat(inputStream).isNotNull();
 
     Scanner s = new Scanner(inputStream, StandardCharsets.UTF_8.name()).useDelimiter("\\A");

@@ -21,6 +21,7 @@ dependencies {
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
+            project(':grpc-testing-proto'),
             libraries.netty.codec.http2,
             libraries.okhttp
     signature libraries.signature.java

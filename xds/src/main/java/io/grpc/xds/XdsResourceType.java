@@ -39,8 +39,7 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 abstract class XdsResourceType<T extends ResourceUpdate> {
-  static final String TYPE_URL_RESOURCE_V2 = "type.googleapis.com/envoy.api.v2.Resource";
-  static final String TYPE_URL_RESOURCE_V3 =
+  static final String TYPE_URL_RESOURCE =
       "type.googleapis.com/envoy.service.discovery.v3.Resource";
   static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   @VisibleForTesting
@@ -65,8 +64,6 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   @VisibleForTesting
   static boolean enableOutlierDetection = getFlag("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION",
       true);
-  static final String TYPE_URL_CLUSTER_CONFIG_V2 =
-      "type.googleapis.com/envoy.config.cluster.aggregate.v2alpha.ClusterConfig";
   static final String TYPE_URL_CLUSTER_CONFIG =
       "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
   static final String TYPE_URL_TYPED_STRUCT_UDPA =
@@ -83,11 +80,12 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   abstract String typeUrl();
 
-  abstract String typeUrlV2();
-
-  // Non-null for  State of the World resources.
-  @Nullable
-  abstract XdsResourceType<?> dependentResource();
+  // Do not confuse with the SotW approach: it is the mechanism in which the client must specify all
+  // resource names it is interested in with each request. Different resource types may behave
+  // differently in this approach. For LDS and CDS resources, the server must return all resources
+  // that the client has subscribed to in each request. For RDS and EDS, the server may only return
+  // the resources that need an update.
+  abstract boolean isFullStateOfTheWorld();
 
   static class Args {
     final ServerInfo serverInfo;
@@ -125,18 +123,14 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
-    Set<String> retainedResources = new HashSet<>();
 
     for (int i = 0; i < resources.size(); i++) {
       Any resource = resources.get(i);
 
-      boolean isResourceV3;
       Message unpackedMessage;
       try {
         resource = maybeUnwrapResources(resource);
-        isResourceV3 = resource.getTypeUrl().equals(typeUrl());
-        unpackedMessage = unpackCompatibleType(resource, unpackedClassName(),
-            typeUrl(), typeUrlV2());
+        unpackedMessage = unpackCompatibleType(resource, unpackedClassName(), typeUrl(), null);
       } catch (InvalidProtocolBufferException e) {
         errors.add(String.format("%s response Resource index %d - can't decode %s: %s",
                 typeName(), i, unpackedClassName().getSimpleName(), e.getMessage()));
@@ -156,7 +150,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
       T resourceUpdate;
       try {
-        resourceUpdate = doParse(args, unpackedMessage, retainedResources, isResourceV3);
+        resourceUpdate = doParse(args, unpackedMessage);
       } catch (XdsClientImpl.ResourceInvalidException e) {
         errors.add(String.format("%s response %s '%s' validation error: %s",
                 typeName(), unpackedClassName().getSimpleName(), cname, e.getMessage()));
@@ -168,13 +162,11 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       parsedResources.put(cname, new ParsedResource<T>(resourceUpdate, resource));
     }
     return new ValidatedResourceUpdate<T>(parsedResources, unpackedResources, invalidResources,
-        errors, retainedResources);
+        errors);
 
   }
 
-  abstract T doParse(Args args, Message unpackedMessage, Set<String> retainedResources,
-                     boolean isResourceV3)
-      throws ResourceInvalidException;
+  abstract T doParse(Args args, Message unpackedMessage) throws ResourceInvalidException;
 
   /**
    * Helper method to unpack serialized {@link com.google.protobuf.Any} message, while replacing
@@ -199,10 +191,9 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   private Any maybeUnwrapResources(Any resource)
       throws InvalidProtocolBufferException {
-    if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE_V2)
-        || resource.getTypeUrl().equals(TYPE_URL_RESOURCE_V3)) {
-      return unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE_V3,
-          TYPE_URL_RESOURCE_V2).getResource();
+    if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE)) {
+      return unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE,
+          null).getResource();
     } else {
       return resource;
     }
@@ -231,19 +222,16 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
     Set<String> unpackedResources;
     Set<String> invalidResources;
     List<String> errors;
-    Set<String> retainedResources;
 
     // validated resource update
     public ValidatedResourceUpdate(Map<String, ParsedResource<T>> parsedResources,
                                    Set<String> unpackedResources,
                                    Set<String> invalidResources,
-                                   List<String> errors,
-                                   Set<String> retainedResources) {
+                                   List<String> errors) {
       this.parsedResources = parsedResources;
       this.unpackedResources = unpackedResources;
       this.invalidResources = invalidResources;
       this.errors = errors;
-      this.retainedResources = retainedResources;
     }
   }
 

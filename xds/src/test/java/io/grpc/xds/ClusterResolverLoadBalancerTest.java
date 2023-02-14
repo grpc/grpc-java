@@ -113,7 +113,7 @@ public class ClusterResolverLoadBalancerTest {
   private static final String EDS_SERVICE_NAME2 = "backend-service-bar.googleapis.com";
   private static final String DNS_HOST_NAME = "dns-service.googleapis.com";
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
   private final Locality locality1 =
       Locality.create("test-region-1", "test-zone-1", "test-subzone-1");
   private final Locality locality2 =
@@ -327,8 +327,8 @@ public class ClusterResolverLoadBalancerTest {
         "least_request_experimental");
 
     assertThat(
-        childBalancer.attributes.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).containsEntry(
-        locality1, 100);
+        childBalancer.addresses.get(0).getAttributes()
+            .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
   }
 
   @Test
@@ -410,8 +410,8 @@ public class ClusterResolverLoadBalancerTest {
         "least_request_experimental");
 
     assertThat(
-        childBalancer.attributes.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).containsEntry(
-        locality1, 100);
+        childBalancer.addresses.get(0).getAttributes()
+            .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
   }
 
 
@@ -507,11 +507,20 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(wrrLocalityConfig3.childPolicy.getProvider().getPolicyName()).isEqualTo(
         "round_robin");
 
-    Map<Locality, Integer> localityWeights = childBalancer.attributes.get(
-        InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
-    assertThat(localityWeights).containsEntry(locality1, 70);
-    assertThat(localityWeights).containsEntry(locality2, 10);
-    assertThat(localityWeights).containsEntry(locality3, 20);
+    for (EquivalentAddressGroup eag : childBalancer.addresses) {
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality1) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(70);
+      }
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality2) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(10);
+      }
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality3) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(20);
+      }
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -687,9 +696,9 @@ public class ClusterResolverLoadBalancerTest {
         ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
 
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    Map<Locality, Integer> localityWeights = childBalancer.attributes.get(
-        InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
-    assertThat(localityWeights.keySet()).containsExactly(locality2);
+    for (EquivalentAddressGroup eag : childBalancer.addresses) {
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
+    }
   }
 
   @Test
@@ -1315,7 +1324,6 @@ public class ClusterResolverLoadBalancerTest {
     private final Helper helper;
     private List<EquivalentAddressGroup> addresses;
     private Object config;
-    private Attributes attributes;
     private Status upstreamError;
     private boolean shutdown;
 
@@ -1328,7 +1336,6 @@ public class ClusterResolverLoadBalancerTest {
     public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
-      attributes = resolvedAddresses.getAttributes();
       return true;
     }
 

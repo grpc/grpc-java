@@ -11,8 +11,6 @@ import "xds/data/orca/v3/orca_load_report.proto";
 
 import "google/protobuf/duration.proto";
 
-import "validate/validate.proto";
-
 // See section `Out-of-band (OOB) reporting` of the design document in
 // :ref:`https://github.com/envoyproxy/envoy/issues/6614`.
 

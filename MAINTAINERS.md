@@ -9,7 +9,9 @@ for general contribution guidelines.
 
 ## Maintainers (in alphabetical order)
 - [ejona86](https://github.com/ejona86), Google LLC
+- [jdcormie](https://github.com/jdcormie), Google LLC
 - [larry-safran](https://github.com/larry-safran), Google LLC
+- [markb74](https://github.com/markb74), Google LLC
 - [ran-su](https://github.com/ran-su), Google LLC
 - [sanjaypujare](https://github.com/sanjaypujare), Google LLC
 - [sergiitk](https://github.com/sergiitk), Google LLC

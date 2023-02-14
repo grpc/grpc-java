@@ -50,7 +50,6 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 class XdsClusterResource extends XdsResourceType<CdsUpdate> {
-  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
   static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
@@ -84,14 +83,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  String typeUrlV2() {
-    return ADS_TYPE_URL_CDS_V2;
-  }
-
-  @Nullable
-  @Override
-  XdsResourceType<?> dependentResource() {
-    return XdsEndpointResource.getInstance();
+  boolean isFullStateOfTheWorld() {
+    return true;
   }
 
   @Override
@@ -101,8 +94,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  CdsUpdate doParse(Args args, Message unpackedMessage,
-                         Set<String> retainedResources, boolean isResourceV3)
+  CdsUpdate doParse(Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof Cluster)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
@@ -111,12 +103,12 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     if (args.bootstrapInfo != null && args.bootstrapInfo.certProviders() != null) {
       certProviderInstances = args.bootstrapInfo.certProviders().keySet();
     }
-    return processCluster((Cluster) unpackedMessage, retainedResources, certProviderInstances,
+    return processCluster((Cluster) unpackedMessage, certProviderInstances,
         args.serverInfo, args.loadBalancerRegistry);
   }
 
   @VisibleForTesting
-  static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources,
+  static CdsUpdate processCluster(Cluster cluster,
                                   Set<String> certProviderInstances,
                                   Bootstrapper.ServerInfo serverInfo,
                                   LoadBalancerRegistry loadBalancerRegistry)
@@ -124,7 +116,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
       case TYPE:
-        structOrError = parseNonAggregateCluster(cluster, retainedEdsResources,
+        structOrError = parseNonAggregateCluster(cluster,
             certProviderInstances, serverInfo);
         break;
       case CLUSTER_TYPE:
@@ -169,7 +161,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     try {
       clusterConfig = unpackCompatibleType(customType.getTypedConfig(),
           io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class,
-          TYPE_URL_CLUSTER_CONFIG, TYPE_URL_CLUSTER_CONFIG_V2);
+          TYPE_URL_CLUSTER_CONFIG, null);
     } catch (InvalidProtocolBufferException e) {
       return StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
     }
@@ -178,8 +170,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   private static StructOrError<CdsUpdate.Builder> parseNonAggregateCluster(
-      Cluster cluster, Set<String> edsResources, Set<String> certProviderInstances,
-      Bootstrapper.ServerInfo serverInfo) {
+      Cluster cluster, Set<String> certProviderInstances, Bootstrapper.ServerInfo serverInfo) {
     String clusterName = cluster.getName();
     Bootstrapper.ServerInfo lrsServerInfo = null;
     Long maxConcurrentRequests = null;
@@ -249,9 +240,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       // If the service_name field is set, that value will be used for the EDS request.
       if (!edsClusterConfig.getServiceName().isEmpty()) {
         edsServiceName = edsClusterConfig.getServiceName();
-        edsResources.add(edsServiceName);
-      } else {
-        edsResources.add(clusterName);
       }
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext,

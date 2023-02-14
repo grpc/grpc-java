@@ -461,6 +461,7 @@ public class TestServiceClient {
 
       case RPC_SOAK: {
         tester.performSoakTest(
+            serverHost,
             false /* resetChannelPerIteration */,
             soakIterations,
             soakMaxFailures,
@@ -472,6 +473,7 @@ public class TestServiceClient {
 
       case CHANNEL_SOAK: {
         tester.performSoakTest(
+            serverHost,
             true /* resetChannelPerIteration */,
             soakIterations,
             soakMaxFailures,

@@ -98,9 +98,7 @@ public final class ServerRegistry {
       instance = new ServerRegistry();
       for (ServerProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
+        instance.addProvider(provider);
       }
       instance.refreshProviders();
     }

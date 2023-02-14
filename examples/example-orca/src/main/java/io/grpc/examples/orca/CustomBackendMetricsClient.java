@@ -19,9 +19,10 @@ package io.grpc.examples.orca;
 import static io.grpc.examples.orca.CustomBackendMetricsLoadBalancerProvider.EXAMPLE_LOAD_BALANCER;
 
 import io.grpc.Channel;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -91,9 +92,8 @@ public class CustomBackendMetricsClient {
 
     LoadBalancerRegistry.getDefaultRegistry().register(
         new CustomBackendMetricsLoadBalancerProvider());
-    ManagedChannel channel = ManagedChannelBuilder.forTarget(target)
+    ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .defaultLoadBalancingPolicy(EXAMPLE_LOAD_BALANCER)
-        .usePlaintext()
         .build();
     try {
       CustomBackendMetricsClient client = new CustomBackendMetricsClient(channel);

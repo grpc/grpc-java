@@ -179,7 +179,8 @@ public class WeightedTargetLoadBalancerTest {
 
   @Test
   public void handleResolvedAddresses() {
-    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
     Attributes.Key<Object> fakeKey = Attributes.Key.create("fake_key");
     Object fakeValue = new Object();
 
@@ -260,8 +261,8 @@ public class WeightedTargetLoadBalancerTest {
 
   @Test
   public void handleNameResolutionError() {
-    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
 
     // Error before any child balancer created.
     weightedTargetLb.handleNameResolutionError(Status.DATA_LOSS);
@@ -326,7 +327,7 @@ public class WeightedTargetLoadBalancerTest {
         new ErrorPicker(Status.DATA_LOSS),
         new ErrorPicker(Status.DATA_LOSS)
     };
-    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
 
     // One child balancer goes to TRANSIENT_FAILURE.
     childHelpers.get(1).updateBalancingState(TRANSIENT_FAILURE, failurePickers[1]);
