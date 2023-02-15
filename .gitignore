@@ -42,6 +42,3 @@ qemu-arm-static
 
 # Temporary output dir for artifacts
 mvn-artifacts
-
-# test environment
-venv
