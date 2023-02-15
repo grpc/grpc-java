@@ -92,34 +92,35 @@ public final class RouteLookupServiceGrpc {
 
   /**
    */
-  public static abstract class RouteLookupServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
      * Lookup returns a target for a single key.
      * </pre>
      */
-    public void routeLookup(io.grpc.lookup.v1.RouteLookupRequest request,
+    default void routeLookup(io.grpc.lookup.v1.RouteLookupRequest request,
         io.grpc.stub.StreamObserver<io.grpc.lookup.v1.RouteLookupResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getRouteLookupMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getRouteLookupMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.lookup.v1.RouteLookupRequest,
-                io.grpc.lookup.v1.RouteLookupResponse>(
-                  this, METHODID_ROUTE_LOOKUP)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service RouteLookupService.
    */
-  public static final class RouteLookupServiceStub extends io.grpc.stub.AbstractAsyncStub<RouteLookupServiceStub> {
+  public static abstract class RouteLookupServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return RouteLookupServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service RouteLookupService.
+   */
+  public static final class RouteLookupServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<RouteLookupServiceStub> {
     private RouteLookupServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -144,8 +145,10 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service RouteLookupService.
    */
-  public static final class RouteLookupServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub> {
+  public static final class RouteLookupServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub> {
     private RouteLookupServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -169,8 +172,10 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteLookupService.
    */
-  public static final class RouteLookupServiceFutureStub extends io.grpc.stub.AbstractFutureStub<RouteLookupServiceFutureStub> {
+  public static final class RouteLookupServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<RouteLookupServiceFutureStub> {
     private RouteLookupServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -201,10 +206,10 @@ public final class RouteLookupServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final RouteLookupServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(RouteLookupServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -231,6 +236,18 @@ public final class RouteLookupServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getRouteLookupMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.lookup.v1.RouteLookupRequest,
+              io.grpc.lookup.v1.RouteLookupResponse>(
+                service, METHODID_ROUTE_LOOKUP)))
+        .build();
   }
 
   private static abstract class RouteLookupServiceBaseDescriptorSupplier

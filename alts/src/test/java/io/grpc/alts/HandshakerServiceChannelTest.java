@@ -46,7 +46,7 @@ public final class HandshakerServiceChannelTest {
             so.onCompleted();
           }
         })
-        .build());
+          .build());
   private Resource<Channel> resource;
 
   @Before
