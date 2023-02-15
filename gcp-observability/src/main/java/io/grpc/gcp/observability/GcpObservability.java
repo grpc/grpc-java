@@ -155,18 +155,18 @@ public final class GcpObservability implements AutoCloseable {
     viewManager.registerView(RpcViewConstants.GRPC_CLIENT_STARTED_RPC_VIEW);
     viewManager.registerView(RpcViewConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY_VIEW);
     viewManager.registerView(
-        ObservabilityCensusConstants.GRPC_CLIENT_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC);
+        ObservabilityCensusConstants.GRPC_CLIENT_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW);
     viewManager.registerView(
-        ObservabilityCensusConstants.GRPC_CLIENT_RECEIVED_COMPRESSED_MESSAGE_BYTES_PER_RPC);
+        ObservabilityCensusConstants.GRPC_CLIENT_RECEIVED_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW);
 
     // server views
     viewManager.registerView(RpcViewConstants.GRPC_SERVER_COMPLETED_RPC_VIEW);
     viewManager.registerView(RpcViewConstants.GRPC_SERVER_STARTED_RPC_VIEW);
     viewManager.registerView(RpcViewConstants.GRPC_SERVER_SERVER_LATENCY_VIEW);
     viewManager.registerView(
-        ObservabilityCensusConstants.GRPC_SERVER_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC);
+        ObservabilityCensusConstants.GRPC_SERVER_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW);
     viewManager.registerView(
-        ObservabilityCensusConstants.GRPC_SERVER_RECEIVED_COMPRESSED_MESSAGE_BYTES_PER_RPC);
+        ObservabilityCensusConstants.GRPC_SERVER_RECEIVED_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW);
   }
 
   @VisibleForTesting
