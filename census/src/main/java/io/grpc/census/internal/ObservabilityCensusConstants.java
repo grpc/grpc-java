@@ -61,7 +61,7 @@ public final class ObservabilityCensusConstants {
   public static final View GRPC_CLIENT_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC =
       View.create(
           View.Name.create("grpc.io/client/sent_compressed_message_bytes_per_rpc"),
-          "Sent compressed message bytes per RPC",
+          "Compressed message bytes sent per client RPC attempt",
           GRPC_CLIENT_SENT_BYTES_PER_RPC,
           AGGREGATION_WITH_BYTES_HISTOGRAM,
           Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS));
@@ -69,7 +69,7 @@ public final class ObservabilityCensusConstants {
   public static final View GRPC_CLIENT_RECEIVED_COMPRESSED_MESSAGE_BYTES_PER_RPC =
       View.create(
           View.Name.create("grpc.io/client/received_compressed_message_bytes_per_rpc"),
-          "Received compressed message bytes per RPC",
+          "Compressed message bytes received per client RPC attempt",
           GRPC_CLIENT_RECEIVED_BYTES_PER_RPC,
           AGGREGATION_WITH_BYTES_HISTOGRAM,
           Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS));
@@ -77,7 +77,7 @@ public final class ObservabilityCensusConstants {
   public static final View GRPC_SERVER_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC =
       View.create(
           View.Name.create("grpc.io/server/sent_compressed_message_bytes_per_rpc"),
-          "Sent compressed message bytes per RPC",
+          "Compressed message bytes sent per server RPC",
           GRPC_SERVER_SENT_BYTES_PER_RPC,
           AGGREGATION_WITH_BYTES_HISTOGRAM,
           Arrays.asList(GRPC_SERVER_METHOD, GRPC_SERVER_STATUS));
@@ -85,7 +85,7 @@ public final class ObservabilityCensusConstants {
   public static final View GRPC_SERVER_RECEIVED_COMPRESSED_MESSAGE_BYTES_PER_RPC =
       View.create(
           View.Name.create("grpc.io/server/received_compressed_message_bytes_per_rpc"),
-          "Received compressed message bytes per RPC",
+          "Compressed message bytes received per server RPC",
           GRPC_SERVER_RECEIVED_BYTES_PER_RPC,
           AGGREGATION_WITH_BYTES_HISTOGRAM,
           Arrays.asList(GRPC_SERVER_METHOD, GRPC_SERVER_STATUS));
