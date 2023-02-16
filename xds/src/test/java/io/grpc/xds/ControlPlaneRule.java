@@ -126,7 +126,6 @@ public class ControlPlaneRule extends TestWatcher {
 
   @Override protected void finished(Description description) {
     if (server != null) {
-      System.out.println(">>> shutting down server on port " + server.getPort());
       server.shutdown();
       try {
         logger.info("awaiting termination");

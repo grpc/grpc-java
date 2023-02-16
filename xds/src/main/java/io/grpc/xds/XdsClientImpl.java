@@ -479,7 +479,7 @@ final class XdsClientImpl extends XdsClient
       // For State of the World services, notify watchers when their watched resource is missing
       // from the ADS update. Note that we can only do this if the resource update is coming from
       // the same xDS server that the ResourceSubscriber is subscribed to.
-      if (subscriber.serverInfo.target().equals(args.serverInfo.target())) {
+      if (subscriber.serverInfo.equals(args.serverInfo)) {
         subscriber.onAbsent();
       }
     }

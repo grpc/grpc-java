@@ -93,7 +93,6 @@ public class XdsClientFederationTest {
         "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
     verify(mockDirectPathWatcher, timeout(20000)).onResourceDoesNotExist(
         "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
-    verify(mockWatcher, timeout(20000)).onResourceDoesNotExist("test-server");
 
     // Add a normal server resource and observe a changed event on the normal watcher and
     // a onResourceDoesNotExist() on the DirectPath watcher as it's resource is not yet created.
