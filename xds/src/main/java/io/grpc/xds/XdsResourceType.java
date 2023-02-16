@@ -59,6 +59,10 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
+
+  @VisibleForTesting
+  static boolean enableWrr = getFlag("GRPC_EXPERIMENTAL_XDS_WRR_LB", false);
+
   @VisibleForTesting
   static boolean enableCustomLbConfig = getFlag("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG", true);
   @VisibleForTesting
@@ -70,6 +74,9 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       "type.googleapis.com/udpa.type.v1.TypedStruct";
   static final String TYPE_URL_TYPED_STRUCT =
       "type.googleapis.com/xds.type.v3.TypedStruct";
+
+  static final String TYPE_URL_CLIENT_SIDE_WRR = "type.googleapis.com/envoy.extensions.load_balancing_policies.client_"
+          + "side_weighted_round_robin.v3.ClientSideWeightedRoundRobin";
 
   @Nullable
   abstract String extractResourceName(Message unpackedResource);

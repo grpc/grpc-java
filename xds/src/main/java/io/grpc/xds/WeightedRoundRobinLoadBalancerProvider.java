@@ -36,6 +36,8 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
   @VisibleForTesting
   static final long MIN_WEIGHT_UPDATE_PERIOD_NANOS = 100_000_000L; // 100ms
 
+  static final String SCHEME = "weighted_round_robin_experimental";
+
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
     return new WeightedRoundRobinLoadBalancer(helper, TimeProvider.SYSTEM_TIME_PROVIDER);
@@ -53,7 +55,7 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
 
   @Override
   public String getPolicyName() {
-    return "weighted_round_robin_experimental";
+    return SCHEME;
   }
 
   @Override

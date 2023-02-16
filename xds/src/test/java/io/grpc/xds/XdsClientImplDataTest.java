@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.CidrRange;
@@ -164,6 +165,8 @@ public class XdsClientImplDataTest {
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
 
+  private boolean originalEnableWrr;
+
   @Before
   public void setUp() {
     originalEnableRetry = XdsResourceType.enableRetry;
@@ -174,6 +177,8 @@ public class XdsClientImplDataTest {
     assertThat(originalEnableRouteLookup).isFalse();
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     assertThat(originalEnableLeastRequest).isFalse();
+    originalEnableWrr = XdsResourceType.enableWrr;
+    assertThat(originalEnableWrr).isFalse();
   }
 
   @After
@@ -182,6 +187,7 @@ public class XdsClientImplDataTest {
     XdsResourceType.enableRbac = originalEnableRbac;
     XdsResourceType.enableRouteLookup = originalEnableRouteLookup;
     XdsResourceType.enableLeastRequest = originalEnableLeastRequest;
+    XdsResourceType.enableWrr = originalEnableWrr;
   }
 
   @Test
@@ -1963,6 +1969,37 @@ public class XdsClientImplDataTest {
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
         JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
+  }
+
+  @Test
+  public void parseCluster_WrrLbPolicy_defaultLbConfig() throws ResourceInvalidException {
+    XdsResourceType.enableWrr = true;
+    Cluster cluster = Cluster.newBuilder()
+            .setName("cluster-foo.googleapis.com")
+            .setType(DiscoveryType.EDS)
+            .setEdsClusterConfig(
+                    EdsClusterConfig.newBuilder()
+                            .setEdsConfig(
+                                    ConfigSource.newBuilder()
+                                            .setAds(AggregatedConfigSource.getDefaultInstance()))
+                            .setServiceName("service-foo.googleapis.com"))
+            .setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder().addPolicies(
+                LoadBalancingPolicy.Policy.newBuilder().mergeTypedExtensionConfig(
+                    TypedExtensionConfig.newBuilder().mergeTypedConfig(Any.pack(
+                        TypedExtensionConfig.newBuilder().setName(
+                            WeightedRoundRobinLoadBalancerProvider.SCHEME).setTypedConfig(
+                                    Any.pack()).build())
+                    ).build()).build()).build())
+            .build();
+
+    CdsUpdate update = XdsClusterResource.processCluster(
+            cluster, null, LRS_SERVER_INFO,
+            LoadBalancerRegistry.getDefaultRegistry());
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+            JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("weighted_round_robin_experimental");
   }
 
   @Test
