@@ -85,12 +85,13 @@ public class ControlPlaneRule extends TestWatcher {
   private XdsTestControlPlaneService controlPlaneService;
   private XdsNameResolverProvider nameResolverProvider;
 
-  public ControlPlaneRule(String serverHostName) {
-    this.serverHostName = serverHostName;
+  public ControlPlaneRule() {
+    serverHostName = "test-server";
   }
 
-  public ControlPlaneRule() {
-    this("test-server");
+  public ControlPlaneRule setServerHostName(String serverHostName) {
+    this.serverHostName = serverHostName;
+    return this;
   }
 
   /**

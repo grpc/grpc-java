@@ -52,10 +52,10 @@ public class XdsClientFederationTest {
       "grpc/server?udpa.resource.listening_address=";
 
   @Rule
-  public ControlPlaneRule trafficdirector = new ControlPlaneRule("test-server");
+  public ControlPlaneRule trafficdirector = new ControlPlaneRule().setServerHostName("test-server");
 
   @Rule
-  public ControlPlaneRule directpathPa = new ControlPlaneRule(
+  public ControlPlaneRule directpathPa = new ControlPlaneRule().setServerHostName(
       "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
 
   private XdsClient xdsClient;
