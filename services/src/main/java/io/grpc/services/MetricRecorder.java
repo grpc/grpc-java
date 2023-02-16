@@ -22,11 +22,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Implements the service/APIs for Out-of-Band metrics reporting, only for utilization metrics.
- * A user should use the public set-APIs to update the server machine's utilization metrics data.
+ * Implements the service/APIs for Out-of-Band metrics reporting, only for utilization metrics. A
+ * user should use the public set-APIs to update the server machine's utilization metrics data.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9006")
 public final class MetricRecorder {
+
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
   private volatile double cpuUtilization;
   private volatile double memoryUtilization;
@@ -36,17 +37,22 @@ public final class MetricRecorder {
     return new MetricRecorder();
   }
 
-  private MetricRecorder() {}
+  private MetricRecorder() {
+  }
 
   /**
-   * Update the metrics value corresponding to the specified key.
+   * Update the metrics value in the range [0, 1] corresponding to the specified key. Values outside
+   * the valid range are rejected.
    */
   public void putUtilizationMetric(String key, double value) {
+    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+      return;
+    }
     metricsData.put(key, value);
   }
 
   /**
-   * Replace the whole metrics data using the specified map.
+   * Replace the whole metrics data using the specified map. No range validation.
    */
   public void setAllUtilizationMetrics(Map<String, Double> metrics) {
     metricsData = new ConcurrentHashMap<>(metrics);
@@ -60,9 +66,13 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the CPU utilization metrics data.
+   * Update the CPU utilization metrics data in the range [0, 1]. Values outside the valid range are
+   * rejected.
    */
   public void setCpuUtilizationMetric(double value) {
+    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+      return;
+    }
     cpuUtilization = value;
   }
 
@@ -74,9 +84,13 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the memory utilization metrics data.
+   * Update the memory utilization metrics data in the range [0, 1]. Values outside the valid range
+   * are rejected.
    */
   public void setMemoryUtilizationMetric(double value) {
+    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+      return;
+    }
     memoryUtilization = value;
   }
 
@@ -88,9 +102,13 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the QPS metrics data.
+   * Update the QPS metrics data in the range [0, inf). Values outside the valid range are
+   * rejected.
    */
   public void setQps(double value) {
+    if (!MetricRecorderHelper.isQpsValid(value)) {
+      return;
+    }
     qps = value;
   }
 
@@ -102,7 +120,7 @@ public final class MetricRecorder {
   }
 
   MetricReport getMetricReport() {
-    return new MetricReport(cpuUtilization, memoryUtilization, qps,
-        Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
+    return new MetricReport(cpuUtilization, memoryUtilization, qps, Collections.emptyMap(),
+        Collections.unmodifiableMap(metricsData));
   }
 }
