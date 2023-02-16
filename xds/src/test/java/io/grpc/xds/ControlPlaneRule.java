@@ -128,14 +128,12 @@ public class ControlPlaneRule extends TestWatcher {
     if (server != null) {
       server.shutdown();
       try {
-        logger.info("awaiting termination");
         if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
           logger.log(Level.SEVERE, "Timed out waiting for server shutdown");
         }
       } catch (InterruptedException e) {
         throw new AssertionError("unable to shut down control plane server", e);
       }
-      logger.info("server terminated");
     }
     NameResolverRegistry.getDefaultRegistry().deregister(nameResolverProvider);
   }
