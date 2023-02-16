@@ -215,12 +215,12 @@ public class OrcaServiceImplTest {
   public void testMultipleClients() {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
-    defaultTestService.putUtilizationMetric("omg", 100);
+    defaultTestService.putUtilizationMetric("omg", 1.00);
     call.start(listener, new Metadata());
     call.sendMessage(OrcaLoadReportRequest.newBuilder().build());
     call.halfClose();
     call.request(1);
-    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("omg", 100).build();
+    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("omg", 1.00).build();
     verify(listener).onMessage(eq(expect));
     defaultTestService.setMemoryUtilizationMetric(0.5);
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call2 = channel.newCall(
