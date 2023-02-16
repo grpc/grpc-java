@@ -808,6 +808,7 @@ public class XdsClientImplDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseRouteAction_withHashPolicies() {
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
