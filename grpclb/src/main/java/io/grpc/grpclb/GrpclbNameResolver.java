@@ -76,7 +76,10 @@ final class GrpclbNameResolver extends DnsNameResolver {
     ResourceResolver resourceResolver = getResourceResolver();
     if (resourceResolver != null) {
       try {
-        srvRecords = resourceResolver.resolveSrv(GRPCLB_NAME_PREFIX + getHost());
+        // This host behaves "unconventionally" with SRV records - we exclude it here.
+        if (!getHost().equals("metadata.google.internal.")) {
+          srvRecords = resourceResolver.resolveSrv(GRPCLB_NAME_PREFIX + getHost());
+        }
       } catch (Exception e) {
         srvRecordsException = e;
       }
