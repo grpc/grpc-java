@@ -77,7 +77,6 @@ public class XdsClientFederationTest {
   @After
   public void cleanUp() throws InterruptedException {
     BootstrapperImpl.enableFederation = originalFederationStatus;
-    xdsClient.shutdown();
     xdsClientPool.returnObject(xdsClient);
   }
 
