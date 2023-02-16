@@ -93,7 +93,7 @@ public class XdsClientFederationTest {
             "xdstp://server-one/envoy.config.listener.v3.Listener/test-server"));
 
     // By setting the LDS config with a new server name we effectively make the old server to go
-    // away as it is not in the configuration anymore. This change in one control plain (here the
+    // away as it is not in the configuration anymore. This change in one control plane (here the
     // "normal TrafficDirector" one) should not trigger an onResourceDoesNotExist() call on a
     // watcher of another control plane (here the DirectPath one).
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
