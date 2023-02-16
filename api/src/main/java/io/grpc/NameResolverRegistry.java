@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -162,7 +163,11 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      NameResolverProvider provider = providers().get(targetUri.getScheme());
+      String scheme = targetUri.getScheme();
+      if (scheme == null) {
+        return null;
+      }
+      NameResolverProvider provider = providers().get(scheme.toLowerCase(Locale.US));
       return provider == null ? null : provider.newNameResolver(targetUri, args);
     }
 
