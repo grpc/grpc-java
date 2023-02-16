@@ -22,6 +22,7 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
@@ -56,6 +57,7 @@ public class XdsClientFederationTest {
   public ControlPlaneRule directpathPa = new ControlPlaneRule().setServerHostName(
       "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
 
+  private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private boolean originalFederationStatus;
 
@@ -68,13 +70,15 @@ public class XdsClientFederationTest {
 
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
     clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
-    xdsClient = clientPoolProvider.getOrCreate().getObject();
+    xdsClientPool = clientPoolProvider.getOrCreate();
+    xdsClient = xdsClientPool.getObject();
   }
 
   @After
   public void cleanUp() throws InterruptedException {
     BootstrapperImpl.enableFederation = originalFederationStatus;
     xdsClient.shutdown();
+    xdsClientPool.returnObject(xdsClient);
   }
 
   /**
