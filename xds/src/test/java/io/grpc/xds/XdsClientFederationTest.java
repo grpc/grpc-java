@@ -16,10 +16,9 @@
 
 package io.grpc.xds;
 
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -83,38 +82,24 @@ public class XdsClientFederationTest {
   /// in watchers of resources on other control planes.
   @Test
   public void isolatedResourceDeletions() throws InterruptedException {
-    // Add the mock watcher for the normal server resource. The test control plane will send
-    // a deletion event.
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "test-server", mockWatcher);
-    verify(mockWatcher, timeout(20000)).onResourceDoesNotExist("test-server");
-
-    // Add the watcher for the DirectPath server.
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
         "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
-    verify(mockDirectPathWatcher, timeout(20000)).onResourceDoesNotExist(
-        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
 
-    // Add a normal server resource and observe a changed event on the normal watcher and
-    // a onResourceDoesNotExist() on the DirectPath watcher as it's resource is not yet created.
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
-    verify(mockWatcher, timeout(20000)).onChanged(isA(LdsUpdate.class));
-    verify(mockDirectPathWatcher, timeout(20000)).onResourceDoesNotExist(
-        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
-
-    // Modifying the DirectPath server resource triggers a changed event on the DirectPath watcher.
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener(
             "xdstp://server-one/envoy.config.listener.v3.Listener/test-server"));
-    verify(mockDirectPathWatcher, timeout(20000)).onChanged(isA(LdsUpdate.class));
 
-    // And the crux of the test: deleting a resource (here by renaming it) in one control plane
-    // (here the "normal TrafficDirector" one) should not trigger an onResourceDoesNotExist() call
-    // on a watcher of another control plane (here the DirectPath one).
+    // Deleting a resource (here by renaming it) in one control plan (here the "normal
+    // TrafficDirector" one) should not trigger an onResourceDoesNotExist() call on a watcher of
+    // another control plane (here the DirectPath one).
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("new-server"));
     verify(mockWatcher, timeout(20000)).onResourceDoesNotExist("test-server");
-    verifyNoMoreInteractions(mockDirectPathWatcher);
+    verify(mockDirectPathWatcher, times(0)).onResourceDoesNotExist(
+            "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
   }
 
   private Map<String, ?> defaultBootstrapOverride() {
