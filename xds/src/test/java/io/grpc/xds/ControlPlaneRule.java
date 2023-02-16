@@ -76,14 +76,22 @@ public class ControlPlaneRule extends TestWatcher {
   private static final String EDS_NAME = "eds-service-0";
   private static final String SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT =
       "grpc/server?udpa.resource.listening_address=";
-  private static final String SERVER_HOST_NAME = "test-server";
   private static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
 
+  private String serverHostName;
   private Server server;
   private XdsTestControlPlaneService controlPlaneService;
   private XdsNameResolverProvider nameResolverProvider;
+
+  public ControlPlaneRule(String serverHostName) {
+    this.serverHostName = serverHostName;
+  }
+
+  public ControlPlaneRule() {
+    this("test-server");
+  }
 
   /**
    * Returns the test control plane service interface.
@@ -118,14 +126,17 @@ public class ControlPlaneRule extends TestWatcher {
 
   @Override protected void finished(Description description) {
     if (server != null) {
-      server.shutdownNow();
+      System.out.println(">>> shutting down server on port " + server.getPort());
+      server.shutdown();
       try {
+        logger.info("awaiting termination");
         if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
           logger.log(Level.SEVERE, "Timed out waiting for server shutdown");
         }
       } catch (InterruptedException e) {
         throw new AssertionError("unable to shut down control plane server", e);
       }
+      logger.info("server terminated");
     }
     NameResolverRegistry.getDefaultRegistry().deregister(nameResolverProvider);
   }
@@ -155,7 +166,7 @@ public class ControlPlaneRule extends TestWatcher {
   void setLdsConfig(Listener serverListener, Listener clientListener) {
     getService().setXdsConfig(ADS_TYPE_URL_LDS,
         ImmutableMap.of(SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT, serverListener,
-                        SERVER_HOST_NAME, clientListener));
+                        serverHostName, clientListener));
   }
 
   void setRdsConfig(RouteConfiguration routeConfiguration) {
