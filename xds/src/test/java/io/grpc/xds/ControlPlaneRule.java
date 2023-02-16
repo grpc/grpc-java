@@ -127,7 +127,7 @@ public class ControlPlaneRule extends TestWatcher {
 
   @Override protected void finished(Description description) {
     if (server != null) {
-      server.shutdown();
+      server.shutdownNow();
       try {
         if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
           logger.log(Level.SEVERE, "Timed out waiting for server shutdown");

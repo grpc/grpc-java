@@ -48,9 +48,6 @@ public class XdsClientFederationTest {
   @Mock
   private ResourceWatcher<LdsUpdate> mockWatcher;
 
-  private static final String SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT =
-      "grpc/server?udpa.resource.listening_address=";
-
   @Rule
   public ControlPlaneRule trafficdirector = new ControlPlaneRule().setServerHostName("test-server");
 
@@ -76,10 +73,13 @@ public class XdsClientFederationTest {
   @After
   public void cleanUp() throws InterruptedException {
     BootstrapperImpl.enableFederation = originalFederationStatus;
+    xdsClient.shutdown();
   }
 
-  // Assures that resource deletions happening in one control plane do not trigger deletion events
-  /// in watchers of resources on other control planes.
+  /**
+   * Assures that resource deletions happening in one control plane do not trigger deletion events
+   * in watchers of resources on other control planes.
+   */
   @Test
   public void isolatedResourceDeletions() throws InterruptedException {
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "test-server", mockWatcher);
@@ -92,9 +92,10 @@ public class XdsClientFederationTest {
         ControlPlaneRule.buildClientListener(
             "xdstp://server-one/envoy.config.listener.v3.Listener/test-server"));
 
-    // Deleting a resource (here by renaming it) in one control plan (here the "normal
-    // TrafficDirector" one) should not trigger an onResourceDoesNotExist() call on a watcher of
-    // another control plane (here the DirectPath one).
+    // By setting the LDS config with a new server name we effectively make the old server to go
+    // away as it is not in the configuration anymore. This change in one control plain (here the
+    // "normal TrafficDirector" one) should not trigger an onResourceDoesNotExist() call on a
+    // watcher of another control plane (here the DirectPath one).
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("new-server"));
     verify(mockWatcher, timeout(20000)).onResourceDoesNotExist("test-server");
@@ -130,8 +131,7 @@ public class XdsClientFederationTest {
                 )
             ),
             "server-two", ImmutableMap.of()
-        ),
-        "server_listener_resource_name_template", SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT
+        )
     );
   }
 }
