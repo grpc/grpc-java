@@ -121,6 +121,8 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
     // Merge metrics from the MetricRecorder first since metrics from the CallMetricRecorder takes a
     // higher precedence.
     OrcaLoadReport.Builder builder = metricRecorderReport.toBuilder()
+        .clearUtilization()
+        .clearRequestCost()
         .putAllUtilization(callMetricRecorderReport.getUtilizationMap())
         .putAllRequestCost(callMetricRecorderReport.getRequestCostMap());
     // Overwrite only if the values from CallMetricRecorder are set
