@@ -12,12 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+FROM openjdk:11.0.16-jdk-slim-bullseye AS build
+
+WORKDIR /grpc-java
+
+COPY . .
+
+RUN ./gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
+
+
+
 FROM openjdk:11.0.16-jdk-slim-bullseye
 
 WORKDIR /grpc-java/interop-testing/build
 
-COPY ./interop-testing/build/. .
+COPY --from=build /grpc-java/interop-testing/build/. .
 
-WORKDIR /grpc-java
+WORKDIR /grpc-java/buildscripts/observability-test
 
-CMD ["/bin/sleep","inf"]
+COPY --from=build /grpc-java/buildscripts/observability-test/run.sh .
+
+ENTRYPOINT ["/grpc-java/buildscripts/observability-test/run.sh"]

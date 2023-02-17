@@ -202,20 +202,6 @@ def xds_federation_test_client = tasks.register("xds_federation_test_client", Cr
     classpath = startScriptsClasspath.get()
 }
 
-def observability_test_client = tasks.register("observability_test_client", CreateStartScripts) {
-    mainClass = "io.grpc.testing.integration.ObservabilityTestClient"
-    applicationName = "observability-test-client"
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath.get()
-}
-
-def observability_test_server = tasks.register("observability_test_server", CreateStartScripts) {
-    mainClass = "io.grpc.testing.integration.ObservabilityTestServer"
-    applicationName = "observability-test-server"
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScriptsClasspath.get()
-}
-
 distributions.shadow.contents.into("bin") {
     from(test_client)
     from(test_server)
@@ -227,8 +213,6 @@ distributions.shadow.contents.into("bin") {
     from(xds_test_client)
     from(xds_test_server)
     from(xds_federation_test_client)
-    from(observability_test_client)
-    from(observability_test_server)
     fileMode = 0755
 }
 

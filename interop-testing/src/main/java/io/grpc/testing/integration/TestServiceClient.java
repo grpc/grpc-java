@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Splitter;
 import com.google.common.io.Files;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
@@ -31,6 +32,7 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.alts.AltsChannelCredentials;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
+import io.grpc.gcp.observability.GcpObservability;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.TestUtils;
@@ -62,6 +64,10 @@ public class TestServiceClient {
     TestUtils.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
+    GcpObservability gcpObservability = null;
+    if (enableObservability) {
+      gcpObservability = GcpObservability.grpcInit();
+    }
     customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
     LoadBalancerRegistry.getDefaultRegistry().register(customBackendMetricsLoadBalancerProvider);
     client.setUp();
@@ -70,6 +76,11 @@ public class TestServiceClient {
       client.run();
     } finally {
       client.tearDown();
+    }
+    if (enableObservability) {
+      System.out.println("Sleeping "+observabilityExporterSleepSeconds+" seconds before exiting");
+      Thread.sleep(TimeUnit.MILLISECONDS.convert(observabilityExporterSleepSeconds, TimeUnit.SECONDS));
+      gcpObservability.close();
     }
     System.exit(0);
   }
@@ -97,6 +108,8 @@ public class TestServiceClient {
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
+  private static boolean enableObservability = false;
+  private static int observabilityExporterSleepSeconds = 0;
 
   private Tester tester = new Tester();
 
@@ -171,6 +184,10 @@ public class TestServiceClient {
         soakMinTimeMsBetweenRpcs = Integer.parseInt(value);
       } else if ("soak_overall_timeout_seconds".equals(key)) {
         soakOverallTimeoutSeconds = Integer.parseInt(value);
+      } else if ("enable_observability".equals(key)) {
+        enableObservability = Boolean.parseBoolean(value);
+      } else if ("observability_exporter_sleep_seconds".equals(key)) {
+        observabilityExporterSleepSeconds = Integer.parseInt(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -239,6 +256,15 @@ public class TestServiceClient {
           + "\n                              should stop and fail, if the desired number of "
           + "\n                              iterations have not yet completed. Default "
             + c.soakOverallTimeoutSeconds
+          + "\n --enable_observability=true|false "
+          + "                                Whether to enable GCP Observability. Default "
+            + TestServiceClient.enableObservability
+          // TODO(stanleycheung): remove this param once all the observability exporter plugins
+          //                      are able to flush observability data to cloud at shutdown
+          + "\n --observability_exporter_sleep_seconds "
+          + "\n                              The number of seconds to wait before the client exits. "
+          + "\n                              Default: "
+            + TestServiceClient.observabilityExporterSleepSeconds
       );
       System.exit(1);
     }
@@ -266,7 +292,14 @@ public class TestServiceClient {
   private void run() {
     System.out.println("Running test " + testCase);
     try {
-      runTest(TestCases.fromString(testCase));
+      if (testCase.contains(",")) {
+        Iterable<String> testCases = Splitter.on(",").split(testCase);
+        for (String singleCase : testCases) {
+          runTest(TestCases.fromString(singleCase));
+        }
+      } else {
+        runTest(TestCases.fromString(testCase));
+      }
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -412,6 +445,11 @@ public class TestServiceClient {
 
       case CUSTOM_METADATA: {
         tester.customMetadata();
+        break;
+      }
+
+      case UNARY_WITH_METADATA: {
+        tester.unaryWithMetadata();
         break;
       }
 

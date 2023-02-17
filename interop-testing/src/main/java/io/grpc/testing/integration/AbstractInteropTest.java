@@ -1490,6 +1490,42 @@ public abstract class AbstractInteropTest {
   }
 
   @Test
+  public void unaryWithMetadata() throws Exception {
+    final int responseSize = 314159;
+    final int requestSize = 271828;
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setResponseSize(responseSize)
+        .setPayload(Payload.newBuilder()
+            .setBody(ByteString.copyFrom(new byte[requestSize])))
+        .build();
+    final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setPayload(Payload.newBuilder()
+            .setBody(ByteString.copyFrom(new byte[responseSize])))
+        .build();
+    final byte[] trailingBytes =
+        {(byte) 0xa, (byte) 0xb, (byte) 0xa, (byte) 0xb, (byte) 0xa, (byte) 0xb};
+
+    // Test UnaryCall
+    Metadata metadata = new Metadata();
+    metadata.put(Util.ECHO_INITIAL_METADATA_KEY, "test_initial_metadata_value");
+    metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
+    AtomicReference<Metadata> headersCapture = new AtomicReference<>();
+    AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
+    TestServiceGrpc.TestServiceBlockingStub blockingStub = this.blockingStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(metadata),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
+    SimpleResponse response = blockingStub.unaryCall(request);
+
+    assertResponse(goldenResponse, response);
+    assertEquals("test_initial_metadata_value",
+        headersCapture.get().get(Util.ECHO_INITIAL_METADATA_KEY));
+    assertTrue(
+        Arrays.equals(trailingBytes, trailersCapture.get().get(Util.ECHO_TRAILING_METADATA_KEY)));
+    assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.OK,
+        Collections.singleton(request), Collections.singleton(goldenResponse));
+  }
+
+  @Test
   public void customMetadata() throws Exception {
     final int responseSize = 314159;
     final int requestSize = 271828;
