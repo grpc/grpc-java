@@ -75,9 +75,6 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   static final String TYPE_URL_TYPED_STRUCT =
       "type.googleapis.com/xds.type.v3.TypedStruct";
 
-  static final String TYPE_URL_CLIENT_SIDE_WRR = "type.googleapis.com/envoy.extensions.load_balancing_policies.client_"
-          + "side_weighted_round_robin.v3.ClientSideWeightedRoundRobin";
-
   @Nullable
   abstract String extractResourceName(Message unpackedResource);
 

@@ -22,12 +22,14 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
+import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.JsonFormat;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.least_request.v3.LeastRequest;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.ring_hash.v3.RingHash;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.round_robin.v3.RoundRobin;
@@ -73,6 +75,16 @@ class LoadBalancerConfigFactory {
   static final String WRR_LOCALITY_FIELD_NAME = "wrr_locality_experimental";
   static final String CHILD_POLICY_FIELD = "childPolicy";
 
+  static final String BLACK_OUT_PERIOD = "blackoutPeriod";
+
+  static final String WEIGHT_EXPIRATION_PERIOD = "weightExpirationPeriod";
+
+  static final String OOB_REPORTING_PERIOD = "oobReportingPeriod";
+
+  static final String ENABLE_OOB_LOAD_REPORT = "enableOobLoadReport";
+
+  static final String WEIGHT_UPDATE_PERIOD = "weightUpdatePeriod";
+
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
    * Cluster}.
@@ -80,14 +92,14 @@ class LoadBalancerConfigFactory {
    * @throws ResourceInvalidException If the {@link Cluster} has an invalid LB configuration.
    */
   static ImmutableMap<String, ?> newConfig(Cluster cluster, boolean enableLeastRequest,
-      boolean enableCustomLbConfig)
+      boolean enableCustomLbConfig, boolean enableWrr)
       throws ResourceInvalidException {
     // The new load_balancing_policy will always be used if it is set, but for backward
     // compatibility we will fall back to using the old lb_policy field if the new field is not set.
     if (cluster.hasLoadBalancingPolicy() && enableCustomLbConfig) {
       try {
         return LoadBalancingPolicyConverter.convertToServiceConfig(cluster.getLoadBalancingPolicy(),
-            0);
+            0, enableWrr);
       } catch (MaxRecursionReachedException e) {
         throw new ResourceInvalidException("Maximum LB config recursion depth reached", e);
       }
@@ -109,6 +121,35 @@ class LoadBalancerConfigFactory {
       configBuilder.put(MAX_RING_SIZE_FIELD_NAME, maxRingSize.doubleValue());
     }
     return ImmutableMap.of(RING_HASH_FIELD_NAME, configBuilder.buildOrThrow());
+  }
+
+  /**
+   * Builds a service config JSON object for the weighted_round_robin load balancer config based on
+   * the given config values.
+   */
+  private static ImmutableMap<String, ?> buildWrrConfig(Long blackoutPeriod,
+                                                        Long weightExpirationPeriod,
+                                                        Long oobReportingPeriod,
+                                                        Boolean enableOobLoadReport,
+                                                        Long weightUpdatePeriod) {
+    ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
+    if (blackoutPeriod != null) {
+      configBuilder.put(BLACK_OUT_PERIOD, blackoutPeriod.doubleValue());
+    }
+    if (weightExpirationPeriod != null) {
+      configBuilder.put(WEIGHT_EXPIRATION_PERIOD, weightExpirationPeriod.doubleValue());
+    }
+    if (oobReportingPeriod != null) {
+      configBuilder.put(OOB_REPORTING_PERIOD, oobReportingPeriod.doubleValue());
+    }
+    if (enableOobLoadReport != null) {
+      configBuilder.put(ENABLE_OOB_LOAD_REPORT, enableOobLoadReport);
+    }
+    if (weightUpdatePeriod != null) {
+      configBuilder.put(WEIGHT_UPDATE_PERIOD, weightUpdatePeriod.doubleValue());
+    }
+    return ImmutableMap.of(WeightedRoundRobinLoadBalancerProvider.SCHEME,
+        configBuilder.buildOrThrow());
   }
 
   /**
@@ -151,7 +192,7 @@ class LoadBalancerConfigFactory {
      * Converts a {@link LoadBalancingPolicy} object to a service config JSON object.
      */
     private static ImmutableMap<String, ?> convertToServiceConfig(
-        LoadBalancingPolicy loadBalancingPolicy, int recursionDepth)
+        LoadBalancingPolicy loadBalancingPolicy, int recursionDepth, boolean enableWrr)
         throws ResourceInvalidException, MaxRecursionReachedException {
       if (recursionDepth > MAX_RECURSION) {
         throw new MaxRecursionReachedException();
@@ -165,11 +206,16 @@ class LoadBalancerConfigFactory {
             serviceConfig = convertRingHashConfig(typedConfig.unpack(RingHash.class));
           } else if (typedConfig.is(WrrLocality.class)) {
             serviceConfig = convertWrrLocalityConfig(typedConfig.unpack(WrrLocality.class),
-                recursionDepth);
+                recursionDepth, enableWrr);
           } else if (typedConfig.is(RoundRobin.class)) {
             serviceConfig = convertRoundRobinConfig();
           } else if (typedConfig.is(LeastRequest.class)) {
             serviceConfig = convertLeastRequestConfig(typedConfig.unpack(LeastRequest.class));
+          } else if (typedConfig.is(ClientSideWeightedRoundRobin.class)) {
+            if (enableWrr) {
+              serviceConfig = convertWeightedRoundRobinConfig(
+                  typedConfig.unpack(ClientSideWeightedRoundRobin.class));
+            }
           } else if (typedConfig.is(com.github.xds.type.v3.TypedStruct.class)) {
             serviceConfig = convertCustomConfig(
                 typedConfig.unpack(com.github.xds.type.v3.TypedStruct.class));
@@ -217,14 +263,26 @@ class LoadBalancerConfigFactory {
           ringHash.hasMaximumRingSize() ? ringHash.getMaximumRingSize().getValue() : null);
     }
 
+    private static ImmutableMap<String, ?> convertWeightedRoundRobinConfig(
+            ClientSideWeightedRoundRobin wrr) throws ResourceInvalidException {
+      return buildWrrConfig(
+          wrr.hasBlackoutPeriod() ? Durations.toNanos(wrr.getBlackoutPeriod()) : null,
+          wrr.hasWeightExpirationPeriod()
+              ? Durations.toNanos(wrr.getWeightExpirationPeriod()) : null,
+          wrr.hasOobReportingPeriod() ? Durations.toNanos(wrr.getOobReportingPeriod()) : null,
+          wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
+          wrr.hasWeightUpdatePeriod() ? Durations.toNanos(wrr.getWeightUpdatePeriod()) : null);
+    }
+
     /**
      * Converts a wrr_locality {@link Any} configuration to service config format.
      */
     private static ImmutableMap<String, ?> convertWrrLocalityConfig(WrrLocality wrrLocality,
-        int recursionDepth) throws ResourceInvalidException,
+        int recursionDepth, boolean enableWrr) throws ResourceInvalidException,
         MaxRecursionReachedException {
       return buildWrrLocalityConfig(
-          convertToServiceConfig(wrrLocality.getEndpointPickingPolicy(), recursionDepth + 1));
+          convertToServiceConfig(wrrLocality.getEndpointPickingPolicy(),
+              recursionDepth + 1, enableWrr));
     }
 
     /**

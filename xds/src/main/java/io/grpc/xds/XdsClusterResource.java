@@ -133,15 +133,10 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
     ImmutableMap<String, ?> lbPolicyConfig = LoadBalancerConfigFactory.newConfig(cluster,
-        enableLeastRequest, enableCustomLbConfig);
+        enableLeastRequest, enableCustomLbConfig, enableWrr);
 
     // Validate the LB config by trying to parse it with the corresponding LB provider.
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbPolicyConfig);
-    if (lbConfig.getPolicyName().equals(WeightedRoundRobinLoadBalancerProvider.SCHEME)
-            && !enableWrr) {
-      throw new ResourceInvalidException("Cluster " +  cluster.getName() + " specified LB policy "
-              + WeightedRoundRobinLoadBalancerProvider.SCHEME + " is not supported");
-    }
     NameResolver.ConfigOrError configOrError = loadBalancerRegistry.getProvider(
         lbConfig.getPolicyName()).parseLoadBalancingPolicyConfig(
         lbConfig.getRawConfigValue());

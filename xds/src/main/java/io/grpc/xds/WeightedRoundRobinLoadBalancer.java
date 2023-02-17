@@ -200,8 +200,8 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
       if (now - lastUpdated >= config.weightExpirationPeriodNanos) {
         nonEmptySince = Integer.MAX_VALUE;
         return 0;
-      } else if (now - nonEmptySince < config.blackoutPeriodNanos &&
-              config.blackoutPeriodNanos > 0) {
+      } else if (now - nonEmptySince < config.blackoutPeriodNanos
+          && config.blackoutPeriodNanos > 0) {
         return 0;
       } else {
         return weight;

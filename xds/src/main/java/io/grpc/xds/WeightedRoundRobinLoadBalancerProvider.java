@@ -60,12 +60,12 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
-    Long blackoutPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "blackoutPeriod");
+    Long blackoutPeriodNanos = JsonUtil.getNumberAsLong(rawConfig, "blackoutPeriod");
     Long weightExpirationPeriodNanos =
-            JsonUtil.getStringAsDuration(rawConfig, "weightExpirationPeriod");
-    Long oobReportingPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "oobReportingPeriod");
+            JsonUtil.getNumberAsLong(rawConfig, "weightExpirationPeriod");
+    Long oobReportingPeriodNanos = JsonUtil.getNumberAsLong(rawConfig, "oobReportingPeriod");
     Boolean enableOobLoadReport = JsonUtil.getBoolean(rawConfig, "enableOobLoadReport");
-    Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
+    Long weightUpdatePeriodNanos = JsonUtil.getNumberAsLong(rawConfig, "weightUpdatePeriod");
 
     WeightedRoundRobinLoadBalancerConfig.Builder configBuilder =
             WeightedRoundRobinLoadBalancerConfig.newBuilder();

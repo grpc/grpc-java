@@ -74,11 +74,11 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
   @Test
   public void parseLoadBalancingConfig() throws IOException {
     String lbConfig =
-        "{\"blackoutPeriod\" : \"20s\","
-        + " \"weightExpirationPeriod\" : \"300s\","
-        + " \"oobReportingPeriod\" : \"100s\","
+        "{\"blackoutPeriod\" : 20000000000,"
+        + " \"weightExpirationPeriod\" : 300000000000,"
+        + " \"oobReportingPeriod\" : 100000000000,"
         + " \"enableOobLoadReport\" : true,"
-        + " \"weightUpdatePeriod\" : \"2s\""
+        + " \"weightUpdatePeriod\" : 2000000000"
         + " }";
 
     ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
@@ -88,13 +88,14 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
             (WeightedRoundRobinLoadBalancerConfig) configOrError.getConfig();
     assertThat(config.blackoutPeriodNanos).isEqualTo(20_000_000_000L);
     assertThat(config.weightExpirationPeriodNanos).isEqualTo(300_000_000_000L);
+    assertThat(config.oobReportingPeriodNanos).isEqualTo(100_000_000_000L);
     assertThat(config.enableOobLoadReport).isEqualTo(true);
     assertThat(config.weightUpdatePeriodNanos).isEqualTo(2_000_000_000L);
   }
 
   @Test
   public void parseLoadBalancingConfigDefaultValues() throws IOException {
-    String lbConfig = "{\"weightUpdatePeriod\" : \"0.02s\"}";
+    String lbConfig = "{\"weightUpdatePeriod\" : 2000000}";
 
     ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
             parseJsonObject(lbConfig));

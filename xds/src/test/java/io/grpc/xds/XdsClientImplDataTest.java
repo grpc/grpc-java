@@ -27,6 +27,7 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
@@ -86,6 +87,8 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
@@ -1975,24 +1978,44 @@ public class XdsClientImplDataTest {
   @Test
   public void parseCluster_WrrLbPolicy_defaultLbConfig() throws ResourceInvalidException {
     XdsResourceType.enableWrr = true;
+
+    LoadBalancingPolicy wrrConfig =
+        LoadBalancingPolicy.newBuilder().addPolicies(
+                LoadBalancingPolicy.Policy.newBuilder()
+                    .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+                        .setName("backend")
+                        .setTypedConfig(
+                            Any.pack(ClientSideWeightedRoundRobin.newBuilder()
+                                .setBlackoutPeriod(Duration.newBuilder().setSeconds(17).build())
+                                .setEnableOobLoadReport(
+                                    BoolValue.newBuilder().setValue(true).build())
+                                .build()))
+                        .build())
+                    .build())
+            .build();
+
     Cluster cluster = Cluster.newBuilder()
             .setName("cluster-foo.googleapis.com")
             .setType(DiscoveryType.EDS)
             .setEdsClusterConfig(
-                    EdsClusterConfig.newBuilder()
-                            .setEdsConfig(
-                                    ConfigSource.newBuilder()
-                                            .setAds(AggregatedConfigSource.getDefaultInstance()))
+                EdsClusterConfig.newBuilder()
+                    .setEdsConfig(
+                        ConfigSource.newBuilder()
+                            .setAds(AggregatedConfigSource.getDefaultInstance()))
                             .setServiceName("service-foo.googleapis.com"))
-            .setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder().addPolicies(
-                LoadBalancingPolicy.Policy.newBuilder().mergeTypedExtensionConfig(
-                    TypedExtensionConfig.newBuilder().mergeTypedConfig(Any.pack(
-                        TypedExtensionConfig.newBuilder().setName(
-                            WeightedRoundRobinLoadBalancerProvider.SCHEME).setTypedConfig(
-                                    Any.pack()).build())
-                    ).build()).build()).build())
-            .build();
-
+            .setLoadBalancingPolicy(
+                LoadBalancingPolicy.newBuilder().addPolicies(
+                    LoadBalancingPolicy.Policy.newBuilder()
+                        .setTypedExtensionConfig(
+                            TypedExtensionConfig.newBuilder()
+                                .setTypedConfig(
+                                    Any.pack(WrrLocality.newBuilder()
+                                        .setEndpointPickingPolicy(wrrConfig)
+                                        .build()))
+                                .build())
+                        .build())
+                   .build())
+              .build();
     CdsUpdate update = XdsClusterResource.processCluster(
             cluster, null, LRS_SERVER_INFO,
             LoadBalancerRegistry.getDefaultRegistry());
