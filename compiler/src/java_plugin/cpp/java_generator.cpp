@@ -608,6 +608,7 @@ static void PrintStub(
       break;
     case ABSTRACT_CLASS:
       GRPC_CODEGEN_FAIL << "Call PrintAbstractClassStub for ABSTRACT_CLASS";
+      break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot determine class name for StubType: " << type;
   }
