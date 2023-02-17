@@ -76,14 +76,23 @@ public class ControlPlaneRule extends TestWatcher {
   private static final String EDS_NAME = "eds-service-0";
   private static final String SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT =
       "grpc/server?udpa.resource.listening_address=";
-  private static final String SERVER_HOST_NAME = "test-server";
   private static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
 
+  private String serverHostName;
   private Server server;
   private XdsTestControlPlaneService controlPlaneService;
   private XdsNameResolverProvider nameResolverProvider;
+
+  public ControlPlaneRule() {
+    serverHostName = "test-server";
+  }
+
+  public ControlPlaneRule setServerHostName(String serverHostName) {
+    this.serverHostName = serverHostName;
+    return this;
+  }
 
   /**
    * Returns the test control plane service interface.
@@ -155,7 +164,7 @@ public class ControlPlaneRule extends TestWatcher {
   void setLdsConfig(Listener serverListener, Listener clientListener) {
     getService().setXdsConfig(ADS_TYPE_URL_LDS,
         ImmutableMap.of(SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT, serverListener,
-                        SERVER_HOST_NAME, clientListener));
+                        serverHostName, clientListener));
   }
 
   void setRdsConfig(RouteConfiguration routeConfiguration) {
