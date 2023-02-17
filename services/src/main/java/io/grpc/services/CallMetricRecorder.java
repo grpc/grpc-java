@@ -96,7 +96,7 @@ public final class CallMetricRecorder {
    * @return this recorder object
    * @since 1.47.0
    * @deprecated use {@link #recordRequestCostMetric} instead. This method will be removed in the
-   * future.
+   *     future.
    */
   @Deprecated
   @InlineMe(replacement = "this.recordRequestCostMetric(name, value)")
