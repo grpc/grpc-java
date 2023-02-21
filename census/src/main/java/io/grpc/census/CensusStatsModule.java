@@ -17,6 +17,7 @@
 package io.grpc.census;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.census.internal.ObservabilityCensusConstants.API_LATENCY_PER_CALL;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -409,6 +410,7 @@ final class CensusStatsModule {
     ClientTracer inboundMetricTracer;
     private final CensusStatsModule module;
     private final Stopwatch stopwatch;
+    private final Stopwatch callStopwatch;
     @GuardedBy("lock")
     private boolean callEnded;
     private final TagContext parentCtx;
@@ -423,6 +425,7 @@ final class CensusStatsModule {
     private final Object lock = new Object();
     // write @GuardedBy("lock") and happens before read
     private long retryDelayNanos;
+    private long callLatencyNanos;
     @GuardedBy("lock")
     private int activeStreams;
     @GuardedBy("lock")
@@ -434,6 +437,7 @@ final class CensusStatsModule {
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.stopwatch = module.stopwatchSupplier.get();
+      this.callStopwatch = module.stopwatchSupplier.get().start();
       TagValue methodTag = TagValue.create(fullMethodName);
       startCtx = module.tagger.toBuilder(parentCtx)
           .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
@@ -495,6 +499,7 @@ final class CensusStatsModule {
       if (!module.recordFinishedRpcs) {
         return;
       }
+      callStopwatch.stop();
       this.status = status;
       boolean shouldRecordFinishedCall = false;
       synchronized (lock) {
@@ -532,10 +537,12 @@ final class CensusStatsModule {
       if (attempts > 0) {
         retriesPerCall = attempts - 1;
       }
+      callLatencyNanos = callStopwatch.elapsed(TimeUnit.NANOSECONDS);
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
           .put(RETRIES_PER_CALL, retriesPerCall)
           .put(TRANSPARENT_RETRIES_PER_CALL, transparentRetriesPerCall.get())
-          .put(RETRY_DELAY_PER_CALL, retryDelayNanos / NANOS_PER_MILLI);
+          .put(RETRY_DELAY_PER_CALL, retryDelayNanos / NANOS_PER_MILLI)
+          .put(API_LATENCY_PER_CALL, callLatencyNanos / NANOS_PER_MILLI);
       TagValue methodTag = TagValue.create(fullMethodName);
       TagValue statusTag = TagValue.create(status.getCode().toString());
       measureMap.record(

@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRIES_PER_CALL;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRY_DELAY_PER_CALL;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.TRANSPARENT_RETRIES_PER_CALL;
+import static io.grpc.census.internal.ObservabilityCensusConstants.API_LATENCY_PER_CALL;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -368,7 +369,7 @@ public class CensusModulesTest {
             .setSampleToLocalSpanStore(false)
             .build());
     verify(spyClientSpan, never()).end();
-    assertZeroRetryRecorded();
+    assertPerCallMetrics(0D);
   }
 
   @Test
@@ -503,7 +504,7 @@ public class CensusModulesTest {
               DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
       assertEquals(30 + 100 + 16 + 24,
           record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY));
-      assertZeroRetryRecorded();
+      assertPerCallMetrics(30D + 100 + 16 + 24);
     } else {
       assertNull(statsRecorder.pollRecord());
     }
@@ -716,13 +717,14 @@ public class CensusModulesTest {
     assertEquals(expectedValue, record.getMetricAsLongOrFail(measure));
   }
 
-  private void assertZeroRetryRecorded() {
+  private void assertPerCallMetrics(double expectedLatencyValue) {
     StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
     TagValue methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     assertThat(record.getMetric(RETRIES_PER_CALL)).isEqualTo(0);
     assertThat(record.getMetric(TRANSPARENT_RETRIES_PER_CALL)).isEqualTo(0);
     assertThat(record.getMetric(RETRY_DELAY_PER_CALL)).isEqualTo(0D);
+    assertThat(record.getMetric(API_LATENCY_PER_CALL)).isEqualTo(expectedLatencyValue);
   }
 
   @Test
@@ -849,7 +851,7 @@ public class CensusModulesTest {
         3000,
         record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY));
     assertNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_SERVER_LATENCY));
-    assertZeroRetryRecorded();
+    assertPerCallMetrics(3000D);
   }
 
   @Test
@@ -989,7 +991,7 @@ public class CensusModulesTest {
       assertNull(clientRecord.getMetric(DeprecatedCensusConstants.RPC_CLIENT_ERROR_COUNT));
       TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
       assertEquals("extra-tag-value-897", clientPropagatedTag.asString());
-      assertZeroRetryRecorded();
+      assertPerCallMetrics(0D);
     }
 
     if (!recordStats) {

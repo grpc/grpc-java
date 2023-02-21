@@ -27,6 +27,8 @@ import static io.opencensus.contrib.grpc.metrics.RpcMeasureConstants.GRPC_SERVER
 
 import io.opencensus.contrib.grpc.metrics.RpcViewConstants;
 import io.opencensus.stats.Aggregation;
+import io.opencensus.stats.Measure;
+import io.opencensus.stats.Measure.MeasureDouble;
 import io.opencensus.stats.View;
 import java.util.Arrays;
 
@@ -36,6 +38,20 @@ public final class ObservabilityCensusConstants {
 
   static final Aggregation AGGREGATION_WITH_BYTES_HISTOGRAM =
       RpcViewConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC_VIEW.getAggregation();
+
+  public static final MeasureDouble API_LATENCY_PER_CALL =
+      Measure.MeasureDouble.create(
+          "grpc.io/client/api_latency",
+          "Time taken by gRPC to complete an RPC from application's perspective",
+          "ms");
+
+  public static final View GRPC_CLIENT_API_LATENCY_VIEW =
+      View.create(
+          View.Name.create("grpc.io/client/api_latency"),
+          "Time taken by gRPC to complete an RPC from application's perspective",
+          API_LATENCY_PER_CALL,
+          AGGREGATION_WITH_BYTES_HISTOGRAM,
+          Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS));
 
   public static final View GRPC_CLIENT_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW =
       View.create(

@@ -154,6 +154,7 @@ public final class GcpObservability implements AutoCloseable {
     viewManager.registerView(RpcViewConstants.GRPC_CLIENT_COMPLETED_RPC_VIEW);
     viewManager.registerView(RpcViewConstants.GRPC_CLIENT_STARTED_RPC_VIEW);
     viewManager.registerView(RpcViewConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY_VIEW);
+    viewManager.registerView(ObservabilityCensusConstants.GRPC_CLIENT_API_LATENCY_VIEW);
     viewManager.registerView(
         ObservabilityCensusConstants.GRPC_CLIENT_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW);
     viewManager.registerView(
