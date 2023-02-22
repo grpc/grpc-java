@@ -29,7 +29,7 @@ class LogHelper {
 
  public:
   LogHelper(std::ostream* os) : os(os) {}
-  ~LogHelper() {
+  [[ noreturn ]] ~LogHelper() {
     *os << std::endl;
     ::abort();
   }
