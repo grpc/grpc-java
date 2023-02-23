@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package io.grpc;
 
 import static org.mockito.Mockito.verify;
 
-import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import org.junit.Before;
@@ -31,7 +30,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /**
- * Unit tests for {@link ForwardingServerCallListener}.
+ * Unit tests for {@link ForwardingServerCall}.
  */
 @RunWith(JUnit4.class)
 public class ForwardingServerCallTest {
