@@ -331,7 +331,8 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
    * </ul>
    *
    */
-  private static final class EdfScheduler {
+  @VisibleForTesting
+  static final class EdfScheduler {
     private final PriorityQueue<ObjectState> prioQueue;
 
     /**
