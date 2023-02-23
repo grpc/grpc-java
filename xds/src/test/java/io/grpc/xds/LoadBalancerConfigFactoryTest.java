@@ -119,7 +119,7 @@ public class LoadBalancerConfigFactoryTest {
   private static final LbConfig VALID_WRR_CONFIG = new LbConfig("wrr_locality_experimental",
       ImmutableMap.of("childPolicy", ImmutableList.of(
       ImmutableMap.of("weighted_round_robin_experimental",
-      ImmutableMap.of("blackoutPeriod",287000000000.0, "enableOobLoadReport", true )))));
+      ImmutableMap.of("blackoutPeriod","287s", "enableOobLoadReport", true )))));
   private static final LbConfig VALID_RING_HASH_CONFIG = new LbConfig("ring_hash_experimental",
       ImmutableMap.of("minRingSize", (double) RING_HASH_MIN_RING_SIZE, "maxRingSize",
           (double) RING_HASH_MAX_RING_SIZE));

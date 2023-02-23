@@ -74,11 +74,11 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
   @Test
   public void parseLoadBalancingConfig() throws IOException {
     String lbConfig =
-        "{\"blackoutPeriod\" : 20000000000,"
-        + " \"weightExpirationPeriod\" : 300000000000,"
-        + " \"oobReportingPeriod\" : 100000000000,"
+        "{\"blackoutPeriod\" : \"20s\","
+        + " \"weightExpirationPeriod\" : \"300s\","
+        + " \"oobReportingPeriod\" : \"100s\","
         + " \"enableOobLoadReport\" : true,"
-        + " \"weightUpdatePeriod\" : 2000000000"
+        + " \"weightUpdatePeriod\" : \"2s\""
         + " }";
 
     ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
@@ -95,7 +95,7 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
 
   @Test
   public void parseLoadBalancingConfigDefaultValues() throws IOException {
-    String lbConfig = "{\"weightUpdatePeriod\" : 2000000}";
+    String lbConfig = "{\"weightUpdatePeriod\" : \"0.02s\"}";
 
     ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
             parseJsonObject(lbConfig));
@@ -107,6 +107,7 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
     assertThat(config.enableOobLoadReport).isEqualTo(false);
     assertThat(config.weightUpdatePeriodNanos).isEqualTo(100_000_000L);
   }
+
 
   @SuppressWarnings("unchecked")
   private static Map<String, ?> parseJsonObject(String json) throws IOException {

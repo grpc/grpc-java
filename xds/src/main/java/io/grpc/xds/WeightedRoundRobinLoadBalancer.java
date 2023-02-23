@@ -43,6 +43,7 @@ import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -53,17 +54,21 @@ import java.util.concurrent.atomic.AtomicReference;
  * determined by backend metrics using ORCA.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
-public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
+final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private volatile WeightedRoundRobinLoadBalancerConfig config;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private ScheduledHandle weightUpdateTimer;
+  private final Runnable updateWeightTask;
+  private final Random random;
 
   public WeightedRoundRobinLoadBalancer(Helper helper, TimeProvider timeProvider) {
     super(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper),
             checkNotNull(timeProvider, "timeProvider")));
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
+    this.updateWeightTask = new UpdateWeightTask();
+    this.random = new Random();
   }
 
   @Override
@@ -78,27 +83,28 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     boolean accepted = super.acceptResolvedAddresses(resolvedAddresses);
-    new UpdateWeightTask().run();
+    if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
+      weightUpdateTimer.cancel();
+    }
+    updateWeightTask.run();
     afterAcceptAddresses();
     return accepted;
   }
 
   @Override
-  public RoundRobinPicker createReadyPicker(List<Subchannel> activeList, int startIndex) {
+  public RoundRobinPicker createReadyPicker(List<Subchannel> activeList) {
+    int startIndex = random.nextInt(activeList.size());
     return new WeightedRoundRobinPicker(activeList, startIndex);
   }
 
   private final class UpdateWeightTask implements Runnable {
     @Override
     public void run() {
-      if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
-        return;
-      }
       if (currentPicker != null && currentPicker instanceof WeightedRoundRobinPicker) {
         ((WeightedRoundRobinPicker)currentPicker).updateWeight();
       }
-      weightUpdateTimer = syncContext.schedule(new UpdateWeightTask(),
-              config.weightUpdatePeriodNanos, TimeUnit.NANOSECONDS, timeService);
+      weightUpdateTimer = syncContext.schedule(this, config.weightUpdatePeriodNanos,
+          TimeUnit.NANOSECONDS, timeService);
     }
   }
 
@@ -154,7 +160,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     private volatile long lastUpdated;
     private volatile long nonEmptySince;
     private volatile double weight;
-    private volatile WeightedRoundRobinLoadBalancerConfig config;
+    private WeightedRoundRobinLoadBalancerConfig config;
 
     WrrSubchannel(Subchannel delegate, TimeProvider timeProvider) {
       this.delegate = checkNotNull(delegate, "delegate");
@@ -196,7 +202,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
       if (config == null) {
         return 0;
       }
-      double now = timeProvider.currentTimeNanos();
+      long now = timeProvider.currentTimeNanos();
       if (now - lastUpdated >= config.weightExpirationPeriodNanos) {
         nonEmptySince = Integer.MAX_VALUE;
         return 0;
@@ -224,7 +230,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
       super(checkNotNull(list, "list"), startIndex);
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
-      this.schedulerRef = new AtomicReference<>(new EdfScheduler(list.size()));
+      this.schedulerRef = new AtomicReference<>(null);
       updateWeight();
     }
 
@@ -246,7 +252,6 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     }
 
     private void updateWeight() {
-      EdfScheduler scheduler = new EdfScheduler(list.size());
       int weightedChannelCount = 0;
       double avgWeight = 0;
       for (Subchannel value : list) {
@@ -260,6 +265,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
         rrMode = true;
         return;
       }
+      EdfScheduler scheduler = new EdfScheduler(list.size());
       avgWeight /= 1.0 * weightedChannelCount;
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
@@ -299,8 +305,9 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
    *
    * <p>Specifically, each object added to chooser is given a deadline equal to the multiplicative
    * inverse of its weight. The place of each object in its deadline is tracked, and each call to
-   * choose returns the object with the least remaining time in its deadline (1/weight).
-   * (Ties are broken by the order in which the children were added to the chooser.)
+   * choose returns the object with the least remaining time in its deadline.
+   * (Ties are broken by the order in which the children were added to the chooser.) The deadline
+   * advances by the multiplicative inverse of the object's weight.
    * For example, if items A and B are added with weights 0.5 and 0.2, successive chooses return:
    *
    * <ul>
@@ -321,13 +328,11 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
    *   <li>etc.
    * </ul>
    *
-   * <p>In short: the entry with the highest weight is preferred. In case of ties, the object that
-   * was last returned will be preferred.
+   * <p>In short: the entry with the highest weight is preferred.
    *
    * <ul>
    *   <li>add() - O(lg n)
-   *   <li>remove() - O(lg n)
-   *   <li>pick() - O(lg n) with worst case O(n)
+   *   <li>pick() - O(lg n)
    * </ul>
    *
    */
@@ -336,7 +341,7 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     private final PriorityQueue<ObjectState> prioQueue;
 
     /**
-     * Weights below this value will be logged and upped to this minimum weight.
+     * Weights below this value will be upped to this minimum weight.
      */
     private static final double MINIMUM_WEIGHT = 0.0001;
 
@@ -349,25 +354,24 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     EdfScheduler(int initialCapacity) {
       this.prioQueue = new PriorityQueue<ObjectState>(initialCapacity, (o1, o2) -> {
         if (o1.deadline == o2.deadline) {
-          return o1.index - o2.index;
-        } else if (o1.deadline < o2.deadline) {
-          return -1;
+          return Double.compare(o1.index, o2.index);
         } else {
-          return 1;
+          return Double.compare(o1.deadline, o2.deadline);
         }
       });
     }
 
     /**
-     * Adds (or updates) the item in the scheduler. This is not thread safe.
+     * Adds the item in the scheduler. This is not thread safe.
      *
-     * @param index The field {@link ObjectState#index} to be added/updated
-     * @param weight positive weight for the added/updated object
+     * @param index The field {@link ObjectState#index} to be added
+     * @param weight positive weight for the added object
      */
     void add(int index, double weight) {
       checkArgument(weight > 0.0, "Weights need to be positive.");
       ObjectState state = new ObjectState(Math.max(weight, MINIMUM_WEIGHT), index);
       state.deadline = 1 / state.weight;
+      // TODO(zivy): randomize the initial deadline.
       prioQueue.add(state);
     }
 
@@ -398,21 +402,21 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
   }
 
   static final class WeightedRoundRobinLoadBalancerConfig {
-    final Long blackoutPeriodNanos;
-    final Long weightExpirationPeriodNanos;
-    final Boolean enableOobLoadReport;
-    final Long oobReportingPeriodNanos;
-    final Long weightUpdatePeriodNanos;
+    final long blackoutPeriodNanos;
+    final long weightExpirationPeriodNanos;
+    final boolean enableOobLoadReport;
+    final long oobReportingPeriodNanos;
+    final long weightUpdatePeriodNanos;
 
     public static Builder newBuilder() {
       return new Builder();
     }
 
-    private WeightedRoundRobinLoadBalancerConfig(Long blackoutPeriodNanos,
-                                                 Long weightExpirationPeriodNanos,
-                                                 Boolean enableOobLoadReport,
-                                                 Long oobReportingPeriodNanos,
-                                                 Long weightUpdatePeriodNanos) {
+    private WeightedRoundRobinLoadBalancerConfig(long blackoutPeriodNanos,
+                                                 long weightExpirationPeriodNanos,
+                                                 boolean enableOobLoadReport,
+                                                 long oobReportingPeriodNanos,
+                                                 long weightUpdatePeriodNanos) {
       this.blackoutPeriodNanos = blackoutPeriodNanos;
       this.weightExpirationPeriodNanos = weightExpirationPeriodNanos;
       this.enableOobLoadReport = enableOobLoadReport;
@@ -421,42 +425,37 @@ public final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer
     }
 
     static final class Builder {
-      Long blackoutPeriodNanos = 10_000_000_000L; // 10s
-      Long weightExpirationPeriodNanos = 180_000_000_000L; //3min
-      Boolean enableOobLoadReport = false;
-      Long oobReportingPeriodNanos = 10_000_000_000L; // 10s
-      Long weightUpdatePeriodNanos = 1_000_000_000L; // 1s
+      long blackoutPeriodNanos = 10_000_000_000L; // 10s
+      long weightExpirationPeriodNanos = 180_000_000_000L; //3min
+      boolean enableOobLoadReport = false;
+      long oobReportingPeriodNanos = 10_000_000_000L; // 10s
+      long weightUpdatePeriodNanos = 1_000_000_000L; // 1s
 
       private Builder() {
 
       }
 
-      Builder setBlackoutPeriodNanos(Long blackoutPeriodNanos) {
-        checkArgument(blackoutPeriodNanos != null);
+      Builder setBlackoutPeriodNanos(long blackoutPeriodNanos) {
         this.blackoutPeriodNanos = blackoutPeriodNanos;
         return this;
       }
 
-      Builder setWeightExpirationPeriodNanos(Long weightExpirationPeriodNanos) {
-        checkArgument(weightExpirationPeriodNanos != null);
+      Builder setWeightExpirationPeriodNanos(long weightExpirationPeriodNanos) {
         this.weightExpirationPeriodNanos = weightExpirationPeriodNanos;
         return this;
       }
 
-      Builder setEnableOobLoadReport(Boolean enableOobLoadReport) {
-        checkArgument(enableOobLoadReport != null);
+      Builder setEnableOobLoadReport(boolean enableOobLoadReport) {
         this.enableOobLoadReport = enableOobLoadReport;
         return this;
       }
 
-      Builder setOobReportingPeriodNanos(Long oobReportingPeriodNanos) {
-        checkArgument(oobReportingPeriodNanos != null);
+      Builder setOobReportingPeriodNanos(long oobReportingPeriodNanos) {
         this.oobReportingPeriodNanos = oobReportingPeriodNanos;
         return this;
       }
 
-      Builder setWeightUpdatePeriodNanos(Long weightUpdatePeriodNanos) {
-        checkArgument(weightUpdatePeriodNanos != null);
+      Builder setWeightUpdatePeriodNanos(long weightUpdatePeriodNanos) {
         this.weightUpdatePeriodNanos = weightUpdatePeriodNanos;
         return this;
       }

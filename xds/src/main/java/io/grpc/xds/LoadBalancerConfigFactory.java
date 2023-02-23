@@ -127,26 +127,26 @@ class LoadBalancerConfigFactory {
    * Builds a service config JSON object for the weighted_round_robin load balancer config based on
    * the given config values.
    */
-  private static ImmutableMap<String, ?> buildWrrConfig(Long blackoutPeriod,
-                                                        Long weightExpirationPeriod,
-                                                        Long oobReportingPeriod,
+  private static ImmutableMap<String, ?> buildWrrConfig(String blackoutPeriod,
+                                                        String weightExpirationPeriod,
+                                                        String oobReportingPeriod,
                                                         Boolean enableOobLoadReport,
-                                                        Long weightUpdatePeriod) {
+                                                        String weightUpdatePeriod) {
     ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
     if (blackoutPeriod != null) {
-      configBuilder.put(BLACK_OUT_PERIOD, blackoutPeriod.doubleValue());
+      configBuilder.put(BLACK_OUT_PERIOD, blackoutPeriod);
     }
     if (weightExpirationPeriod != null) {
-      configBuilder.put(WEIGHT_EXPIRATION_PERIOD, weightExpirationPeriod.doubleValue());
+      configBuilder.put(WEIGHT_EXPIRATION_PERIOD, weightExpirationPeriod);
     }
     if (oobReportingPeriod != null) {
-      configBuilder.put(OOB_REPORTING_PERIOD, oobReportingPeriod.doubleValue());
+      configBuilder.put(OOB_REPORTING_PERIOD, oobReportingPeriod);
     }
     if (enableOobLoadReport != null) {
       configBuilder.put(ENABLE_OOB_LOAD_REPORT, enableOobLoadReport);
     }
     if (weightUpdatePeriod != null) {
-      configBuilder.put(WEIGHT_UPDATE_PERIOD, weightUpdatePeriod.doubleValue());
+      configBuilder.put(WEIGHT_UPDATE_PERIOD, weightUpdatePeriod);
     }
     return ImmutableMap.of(WeightedRoundRobinLoadBalancerProvider.SCHEME,
         configBuilder.buildOrThrow());
@@ -266,12 +266,12 @@ class LoadBalancerConfigFactory {
     private static ImmutableMap<String, ?> convertWeightedRoundRobinConfig(
             ClientSideWeightedRoundRobin wrr) throws ResourceInvalidException {
       return buildWrrConfig(
-          wrr.hasBlackoutPeriod() ? Durations.toNanos(wrr.getBlackoutPeriod()) : null,
+          wrr.hasBlackoutPeriod() ? Durations.toString(wrr.getBlackoutPeriod()) : null,
           wrr.hasWeightExpirationPeriod()
-              ? Durations.toNanos(wrr.getWeightExpirationPeriod()) : null,
-          wrr.hasOobReportingPeriod() ? Durations.toNanos(wrr.getOobReportingPeriod()) : null,
+              ? Durations.toString(wrr.getWeightExpirationPeriod()) : null,
+          wrr.hasOobReportingPeriod() ? Durations.toString(wrr.getOobReportingPeriod()) : null,
           wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
-          wrr.hasWeightUpdatePeriod() ? Durations.toNanos(wrr.getWeightUpdatePeriod()) : null);
+          wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null);
     }
 
     /**

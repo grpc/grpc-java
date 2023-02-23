@@ -132,6 +132,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsResourceType.StructOrError;
@@ -167,7 +168,6 @@ public class XdsClientImplDataTest {
   private boolean originalEnableRbac;
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
-
   private boolean originalEnableWrr;
 
   @Before
@@ -2024,6 +2024,14 @@ public class XdsClientImplDataTest {
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
             JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("weighted_round_robin_experimental");
+    WeightedRoundRobinLoadBalancerConfig result = (WeightedRoundRobinLoadBalancerConfig)
+        new WeightedRoundRobinLoadBalancerProvider().parseLoadBalancingPolicyConfig(
+        childConfigs.get(0).getRawConfigValue()).getConfig();
+    assertThat(result.blackoutPeriodNanos).isEqualTo(17_000_000_000L);
+    assertThat(result.enableOobLoadReport).isTrue();
+    assertThat(result.oobReportingPeriodNanos).isEqualTo(10_000_000_000L);
+    assertThat(result.weightUpdatePeriodNanos).isEqualTo(1_000_000_000L);
+    assertThat(result.weightExpirationPeriodNanos).isEqualTo(180_000_000_000L);
   }
 
   @Test

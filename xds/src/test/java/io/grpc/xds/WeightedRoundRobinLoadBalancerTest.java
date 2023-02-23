@@ -209,6 +209,14 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(weightedPicker.pickSubchannel(mockArgs)
             .getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
+        .setWeightUpdatePeriodNanos(500_000_000L) //.5s
+        .build();
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+
     syncContext.execute(() -> wrr.shutdown());
     for (Subchannel subchannel: subchannels.values()) {
       verify(subchannel).shutdown();
@@ -403,6 +411,58 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
+  public void updateWeightTimer() {
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+    verify(helper, times(3)).createSubchannel(
+        any(CreateSubchannelArgs.class));
+    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel1 = it.next();
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel2  = it.next();
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+    Subchannel connectingSubchannel = it.next();
+    subchannelStateListeners.get(connectingSubchannel).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.CONNECTING));
+    verify(helper, times(2)).updateBalancingState(
+        eq(ConnectivityState.READY), pickerCaptor.capture());
+    assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
+    assertThat(pickerCaptor.getAllValues().get(0).getList().size()).isEqualTo(1);
+    WeightedRoundRobinPicker weightedPicker = pickerCaptor.getAllValues().get(1);
+    assertThat(weightedPicker.getList().size()).isEqualTo(2);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+        0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+        0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(weightedPicker.pickSubchannel(mockArgs)
+        .getSubchannel()).isEqualTo(weightedSubchannel1);
+    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
+        .setWeightUpdatePeriodNanos(500_000_000L) //.5s
+        .build();
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+        0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+        0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    //timer fires, new weight updated
+    assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
+    assertThat(weightedPicker.pickSubchannel(mockArgs)
+        .getSubchannel()).isEqualTo(weightedSubchannel2);
+  }
+
+  @Test
   public void weightExpired() {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
@@ -577,7 +637,7 @@ public class WeightedRoundRobinLoadBalancerTest {
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < capacity; i++) {
-      assertThat(Math.abs(pickCount.get(i) / 1000.0 - weights[i] / totalWeight) ).isAtMost(0.001);
+      assertThat(Math.abs(pickCount.get(i) / 1000.0 - weights[i] / totalWeight) ).isAtMost(0.01);
     }
   }
 
@@ -587,6 +647,16 @@ public class WeightedRoundRobinLoadBalancerTest {
     scheduler.add(0, 0.5);
     scheduler.add(1, 0.5);
     assertThat(scheduler.pick()).isEqualTo(0);
+  }
+
+  @Test(expected = NullPointerException.class)
+  public void wrrConfig_TimeValueNonNull() {
+    WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos((Long) null);
+  }
+
+  @Test(expected = NullPointerException.class)
+  public void wrrConfig_BooleanValueNonNull() {
+    WeightedRoundRobinLoadBalancerConfig.newBuilder().setEnableOobLoadReport((Boolean) null);
   }
 
   private static class FakeSocketAddress extends SocketAddress {

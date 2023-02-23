@@ -208,10 +208,7 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
           // an arbitrary subchannel, otherwise return OK.
           new EmptyPicker(aggStatus));
     } else {
-      // initialize the Picker to a random start index to ensure that a high frequency of Picker
-      // churn does not skew subchannel selection.
-      int startIndex = random.nextInt(activeList.size());
-      updateBalancingState(READY, createReadyPicker(activeList, startIndex));
+      updateBalancingState(READY, createReadyPicker(activeList));
     }
   }
 
@@ -223,7 +220,10 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
     }
   }
 
-  protected RoundRobinPicker createReadyPicker(List<Subchannel> activeList, int startIndex) {
+  protected RoundRobinPicker createReadyPicker(List<Subchannel> activeList) {
+    // initialize the Picker to a random start index to ensure that a high frequency of Picker
+    // churn does not skew subchannel selection.
+    int startIndex = random.nextInt(activeList.size());
     return new ReadyPicker(activeList, startIndex);
   }
 

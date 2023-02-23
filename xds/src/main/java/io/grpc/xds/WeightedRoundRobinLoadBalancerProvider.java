@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -28,9 +29,10 @@ import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancer
 import java.util.Map;
 
 /**
- * Providers a {@link WeightedRoundRobinLoadBalancer}.
+ * Provides a {@link WeightedRoundRobinLoadBalancer}.
  * */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
+@Internal
 public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerProvider {
 
   @VisibleForTesting
@@ -60,12 +62,12 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
-    Long blackoutPeriodNanos = JsonUtil.getNumberAsLong(rawConfig, "blackoutPeriod");
+    Long blackoutPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "blackoutPeriod");
     Long weightExpirationPeriodNanos =
-            JsonUtil.getNumberAsLong(rawConfig, "weightExpirationPeriod");
-    Long oobReportingPeriodNanos = JsonUtil.getNumberAsLong(rawConfig, "oobReportingPeriod");
+            JsonUtil.getStringAsDuration(rawConfig, "weightExpirationPeriod");
+    Long oobReportingPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "oobReportingPeriod");
     Boolean enableOobLoadReport = JsonUtil.getBoolean(rawConfig, "enableOobLoadReport");
-    Long weightUpdatePeriodNanos = JsonUtil.getNumberAsLong(rawConfig, "weightUpdatePeriod");
+    Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
 
     WeightedRoundRobinLoadBalancerConfig.Builder configBuilder =
             WeightedRoundRobinLoadBalancerConfig.newBuilder();
