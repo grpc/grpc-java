@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+#
+# Stage 1: Build the interop test client and server
+#
+
 FROM openjdk:11.0.16-jdk-slim-bullseye AS build
 
 WORKDIR /grpc-java
@@ -20,6 +25,13 @@ COPY . .
 RUN ./gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
 
 
+#
+# Stage 2:
+#
+# - Copy only the necessary files to reduce Docker image size.
+# - Have an ENTRYPOINT script which will launch the interop test client or server
+#   with the given parameters.
+#
 
 FROM openjdk:11.0.16-jdk-slim-bullseye
 

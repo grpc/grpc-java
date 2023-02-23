@@ -78,8 +78,11 @@ public class TestServiceClient {
       client.tearDown();
     }
     if (enableObservability) {
-      System.out.println("Sleeping "+observabilityExporterSleepSeconds+" seconds before exiting");
-      Thread.sleep(TimeUnit.MILLISECONDS.convert(observabilityExporterSleepSeconds, TimeUnit.SECONDS));
+      // TODO(stanleycheung): remove this once the observability exporter plugin is able to
+      //                      gracefully flush observability data to cloud at shutdown
+      final int OBSERVABILITY_EXPORTER_SLEEP_SECONDS = 65;
+      System.out.println("Sleeping "+OBSERVABILITY_EXPORTER_SLEEP_SECONDS+" seconds before exiting");
+      Thread.sleep(TimeUnit.MILLISECONDS.convert(OBSERVABILITY_EXPORTER_SLEEP_SECONDS, TimeUnit.SECONDS));
       gcpObservability.close();
     }
     System.exit(0);
@@ -109,7 +112,6 @@ public class TestServiceClient {
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
   private static boolean enableObservability = false;
-  private static int observabilityExporterSleepSeconds = 0;
 
   private Tester tester = new Tester();
 
@@ -186,8 +188,6 @@ public class TestServiceClient {
         soakOverallTimeoutSeconds = Integer.parseInt(value);
       } else if ("enable_observability".equals(key)) {
         enableObservability = Boolean.parseBoolean(value);
-      } else if ("observability_exporter_sleep_seconds".equals(key)) {
-        observabilityExporterSleepSeconds = Integer.parseInt(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -259,12 +259,6 @@ public class TestServiceClient {
           + "\n --enable_observability=true|false "
           + "                                Whether to enable GCP Observability. Default "
             + TestServiceClient.enableObservability
-          // TODO(stanleycheung): remove this param once all the observability exporter plugins
-          //                      are able to flush observability data to cloud at shutdown
-          + "\n --observability_exporter_sleep_seconds "
-          + "\n                              The number of seconds to wait before the client exits. "
-          + "\n                              Default: "
-            + TestServiceClient.observabilityExporterSleepSeconds
       );
       System.exit(1);
     }
@@ -292,13 +286,9 @@ public class TestServiceClient {
   private void run() {
     System.out.println("Running test " + testCase);
     try {
-      if (testCase.contains(",")) {
-        Iterable<String> testCases = Splitter.on(",").split(testCase);
-        for (String singleCase : testCases) {
-          runTest(TestCases.fromString(singleCase));
-        }
-      } else {
-        runTest(TestCases.fromString(testCase));
+      Iterable<String> testCases = Splitter.on(",").split(testCase);
+      for (String singleCase : testCases) {
+        runTest(TestCases.fromString(singleCase));
       }
     } catch (RuntimeException ex) {
       throw ex;
