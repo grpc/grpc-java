@@ -15,7 +15,6 @@
 FROM openjdk:11.0.16-jdk-slim-bullseye AS build
 
 WORKDIR /grpc-java
-
 COPY . .
 
 RUN ./gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
@@ -25,11 +24,9 @@ RUN ./gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
 FROM openjdk:11.0.16-jdk-slim-bullseye
 
 WORKDIR /grpc-java/interop-testing/build
-
 COPY --from=build /grpc-java/interop-testing/build/. .
 
 WORKDIR /grpc-java/buildscripts/observability-test
-
 COPY --from=build /grpc-java/buildscripts/observability-test/run.sh .
 
 ENTRYPOINT ["/grpc-java/buildscripts/observability-test/run.sh"]

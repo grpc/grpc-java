@@ -46,7 +46,6 @@ public enum TestCases {
   GOOGLE_DEFAULT_CREDENTIALS(
       "google default credentials, i.e. GoogleManagedChannel based auth"),
   CUSTOM_METADATA("unary and full duplex calls with metadata"),
-  UNARY_WITH_METADATA("unary call with metadata"),
   STATUS_CODE_AND_MESSAGE("request error code and message"),
   SPECIAL_STATUS_MESSAGE("special characters in status message"),
   UNIMPLEMENTED_METHOD("call an unimplemented RPC method"),

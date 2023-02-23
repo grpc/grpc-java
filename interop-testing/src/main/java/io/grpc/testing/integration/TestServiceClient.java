@@ -448,11 +448,6 @@ public class TestServiceClient {
         break;
       }
 
-      case UNARY_WITH_METADATA: {
-        tester.unaryWithMetadata();
-        break;
-      }
-
       case STATUS_CODE_AND_MESSAGE: {
         tester.statusCodeAndMessage();
         break;
