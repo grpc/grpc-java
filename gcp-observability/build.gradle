@@ -33,11 +33,14 @@ dependencies {
             libraries.opencensus.contrib.grpc.metrics,
             libraries.opencensus.exporter.stats.stackdriver,
             libraries.opencensus.exporter.trace.stackdriver,
+            project(':grpc-xds'), // Align grpc versions
+            project(':grpc-services'), // Align grpc versions
             libraries.animalsniffer.annotations, // Prefer our version
             libraries.google.auth.credentials, // Prefer our version
             libraries.protobuf.java.util, // Prefer our version
             libraries.gson, // Prefer our version
             libraries.perfmark.api, // Prefer our version
+            libraries.re2j, // Prefer our version
             ('com.google.guava:guava:31.1-jre')
 
     runtimeOnly libraries.opencensus.impl
