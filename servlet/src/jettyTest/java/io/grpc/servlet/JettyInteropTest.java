@@ -83,10 +83,9 @@ public class JettyInteropTest extends AbstractInteropTest {
 
   @Override
   protected ManagedChannelBuilder<?> createChannelBuilder() {
-    NettyChannelBuilder builder =
-            (NettyChannelBuilder) ManagedChannelBuilder.forAddress(HOST, port)
-                    .usePlaintext()
-                    .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress(HOST, port)
+                                  .usePlaintext()
+                                  .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
     InternalNettyChannelBuilder.setStatsEnabled(builder, false);
     builder.intercept(createCensusStatsClientInterceptor());
     return builder;

@@ -111,7 +111,7 @@ public class UndertowInteropTest extends AbstractInteropTest {
 
   @Override
   protected ManagedChannelBuilder<?> createChannelBuilder() {
-    NettyChannelBuilder builder = (NettyChannelBuilder) ManagedChannelBuilder
+    NettyChannelBuilder builder = NettyChannelBuilder
             .forAddress(HOST, port)
             .usePlaintext()
             .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
