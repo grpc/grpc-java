@@ -20,7 +20,7 @@ import com.google.common.base.MoreObjects;
 
 /**
  * A {@link ServerCall} which forwards all of it's methods to another {@link ServerCall} which
- * may have a different sentMessage() message type.
+ * may have a different sendMessage() message type.
  */
 abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   /**
