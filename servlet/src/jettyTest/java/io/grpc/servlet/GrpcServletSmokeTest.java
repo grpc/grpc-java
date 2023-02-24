@@ -22,7 +22,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
 import io.grpc.BindableService;
 import io.grpc.Channel;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
@@ -99,7 +99,7 @@ public class GrpcServletSmokeTest {
   @Test
   public void unaryCall() {
     Channel channel = cleanupRule.register(
-        ManagedChannelBuilder.forAddress(HOST, port).usePlaintext().build());
+        NettyChannelBuilder.forAddress(HOST, port).usePlaintext().build());
     SimpleResponse response = TestServiceGrpc.newBlockingStub(channel).unaryCall(
         SimpleRequest.newBuilder()
             .setResponseSize(1234)
