@@ -80,9 +80,9 @@ public class TestServiceClient {
       gcpObservability.close();
       // TODO(stanleycheung): remove this once the observability exporter plugin is able to
       //                      gracefully flush observability data to cloud at shutdown
-      final int observabilitySleepSeconds = 65;
-      System.out.println("Sleeping " + observabilitySleepSeconds + " seconds before exiting");
-      Thread.sleep(TimeUnit.MILLISECONDS.convert(observabilitySleepSeconds, TimeUnit.SECONDS));
+      final int o11yCloseSleepSeconds = 65;
+      System.out.println("Sleeping " + o11yCloseSleepSeconds + " seconds before exiting");
+      Thread.sleep(TimeUnit.MILLISECONDS.convert(o11yCloseSleepSeconds, TimeUnit.SECONDS));
     }
     System.exit(0);
   }
@@ -211,7 +211,8 @@ public class TestServiceClient {
           + "\n  --test_case=TESTCASE        Test case to run. Default " + c.testCase
           + "\n    Valid options:"
           + validTestCasesHelpText()
-          + "\n  --num_times=INT             Number of times to run the test case. Default: " + c.numTimes
+          + "\n  --num_times=INT             Number of times to run the test case. Default: "
+          + c.numTimes
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
           + "\n  --use_alts=true|false       Whether to use ALTS. Enable ALTS will disable TLS."
           + "\n                              Default " + c.useAlts
