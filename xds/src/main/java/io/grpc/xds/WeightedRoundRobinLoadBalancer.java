@@ -61,7 +61,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private ScheduledHandle weightUpdateTimer;
   private final Runnable updateWeightTask;
   private final Random random;
-  private static long INF_TIME = Long.MAX_VALUE;
+  private final long infTime;
 
   public WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
     this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper),
@@ -71,6 +71,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   public WeightedRoundRobinLoadBalancer(WrrHelper helper) {
     super(helper);
     helper.setLoadBalancer(this);
+    this.infTime = helper.ticker.nanoTime() + Long.MAX_VALUE;
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.updateWeightTask = new UpdateWeightTask();
@@ -183,8 +184,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (newWeight == 0) {
         return;
       }
-      if (nonEmptySince == INF_TIME) {
-
+      if (nonEmptySince == infTime) {
         nonEmptySince = ticker.nanoTime();
       }
       lastUpdated = ticker.nanoTime();
@@ -197,7 +197,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         @Override
         public void onSubchannelState(ConnectivityStateInfo newState) {
           if (newState.getState().equals(ConnectivityState.READY)) {
-            nonEmptySince = INF_TIME;
+            nonEmptySince = infTime;
           }
           listener.onSubchannelState(newState);
         }
@@ -210,7 +210,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
       long now = ticker.nanoTime();
       if (now - lastUpdated >= config.weightExpirationPeriodNanos) {
-        nonEmptySince = INF_TIME;
+        nonEmptySince = infTime;
         return 0;
       } else if (now - nonEmptySince < config.blackoutPeriodNanos
           && config.blackoutPeriodNanos > 0) {
