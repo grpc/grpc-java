@@ -171,7 +171,7 @@ public class WeightedRoundRobinLoadBalancerTest {
               return subchannel;
             }
             });
-    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getTimeProvider());
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
   }
 
   @Test

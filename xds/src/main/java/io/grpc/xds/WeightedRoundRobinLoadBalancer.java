@@ -24,6 +24,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.Deadline.Ticker;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
@@ -31,7 +32,6 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.TimeProvider;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
@@ -61,10 +61,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private ScheduledHandle weightUpdateTimer;
   private final Runnable updateWeightTask;
   private final Random random;
+  private static long INF_TIME = Long.MAX_VALUE;
 
-  public WeightedRoundRobinLoadBalancer(Helper helper, TimeProvider timeProvider) {
-    super(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper),
-            checkNotNull(timeProvider, "timeProvider")));
+  public WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
+    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper),
+        checkNotNull(ticker, "ticker")));
+  }
+
+  public WeightedRoundRobinLoadBalancer(WrrHelper helper) {
+    super(helper);
+    helper.setLoadBalancer(this);
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.updateWeightTask = new UpdateWeightTask();
@@ -111,7 +117,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private void afterAcceptAddresses() {
     for (Subchannel subchannel : getSubchannels()) {
       WrrSubchannel weightedSubchannel = (WrrSubchannel) subchannel;
-      weightedSubchannel.setConfig(config);
       if (config.enableOobLoadReport) {
         OrcaOobUtil.setListener(weightedSubchannel, weightedSubchannel.oobListener,
                 OrcaOobUtil.OrcaReportingConfig.newBuilder()
@@ -133,11 +138,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   private static final class WrrHelper extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
-    private final TimeProvider timeProvider;
+    private final Ticker ticker;
+    private WeightedRoundRobinLoadBalancer wrr;
 
-    WrrHelper(Helper helper, TimeProvider timeProvider) {
+    WrrHelper(Helper helper, Ticker ticker) {
       this.delegate = helper;
-      this.timeProvider = timeProvider;
+      this.ticker = ticker;
+    }
+
+    void setLoadBalancer(WeightedRoundRobinLoadBalancer lb) {
+      this.wrr = lb;
     }
 
     @Override
@@ -147,28 +157,23 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      return new WrrSubchannel(delegate().createSubchannel(args), timeProvider);
+      return wrr.new WrrSubchannel(delegate().createSubchannel(args), ticker);
     }
   }
 
   @VisibleForTesting
-  static final class WrrSubchannel extends ForwardingSubchannel {
+  final class WrrSubchannel extends ForwardingSubchannel {
     private final Subchannel delegate;
-    private final TimeProvider timeProvider;
+    private final Ticker ticker;
     private final OrcaOobReportListener oobListener = this::onLoadReport;
     private final OrcaPerRequestReportListener perRpcListener = this::onLoadReport;
     private volatile long lastUpdated;
     private volatile long nonEmptySince;
     private volatile double weight;
-    private WeightedRoundRobinLoadBalancerConfig config;
 
-    WrrSubchannel(Subchannel delegate, TimeProvider timeProvider) {
+    WrrSubchannel(Subchannel delegate, Ticker ticker) {
       this.delegate = checkNotNull(delegate, "delegate");
-      this.timeProvider = checkNotNull(timeProvider, "timeProvider");
-    }
-
-    private void setConfig(WeightedRoundRobinLoadBalancerConfig config) {
-      this.config = config;
+      this.ticker = checkNotNull(ticker, "ticker");
     }
 
     @VisibleForTesting
@@ -178,10 +183,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (newWeight == 0) {
         return;
       }
-      if (nonEmptySince == Integer.MAX_VALUE) {
-        nonEmptySince = timeProvider.currentTimeNanos();
+      if (nonEmptySince == INF_TIME) {
+
+        nonEmptySince = ticker.nanoTime();
       }
-      lastUpdated = timeProvider.currentTimeNanos();
+      lastUpdated = ticker.nanoTime();
       weight = newWeight;
     }
 
@@ -191,7 +197,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         @Override
         public void onSubchannelState(ConnectivityStateInfo newState) {
           if (newState.getState().equals(ConnectivityState.READY)) {
-            nonEmptySince = Integer.MAX_VALUE;
+            nonEmptySince = INF_TIME;
           }
           listener.onSubchannelState(newState);
         }
@@ -202,9 +208,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (config == null) {
         return 0;
       }
-      long now = timeProvider.currentTimeNanos();
+      long now = ticker.nanoTime();
       if (now - lastUpdated >= config.weightExpirationPeriodNanos) {
-        nonEmptySince = Integer.MAX_VALUE;
+        nonEmptySince = INF_TIME;
         return 0;
       } else if (now - nonEmptySince < config.blackoutPeriodNanos
           && config.blackoutPeriodNanos > 0) {

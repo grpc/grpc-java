@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
@@ -24,7 +25,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.JsonUtil;
-import io.grpc.internal.TimeProvider;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import java.util.Map;
 
@@ -42,7 +42,7 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new WeightedRoundRobinLoadBalancer(helper, TimeProvider.SYSTEM_TIME_PROVIDER);
+    return new WeightedRoundRobinLoadBalancer(helper, Deadline.getSystemTicker());
   }
 
   @Override
