@@ -80,9 +80,9 @@ public class TestServiceClient {
       gcpObservability.close();
       // TODO(stanleycheung): remove this once the observability exporter plugin is able to
       //                      gracefully flush observability data to cloud at shutdown
-      final int OBSERVABILITY_EXPORTER_SLEEP_SECONDS = 65;
-      System.out.println("Sleeping "+OBSERVABILITY_EXPORTER_SLEEP_SECONDS+" seconds before exiting");
-      Thread.sleep(TimeUnit.MILLISECONDS.convert(OBSERVABILITY_EXPORTER_SLEEP_SECONDS, TimeUnit.SECONDS));
+      final int observabilityExporterSleepSeconds = 65;
+      System.out.println("Sleeping "+observabilityExporterSleepSeconds+" seconds before exiting");
+      Thread.sleep(TimeUnit.MILLISECONDS.convert(observabilityExporterSleepSeconds, TimeUnit.SECONDS));
     }
     System.exit(0);
   }
