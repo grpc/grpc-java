@@ -17,7 +17,6 @@
 package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Splitter;
 import com.google.common.io.Files;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
@@ -78,12 +77,12 @@ public class TestServiceClient {
       client.tearDown();
     }
     if (enableObservability) {
+      gcpObservability.close();
       // TODO(stanleycheung): remove this once the observability exporter plugin is able to
       //                      gracefully flush observability data to cloud at shutdown
       final int OBSERVABILITY_EXPORTER_SLEEP_SECONDS = 65;
       System.out.println("Sleeping "+OBSERVABILITY_EXPORTER_SLEEP_SECONDS+" seconds before exiting");
       Thread.sleep(TimeUnit.MILLISECONDS.convert(OBSERVABILITY_EXPORTER_SLEEP_SECONDS, TimeUnit.SECONDS));
-      gcpObservability.close();
     }
     System.exit(0);
   }
@@ -92,6 +91,7 @@ public class TestServiceClient {
   private String serverHostOverride;
   private int serverPort = 8080;
   private String testCase = "empty_unary";
+  private int numTimes = 1;
   private boolean useTls = true;
   private boolean useAlts = false;
   private boolean useH2cUpgrade = false;
@@ -144,6 +144,8 @@ public class TestServiceClient {
         serverPort = Integer.parseInt(value);
       } else if ("test_case".equals(key)) {
         testCase = value;
+      } else if ("num_times".equals(key)) {
+        numTimes = Integer.parseInt(value);
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_upgrade".equals(key)) {
@@ -209,6 +211,7 @@ public class TestServiceClient {
           + "\n  --test_case=TESTCASE        Test case to run. Default " + c.testCase
           + "\n    Valid options:"
           + validTestCasesHelpText()
+          + "\n  --num_times=INT             Number of times to run the test case. Default: " + c.numTimes
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
           + "\n  --use_alts=true|false       Whether to use ALTS. Enable ALTS will disable TLS."
           + "\n                              Default " + c.useAlts
@@ -286,9 +289,8 @@ public class TestServiceClient {
   private void run() {
     System.out.println("Running test " + testCase);
     try {
-      Iterable<String> testCases = Splitter.on(",").split(testCase);
-      for (String singleCase : testCases) {
-        runTest(TestCases.fromString(singleCase));
+      for (int i = 0; i < numTimes; i++) {
+        runTest(TestCases.fromString(testCase));
       }
     } catch (RuntimeException ex) {
       throw ex;

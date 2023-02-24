@@ -24,7 +24,8 @@ cd "$(dirname "$0")"/../..
 #
 # For client: $2: server_host
 #             $3: server_port
-#             $4: test_case    # comma delimited interop test case names
+#             $4: test_case
+#             $5: num_times
 
 if [ "$1" = "server" ] ; then
   /grpc-java/interop-testing/build/install/grpc-interop-testing/bin/test-server \
@@ -35,7 +36,7 @@ elif [ "$1" = "client" ] ; then
   /grpc-java/interop-testing/build/install/grpc-interop-testing/bin/test-client \
     --use_tls=false --enable_observability=true \
     --server_host=$2 --server_port=$3 \
-    --test_case=$4
+    --test_case=$4 --num_times=$5
 
 else
   echo "Invalid action: $1"
