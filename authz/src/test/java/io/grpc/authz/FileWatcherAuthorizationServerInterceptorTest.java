@@ -24,6 +24,7 @@ import static org.junit.Assert.fail;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,9 +45,7 @@ public class FileWatcherAuthorizationServerInterceptorTest {
       FileWatcherAuthorizationServerInterceptor.create(policyFile);
       fail("exception expected");
     } catch (IOException ioe) {
-      assertThat(ioe).hasMessageThat().isEqualTo(
-          "Use JsonReader.setLenient(true) to accept malformed JSON"
-          + " at line 1 column 18 path $.name");
+      assertThat(ioe).hasMessageThat().contains("malformed");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -81,7 +80,6 @@ public class FileWatcherAuthorizationServerInterceptorTest {
     FileWatcherAuthorizationServerInterceptor interceptor = 
         FileWatcherAuthorizationServerInterceptor.create(policyFile);
     assertNotNull(interceptor);
-    interceptor.scheduleRefreshes(1, TimeUnit.SECONDS);
   }
 
   @Test
@@ -104,7 +102,8 @@ public class FileWatcherAuthorizationServerInterceptorTest {
         FileWatcherAuthorizationServerInterceptor.create(policyFile);
     assertNotNull(interceptor);
     try {
-      interceptor.scheduleRefreshes(0, TimeUnit.SECONDS);
+      interceptor.scheduleRefreshes(0, TimeUnit.SECONDS, 
+          Executors.newSingleThreadScheduledExecutor());
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo(

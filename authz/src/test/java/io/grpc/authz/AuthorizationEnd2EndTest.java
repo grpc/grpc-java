@@ -18,6 +18,7 @@ package io.grpc.authz;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
@@ -33,6 +34,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.TlsServerCredentials.ClientAuth;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -59,6 +61,9 @@ public class AuthorizationEnd2EndTest {
   private Server server;
   private ManagedChannel channel;
 
+  private FakeClock fakeClock = new FakeClock();
+  private File policyFile;
+
   private AuthorizationServerInterceptor createStaticAuthorizationInterceptor(
       String authorizationPolicy) throws Exception {
     AuthorizationServerInterceptor interceptor =
@@ -84,17 +89,15 @@ public class AuthorizationEnd2EndTest {
                 .start();
   }
 
-  private File createTempAuthorizationPolicy(String authorizationPolicy) throws Exception {
-    File policyFile = File.createTempFile("temp", "json");
+  private void createTempAuthorizationPolicy(String authorizationPolicy) throws Exception {
+    policyFile = File.createTempFile("temp", "json");
     try (FileOutputStream outputStream = new FileOutputStream(policyFile, false)) {
       outputStream.write(authorizationPolicy.getBytes(UTF_8));
       outputStream.close();
     }
-    return policyFile;
   }
 
-  private void rewriteAuthorizationPolicy(
-      File policyFile, String newPolicy) throws Exception {
+  private void rewriteAuthorizationPolicy(String newPolicy) throws Exception {
     try (FileOutputStream outputStream = new FileOutputStream(policyFile, false)) {
       outputStream.write(newPolicy.getBytes(UTF_8));
       outputStream.close();
@@ -121,6 +124,9 @@ public class AuthorizationEnd2EndTest {
 
   @After
   public void tearDown() {
+    if (policyFile != null) {
+      policyFile.delete();
+    }
     if (server != null) {
       server.shutdown();
     }
@@ -438,13 +444,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
@@ -473,13 +479,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -516,13 +522,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -559,13 +565,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -592,13 +598,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
@@ -617,13 +623,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -655,13 +661,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -684,16 +690,32 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    rewriteAuthorizationPolicy(policyFile, policy);
+    rewriteAuthorizationPolicy(policy);
+    assertEquals(0, fakeClock.forwardNanos(99));
+    //assertEquals(0, fakeClock.runDueTasks());
+    /*
     Runnable callback = () -> {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
     };
     Thread onReloadDone = new Thread(callback);
     interceptor.setCallbackForTesting(onReloadDone);
-    onReloadDone.join();
+    onReloadDone.join();*/
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    assertEquals(1, fakeClock.forwardNanos(2));
+    //assertEquals(1, fakeClock.numPendingTasks());
+    getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
   @Test
+  // TODO(ashithasantosh): Replace callback with fakeclock
   public void fileWatcherAuthzInvalidPolicySkipRefreshTest() throws Exception {
     String policy = "{"
         + " \"name\" : \"authz\" ,"
@@ -708,13 +730,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -725,7 +747,7 @@ public class AuthorizationEnd2EndTest {
       throw new AssertionError("the test failed ", e);
     }
     policy = "{}";
-    rewriteAuthorizationPolicy(policyFile, policy);
+    rewriteAuthorizationPolicy(policy);
     Runnable callback = () -> {
       try {
         getStub().unaryRpc(SimpleRequest.getDefaultInstance());
@@ -743,6 +765,7 @@ public class AuthorizationEnd2EndTest {
   }
 
   @Test
+  // TODO(ashithasantosh): Replace callback with fakeclock
   public void fileWatcherAuthzRecoversFromReloadTest() throws Exception {
     String policy = "{"
         + " \"name\" : \"authz\" ,"
@@ -757,13 +780,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -774,7 +797,7 @@ public class AuthorizationEnd2EndTest {
       throw new AssertionError("the test failed ", e);
     }
     policy = "{}";
-    rewriteAuthorizationPolicy(policyFile, policy);
+    rewriteAuthorizationPolicy(policy);
     Runnable callback = () -> {
       try {
         getStub().unaryRpc(SimpleRequest.getDefaultInstance());
@@ -802,7 +825,7 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    rewriteAuthorizationPolicy(policyFile, policy);
+    rewriteAuthorizationPolicy(policy);
     callback = () -> {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
     };
