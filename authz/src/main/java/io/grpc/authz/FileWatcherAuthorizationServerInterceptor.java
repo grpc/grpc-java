@@ -19,8 +19,6 @@ package io.grpc.authz;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -29,8 +27,6 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.attribute.FileTime;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -47,20 +43,11 @@ public final class FileWatcherAuthorizationServerInterceptor implements ServerIn
       Logger.getLogger(FileWatcherAuthorizationServerInterceptor.class.getName());
 
   private volatile AuthorizationServerInterceptor internalAuthzServerInterceptor;
-  private final ScheduledExecutorService scheduledExecutorService = 
-      Executors.newSingleThreadScheduledExecutor(
-                    new ThreadFactoryBuilder()
-                    .setNameFormat("filewatcher" + "-%d")
-                    .setDaemon(true)
-                    .build());
 
   private final File policyFile;
-  private FileTime lastModifiedTime;
+  private String policyContents;
 
-  private Thread testCallback;
-
-  private FileWatcherAuthorizationServerInterceptor(File policyFile)
-        throws IllegalArgumentException, IOException {
+  private FileWatcherAuthorizationServerInterceptor(File policyFile) throws IOException {
     this.policyFile = policyFile;
     updateInternalInterceptor();
   }
@@ -73,16 +60,12 @@ public final class FileWatcherAuthorizationServerInterceptor implements ServerIn
   }
 
   void updateInternalInterceptor() throws IOException {
-    FileTime currentTime = Files.getLastModifiedTime(policyFile.toPath());
-    if (currentTime.equals(lastModifiedTime)) {
+    String currentPolicyContents = new String(Files.readAllBytes(policyFile.toPath()), UTF_8);
+    if (currentPolicyContents.equals(policyContents)) {
       return;
     }
-    String policyContents = new String(Files.readAllBytes(policyFile.toPath()), UTF_8);
-    lastModifiedTime = currentTime;
+    policyContents = currentPolicyContents;
     internalAuthzServerInterceptor = AuthorizationServerInterceptor.create(policyContents);
-    if (testCallback != null) {
-      testCallback.start();
-    }
   }
 
   /** 
@@ -93,22 +76,25 @@ public final class FileWatcherAuthorizationServerInterceptor implements ServerIn
    * 
    * @param period the period between successive file load executions.
    * @param unit the time unit for period parameter
+   * @param executor the execute service we use to read and update authorization policy
    * @return an object that caller should close when the file refreshes are not needed
    */
-  public Closeable scheduleRefreshes(long period, TimeUnit unit) 
-    throws IOException {
+  public Closeable scheduleRefreshes(
+      long period, TimeUnit unit, ScheduledExecutorService executor) throws IOException {
+    checkNotNull(executor, "scheduledExecutorService");
     if (period <= 0) {
       throw new IllegalArgumentException("Refresh interval must be greater than 0");
     }
     final ScheduledFuture<?> future = 
-        scheduledExecutorService.scheduleWithFixedDelay(new Runnable() {
-          @Override public void run() {
+        executor.scheduleWithFixedDelay(new Runnable() {
+          @Override
+          public void run() {
             try {
-                updateInternalInterceptor();
+              updateInternalInterceptor();
             } catch (Exception e) {
-                logger.log(Level.WARNING, "Authorization Policy file reload failed: " + e);
+              logger.log(Level.WARNING, "Authorization Policy file reload failed: ", e);
             }
-            }
+          }
         }, period, period, unit);
     return new Closeable() {
       @Override public void close() {
@@ -117,13 +103,8 @@ public final class FileWatcherAuthorizationServerInterceptor implements ServerIn
     };
   }
 
-  @VisibleForTesting
-  public void setCallbackForTesting(Thread callback) {
-    testCallback = callback;
-  }
-
   public static FileWatcherAuthorizationServerInterceptor create(File policyFile) 
-    throws IllegalArgumentException, IOException {
+      throws IOException {
     checkNotNull(policyFile, "policyFile");
     return new FileWatcherAuthorizationServerInterceptor(policyFile);
   }

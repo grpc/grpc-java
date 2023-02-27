@@ -18,6 +18,7 @@ package io.grpc.authz;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
@@ -33,6 +34,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.TlsServerCredentials.ClientAuth;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -40,7 +42,8 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.Closeable;
 import java.io.File;
-import java.io.FileOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
@@ -57,6 +60,9 @@ public class AuthorizationEnd2EndTest {
 
   private Server server;
   private ManagedChannel channel;
+
+  private FakeClock fakeClock = new FakeClock();
+  private File policyFile;
 
   private AuthorizationServerInterceptor createStaticAuthorizationInterceptor(
       String authorizationPolicy) throws Exception {
@@ -83,21 +89,14 @@ public class AuthorizationEnd2EndTest {
                 .start();
   }
 
-  private File createTempAuthorizationPolicy(String authorizationPolicy) throws Exception {
-    File policyFile = File.createTempFile("temp", "json");
-    try (FileOutputStream outputStream = new FileOutputStream(policyFile, false)) {
-      outputStream.write(authorizationPolicy.getBytes(UTF_8));
-      outputStream.close();
-    }
-    return policyFile;
+  private void createTempAuthorizationPolicy(String authorizationPolicy) throws Exception {
+    policyFile = File.createTempFile("temp", "json");
+    Files.write(Paths.get(policyFile.getAbsolutePath()), authorizationPolicy.getBytes(UTF_8));
   }
 
-  private void rewriteAuthorizationPolicy(
-      File policyFile, String newPolicy) throws Exception {
-    try (FileOutputStream outputStream = new FileOutputStream(policyFile, false)) {
-      outputStream.write(newPolicy.getBytes(UTF_8));
-      outputStream.close();
-    }
+  private void rewriteAuthorizationPolicy(String newPolicy) throws Exception {
+    assertNotNull(policyFile);
+    Files.write(Paths.get(policyFile.getAbsolutePath()), newPolicy.getBytes(UTF_8));
   }
 
   private SimpleServiceGrpc.SimpleServiceBlockingStub getStub() {
@@ -120,6 +119,9 @@ public class AuthorizationEnd2EndTest {
 
   @After
   public void tearDown() {
+    if (policyFile != null) {
+      policyFile.delete();
+    }
     if (server != null) {
       server.shutdown();
     }
@@ -192,8 +194,6 @@ public class AuthorizationEnd2EndTest {
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -230,8 +230,6 @@ public class AuthorizationEnd2EndTest {
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -268,8 +266,6 @@ public class AuthorizationEnd2EndTest {
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -316,8 +312,6 @@ public class AuthorizationEnd2EndTest {
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -343,8 +337,6 @@ public class AuthorizationEnd2EndTest {
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -437,13 +429,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
@@ -472,21 +464,19 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -515,21 +505,19 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -558,21 +546,19 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -591,13 +577,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
@@ -616,27 +602,25 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
     closeable.close();
-    policyFile.deleteOnExit();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
   @Test
   public void fileWatcherAuthzValidPolicyRefreshTest() throws Exception {
-    String policy = "{"
+    String policy1 = "{"
         + " \"name\" : \"authz\" ,"
         + " \"deny_rules\": ["
         + "   {"
@@ -654,23 +638,13 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(policy1);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
-    policyFile.deleteOnExit();
-    try {
-      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-      fail("exception expected");
-    } catch (StatusRuntimeException sre) {
-      assertThat(sre).hasMessageThat().isEqualTo(
-          "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
-    }
-    policy = "{"
+    String policy2 = "{"
         + " \"name\" : \"authz\" ,"
         + " \"allow_rules\": ["
         + "   {"
@@ -683,18 +657,25 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    rewriteAuthorizationPolicy(policyFile, policy);
-    Runnable callback = () -> {
+    rewriteAuthorizationPolicy(policy2);
+    // Reload is yet to take place at 100ns. policy1 will be active here.
+    assertEquals(0, fakeClock.forwardNanos(99));
+    try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-    };
-    Thread onReloadDone = new Thread(callback);
-    interceptor.setCallbackForTesting(onReloadDone);
-    onReloadDone.join();
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    }
+    // Reload will take place making policy2 the active policy.
+    assertEquals(1, fakeClock.forwardNanos(2));
+    closeable.close();
+    getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
   @Test
   public void fileWatcherAuthzInvalidPolicySkipRefreshTest() throws Exception {
-    String policy = "{"
+    String validPolicy = "{"
         + " \"name\" : \"authz\" ,"
         + " \"allow_rules\": ["
         + "   {"
@@ -707,43 +688,39 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(validPolicy);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
-    policyFile.deleteOnExit();
+    String invalidPolicy = "{}";
+    rewriteAuthorizationPolicy(invalidPolicy);
+    // Reload is yet to take place at 100ns. validPolicy will be active here.
+    assertEquals(0, fakeClock.forwardNanos(99));
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
           "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
-    policy = "{}";
-    rewriteAuthorizationPolicy(policyFile, policy);
-    Runnable callback = () -> {
-      try {
-        getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-        fail("exception expected");
-      } catch (StatusRuntimeException sre) {
-        assertThat(sre).hasMessageThat().isEqualTo(
-            "PERMISSION_DENIED: Access Denied");
-      } catch (Exception e) {
-        throw new AssertionError("the test failed ", e);
-      }
-    };
-    Thread onReloadDone = new Thread(callback);
-    interceptor.setCallbackForTesting(onReloadDone);
-    onReloadDone.join();
+    // Reload will take place which skips the invalidPolicy. validPolicy remains
+    // the active policy.
+    assertEquals(1, fakeClock.forwardNanos(2));
+    closeable.close();
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    }
   }
 
   @Test
   public void fileWatcherAuthzRecoversFromReloadTest() throws Exception {
-    String policy = "{"
+    String validPolicy1 = "{"
         + " \"name\" : \"authz\" ,"
         + " \"allow_rules\": ["
         + "   {"
@@ -756,39 +733,34 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    File policyFile = createTempAuthorizationPolicy(policy);
+    createTempAuthorizationPolicy(validPolicy1);
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
-    Closeable closeable = interceptor.scheduleRefreshes(100, TimeUnit.MILLISECONDS);
+    Closeable closeable = interceptor.scheduleRefreshes(
+        100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
-    policyFile.deleteOnExit();
+    String invalidPolicy = "{}";
+    rewriteAuthorizationPolicy(invalidPolicy);
+    // Reload is yet to take place at 100ns. validPolicy1 will be active here.
+    assertEquals(0, fakeClock.forwardNanos(99));
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       assertThat(sre).hasMessageThat().isEqualTo(
             "PERMISSION_DENIED: Access Denied");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
-    policy = "{}";
-    rewriteAuthorizationPolicy(policyFile, policy);
-    Runnable callback = () -> {
-      try {
-        getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-        fail("exception expected");
-      } catch (StatusRuntimeException sre) {
-        assertThat(sre).hasMessageThat().isEqualTo(
+    // Reload will take place which skips the invalidPolicy. validPolicy1 remains
+    // the active policy.
+    assertEquals(1, fakeClock.forwardNanos(2));
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
             "PERMISSION_DENIED: Access Denied");
-      } catch (Exception e) {
-        throw new AssertionError("the test failed ", e);
-      }
-    };
-    Thread onFirstReloadDone = new Thread(callback);
-    interceptor.setCallbackForTesting(onFirstReloadDone);
-    onFirstReloadDone.join();
-    policy = "{"
+    }
+    String validPolicy2 = "{"
         + " \"name\" : \"authz\" ,"
         + " \"allow_rules\": ["
         + "   {"
@@ -801,13 +773,20 @@ public class AuthorizationEnd2EndTest {
         + "   }"
         + " ]"
         + "}";
-    rewriteAuthorizationPolicy(policyFile, policy);
-    callback = () -> {
+    rewriteAuthorizationPolicy(validPolicy2);
+    // Next reload is yet to take place. validPolicy1 remains the active policy.
+    assertEquals(0, fakeClock.forwardNanos(98));
+    try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-    };
-    Thread onSecondReloadDone = new Thread(callback);
-    interceptor.setCallbackForTesting(onSecondReloadDone);
-    onSecondReloadDone.join();
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+            "PERMISSION_DENIED: Access Denied");
+    }
+    // Reload occurs making validPolicy2 the active policy.
+    assertEquals(1, fakeClock.forwardNanos(2));
+    closeable.close();
+    getStub().unaryRpc(SimpleRequest.getDefaultInstance());
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
