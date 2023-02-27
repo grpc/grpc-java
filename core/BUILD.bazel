@@ -65,13 +65,12 @@ java_library(
 )
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
-# with maven_install's override_targets. Purposefully does not export any
-# symbols, as it should only be used as a dep for pre-compiled binaries on
-# Maven Central.
+# with maven_install's override_targets. Should only be used as a dep for
+# pre-compiled binaries on Maven Central.
 java_library(
     name = "core_maven",
     visibility = ["//visibility:public"],
-    runtime_deps = [
+    exports = [
         ":inprocess",
         ":internal",
         ":util",

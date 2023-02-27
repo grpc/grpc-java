@@ -195,9 +195,9 @@ public class GoogleCloudToProdNameResolverTest {
 
   @SuppressWarnings("unchecked")
   @Test
-  public void onGcpAndProvidedBootstrapAndFederationEnabledDelegateToXds() {
+  public void onGcpAndNoProvidedBootstrapAndFederationEnabledDelegateToXds() {
     GoogleCloudToProdNameResolver.isOnGcp = true;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = true;
+    GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
     GoogleCloudToProdNameResolver.enableFederation = true;
     createResolver();
     resolver.start(mockListener);
@@ -221,6 +221,21 @@ public class GoogleCloudToProdNameResolverTest {
     assertThat(authorities).containsExactly(
         "traffic-director-c2p.xds.googleapis.com",
         ImmutableMap.of("xds_servers", ImmutableList.of(server)));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void onGcpAndProvidedBootstrapAndFederationEnabledDontDelegateToXds() {
+    GoogleCloudToProdNameResolver.isOnGcp = true;
+    GoogleCloudToProdNameResolver.xdsBootstrapProvided = true;
+    GoogleCloudToProdNameResolver.enableFederation = true;
+    createResolver();
+    resolver.start(mockListener);
+    fakeExecutor.runDueTasks();
+    assertThat(delegatedResolver.keySet()).containsExactly("xds");
+    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
+    // Bootstrapper should not have been set, since there was no user provided config.
+    assertThat(fakeBootstrapSetter.bootstrapRef.get()).isNull();
   }
 
   @Test

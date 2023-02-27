@@ -159,7 +159,7 @@ the dependency.
       <extension>
         <groupId>kr.motd.maven</groupId>
         <artifactId>os-maven-plugin</artifactId>
-        <version>1.6.2</version>
+        <version>1.7.1</version>
       </extension>
     </extensions>
     <plugins>
@@ -387,7 +387,7 @@ If you are running in a runtime environment that also uses Netty (e.g., Hadoop, 
 Below are known to work version combinations:
 
 grpc-netty version | netty-handler version | netty-tcnative-boringssl-static version
------------------- | --------------------- | ---------------------------------------
+------------------ |-----------------------| ---------------------------------------
 1.0.0-1.0.1        | 4.1.3.Final           | 1.1.33.Fork19
 1.0.2-1.0.3        | 4.1.6.Final           | 1.1.33.Fork23
 1.1.x-1.3.x        | 4.1.8.Final           | 1.1.33.Fork26
@@ -412,7 +412,8 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.42.x-1.43.x      | 4.1.63.Final          | 2.0.38.Final
 1.44.x-1.47.x      | 4.1.72.Final          | 2.0.46.Final
 1.48.x-1.49.x      | 4.1.77.Final          | 2.0.53.Final
-1.50.x-            | 4.1.79.Final          | 2.0.54.Final
+1.50.x-1.53.x      | 4.1.79.Final          | 2.0.54.Final
+1.54.x-            | 4.1.87.Final          | 2.0.56.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 

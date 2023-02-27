@@ -132,7 +132,7 @@ public class ConfigSelectingClientCallTest {
         method,
         CallOptions.DEFAULT);
     configSelectingClientCall.start(callListener, new Metadata());
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.DEADLINE_EXCEEDED);
 
@@ -157,7 +157,7 @@ public class ConfigSelectingClientCallTest {
         method,
         CallOptions.DEFAULT);
     configSelectingClientCall.start(callListener, new Metadata());
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
     // ... so it should be represented as an internal error to highlight the control plane bug.
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.INTERNAL);

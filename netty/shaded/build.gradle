@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
+import com.github.jengelman.gradle.plugins.shadow.transformers.CacheableTransformer
 import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
 import org.gradle.api.file.FileTreeElement
 import shadow.org.apache.tools.zip.ZipOutputStream
@@ -140,6 +141,7 @@ tasks.named("test").configure {
  * A Transformer which updates the Netty JAR META-INF/ resources to accurately
  * reference shaded class names.
  */
+@CacheableTransformer
 class NettyResourceTransformer implements Transformer {
 
     // A map of resource file paths to be modified

@@ -73,7 +73,7 @@ public class CsdsServiceTest {
       EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
   private static final BootstrapInfo BOOTSTRAP_INFO = BootstrapInfo.builder()
       .servers(ImmutableList.of(
-          ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), true)))
+          ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create())))
       .node(BOOTSTRAP_NODE)
       .build();
   private static final FakeXdsClient XDS_CLIENT_NO_RESOURCES = new FakeXdsClient();

@@ -3,12 +3,11 @@ load("//:java_grpc_library.bzl", "java_grpc_library")
 package(default_visibility = ["//visibility:public"])
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
-# with maven_install's override_targets. Purposefully does not export any
-# symbols, as it should only be used as a dep for pre-compiled binaries on
-# Maven Central.
+# with maven_install's override_targets. Should only be used as a dep for
+# pre-compiled binaries on Maven Central.
 java_library(
     name = "services_maven",
-    runtime_deps = [
+    exports = [
         ":admin",
         ":binarylog",
         ":channelz",

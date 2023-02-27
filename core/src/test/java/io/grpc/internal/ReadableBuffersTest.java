@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -32,9 +33,7 @@ import io.grpc.HasByteBuffer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.InvalidMarkException;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -45,9 +44,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ReadableBuffersTest {
   private static final byte[] MSG_BYTES = "hello".getBytes(UTF_8);
-
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void empty_returnsEmptyBuffer() {
@@ -216,8 +212,7 @@ public class ReadableBuffersTest {
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     inputStream.mark(5);
     ((Detachable) inputStream).detach();
-    thrown.expect(InvalidMarkException.class);
-    inputStream.reset();
+    assertThrows(InvalidMarkException.class, () -> inputStream.reset());
   }
 
   @Test

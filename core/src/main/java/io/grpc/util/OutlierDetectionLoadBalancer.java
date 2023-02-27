@@ -26,6 +26,8 @@ import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
@@ -73,6 +75,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   private ScheduledHandle detectionTimerHandle;
   private Long detectionTimerStartNanos;
 
+  private final ChannelLogger logger;
+
   private static final Attributes.Key<AddressTracker> ADDRESS_TRACKER_ATTR_KEY
       = Attributes.Key.create("addressTrackerKey");
 
@@ -80,16 +84,19 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * Creates a new instance of {@link OutlierDetectionLoadBalancer}.
    */
   public OutlierDetectionLoadBalancer(Helper helper, TimeProvider timeProvider) {
+    logger = helper.getChannelLogger();
     childHelper = new ChildHelper(checkNotNull(helper, "helper"));
     switchLb = new GracefulSwitchLoadBalancer(childHelper);
     trackerMap = new AddressTrackerMap();
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.timeProvider = timeProvider;
+    logger.log(ChannelLogLevel.DEBUG, "OutlierDetection lb created.");
   }
 
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    logger.log(ChannelLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     OutlierDetectionLoadBalancerConfig config
         = (OutlierDetectionLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
 
@@ -129,7 +136,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         trackerMap.resetCallCounters();
       }
 
-      detectionTimerHandle = syncContext.scheduleWithFixedDelay(new DetectionTimer(config),
+      detectionTimerHandle = syncContext.scheduleWithFixedDelay(new DetectionTimer(config, logger),
           initialDelayNanos, config.intervalNanos, NANOSECONDS, timeService);
     } else if (detectionTimerHandle != null) {
       // Outlier detection is not configured, but we have a lingering timer. Let's cancel it and
@@ -162,9 +169,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   class DetectionTimer implements Runnable {
 
     OutlierDetectionLoadBalancerConfig config;
+    ChannelLogger logger;
 
-    DetectionTimer(OutlierDetectionLoadBalancerConfig config) {
+    DetectionTimer(OutlierDetectionLoadBalancerConfig config, ChannelLogger logger) {
       this.config = config;
+      this.logger = logger;
     }
 
     @Override
@@ -173,7 +182,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       trackerMap.swapCounters();
 
-      for (OutlierEjectionAlgorithm algo : OutlierEjectionAlgorithm.forConfig(config)) {
+      for (OutlierEjectionAlgorithm algo : OutlierEjectionAlgorithm.forConfig(config, logger)) {
         algo.ejectOutliers(trackerMap, detectionTimerStartNanos);
       }
 
@@ -235,9 +244,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
     private SubchannelStateListener subchannelStateListener;
+    private final ChannelLogger logger;
 
     OutlierDetectionSubchannel(Subchannel delegate) {
       this.delegate = delegate;
+      this.logger = delegate.getChannelLogger();
     }
 
     @Override
@@ -316,12 +327,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       ejected = true;
       subchannelStateListener.onSubchannelState(
           ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+      logger.log(ChannelLogLevel.INFO, "Subchannel ejected: {0}", this);
     }
 
     void uneject() {
       ejected = false;
       if (lastSubchannelState != null) {
         subchannelStateListener.onSubchannelState(lastSubchannelState);
+        logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
       }
     }
 
@@ -352,6 +365,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           delegate.onSubchannelState(newState);
         }
       }
+    }
+
+    @Override
+    public String toString() {
+      return "OutlierDetectionSubchannel{"
+              + "addresses=" + delegate.getAllAddresses()
+              + '}';
     }
   }
 
@@ -576,6 +596,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         failureCount.set(0);
       }
     }
+
+    @Override
+    public String toString() {
+      return "AddressTracker{"
+              + "subchannels=" + subchannels
+              + '}';
+    }
   }
 
   /**
@@ -684,13 +711,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     /** Builds a list of algorithms that are enabled in the given config. */
     @Nullable
-    static List<OutlierEjectionAlgorithm> forConfig(OutlierDetectionLoadBalancerConfig config) {
+    static List<OutlierEjectionAlgorithm> forConfig(OutlierDetectionLoadBalancerConfig config,
+                                                    ChannelLogger logger) {
       ImmutableList.Builder<OutlierEjectionAlgorithm> algoListBuilder = ImmutableList.builder();
       if (config.successRateEjection != null) {
-        algoListBuilder.add(new SuccessRateOutlierEjectionAlgorithm(config));
+        algoListBuilder.add(new SuccessRateOutlierEjectionAlgorithm(config, logger));
       }
       if (config.failurePercentageEjection != null) {
-        algoListBuilder.add(new FailurePercentageOutlierEjectionAlgorithm(config));
+        algoListBuilder.add(new FailurePercentageOutlierEjectionAlgorithm(config, logger));
       }
       return algoListBuilder.build();
     }
@@ -705,9 +733,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     private final OutlierDetectionLoadBalancerConfig config;
 
-    SuccessRateOutlierEjectionAlgorithm(OutlierDetectionLoadBalancerConfig config) {
+    private final ChannelLogger logger;
+
+    SuccessRateOutlierEjectionAlgorithm(OutlierDetectionLoadBalancerConfig config,
+                                        ChannelLogger logger) {
       checkArgument(config.successRateEjection != null, "success rate ejection config is null");
       this.config = config;
+      this.logger = logger;
     }
 
     @Override
@@ -744,6 +776,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
         // If success rate is below the threshold, eject the address.
         if (tracker.successRate() < requiredSuccessRate) {
+          logger.log(ChannelLogLevel.DEBUG,
+                  "SuccessRate algorithm detected outlier: {0}. "
+                          + "Parameters: successRate={1}, mean={2}, stdev={3}, "
+                          + "requiredSuccessRate={4}",
+                  tracker, tracker.successRate(),  mean, stdev, requiredSuccessRate);
           // Only eject some addresses based on the enforcement percentage.
           if (new Random().nextInt(100) < config.successRateEjection.enforcementPercentage) {
             tracker.ejectSubchannels(ejectionTimeNanos);
@@ -781,8 +818,12 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     private final OutlierDetectionLoadBalancerConfig config;
 
-    FailurePercentageOutlierEjectionAlgorithm(OutlierDetectionLoadBalancerConfig config) {
+    private final ChannelLogger logger;
+
+    FailurePercentageOutlierEjectionAlgorithm(OutlierDetectionLoadBalancerConfig config,
+                                              ChannelLogger logger) {
       this.config = config;
+      this.logger = logger;
     }
 
     @Override
@@ -814,6 +855,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         // If the failure rate is above the threshold, we should eject...
         double maxFailureRate = ((double)config.failurePercentageEjection.threshold) / 100;
         if (tracker.failureRate() > maxFailureRate) {
+          logger.log(ChannelLogLevel.DEBUG,
+                  "FailurePercentage algorithm detected outlier: {0}, failureRate={1}",
+                  tracker, tracker.failureRate());
           // ...but only enforce this based on the enforcement percentage.
           if (new Random().nextInt(100) < config.failurePercentageEjection.enforcementPercentage) {
             tracker.ejectSubchannels(ejectionTimeNanos);
@@ -880,7 +924,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public static class Builder {
       Long intervalNanos = 10_000_000_000L; // 10s
       Long baseEjectionTimeNanos = 30_000_000_000L; // 30s
-      Long maxEjectionTimeNanos = 30_000_000_000L; // 30s
+      Long maxEjectionTimeNanos = 300_000_000_000L; // 300s
       Integer maxEjectionPercent = 10;
       SuccessRateEjection successRateEjection;
       FailurePercentageEjection failurePercentageEjection;

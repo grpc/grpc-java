@@ -1685,7 +1685,7 @@ public class OkHttpClientTransportTest {
   public void invalidAuthorityPropagates() {
     clientTransport = new OkHttpClientTransport(
         channelBuilder.buildTransportFactory(),
-        new InetSocketAddress("host", 1234),
+        new InetSocketAddress("localhost", 1234),
         "invalid_authority",
         "userAgent",
         EAG_ATTRS,

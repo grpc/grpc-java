@@ -131,6 +131,7 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsResourceType.StructOrError;
+import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.Arrays;
@@ -152,7 +153,7 @@ import org.junit.runners.JUnit4;
 public class XdsClientImplDataTest {
 
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
 
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
@@ -482,6 +483,28 @@ public class XdsClientImplDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
+  public void parseHeaderMatcher_withStringMatcher() {
+    io.envoyproxy.envoy.type.matcher.v3.StringMatcher stringMatcherProto =
+            io.envoyproxy.envoy.type.matcher.v3.StringMatcher.newBuilder()
+                    .setPrefix("service-foo")
+                    .setIgnoreCase(false)
+                    .build();
+
+    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
+            io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
+                    .setName("authority")
+                    .setStringMatch(stringMatcherProto)
+                    .setInvertMatch(false)
+                    .build();
+    StructOrError<HeaderMatcher> struct = XdsRouteConfigureResource.parseHeaderMatcher(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(
+            HeaderMatcher.forString("authority", Matchers.StringMatcher
+                    .forPrefix("service-foo", false), false));
+  }
+
+  @Test
   public void parseRouteAction_withCluster() {
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
@@ -779,6 +802,7 @@ public class XdsClientImplDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseRouteAction_withHashPolicies() {
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
@@ -2719,9 +2743,6 @@ public class XdsClientImplDataTest {
     assertThat(XdsClient.isResourceNameValid(traditionalResource,
         XdsClusterResource.getInstance().typeUrl()))
         .isTrue();
-    assertThat(XdsClient.isResourceNameValid(traditionalResource,
-        XdsRouteConfigureResource.getInstance().typeUrlV2()))
-        .isTrue();
 
     String invalidPath = "xdstp:/abc/efg";
     assertThat(XdsClient.isResourceNameValid(invalidPath,
@@ -2736,8 +2757,6 @@ public class XdsClientImplDataTest {
         XdsListenerResource.getInstance().typeUrl())).isFalse();
     assertThat(XdsClient.isResourceNameValid(typeMatch,
         XdsRouteConfigureResource.getInstance().typeUrl())).isTrue();
-    assertThat(XdsClient.isResourceNameValid(typeMatch,
-        XdsRouteConfigureResource.getInstance().typeUrlV2())).isFalse();
   }
 
   @Test

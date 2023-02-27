@@ -30,6 +30,7 @@ public final class MetricRecorder {
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
   private volatile double cpuUtilization;
   private volatile double memoryUtilization;
+  private volatile double qps;
 
   public static MetricRecorder newInstance() {
     return new MetricRecorder();
@@ -86,8 +87,22 @@ public final class MetricRecorder {
     memoryUtilization = 0;
   }
 
+  /**
+   * Update the QPS metrics data.
+   */
+  public void setQps(double value) {
+    qps = value;
+  }
+
+  /**
+   * Clear the QPS metrics data.
+   */
+  public void clearQps() {
+    qps = 0;
+  }
+
   MetricReport getMetricReport() {
-    return new MetricReport(cpuUtilization, memoryUtilization,
+    return new MetricReport(cpuUtilization, memoryUtilization, qps,
         Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
   }
 }

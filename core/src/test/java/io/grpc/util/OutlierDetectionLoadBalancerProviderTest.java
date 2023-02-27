@@ -21,6 +21,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import io.grpc.ChannelLogger;
 import io.grpc.InternalServiceProviders;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -66,6 +67,9 @@ public class OutlierDetectionLoadBalancerProviderTest {
   @Test
   public void providesLoadBalancer() {
     Helper helper = mock(Helper.class);
+    ChannelLogger channelLogger = mock(ChannelLogger.class);
+
+    when(helper.getChannelLogger()).thenReturn(channelLogger);
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(mock(ScheduledExecutorService.class));
     assertThat(provider.newLoadBalancer(helper))

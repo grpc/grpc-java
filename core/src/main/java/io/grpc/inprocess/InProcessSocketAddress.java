@@ -29,7 +29,9 @@ public final class InProcessSocketAddress extends SocketAddress {
   private final String name;
 
   /**
-   * @param name - The name of the inprocess channel or server.
+   * Construct an address for a server identified by name.
+   *
+   * @param name The name of the inprocess server.
    * @since 1.0.0
    */
   public InProcessSocketAddress(String name) {
@@ -37,7 +39,7 @@ public final class InProcessSocketAddress extends SocketAddress {
   }
 
   /**
-   * Gets the name of the inprocess channel or server.
+   * Gets the name of the inprocess server.
    *
    * @since 1.0.0
    */
@@ -46,6 +48,8 @@ public final class InProcessSocketAddress extends SocketAddress {
   }
 
   /**
+   * Returns {@link #getName}.
+   *
    * @since 1.14.0
    */
   @Override
@@ -53,15 +57,14 @@ public final class InProcessSocketAddress extends SocketAddress {
     return name;
   }
 
-  /**
-   * @since 1.15.0
-   */
   @Override
   public int hashCode() {
     return name.hashCode();
   }
 
   /**
+   * Returns {@code true} if the object is of the same type and server names match.
+   *
    * @since 1.15.0
    */
   @Override

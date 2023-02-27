@@ -24,6 +24,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.primitives.UnsignedInteger;
 import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -50,6 +51,7 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
@@ -65,8 +67,6 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
-  static final String ADS_TYPE_URL_RDS_V2 =
-      "type.googleapis.com/envoy.api.v2.RouteConfiguration";
   static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
   private static final String TYPE_URL_FILTER_CONFIG =
@@ -103,11 +103,6 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  String typeUrlV2() {
-    return ADS_TYPE_URL_RDS_V2;
-  }
-
-  @Override
   boolean isFullStateOfTheWorld() {
     return false;
   }
@@ -118,13 +113,13 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage, boolean isResourceV3)
+  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
     return processRouteConfiguration((RouteConfiguration) unpackedMessage,
-        args.filterRegistry, enableFaultInjection && isResourceV3);
+        args.filterRegistry, enableFaultInjection);
   }
 
   private static RdsUpdate processRouteConfiguration(
@@ -399,39 +394,11 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   @VisibleForTesting
   static StructOrError<HeaderMatcher> parseHeaderMatcher(
       io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
-    switch (proto.getHeaderMatchSpecifierCase()) {
-      case EXACT_MATCH:
-        return StructOrError.fromStruct(HeaderMatcher.forExactValue(
-            proto.getName(), proto.getExactMatch(), proto.getInvertMatch()));
-      case SAFE_REGEX_MATCH:
-        String rawPattern = proto.getSafeRegexMatch().getRegex();
-        Pattern safeRegExMatch;
-        try {
-          safeRegExMatch = Pattern.compile(rawPattern);
-        } catch (PatternSyntaxException e) {
-          return StructOrError.fromError(
-              "HeaderMatcher [" + proto.getName() + "] contains malformed safe regex pattern: "
-                  + e.getMessage());
-        }
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forSafeRegEx(
-            proto.getName(), safeRegExMatch, proto.getInvertMatch()));
-      case RANGE_MATCH:
-        Matchers.HeaderMatcher.Range rangeMatch = Matchers.HeaderMatcher.Range.create(
-            proto.getRangeMatch().getStart(), proto.getRangeMatch().getEnd());
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forRange(
-            proto.getName(), rangeMatch, proto.getInvertMatch()));
-      case PRESENT_MATCH:
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forPresent(
-            proto.getName(), proto.getPresentMatch(), proto.getInvertMatch()));
-      case PREFIX_MATCH:
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forPrefix(
-            proto.getName(), proto.getPrefixMatch(), proto.getInvertMatch()));
-      case SUFFIX_MATCH:
-        return StructOrError.fromStruct(Matchers.HeaderMatcher.forSuffix(
-            proto.getName(), proto.getSuffixMatch(), proto.getInvertMatch()));
-      case HEADERMATCHSPECIFIER_NOT_SET:
-      default:
-        return StructOrError.fromError("Unknown header matcher type");
+    try {
+      Matchers.HeaderMatcher headerMatcher = MatcherParser.parseHeaderMatcher(proto);
+      return StructOrError.fromStruct(headerMatcher);
+    } catch (IllegalArgumentException e) {
+      return StructOrError.fromError(e.getMessage());
     }
   }
 
@@ -511,7 +478,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           return StructOrError.fromError("No cluster found in weighted cluster list");
         }
         List<ClusterWeight> weightedClusters = new ArrayList<>();
-        int clusterWeightSum = 0;
+        long clusterWeightSum = 0;
         for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
             : clusterWeights) {
           StructOrError<ClusterWeight> clusterWeightOrError =
@@ -526,6 +493,12 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
         if (clusterWeightSum <= 0) {
           return StructOrError.fromError("Sum of cluster weights should be above 0.");
         }
+        if (clusterWeightSum > UnsignedInteger.MAX_VALUE.longValue()) {
+          return StructOrError.fromError(String.format(
+              "Sum of cluster weights should be less than the maximum unsigned integer (%d), but"
+                  + " was %d. ",
+              UnsignedInteger.MAX_VALUE.longValue(), clusterWeightSum));
+        }
         return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy));
       case CLUSTER_SPECIFIER_PLUGIN:
@@ -533,7 +506,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           String pluginName = proto.getClusterSpecifierPlugin();
           PluginConfig pluginConfig = pluginConfigMap.get(pluginName);
           if (pluginConfig == null) {
-            // Skip route if the plugin is not registered, but it's optional.
+            // Skip route if the plugin is not registered, but it is optional.
             if (optionalPlugins.contains(pluginName)) {
               return null;
             }

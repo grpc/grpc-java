@@ -92,34 +92,35 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static abstract class LoadBalancerImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
      * Bidirectional rpc to get a list of servers.
      * </pre>
      */
-    public io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceRequest> balanceLoad(
+    default io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceRequest> balanceLoad(
         io.grpc.stub.StreamObserver<io.grpc.lb.v1.LoadBalanceResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getBalanceLoadMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getBalanceLoadMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.grpc.lb.v1.LoadBalanceRequest,
-                io.grpc.lb.v1.LoadBalanceResponse>(
-                  this, METHODID_BALANCE_LOAD)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service LoadBalancer.
    */
-  public static final class LoadBalancerStub extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub> {
+  public static abstract class LoadBalancerImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return LoadBalancerGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service LoadBalancer.
+   */
+  public static final class LoadBalancerStub
+      extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub> {
     private LoadBalancerStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -144,8 +145,10 @@ public final class LoadBalancerGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service LoadBalancer.
    */
-  public static final class LoadBalancerBlockingStub extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {
+  public static final class LoadBalancerBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {
     private LoadBalancerBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -159,8 +162,10 @@ public final class LoadBalancerGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadBalancer.
    */
-  public static final class LoadBalancerFutureStub extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub> {
+  public static final class LoadBalancerFutureStub
+      extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub> {
     private LoadBalancerFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -180,10 +185,10 @@ public final class LoadBalancerGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final LoadBalancerImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(LoadBalancerImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -209,6 +214,18 @@ public final class LoadBalancerGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getBalanceLoadMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.grpc.lb.v1.LoadBalanceRequest,
+              io.grpc.lb.v1.LoadBalanceResponse>(
+                service, METHODID_BALANCE_LOAD)))
+        .build();
   }
 
   private static abstract class LoadBalancerBaseDescriptorSupplier

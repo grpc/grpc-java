@@ -61,6 +61,8 @@ import javax.annotation.Nullable;
  * the xDS RPC stream.
  */
 final class AbstractXdsClient {
+
+  public static final String CLOSED_BY_SERVER = "Closed by server";
   private final SynchronizationContext syncContext;
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -217,6 +219,11 @@ final class AbstractXdsClient {
       return;
     }
 
+    if (isInBackoff()) {
+      rpcRetryTimer.cancel();
+      rpcRetryTimer = null;
+    }
+
     timerLaunch.startSubscriberTimersIfNeeded(serverInfo);
   }
 
@@ -227,11 +234,7 @@ final class AbstractXdsClient {
   // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (serverInfo.useProtocolV3()) {
-      adsStream = new AdsStreamV3();
-    } else {
-      adsStream = new AdsStreamV2();
-    }
+    adsStream = new AdsStreamV3();
     Context prevContext = context.attach();
     try {
       adsStream.start();
@@ -305,13 +308,12 @@ final class AbstractXdsClient {
 
     final void handleRpcResponse(XdsResourceType<?> type, String versionInfo, List<Any> resources,
                                  String nonce) {
+      checkNotNull(type, "type");
       if (closed) {
         return;
       }
       responseReceived = true;
-      if (type != null) {
-        respNonces.put(type, nonce);
-      }
+      respNonces.put(type, nonce);
       xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce);
     }
 
@@ -320,21 +322,25 @@ final class AbstractXdsClient {
     }
 
     final void handleRpcCompleted() {
-      handleRpcStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
+      handleRpcStreamClosed(Status.UNAVAILABLE.withDescription(CLOSED_BY_SERVER));
     }
 
     private void handleRpcStreamClosed(Status error) {
-      checkArgument(!error.isOk(), "unexpected OK status");
       if (closed) {
         return;
       }
+
+      checkArgument(!error.isOk(), "unexpected OK status");
+      String errorMsg = error.getDescription() != null
+          && error.getDescription().equals(CLOSED_BY_SERVER)
+              ? "ADS stream closed with status {0}: {1}. Cause: {2}"
+              : "ADS stream failed with status {0}: {1}. Cause: {2}";
       logger.log(
-          XdsLogLevel.ERROR,
-          "ADS stream closed with status {0}: {1}. Cause: {2}",
-          error.getCode(), error.getDescription(), error.getCause());
+          XdsLogLevel.ERROR, errorMsg, error.getCode(), error.getDescription(), error.getCause());
       closed = true;
       xdsResponseHandler.handleStreamClosed(error);
       cleanUp();
+
       if (responseReceived || retryBackoffPolicy == null) {
         // Reset the backoff sequence if had received a response, or backoff sequence
         // has never been initialized.
@@ -361,102 +367,6 @@ final class AbstractXdsClient {
       if (adsStream == this) {
         adsStream = null;
       }
-    }
-  }
-
-  private final class AdsStreamV2 extends AbstractAdsStream {
-    private StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestWriter;
-
-    @Override
-    public boolean isReady() {
-      return requestWriter != null && ((ClientCallStreamObserver<?>) requestWriter).isReady();
-    }
-
-    @Override
-    void start() {
-      io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
-          .AggregatedDiscoveryServiceStub stub =
-          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(channel);
-      StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
-          new ClientResponseObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-              io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
-
-            @Override
-            public void beforeStart(
-                ClientCallStreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> reqStream) {
-              reqStream.setOnReadyHandler(AbstractXdsClient.this::readyHandler);
-            }
-
-            @Override
-            public void onNext(final io.envoyproxy.envoy.api.v2.DiscoveryResponse response) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
-                  if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-                    logger.log(
-                        XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
-                        MessagePrinter.print(response));
-                  }
-                  handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
-                      response.getNonce());
-                }
-              });
-            }
-
-            @Override
-            public void onError(final Throwable t) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcError(t);
-                }
-              });
-            }
-
-            @Override
-            public void onCompleted() {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcCompleted();
-                }
-              });
-            }
-          };
-      requestWriter = stub.withWaitForReady().streamAggregatedResources(responseReaderV2);
-    }
-
-    @Override
-    void sendDiscoveryRequest(XdsResourceType<?> type, String versionInfo,
-                              Collection<String> resources, String nonce,
-                              @Nullable String errorDetail) {
-      checkState(requestWriter != null, "ADS stream has not been started");
-      io.envoyproxy.envoy.api.v2.DiscoveryRequest.Builder builder =
-          io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
-              .setVersionInfo(versionInfo)
-              .setNode(bootstrapNode.toEnvoyProtoNodeV2())
-              .addAllResourceNames(resources)
-              .setTypeUrl(type.typeUrlV2())
-              .setResponseNonce(nonce);
-      if (errorDetail != null) {
-        com.google.rpc.Status error =
-            com.google.rpc.Status.newBuilder()
-                .setCode(Code.INVALID_ARGUMENT_VALUE)  // FIXME(chengyuanzhang): use correct code
-                .setMessage(errorDetail)
-                .build();
-        builder.setErrorDetail(error);
-      }
-      io.envoyproxy.envoy.api.v2.DiscoveryRequest request = builder.build();
-      requestWriter.onNext(request);
-      if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-        logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", MessagePrinter.print(request));
-      }
-    }
-
-    @Override
-    void sendError(Exception error) {
-      requestWriter.onError(error);
     }
   }
 
@@ -491,6 +401,13 @@ final class AbstractXdsClient {
                     XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
                     MessagePrinter.print(response));
               }
+              if (type == null) {
+                logger.log(
+                    XdsLogLevel.WARNING,
+                    "Ignore an unknown type of DiscoveryResponse: {0}",
+                    response.getTypeUrl());
+                return;
+              }
               handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
                   response.getNonce());
             }
@@ -517,7 +434,7 @@ final class AbstractXdsClient {
           });
         }
       };
-      requestWriter = stub.withWaitForReady().streamAggregatedResources(responseReader);
+      requestWriter = stub.streamAggregatedResources(responseReader);
     }
 
     @Override

@@ -20,7 +20,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.53.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.54.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -70,7 +70,9 @@ subprojects {
                     all().each { task ->
                         // Recompile protos when build.gradle has been changed, because
                         // it's possible the version of protoc has been changed.
-                        task.inputs.file "${rootProject.projectDir}/build.gradle"
+                        task.inputs.file("${rootProject.projectDir}/build.gradle")
+                          .withPathSensitivity(PathSensitivity.RELATIVE)
+                          .withPropertyName('root build.gradle')
                         if (isAndroid) {
                             task.builtins {
                                 java { option 'lite' }
@@ -176,7 +178,6 @@ subprojects {
     if (!project.hasProperty('errorProne') || errorProne.toBoolean()) {
         dependencies {
             errorprone libs.errorprone.core
-            errorproneJavac libs.errorprone.javac
         }
     } else {
         // Disable Error Prone

@@ -1000,6 +1000,8 @@ public class Context {
    */
   public abstract static class Storage {
     /**
+     * Unused.
+     *
      * @deprecated This is an old API that is no longer used.
      */
     @Deprecated
@@ -1029,7 +1031,7 @@ public class Context {
     }
 
     /**
-     * Implements {@link io.grpc.Context#detach}
+     * Implements {@link io.grpc.Context#detach}.
      *
      * @param toDetach the context to be detached. Should be, or be equivalent to, the current
      *        context of the current scope

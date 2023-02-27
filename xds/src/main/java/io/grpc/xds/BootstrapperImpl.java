@@ -68,7 +68,6 @@ class BootstrapperImpl extends Bootstrapper {
   static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
 
   // Server features.
-  private static final String SERVER_FEATURE_XDS_V3 = "xds_v3";
   private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
 
   private final XdsLogger logger;
@@ -281,16 +280,14 @@ class BootstrapperImpl extends Bootstrapper {
             "Server " + serverUri + ": no supported channel credentials found");
       }
 
-      boolean useProtocolV3 = false;
       boolean ignoreResourceDeletion = false;
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        useProtocolV3 = serverFeatures.contains(SERVER_FEATURE_XDS_V3);
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
       }
       servers.add(
-          ServerInfo.create(serverUri, channelCredentials, useProtocolV3, ignoreResourceDeletion));
+          ServerInfo.create(serverUri, channelCredentials, ignoreResourceDeletion));
     }
     return servers.build();
   }

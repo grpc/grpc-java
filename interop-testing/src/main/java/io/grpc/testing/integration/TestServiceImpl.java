@@ -40,6 +40,7 @@ import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
+import io.grpc.testing.integration.TestServiceGrpc.AsyncService;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -59,7 +60,7 @@ import javax.annotation.concurrent.GuardedBy;
  * Implementation of the business logic for the TestService. Uses an executor to schedule chunks
  * sent in response streams.
  */
-public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
+public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
   private final Random random = new Random();
 
   private final ScheduledExecutorService executor;
@@ -78,6 +79,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
   public TestServiceImpl(ScheduledExecutorService executor) {
     this(executor, MetricRecorder.newInstance());
+  }
+
+  @Override
+  public final io.grpc.ServerServiceDefinition bindService() {
+    return TestServiceGrpc.bindService(this);
   }
 
   @Override
@@ -414,12 +420,11 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
 
         // Schedule the next response chunk if there is one.
         Chunk nextChunk = chunks.peek();
-        if (nextChunk != null) {
+        if (nextChunk != null && !executor.isShutdown()) {
           scheduled = true;
           // TODO(ejona): cancel future if RPC is cancelled
           Future<?> unused = executor.schedule(new LogExceptionRunnable(dispatchTask),
               nextChunk.delayMicroseconds, TimeUnit.MICROSECONDS);
-          return;
         }
       }
     }

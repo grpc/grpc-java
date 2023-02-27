@@ -552,9 +552,7 @@ public class RingHashLoadBalancerTest {
     //   "[FakeSocketAddress-server2]_0"
 
     long rpcHash = hashFunc.hashAsciiString("[FakeSocketAddress-server0]_0");
-    PickSubchannelArgs args = new PickSubchannelArgsImpl(
-        TestMethodDescriptors.voidMethod(), new Metadata(),
-        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(rpcHash);
 
     // Bring down server0 to force trying server2.
     deliverSubchannelState(
@@ -590,6 +588,12 @@ public class RingHashLoadBalancerTest {
     result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(2));
+  }
+
+  private PickSubchannelArgsImpl getDefaultPickSubchannelArgs(long rpcHash) {
+    return new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
   }
 
   @Test
@@ -1040,43 +1044,6 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
-  public void hostSelectionProportionalToRepeatedAddressCount() {
-    RingHashConfig config = new RingHashConfig(10000, 100000);
-    List<EquivalentAddressGroup> servers = createRepeatedServerAddrs(1, 10, 100);  // 1:10:100
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
-    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
-
-    // Bring all subchannels to READY.
-    Map<EquivalentAddressGroup, Integer> pickCounts = new HashMap<>();
-    for (Subchannel subchannel : subchannels.values()) {
-      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-      pickCounts.put(subchannel.getAddresses(), 0);
-    }
-    verify(helper, times(3)).updateBalancingState(eq(READY), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
-
-    for (int i = 0; i < 10000; i++) {
-      long hash = hashFunc.hashInt(i);
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(
-          TestMethodDescriptors.voidMethod(), new Metadata(),
-          CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hash));
-      Subchannel pickedSubchannel = picker.pickSubchannel(args).getSubchannel();
-      EquivalentAddressGroup addr = pickedSubchannel.getAddresses();
-      pickCounts.put(addr, pickCounts.get(addr) + 1);
-    }
-
-    // Actual distribution: server0 = 104, server1 = 808, server2 = 9088
-    double ratio01 = (double) pickCounts.get(servers.get(0)) / pickCounts.get(servers.get(1));
-    double ratio12 = (double) pickCounts.get(servers.get(1)) / pickCounts.get(servers.get(11));
-    assertThat(ratio01).isWithin(0.03).of((double) 1 / 10);
-    assertThat(ratio12).isWithin(0.03).of((double) 10 / 100);
-  }
-
-  @Test
   public void nameResolutionErrorWithNoActiveSubchannels() {
     Status error = Status.UNAVAILABLE.withDescription("not reachable");
     loadBalancer.handleNameResolutionError(error);
@@ -1110,6 +1077,30 @@ public class RingHashLoadBalancerTest {
 
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("target not found"));
     verifyNoMoreInteractions(helper);
+  }
+
+  @Test
+  public void duplicateAddresses() {
+    RingHashConfig config = new RingHashConfig(10, 100);
+    List<EquivalentAddressGroup> servers = createRepeatedServerAddrs(1, 2, 3);
+    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    assertThat(addressesAccepted).isFalse();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
+    assertThat(result.getStatus().getCode())
+        .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
+    String description = result.getStatus().getDescription();
+    assertThat(description).startsWith(
+        "Ring hash lb error: EDS resolution was successful, but there were duplicate addresses: ");
+    assertThat(description).contains("Address: FakeSocketAddress-server1, count: 2");
+    assertThat(description).contains("Address: FakeSocketAddress-server2, count: 3");
   }
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
