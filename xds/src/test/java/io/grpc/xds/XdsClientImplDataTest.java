@@ -27,6 +27,7 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
@@ -39,6 +40,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.CidrRange;
@@ -85,6 +87,8 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
@@ -128,6 +132,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsResourceType.StructOrError;
@@ -163,6 +168,7 @@ public class XdsClientImplDataTest {
   private boolean originalEnableRbac;
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
+  private boolean originalEnableWrr;
 
   @Before
   public void setUp() {
@@ -174,6 +180,8 @@ public class XdsClientImplDataTest {
     assertThat(originalEnableRouteLookup).isFalse();
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     assertThat(originalEnableLeastRequest).isFalse();
+    originalEnableWrr = XdsResourceType.enableWrr;
+    assertThat(originalEnableWrr).isFalse();
   }
 
   @After
@@ -182,6 +190,7 @@ public class XdsClientImplDataTest {
     XdsResourceType.enableRbac = originalEnableRbac;
     XdsResourceType.enableRouteLookup = originalEnableRouteLookup;
     XdsResourceType.enableLeastRequest = originalEnableLeastRequest;
+    XdsResourceType.enableWrr = originalEnableWrr;
   }
 
   @Test
@@ -1964,6 +1973,65 @@ public class XdsClientImplDataTest {
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
         JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
+  }
+
+  @Test
+  public void parseCluster_WrrLbPolicy_defaultLbConfig() throws ResourceInvalidException {
+    XdsResourceType.enableWrr = true;
+
+    LoadBalancingPolicy wrrConfig =
+        LoadBalancingPolicy.newBuilder().addPolicies(
+                LoadBalancingPolicy.Policy.newBuilder()
+                    .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+                        .setName("backend")
+                        .setTypedConfig(
+                            Any.pack(ClientSideWeightedRoundRobin.newBuilder()
+                                .setBlackoutPeriod(Duration.newBuilder().setSeconds(17).build())
+                                .setEnableOobLoadReport(
+                                    BoolValue.newBuilder().setValue(true).build())
+                                .build()))
+                        .build())
+                    .build())
+            .build();
+
+    Cluster cluster = Cluster.newBuilder()
+            .setName("cluster-foo.googleapis.com")
+            .setType(DiscoveryType.EDS)
+            .setEdsClusterConfig(
+                EdsClusterConfig.newBuilder()
+                    .setEdsConfig(
+                        ConfigSource.newBuilder()
+                            .setAds(AggregatedConfigSource.getDefaultInstance()))
+                            .setServiceName("service-foo.googleapis.com"))
+            .setLoadBalancingPolicy(
+                LoadBalancingPolicy.newBuilder().addPolicies(
+                    LoadBalancingPolicy.Policy.newBuilder()
+                        .setTypedExtensionConfig(
+                            TypedExtensionConfig.newBuilder()
+                                .setTypedConfig(
+                                    Any.pack(WrrLocality.newBuilder()
+                                        .setEndpointPickingPolicy(wrrConfig)
+                                        .build()))
+                                .build())
+                        .build())
+                   .build())
+              .build();
+    CdsUpdate update = XdsClusterResource.processCluster(
+            cluster, null, LRS_SERVER_INFO,
+            LoadBalancerRegistry.getDefaultRegistry());
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+            JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("weighted_round_robin_experimental");
+    WeightedRoundRobinLoadBalancerConfig result = (WeightedRoundRobinLoadBalancerConfig)
+        new WeightedRoundRobinLoadBalancerProvider().parseLoadBalancingPolicyConfig(
+        childConfigs.get(0).getRawConfigValue()).getConfig();
+    assertThat(result.blackoutPeriodNanos).isEqualTo(17_000_000_000L);
+    assertThat(result.enableOobLoadReport).isTrue();
+    assertThat(result.oobReportingPeriodNanos).isEqualTo(10_000_000_000L);
+    assertThat(result.weightUpdatePeriodNanos).isEqualTo(1_000_000_000L);
+    assertThat(result.weightExpirationPeriodNanos).isEqualTo(180_000_000_000L);
   }
 
   @Test

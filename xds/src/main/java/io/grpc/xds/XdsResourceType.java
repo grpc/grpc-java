@@ -59,6 +59,10 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
+
+  @VisibleForTesting
+  static boolean enableWrr = getFlag("GRPC_EXPERIMENTAL_XDS_WRR_LB", false);
+
   @VisibleForTesting
   static boolean enableCustomLbConfig = getFlag("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG", true);
   @VisibleForTesting

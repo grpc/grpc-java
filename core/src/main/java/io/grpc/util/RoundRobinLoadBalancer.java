@@ -31,6 +31,7 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
 import io.grpc.Status;
@@ -50,7 +51,8 @@ import javax.annotation.Nonnull;
  * A {@link LoadBalancer} that provides round-robin load-balancing over the {@link
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
-final class RoundRobinLoadBalancer extends LoadBalancer {
+@Internal
+public class RoundRobinLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
@@ -59,11 +61,10 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   private final Map<EquivalentAddressGroup, Subchannel> subchannels =
       new HashMap<>();
   private final Random random;
-
   private ConnectivityState currentState;
-  private RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
+  protected RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
 
-  RoundRobinLoadBalancer(Helper helper) {
+  public RoundRobinLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
     this.random = new Random();
   }
@@ -207,10 +208,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
           // an arbitrary subchannel, otherwise return OK.
           new EmptyPicker(aggStatus));
     } else {
-      // initialize the Picker to a random start index to ensure that a high frequency of Picker
-      // churn does not skew subchannel selection.
-      int startIndex = random.nextInt(activeList.size());
-      updateBalancingState(READY, new ReadyPicker(activeList, startIndex));
+      updateBalancingState(READY, createReadyPicker(activeList));
     }
   }
 
@@ -220,6 +218,13 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       currentState = state;
       currentPicker = picker;
     }
+  }
+
+  protected RoundRobinPicker createReadyPicker(List<Subchannel> activeList) {
+    // initialize the Picker to a random start index to ensure that a high frequency of Picker
+    // churn does not skew subchannel selection.
+    int startIndex = random.nextInt(activeList.size());
+    return new ReadyPicker(activeList, startIndex);
   }
 
   /**
@@ -254,7 +259,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   @VisibleForTesting
-  Collection<Subchannel> getSubchannels() {
+  protected Collection<Subchannel> getSubchannels() {
     return subchannels.values();
   }
 
@@ -275,12 +280,11 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   // Only subclasses are ReadyPicker or EmptyPicker
-  private abstract static class RoundRobinPicker extends SubchannelPicker {
-    abstract boolean isEquivalentTo(RoundRobinPicker picker);
+  public abstract static class RoundRobinPicker extends SubchannelPicker {
+    public abstract boolean isEquivalentTo(RoundRobinPicker picker);
   }
 
-  @VisibleForTesting
-  static final class ReadyPicker extends RoundRobinPicker {
+  public static class ReadyPicker extends RoundRobinPicker {
     private static final AtomicIntegerFieldUpdater<ReadyPicker> indexUpdater =
         AtomicIntegerFieldUpdater.newUpdater(ReadyPicker.class, "index");
 
@@ -288,7 +292,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     @SuppressWarnings("unused")
     private volatile int index;
 
-    ReadyPicker(List<Subchannel> list, int startIndex) {
+    public ReadyPicker(List<Subchannel> list, int startIndex) {
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
       this.index = startIndex - 1;
@@ -321,7 +325,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    boolean isEquivalentTo(RoundRobinPicker picker) {
+    public boolean isEquivalentTo(RoundRobinPicker picker) {
       if (!(picker instanceof ReadyPicker)) {
         return false;
       }
@@ -332,8 +336,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     }
   }
 
-  @VisibleForTesting
-  static final class EmptyPicker extends RoundRobinPicker {
+  public static final class EmptyPicker extends RoundRobinPicker {
 
     private final Status status;
 
@@ -347,7 +350,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    boolean isEquivalentTo(RoundRobinPicker picker) {
+    public boolean isEquivalentTo(RoundRobinPicker picker) {
       return picker instanceof EmptyPicker && (Objects.equal(status, ((EmptyPicker) picker).status)
           || (status.isOk() && ((EmptyPicker) picker).status.isOk()));
     }
