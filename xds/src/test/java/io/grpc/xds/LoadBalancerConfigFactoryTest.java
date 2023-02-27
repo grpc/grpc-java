@@ -153,6 +153,24 @@ public class LoadBalancerConfigFactoryTest {
   }
 
   @Test
+  public void weightedRoundRobin_invalid() throws ResourceInvalidException {
+    Cluster cluster = newCluster(buildWrrPolicy(Policy.newBuilder()
+        .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+            .setName("backend")
+            .setTypedConfig(
+                Any.pack(ClientSideWeightedRoundRobin.newBuilder()
+                    .setBlackoutPeriod(Duration.newBuilder().setNanos(1000000000).build())
+                    .setEnableOobLoadReport(
+                        BoolValue.newBuilder().setValue(true).build())
+                    .build()))
+            .build())
+        .build()));
+
+    assertResourceInvalidExceptionThrown(cluster, true, true, true,
+        "Invalid duration in weighted round robin config");
+  }
+
+  @Test
   public void weightedRoundRobin_fallback_roundrobin() throws ResourceInvalidException {
     Cluster cluster = newCluster(buildWrrPolicy(WRR_POLICY, ROUND_ROBIN_POLICY));
 

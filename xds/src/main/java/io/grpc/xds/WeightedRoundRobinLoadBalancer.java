@@ -46,7 +46,6 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A {@link LoadBalancer} that provides weighted-round-robin load-balancing over
@@ -62,16 +61,17 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final Runnable updateWeightTask;
   private final Random random;
   private final long infTime;
+  private final Ticker ticker;
 
   public WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
-    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper),
-        checkNotNull(ticker, "ticker")));
+    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker);
   }
 
-  public WeightedRoundRobinLoadBalancer(WrrHelper helper) {
+  public WeightedRoundRobinLoadBalancer(WrrHelper helper, Ticker ticker) {
     super(helper);
     helper.setLoadBalancer(this);
-    this.infTime = helper.ticker.nanoTime() + Long.MAX_VALUE;
+    this.ticker = checkNotNull(ticker, "ticker");
+    this.infTime = ticker.nanoTime() + Long.MAX_VALUE;
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.updateWeightTask = new UpdateWeightTask();
@@ -139,12 +139,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   private static final class WrrHelper extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
-    private final Ticker ticker;
     private WeightedRoundRobinLoadBalancer wrr;
 
-    WrrHelper(Helper helper, Ticker ticker) {
+    WrrHelper(Helper helper) {
       this.delegate = helper;
-      this.ticker = ticker;
     }
 
     void setLoadBalancer(WeightedRoundRobinLoadBalancer lb) {
@@ -158,23 +156,21 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      return wrr.new WrrSubchannel(delegate().createSubchannel(args), ticker);
+      return wrr.new WrrSubchannel(delegate().createSubchannel(args));
     }
   }
 
   @VisibleForTesting
   final class WrrSubchannel extends ForwardingSubchannel {
     private final Subchannel delegate;
-    private final Ticker ticker;
     private final OrcaOobReportListener oobListener = this::onLoadReport;
     private final OrcaPerRequestReportListener perRpcListener = this::onLoadReport;
     private volatile long lastUpdated;
     private volatile long nonEmptySince;
     private volatile double weight;
 
-    WrrSubchannel(Subchannel delegate, Ticker ticker) {
+    WrrSubchannel(Subchannel delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
-      this.ticker = checkNotNull(ticker, "ticker");
     }
 
     @VisibleForTesting
@@ -229,14 +225,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @VisibleForTesting
   final class WeightedRoundRobinPicker extends ReadyPicker {
     private final List<Subchannel> list;
-    private final AtomicReference<EdfScheduler> schedulerRef;
-    private volatile boolean rrMode = true;
+    private volatile EdfScheduler scheduler;
+    private volatile boolean rrMode;
 
     WeightedRoundRobinPicker(List<Subchannel> list, int startIndex) {
       super(checkNotNull(list, "list"), startIndex);
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
-      this.schedulerRef = new AtomicReference<>(null);
       updateWeight();
     }
 
@@ -245,7 +240,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (rrMode) {
         return super.pickSubchannel(args);
       }
-      int pickIndex = schedulerRef.get().pick();
+      int pickIndex = scheduler.pick();
       WrrSubchannel subchannel = (WrrSubchannel) list.get(pickIndex);
       if (!config.enableOobLoadReport) {
         return PickResult.withSubchannel(
@@ -278,7 +273,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         double newWeight = subchannel.getWeight();
         scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
       }
-      schedulerRef.set(scheduler);
+      this.scheduler = scheduler;
       rrMode = false;
     }
 
@@ -360,7 +355,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     EdfScheduler(int initialCapacity) {
       this.prioQueue = new PriorityQueue<ObjectState>(initialCapacity, (o1, o2) -> {
         if (o1.deadline == o2.deadline) {
-          return Double.compare(o1.index, o2.index);
+          return Integer.compare(o1.index, o2.index);
         } else {
           return Double.compare(o1.deadline, o2.deadline);
         }

@@ -265,13 +265,18 @@ class LoadBalancerConfigFactory {
 
     private static ImmutableMap<String, ?> convertWeightedRoundRobinConfig(
             ClientSideWeightedRoundRobin wrr) throws ResourceInvalidException {
-      return buildWrrConfig(
-          wrr.hasBlackoutPeriod() ? Durations.toString(wrr.getBlackoutPeriod()) : null,
-          wrr.hasWeightExpirationPeriod()
-              ? Durations.toString(wrr.getWeightExpirationPeriod()) : null,
-          wrr.hasOobReportingPeriod() ? Durations.toString(wrr.getOobReportingPeriod()) : null,
-          wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
-          wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null);
+      try {
+        return buildWrrConfig(
+            wrr.hasBlackoutPeriod() ? Durations.toString(wrr.getBlackoutPeriod()) : null,
+            wrr.hasWeightExpirationPeriod()
+                ? Durations.toString(wrr.getWeightExpirationPeriod()) : null,
+            wrr.hasOobReportingPeriod() ? Durations.toString(wrr.getOobReportingPeriod()) : null,
+            wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
+            wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null);
+      } catch (IllegalArgumentException ex) {
+        throw new ResourceInvalidException("Invalid duration in weighted round robin config: "
+            + ex.getMessage());
+      }
     }
 
     /**
