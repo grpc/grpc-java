@@ -22,8 +22,9 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
@@ -36,18 +37,13 @@ public class FileWatcherAuthorizationServerInterceptorTest {
   public void invalidPolicyFailsAuthzInterceptorCreation() throws Exception {
     File policyFile = File.createTempFile("temp", "json");
     policyFile.deleteOnExit();
-    try (FileOutputStream outputStream = new FileOutputStream(policyFile)) {
-      String policy = "{ \"name\": \"abc\",, }";
-      outputStream.write(policy.getBytes(UTF_8));
-      outputStream.close();
-    }
+    String policy = "{ \"name\": \"abc\",, }";
+    Files.write(Paths.get(policyFile.getAbsolutePath()), policy.getBytes(UTF_8));
     try {
       FileWatcherAuthorizationServerInterceptor.create(policyFile);
       fail("exception expected");
     } catch (IOException ioe) {
       assertThat(ioe).hasMessageThat().contains("malformed");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -55,28 +51,25 @@ public class FileWatcherAuthorizationServerInterceptorTest {
   public void validPolicyCreatesFileWatcherAuthzInterceptor() throws Exception {
     File policyFile = File.createTempFile("temp", "json");
     policyFile.deleteOnExit();
-    try (FileOutputStream outputStream = new FileOutputStream(policyFile)) {
-      String policy = "{"
-          + " \"name\" : \"authz\","
-          + " \"deny_rules\": ["
-          + "   {"
-          + "     \"name\": \"deny_foo\","
-          + "     \"source\": {"
-          + "       \"principals\": ["
-          + "         \"spiffe://foo.com\""
-          + "       ]"
-          + "     }"
-          + "   }"
-          + " ],"
-          + " \"allow_rules\": ["
-          + "   {"
-          + "     \"name\": \"allow_all\""
-          + "   }"
-          + " ]"
-          + "}";
-      outputStream.write(policy.getBytes(UTF_8));
-      outputStream.close();
-    }
+    String policy = "{"
+        + " \"name\" : \"authz\","
+        + " \"deny_rules\": ["
+        + "   {"
+        + "     \"name\": \"deny_foo\","
+        + "     \"source\": {"
+        + "       \"principals\": ["
+        + "         \"spiffe://foo.com\""
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ],"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_all\""
+        + "   }"
+        + " ]"
+        + "}";
+    Files.write(Paths.get(policyFile.getAbsolutePath()), policy.getBytes(UTF_8));
     FileWatcherAuthorizationServerInterceptor interceptor = 
         FileWatcherAuthorizationServerInterceptor.create(policyFile);
     assertNotNull(interceptor);
@@ -86,18 +79,15 @@ public class FileWatcherAuthorizationServerInterceptorTest {
   public void invalidRefreshIntervalFailsScheduleRefreshes() throws Exception {
     File policyFile = File.createTempFile("temp", "json");
     policyFile.deleteOnExit();
-    try (FileOutputStream outputStream = new FileOutputStream(policyFile)) {
-      String policy = "{"
-          + " \"name\" : \"authz\","
-          + " \"allow_rules\": ["
-          + "   {"
-          + "     \"name\": \"allow_all\""
-          + "   }"
-          + " ]"
-          + "}";
-      outputStream.write(policy.getBytes(UTF_8));
-      outputStream.close();
-    }
+    String policy = "{"
+        + " \"name\" : \"authz\","
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_all\""
+        + "   }"
+        + " ]"
+        + "}";
+    Files.write(Paths.get(policyFile.getAbsolutePath()), policy.getBytes(UTF_8));
     FileWatcherAuthorizationServerInterceptor interceptor = 
         FileWatcherAuthorizationServerInterceptor.create(policyFile);
     assertNotNull(interceptor);
@@ -108,8 +98,6 @@ public class FileWatcherAuthorizationServerInterceptorTest {
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo(
           "Refresh interval must be greater than 0");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 }

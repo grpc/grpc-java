@@ -40,10 +40,10 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
-
 import java.io.Closeable;
 import java.io.File;
-import java.io.FileOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
@@ -91,17 +91,12 @@ public class AuthorizationEnd2EndTest {
 
   private void createTempAuthorizationPolicy(String authorizationPolicy) throws Exception {
     policyFile = File.createTempFile("temp", "json");
-    try (FileOutputStream outputStream = new FileOutputStream(policyFile, false)) {
-      outputStream.write(authorizationPolicy.getBytes(UTF_8));
-      outputStream.close();
-    }
+    Files.write(Paths.get(policyFile.getAbsolutePath()), authorizationPolicy.getBytes(UTF_8));
   }
 
   private void rewriteAuthorizationPolicy(String newPolicy) throws Exception {
-    try (FileOutputStream outputStream = new FileOutputStream(policyFile, false)) {
-      outputStream.write(newPolicy.getBytes(UTF_8));
-      outputStream.close();
-    }
+    assertNotNull(policyFile);
+    Files.write(Paths.get(policyFile.getAbsolutePath()), newPolicy.getBytes(UTF_8));
   }
 
   private SimpleServiceGrpc.SimpleServiceBlockingStub getStub() {
