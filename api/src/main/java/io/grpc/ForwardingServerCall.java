@@ -32,6 +32,11 @@ public abstract class ForwardingServerCall<ReqT, RespT>
     delegate().sendMessage(message);
   }
 
+  @Override
+  public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+    return delegate().getMethodDescriptor();
+  }
+
   /**
    * A simplified version of {@link ForwardingServerCall} where subclasses can pass in a {@link
    * ServerCall} as the delegate.
@@ -48,11 +53,6 @@ public abstract class ForwardingServerCall<ReqT, RespT>
     @Override
     protected ServerCall<ReqT, RespT> delegate() {
       return delegate;
-    }
-
-    @Override
-    public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
-      return delegate.getMethodDescriptor();
     }
   }
 }

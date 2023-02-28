@@ -45,11 +45,6 @@ public class ForwardingServerCallTest {
     forwarder =
         new ForwardingServerCall<Integer, Integer>() {
           @Override
-          public MethodDescriptor<Integer, Integer> getMethodDescriptor() {
-            return serverCall.getMethodDescriptor();
-          }
-
-          @Override
           protected ServerCall<Integer, Integer> delegate() {
             return serverCall;
           }
