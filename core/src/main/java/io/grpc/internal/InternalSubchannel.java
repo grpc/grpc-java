@@ -256,7 +256,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     channelz.addClientSocket(transport);
     pendingTransport = transport;
     transports.add(transport);
-    Runnable runnable = transport.start(new TransportListener(transport, address));
+    Runnable runnable = transport.start(new TransportListener(transport));
     if (runnable != null) {
       syncContext.executeLater(runnable);
     }
@@ -533,12 +533,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   /** Listener for real transports. */
   private class TransportListener implements ManagedClientTransport.Listener {
     final ConnectionClientTransport transport;
-    final SocketAddress address;
     boolean shutdownInitiated = false;
 
-    TransportListener(ConnectionClientTransport transport, SocketAddress address) {
+    TransportListener(ConnectionClientTransport transport) {
       this.transport = transport;
-      this.address = address;
     }
 
     @Override

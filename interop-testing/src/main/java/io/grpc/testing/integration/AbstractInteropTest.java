@@ -939,7 +939,7 @@ public abstract class AbstractInteropTest {
     requestStream.onCompleted();
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
+    assertEquals(responseSizes.size() * (long) numRequests, recorder.getValues().size());
     for (int ix = 0; ix < recorder.getValues().size(); ++ix) {
       StreamingOutputCallResponse response = recorder.getValues().get(ix);
       int length = response.getPayload().getBody().size();
@@ -973,7 +973,7 @@ public abstract class AbstractInteropTest {
     requestStream.onCompleted();
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
+    assertEquals(responseSizes.size() * (long) numRequests, recorder.getValues().size());
     for (int ix = 0; ix < recorder.getValues().size(); ++ix) {
       StreamingOutputCallResponse response = recorder.getValues().get(ix);
       int length = response.getPayload().getBody().size();
@@ -1125,7 +1125,8 @@ public abstract class AbstractInteropTest {
     requestStream.onCompleted();
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    org.junit.Assert.assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
+    org.junit.Assert.assertEquals(
+        responseSizes.size() * (long) numRequests, recorder.getValues().size());
 
     // Assert that our side channel object is echoed back in both headers and trailers
     Assert.assertEquals(metadataValue, headersCapture.get().get(Util.METADATA_KEY));

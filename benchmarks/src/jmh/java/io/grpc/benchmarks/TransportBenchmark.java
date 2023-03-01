@@ -214,6 +214,7 @@ public class TransportBenchmark {
     return stub.unaryCall(BYTE_THROUGHPUT_REQUEST);
   }
 
+  @SuppressWarnings("StaticAssignmentOfThrowable")
   private static final Throwable OK_THROWABLE = new RuntimeException("OK");
 
   @State(Scope.Thread)

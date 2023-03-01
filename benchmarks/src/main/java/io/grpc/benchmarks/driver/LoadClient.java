@@ -245,9 +245,9 @@ class LoadClient {
       latenciesBuilder.addBucket(0);
       base = base * resolution;
     }
-    latenciesBuilder.setMaxSeen(intervalHistogram.getMaxValue());
-    latenciesBuilder.setMinSeen(intervalHistogram.getMinNonZeroValue());
-    latenciesBuilder.setCount(intervalHistogram.getTotalCount());
+    latenciesBuilder.setMaxSeen((double) intervalHistogram.getMaxValue());
+    latenciesBuilder.setMinSeen((double) intervalHistogram.getMinNonZeroValue());
+    latenciesBuilder.setCount((double) intervalHistogram.getTotalCount());
     latenciesBuilder.setSum(intervalHistogram.getMean()
         * intervalHistogram.getTotalCount());
     // TODO: No support for sum of squares

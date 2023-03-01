@@ -276,7 +276,7 @@ final class CensusStatsModule {
         outboundWireSize += bytes;
       }
       module.recordRealTimeMetric(
-          startCtx, RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_METHOD, bytes);
+          startCtx, RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_METHOD, (double) bytes);
     }
 
     @Override
@@ -288,7 +288,7 @@ final class CensusStatsModule {
         inboundWireSize += bytes;
       }
       module.recordRealTimeMetric(
-          startCtx, RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_METHOD, bytes);
+          startCtx, RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_METHOD, (double) bytes);
     }
 
     @Override
@@ -365,21 +365,27 @@ final class CensusStatsModule {
     }
 
     void recordFinishedAttempt() {
-      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
-          // TODO(songya): remove the deprecated measure constants once they are completed removed.
-          .put(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT, 1)
-          // The latency is double value
-          .put(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
-          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC, outboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC, outboundWireSize)
-          .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC, inboundWireSize)
-          .put(
-              DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
-              outboundUncompressedSize)
-          .put(
-              DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
-              inboundUncompressedSize);
+      MeasureMap measureMap =
+          module
+              .statsRecorder
+              .newMeasureMap()
+              // TODO(songya): remove the deprecated measure constants once they are completed
+              // removed.
+              .put(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT, 1)
+              // The latency is double value
+              .put(
+                  RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY,
+                  roundtripNanos / NANOS_PER_MILLI)
+              .put(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC, outboundMessageCount)
+              .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
+              .put(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC, (double) outboundWireSize)
+              .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC, (double) inboundWireSize)
+              .put(
+                  DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
+                  (double) outboundUncompressedSize)
+              .put(
+                  DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
+                  (double) inboundUncompressedSize);
       if (statusCode != Code.OK) {
         measureMap.put(DeprecatedCensusConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
@@ -640,7 +646,7 @@ final class CensusStatsModule {
         outboundWireSize += bytes;
       }
       module.recordRealTimeMetric(
-          parentCtx, RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_METHOD, bytes);
+          parentCtx, RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_METHOD, (double) bytes);
     }
 
     @Override
@@ -652,7 +658,7 @@ final class CensusStatsModule {
         inboundWireSize += bytes;
       }
       module.recordRealTimeMetric(
-          parentCtx, RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_METHOD, bytes);
+          parentCtx, RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_METHOD, (double) bytes);
     }
 
     @Override
@@ -722,21 +728,27 @@ final class CensusStatsModule {
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
-          // TODO(songya): remove the deprecated measure constants once they are completed removed.
-          .put(DeprecatedCensusConstants.RPC_SERVER_FINISHED_COUNT, 1)
-          // The latency is double value
-          .put(RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
-          .put(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC, outboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC, outboundWireSize)
-          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC, inboundWireSize)
-          .put(
-              DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES,
-              outboundUncompressedSize)
-          .put(
-              DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES,
-              inboundUncompressedSize);
+      MeasureMap measureMap =
+          module
+              .statsRecorder
+              .newMeasureMap()
+              // TODO(songya): remove the deprecated measure constants once they are completed
+              // removed.
+              .put(DeprecatedCensusConstants.RPC_SERVER_FINISHED_COUNT, 1)
+              // The latency is double value
+              .put(
+                  RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY,
+                  elapsedTimeNanos / NANOS_PER_MILLI)
+              .put(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC, outboundMessageCount)
+              .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
+              .put(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC, (double) outboundWireSize)
+              .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC, (double) inboundWireSize)
+              .put(
+                  DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES,
+                  (double) outboundUncompressedSize)
+              .put(
+                  DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES,
+                  (double) inboundUncompressedSize);
       if (!status.isOk()) {
         measureMap.put(DeprecatedCensusConstants.RPC_SERVER_ERROR_COUNT, 1);
       }

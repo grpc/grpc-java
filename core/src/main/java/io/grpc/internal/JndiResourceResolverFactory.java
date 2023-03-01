@@ -43,6 +43,7 @@ import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResolverFactory {
 
   @Nullable
+  @SuppressWarnings("StaticAssignmentOfThrowable")
   private static final Throwable JNDI_UNAVAILABILITY_CAUSE = initJndi();
 
   // @UsedReflectively
@@ -194,8 +195,7 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
 
   @VisibleForTesting
   @IgnoreJRERequirement
-  // Hashtable is required. https://github.com/google/error-prone/issues/1766
-  @SuppressWarnings("JdkObsolete")
+  @SuppressWarnings({"JdkObsolete", "BanJNDI"})
   // javax.naming.* is only loaded reflectively and is never loaded for Android
   // The lint issue id is supposed to be "InvalidPackage" but it doesn't work, don't know why.
   // Use "all" as the lint issue id to suppress all types of lint error.

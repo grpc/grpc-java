@@ -877,7 +877,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   /** If {@code statusCode} is non-null, it will be used instead of the http2 error code mapping. */
   private Status statusFromH2Error(
       Status.Code statusCode, String context, long errorCode, byte[] debugData) {
-    Status status = GrpcUtil.Http2Error.statusForCode((int) errorCode);
+    Status status = GrpcUtil.Http2Error.statusForCode(errorCode);
     if (statusCode == null) {
       statusCode = status.getCode();
     }

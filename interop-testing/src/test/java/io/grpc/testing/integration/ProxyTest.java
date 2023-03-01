@@ -93,7 +93,7 @@ public class ProxyTest {
     }
     Collections.sort(rtts);
     long rtt = rtts.get(0);
-    assertEquals(latency, rtt, .5 * latency);
+    assertEquals(latency, (double) rtt, .5 * latency);
   }
 
   @Test
@@ -126,7 +126,7 @@ public class ProxyTest {
     }
     Collections.sort(rtts);
     long rtt = rtts.get(0);
-    assertEquals(latency, rtt, .5 * latency);
+    assertEquals(latency, (double) rtt, .5 * latency);
   }
 
   @Test

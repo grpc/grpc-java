@@ -70,7 +70,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import okio.Buffer;
 import okio.BufferedSource;
 import okio.ByteString;
@@ -130,6 +129,7 @@ public class OkHttpServerTransportTest {
   @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
   @Before
+  @SuppressWarnings("DirectInvocationOnMock")
   public void setUp() throws Exception {
     doAnswer(answerVoid((Boolean outDone, Integer streamId, BufferedSource in, Integer length) -> {
       in.require(length);
@@ -1294,7 +1294,6 @@ public class OkHttpServerTransportTest {
 
     Deque<String> messages = new ArrayDeque<>();
     boolean halfClosedCalled;
-    boolean onReadyCalled;
     Status status;
     CountDownLatch closed = new CountDownLatch(1);
 
@@ -1335,19 +1334,6 @@ public class OkHttpServerTransportTest {
 
     @Override
     public void onReady() {
-      onReadyCalled = true;
-    }
-
-    boolean isOnReadyCalled() {
-      boolean value = onReadyCalled;
-      onReadyCalled = false;
-      return value;
-    }
-
-    void waitUntilStreamClosed() throws InterruptedException, TimeoutException {
-      if (!closed.await(TIME_OUT_MS, TimeUnit.MILLISECONDS)) {
-        throw new TimeoutException("Failed waiting stream to be closed.");
-      }
     }
 
     static String getContent(InputStream message) throws IOException {

@@ -943,8 +943,8 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
-    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
-            "foo.google.com", "filter-type-url");
+    ServerRoutingConfig routingConfig =
+        createRoutingConfig("/FooService/barMethod", "foo.google.com");
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
         Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG,
@@ -983,8 +983,8 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
-    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
-            "foo.google.com", "filter-type-url");
+    ServerRoutingConfig routingConfig =
+        createRoutingConfig("/FooService/barMethod", "foo.google.com");
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
             Attributes.newBuilder()
@@ -1024,10 +1024,12 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
-    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
-        "foo.google.com", "filter-type-url", Route.RouteAction.forCluster(
-            "cluster", Collections.<Route.RouteAction.HashPolicy>emptyList(), null, null
-        ));
+    ServerRoutingConfig routingConfig =
+        createRoutingConfig(
+            "/FooService/barMethod",
+            "foo.google.com",
+            Route.RouteAction.forCluster(
+                "cluster", Collections.<Route.RouteAction.HashPolicy>emptyList(), null, null));
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
         Attributes.newBuilder()
@@ -1286,13 +1288,12 @@ public class XdsServerWrapperTest {
         "");
   }
 
-  private static ServerRoutingConfig createRoutingConfig(String path, String domain,
-                                                         String filterType) {
-    return createRoutingConfig(path, domain, filterType, null);
+  private static ServerRoutingConfig createRoutingConfig(String path, String domain) {
+    return createRoutingConfig(path, domain, null);
   }
 
-  private static ServerRoutingConfig createRoutingConfig(String path, String domain,
-      String filterType, Route.RouteAction action) {
+  private static ServerRoutingConfig createRoutingConfig(
+      String path, String domain, Route.RouteAction action) {
     RouteMatch routeMatch =
         RouteMatch.create(
             PathMatcher.fromPath(path, true),
@@ -1302,8 +1303,6 @@ public class XdsServerWrapperTest {
         Arrays.asList(Route.forAction(routeMatch, action,
             ImmutableMap.<String, FilterConfig>of())),
         Collections.<String, FilterConfig>emptyMap());
-    FilterConfig f0 = mock(FilterConfig.class);
-    when(f0.typeUrl()).thenReturn(filterType);
     return ServerRoutingConfig.create(ImmutableList.<VirtualHost>of(virtualHost),
         ImmutableMap.<Route, ServerInterceptor>of()
     );

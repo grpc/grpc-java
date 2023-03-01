@@ -2043,12 +2043,8 @@ public class XdsNameResolverTest {
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
-    Map<String, ?> bootstrap;
-
     @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      this.bootstrap = bootstrap;
-    }
+    public void setBootstrapOverride(Map<String, ?> bootstrap) {}
 
     @Override
     @Nullable

@@ -105,9 +105,9 @@ public final class KeepAliveManagerTest {
   @Test
   public void clientKeepAlivePinger_pingTimeout() {
     ConnectionClientTransport transport = mock(ConnectionClientTransport.class);
-    keepAlivePinger = new ClientKeepAlivePinger(transport);
+    ClientKeepAlivePinger pinger = new ClientKeepAlivePinger(transport);
 
-    keepAlivePinger.onPingTimeout();
+    pinger.onPingTimeout();
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(transport).shutdownNow(statusCaptor.capture());
@@ -120,8 +120,8 @@ public final class KeepAliveManagerTest {
   @Test
   public void clientKeepAlivePinger_pingFailure() {
     ConnectionClientTransport transport = mock(ConnectionClientTransport.class);
-    keepAlivePinger = new ClientKeepAlivePinger(transport);
-    keepAlivePinger.ping();
+    ClientKeepAlivePinger pinger = new ClientKeepAlivePinger(transport);
+    pinger.ping();
     ArgumentCaptor<ClientTransport.PingCallback> pingCallbackCaptor =
         ArgumentCaptor.forClass(ClientTransport.PingCallback.class);
     verify(transport).ping(pingCallbackCaptor.capture(), isA(Executor.class));

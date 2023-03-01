@@ -281,6 +281,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
   }
 
   @Override
+  @SuppressWarnings("DirectInvocationOnMock")
   protected NettyServerStream createStream() {
     when(handler.getWriteQueue()).thenReturn(writeQueue);
     StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
