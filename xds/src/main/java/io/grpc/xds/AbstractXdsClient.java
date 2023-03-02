@@ -330,6 +330,9 @@ final class AbstractXdsClient {
         return;
       }
 
+      // Need this here to avoid tsan race condition in XdsClientImplTestBase.sendToNonexistentHost
+      long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+
       checkArgument(!error.isOk(), "unexpected OK status");
       String errorMsg = error.getDescription() != null
           && error.getDescription().equals(CLOSED_BY_SERVER)
@@ -348,7 +351,7 @@ final class AbstractXdsClient {
       }
       long delayNanos = Math.max(
           0,
-          retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS));
+          retryBackoffPolicy.nextBackoffNanos() - elapsed);
       logger.log(XdsLogLevel.INFO, "Retry ADS stream in {0} ns", delayNanos);
       rpcRetryTimer = syncContext.schedule(
           new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
