@@ -675,8 +675,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   private static class FakeRandom extends Random {
     @Override
     public double nextDouble() {
-      setSeed(1L);
-      return super.nextDouble();
+      // return constant value to disable init deadline randomization in the scheduler
+      return 0.322023;
     }
   }
 }

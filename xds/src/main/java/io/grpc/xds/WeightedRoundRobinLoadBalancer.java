@@ -379,7 +379,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       checkArgument(weight > 0.0, "Weights need to be positive.");
       ObjectState state = new ObjectState(Math.max(weight, MINIMUM_WEIGHT), index);
       // Randomize the initial deadline.
-      state.deadline = (1 - random.nextDouble()) * (1 / state.weight);
+      state.deadline = random.nextDouble() * (1 / state.weight);
       prioQueue.add(state);
     }
 
