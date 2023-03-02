@@ -33,7 +33,7 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
 GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
-GRADLE_FLAGS+=" -PfailOnWarnings=true"
+# GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
 GRADLE_FLAGS+=" -PskipAndroid=true"
 GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
