@@ -177,7 +177,7 @@ subprojects {
 
     if (!project.hasProperty('errorProne') || errorProne.toBoolean()) {
         dependencies {
-            errorprone libs.errorprone.core
+            errorprone JavaVersion.current().isJava11Compatible() ? libs.errorprone.core : libs.errorprone.corejava8
         }
     } else {
         // Disable Error Prone
