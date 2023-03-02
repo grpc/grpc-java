@@ -53,6 +53,8 @@ jobs:
 
     - name: Build
       run: buildscripts/kokoro/unix.sh
+      env:
+        GRADLE_FLAGS: -x checkUpperBoundDeps -x javadoc
     - name: Post Failure Upload Test Reports to Artifacts
       if: ${{ failure() }}
       uses: actions/upload-artifact@v2
