@@ -171,7 +171,8 @@ public class WeightedRoundRobinLoadBalancerTest {
               return subchannel;
             }
             });
-    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker(),
+        new FakeRandom());
   }
 
   @Test
@@ -625,7 +626,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     double totalWeight = 0;
     int capacity = random.nextInt(10) + 1;
     double[] weights = new double[capacity];
-    EdfScheduler scheduler = new EdfScheduler(capacity);
+    EdfScheduler scheduler = new EdfScheduler(capacity, random);
     for (int i = 0; i < capacity; i++) {
       weights[i] = random.nextDouble();
       scheduler.add(i, weights[i]);
@@ -643,7 +644,7 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   @Test
   public void edsScheduler_sameWeight() {
-    EdfScheduler scheduler = new EdfScheduler(2);
+    EdfScheduler scheduler = new EdfScheduler(2, new FakeRandom());
     scheduler.add(0, 0.5);
     scheduler.add(1, 0.5);
     assertThat(scheduler.pick()).isEqualTo(0);
@@ -668,6 +669,14 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     @Override public String toString() {
       return "FakeSocketAddress-" + name;
+    }
+  }
+
+  private static class FakeRandom extends Random {
+    @Override
+    public double nextDouble() {
+      // return constant value to disable init deadline randomization in the scheduler
+      return 0.322023;
     }
   }
 }
