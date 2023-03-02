@@ -330,6 +330,17 @@ final class AbstractXdsClient {
         return;
       }
 
+      if (responseReceived || retryBackoffPolicy == null) {
+        // Reset the backoff sequence if had received a response, or backoff sequence
+        // has never been initialized.
+        retryBackoffPolicy = backoffPolicyProvider.get();
+      }
+      // Need this here to avoid tsan race condition in XdsClientImplTestBase.sendToNonexistentHost
+      long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+      long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
+      rpcRetryTimer = syncContext.schedule(
+          new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
+
       checkArgument(!error.isOk(), "unexpected OK status");
       String errorMsg = error.getDescription() != null
           && error.getDescription().equals(CLOSED_BY_SERVER)
@@ -341,17 +352,7 @@ final class AbstractXdsClient {
       xdsResponseHandler.handleStreamClosed(error);
       cleanUp();
 
-      if (responseReceived || retryBackoffPolicy == null) {
-        // Reset the backoff sequence if had received a response, or backoff sequence
-        // has never been initialized.
-        retryBackoffPolicy = backoffPolicyProvider.get();
-      }
-      long delayNanos = Math.max(
-          0,
-          retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS));
       logger.log(XdsLogLevel.INFO, "Retry ADS stream in {0} ns", delayNanos);
-      rpcRetryTimer = syncContext.schedule(
-          new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
     }
 
     private void close(Exception error) {
