@@ -108,11 +108,6 @@ plugins.withId("java") {
                 "<T:Lio/grpc/ServerBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;");
         }
     }
-
-    tasks.named("compileJmhJava").configure {
-        // This project targets Java 7 (no method references)
-        options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
-    }
 }
 
 tasks.register("versionFile") {
