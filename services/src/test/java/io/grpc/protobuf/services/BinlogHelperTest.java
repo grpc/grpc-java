@@ -979,7 +979,7 @@ public final class BinlogHelperTest {
         ArgumentMatchers.<SocketAddress>isNull());
     verifyNoMoreInteractions(mockSinkWriter);
     Duration timeout = timeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout)))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
   }
 
@@ -1000,7 +1000,7 @@ public final class BinlogHelperTest {
             .getClientInterceptor(CALL_ID)
             .interceptCall(
                 method,
-                CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                CallOptions.DEFAULT.withDeadlineAfter(2, TimeUnit.SECONDS),
                 new Channel() {
                   @Override
                   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -1028,15 +1028,15 @@ public final class BinlogHelperTest {
             AdditionalMatchers.or(ArgumentMatchers.<SocketAddress>isNull(),
                 ArgumentMatchers.<SocketAddress>any()));
     Duration timeout = callOptTimeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(2) - Durations.toNanos(timeout)))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test
   public void clientDeadlineLogged_deadlineSetViaContext() throws Exception {
     // important: deadline is read from the ctx where call was created
     final SettableFuture<ClientCall<byte[], byte[]>> callFuture = SettableFuture.create();
-    Deadline expectedDeadline = Deadline.after(1, TimeUnit.SECONDS);
+    Deadline expectedDeadline = Deadline.after(2, TimeUnit.SECONDS);
     Context.current()
         .withDeadline(
             expectedDeadline, Executors.newSingleThreadScheduledExecutor())
@@ -1055,7 +1055,7 @@ public final class BinlogHelperTest {
                 .getClientInterceptor(CALL_ID)
                 .interceptCall(
                     method,
-                    CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS),
+                    CallOptions.DEFAULT.withDeadlineAfter(10, TimeUnit.SECONDS),
                     new Channel() {
                       @Override
                       public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -1089,7 +1089,7 @@ public final class BinlogHelperTest {
     long expectedTimeRemaining = expectedDeadline.timeRemaining(TimeUnit.NANOSECONDS);
     long timeout = Durations.toNanos(callOptTimeoutCaptor.getValue());
     assertThat(Math.abs(expectedTimeRemaining - timeout))
-        .isAtMost(TimeUnit.SECONDS.toNanos(1));
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test

@@ -345,7 +345,7 @@ public class InternalLoggingServerInterceptorTest {
         ArgumentMatchers.isNull());
     verifyNoMoreInteractions(mockLogHelper);
     Duration timeout = timeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout)))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
   }
 
