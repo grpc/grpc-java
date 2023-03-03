@@ -25,6 +25,7 @@ import static io.opencensus.contrib.grpc.metrics.RpcMeasureConstants.GRPC_SERVER
 import static io.opencensus.contrib.grpc.metrics.RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC;
 import static io.opencensus.contrib.grpc.metrics.RpcMeasureConstants.GRPC_SERVER_STATUS;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.opencensus.contrib.grpc.metrics.RpcViewConstants;
 import io.opencensus.stats.Aggregation;
 import io.opencensus.stats.Measure;
@@ -32,12 +33,20 @@ import io.opencensus.stats.Measure.MeasureDouble;
 import io.opencensus.stats.View;
 import java.util.Arrays;
 
-/** Temporary holder class for the observability specific OpenCensus constants.
- *  The class will be removed once the new views are added in OpenCensus library. */
+// TODO(dnvindhya): Remove metric and view definitions from this class once it is moved to
+// OpenCensus library.
+/**
+ * Temporary holder class for the observability specific OpenCensus constants. The class will be
+ * removed once the new views are added in OpenCensus library.
+ */
+@VisibleForTesting
 public final class ObservabilityCensusConstants {
 
   static final Aggregation AGGREGATION_WITH_BYTES_HISTOGRAM =
       RpcViewConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC_VIEW.getAggregation();
+
+  static final Aggregation AGGREGATION_WITH_MILLIS_HISTOGRAM =
+      RpcViewConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY_VIEW.getAggregation();
 
   public static final MeasureDouble API_LATENCY_PER_CALL =
       Measure.MeasureDouble.create(
@@ -50,7 +59,7 @@ public final class ObservabilityCensusConstants {
           View.Name.create("grpc.io/client/api_latency"),
           "Time taken by gRPC to complete an RPC from application's perspective",
           API_LATENCY_PER_CALL,
-          AGGREGATION_WITH_BYTES_HISTOGRAM,
+          AGGREGATION_WITH_MILLIS_HISTOGRAM,
           Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS));
 
   public static final View GRPC_CLIENT_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW =
