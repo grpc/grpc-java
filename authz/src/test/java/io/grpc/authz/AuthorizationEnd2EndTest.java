@@ -445,8 +445,8 @@ public class AuthorizationEnd2EndTest {
     Closeable closeable = interceptor.scheduleRefreshes(
         100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+    closeable.close();
   }
 
   @Test
@@ -480,7 +480,6 @@ public class AuthorizationEnd2EndTest {
     Closeable closeable = interceptor.scheduleRefreshes(
         100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -490,6 +489,7 @@ public class AuthorizationEnd2EndTest {
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
+    closeable.close();
   }
 
   @Test
@@ -523,7 +523,6 @@ public class AuthorizationEnd2EndTest {
     Closeable closeable = interceptor.scheduleRefreshes(
         100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -533,6 +532,7 @@ public class AuthorizationEnd2EndTest {
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
+    closeable.close();
   }
 
   @Test
@@ -566,7 +566,6 @@ public class AuthorizationEnd2EndTest {
     Closeable closeable = interceptor.scheduleRefreshes(
         100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -576,6 +575,7 @@ public class AuthorizationEnd2EndTest {
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
+    closeable.close();
   }
 
   @Test
@@ -599,8 +599,8 @@ public class AuthorizationEnd2EndTest {
     Closeable closeable = interceptor.scheduleRefreshes(
         100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+    closeable.close();
   }
 
   @Test
@@ -624,7 +624,6 @@ public class AuthorizationEnd2EndTest {
     Closeable closeable = interceptor.scheduleRefreshes(
         100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -634,6 +633,7 @@ public class AuthorizationEnd2EndTest {
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
+    closeable.close();
   }
 
   @Test
@@ -662,7 +662,6 @@ public class AuthorizationEnd2EndTest {
     Closeable closeable = interceptor.scheduleRefreshes(
         100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -687,14 +686,6 @@ public class AuthorizationEnd2EndTest {
         + "}";
     rewriteAuthorizationPolicy(policy);
     assertEquals(0, fakeClock.forwardNanos(99));
-    //assertEquals(0, fakeClock.runDueTasks());
-    /*
-    Runnable callback = () -> {
-      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-    };
-    Thread onReloadDone = new Thread(callback);
-    interceptor.setCallbackForTesting(onReloadDone);
-    onReloadDone.join();*/
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -705,12 +696,11 @@ public class AuthorizationEnd2EndTest {
       throw new AssertionError("the test failed ", e);
     }
     assertEquals(1, fakeClock.forwardNanos(2));
-    //assertEquals(1, fakeClock.numPendingTasks());
     getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+    closeable.close();
   }
 
   @Test
-  // TODO(ashithasantosh): Replace callback with fakeclock
   public void fileWatcherAuthzInvalidPolicySkipRefreshTest() throws Exception {
     String policy = "{"
         + " \"name\" : \"authz\" ,"
@@ -729,9 +719,19 @@ public class AuthorizationEnd2EndTest {
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
     Closeable closeable = interceptor.scheduleRefreshes(
-        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
+        100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
+    assertEquals(0, fakeClock.forwardNanos(99));
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    assertEquals(1, fakeClock.forwardNanos(2));
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -743,24 +743,30 @@ public class AuthorizationEnd2EndTest {
     }
     policy = "{}";
     rewriteAuthorizationPolicy(policy);
-    Runnable callback = () -> {
-      try {
-        getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-        fail("exception expected");
-      } catch (StatusRuntimeException sre) {
-        assertThat(sre).hasMessageThat().isEqualTo(
-            "PERMISSION_DENIED: Access Denied");
-      } catch (Exception e) {
-        throw new AssertionError("the test failed ", e);
-      }
-    };
-    Thread onReloadDone = new Thread(callback);
-    interceptor.setCallbackForTesting(onReloadDone);
-    onReloadDone.join();
+    assertEquals(0, fakeClock.forwardNanos(98));
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    assertEquals(1, fakeClock.forwardNanos(2));
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+          "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    closeable.close();
   }
 
   @Test
-  // TODO(ashithasantosh): Replace callback with fakeclock
   public void fileWatcherAuthzRecoversFromReloadTest() throws Exception {
     String policy = "{"
         + " \"name\" : \"authz\" ,"
@@ -779,9 +785,19 @@ public class AuthorizationEnd2EndTest {
     FileWatcherAuthorizationServerInterceptor interceptor = 
         createFileWatcherAuthorizationInterceptor(policyFile);
     Closeable closeable = interceptor.scheduleRefreshes(
-        100, TimeUnit.MILLISECONDS, fakeClock.getScheduledExecutorService());
+        100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
     initServerWithAuthzInterceptor(interceptor, InsecureServerCredentials.create());
-    closeable.close();
+    assertEquals(0, fakeClock.forwardNanos(99));
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+            "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    assertEquals(1, fakeClock.forwardNanos(2));
     try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
       fail("exception expected");
@@ -793,20 +809,26 @@ public class AuthorizationEnd2EndTest {
     }
     policy = "{}";
     rewriteAuthorizationPolicy(policy);
-    Runnable callback = () -> {
-      try {
-        getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-        fail("exception expected");
-      } catch (StatusRuntimeException sre) {
-        assertThat(sre).hasMessageThat().isEqualTo(
+    assertEquals(0, fakeClock.forwardNanos(98));
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
             "PERMISSION_DENIED: Access Denied");
-      } catch (Exception e) {
-        throw new AssertionError("the test failed ", e);
-      }
-    };
-    Thread onFirstReloadDone = new Thread(callback);
-    interceptor.setCallbackForTesting(onFirstReloadDone);
-    onFirstReloadDone.join();
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    assertEquals(1, fakeClock.forwardNanos(2));
+    try {
+      getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+            "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
     policy = "{"
         + " \"name\" : \"authz\" ,"
         + " \"allow_rules\": ["
@@ -821,12 +843,19 @@ public class AuthorizationEnd2EndTest {
         + " ]"
         + "}";
     rewriteAuthorizationPolicy(policy);
-    callback = () -> {
+    assertEquals(0, fakeClock.forwardNanos(98));
+    try {
       getStub().unaryRpc(SimpleRequest.getDefaultInstance());
-    };
-    Thread onSecondReloadDone = new Thread(callback);
-    interceptor.setCallbackForTesting(onSecondReloadDone);
-    onSecondReloadDone.join();
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre).hasMessageThat().isEqualTo(
+            "PERMISSION_DENIED: Access Denied");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+    assertEquals(1, fakeClock.forwardNanos(2));
+    getStub().unaryRpc(SimpleRequest.getDefaultInstance());
+    closeable.close();
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {

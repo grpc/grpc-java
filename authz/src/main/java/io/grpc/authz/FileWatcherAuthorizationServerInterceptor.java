@@ -19,7 +19,6 @@ package io.grpc.authz;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -49,9 +48,6 @@ public final class FileWatcherAuthorizationServerInterceptor implements ServerIn
   private final File policyFile;
   private FileTime lastModifiedTime;
 
-  // TODO: remove callback logic
-  private Thread testCallback;
-
   private FileWatcherAuthorizationServerInterceptor(File policyFile) throws IOException {
     this.policyFile = policyFile;
     updateInternalInterceptor();
@@ -72,9 +68,6 @@ public final class FileWatcherAuthorizationServerInterceptor implements ServerIn
     String policyContents = new String(Files.readAllBytes(policyFile.toPath()), UTF_8);
     lastModifiedTime = currentTime;
     internalAuthzServerInterceptor = AuthorizationServerInterceptor.create(policyContents);
-    if (testCallback != null) {
-      testCallback.start();
-    }
   }
 
   /** 
@@ -110,11 +103,6 @@ public final class FileWatcherAuthorizationServerInterceptor implements ServerIn
         future.cancel(false);
       }
     };
-  }
-
-  @VisibleForTesting
-  public void setCallbackForTesting(Thread callback) {
-    testCallback = callback;
   }
 
   public static FileWatcherAuthorizationServerInterceptor create(File policyFile) 
