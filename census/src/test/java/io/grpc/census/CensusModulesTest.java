@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRIES_PER_CALL;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRY_DELAY_PER_CALL;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.TRANSPARENT_RETRIES_PER_CALL;
+import static io.grpc.census.internal.ObservabilityCensusConstants.API_LATENCY_PER_CALL;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -63,6 +64,7 @@ import io.grpc.ServerStreamTracer.ServerCallInfo;
 import io.grpc.Status;
 import io.grpc.census.CensusTracingModule.CallAttemptsTracerFactory;
 import io.grpc.census.internal.DeprecatedCensusConstants;
+import io.grpc.census.internal.ObservabilityCensusConstants;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
@@ -121,6 +123,8 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class CensusModulesTest {
+
+  private static final double TOLERANCE = 1e-6;
   private static final CallOptions.Key<String> CUSTOM_OPTION =
       CallOptions.Key.createWithDefault("option1", "default");
   private static final CallOptions CALL_OPTIONS =
@@ -368,7 +372,7 @@ public class CensusModulesTest {
             .setSampleToLocalSpanStore(false)
             .build());
     verify(spyClientSpan, never()).end();
-    assertZeroRetryRecorded();
+    assertPerCallMetrics(0D);
   }
 
   @Test
@@ -503,7 +507,7 @@ public class CensusModulesTest {
               DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
       assertEquals(30 + 100 + 16 + 24,
           record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY));
-      assertZeroRetryRecorded();
+      assertPerCallMetrics(30D + 100 + 16 + 24);
     } else {
       assertNull(statsRecorder.pollRecord());
     }
@@ -691,6 +695,8 @@ public class CensusModulesTest {
     assertThat(record.getMetric(RETRIES_PER_CALL)).isEqualTo(1);
     assertThat(record.getMetric(TRANSPARENT_RETRIES_PER_CALL)).isEqualTo(2);
     assertThat(record.getMetric(RETRY_DELAY_PER_CALL)).isEqualTo(1000D + 10 + 10);
+    assertThat(record.getMetric(API_LATENCY_PER_CALL))
+        .isEqualTo(30D + 100 + 24 + 1000 + 100 + 10 + 10 + 16 + 24);
   }
 
   private void assertRealTimeMetric(
@@ -716,13 +722,14 @@ public class CensusModulesTest {
     assertEquals(expectedValue, record.getMetricAsLongOrFail(measure));
   }
 
-  private void assertZeroRetryRecorded() {
+  private void assertPerCallMetrics(double expectedLatencyValue) {
     StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
     TagValue methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     assertThat(record.getMetric(RETRIES_PER_CALL)).isEqualTo(0);
     assertThat(record.getMetric(TRANSPARENT_RETRIES_PER_CALL)).isEqualTo(0);
     assertThat(record.getMetric(RETRY_DELAY_PER_CALL)).isEqualTo(0D);
+    assertThat(record.getMetric(API_LATENCY_PER_CALL)).isEqualTo(expectedLatencyValue);
   }
 
   @Test
@@ -849,7 +856,7 @@ public class CensusModulesTest {
         3000,
         record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY));
     assertNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_SERVER_LATENCY));
-    assertZeroRetryRecorded();
+    assertPerCallMetrics(3000D);
   }
 
   @Test
@@ -989,7 +996,7 @@ public class CensusModulesTest {
       assertNull(clientRecord.getMetric(DeprecatedCensusConstants.RPC_CLIENT_ERROR_COUNT));
       TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
       assertEquals("extra-tag-value-897", clientPropagatedTag.asString());
-      assertZeroRetryRecorded();
+      assertPerCallMetrics(0D);
     }
 
     if (!recordStats) {
@@ -1503,6 +1510,81 @@ public class CensusModulesTest {
           @Override
           public Long apply(AggregationData arg) {
             return ((AggregationData.MeanData) arg).getCount();
+          }
+        });
+  }
+
+  @Test
+  public void callLatencyView() throws InterruptedException {
+    StatsComponent localStats = new StatsComponentImpl();
+
+    localStats
+        .getViewManager()
+        .registerView(ObservabilityCensusConstants.GRPC_CLIENT_API_LATENCY_VIEW);
+
+    CensusStatsModule localCensusStats = new CensusStatsModule(
+        tagger, tagCtxSerializer, localStats.getStatsRecorder(), fakeClock.getStopwatchSupplier(),
+        false, false, true, false /* real-time */, true);
+
+    CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CensusStatsModule.CallAttemptsTracerFactory(
+            localCensusStats, tagger.empty(), method.getFullMethodName());
+
+    Metadata headers = new Metadata();
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
+    tracer.streamCreated(Attributes.EMPTY, headers);
+    fakeClock.forwardTime(50, MILLISECONDS);
+    Status status = Status.OK.withDescription("Success");
+    tracer.streamClosed(status);
+    callAttemptsTracerFactory.callEnded(status);
+
+    // Give OpenCensus a chance to update the views asynchronously.
+    Thread.sleep(100);
+
+    assertDistributionData(
+        localStats,
+        ObservabilityCensusConstants.GRPC_CLIENT_API_LATENCY_VIEW,
+        ImmutableList.of(TagValue.create(method.getFullMethodName()), TagValue.create("OK")),
+        50.0, 1, 0.0,
+        ImmutableList.of(
+            0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 1L,
+            0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L));
+  }
+
+  private void assertDistributionData(StatsComponent localStats, View view,
+      List<TagValue> dimension, double mean, long count, double sumOfSquaredDeviations,
+      List<Long> expectedBucketCounts) {
+    AggregationData aggregationData = localStats.getViewManager()
+        .getView(view.getName())
+        .getAggregationMap()
+        .get(dimension);
+
+    aggregationData.match(
+        Functions.</*@Nullable*/ Void>throwAssertionError(),
+        Functions.</*@Nullable*/ Void>throwAssertionError(),
+        Functions.</*@Nullable*/ Void>throwAssertionError(),
+        /* p3= */ new Function<AggregationData.DistributionData, Void>() {
+          @Override
+          public Void apply(AggregationData.DistributionData arg) {
+            assertThat(arg.getMean()).isWithin(TOLERANCE).of(mean);
+            assertThat(arg.getCount()).isEqualTo(count);
+            assertThat(arg.getSumOfSquaredDeviations())
+                .isWithin(TOLERANCE)
+                .of(sumOfSquaredDeviations);
+            assertThat(arg.getBucketCounts())
+                .containsExactlyElementsIn(expectedBucketCounts)
+                .inOrder();
+            return null;
+          }
+        },
+        Functions.</*@Nullable*/ Void>throwAssertionError(),
+        Functions.</*@Nullable*/ Void>throwAssertionError(),
+        new Function<AggregationData, Void>() {
+          @Override
+          public Void apply(AggregationData arg) {
+            assertThat(((AggregationData.DistributionData) arg).getCount()).isEqualTo(count);
+            return null;
           }
         });
   }
