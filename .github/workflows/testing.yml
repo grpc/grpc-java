@@ -65,6 +65,6 @@ jobs:
 
     - name: Coveralls
       if: matrix.jre == 8 # Upload once, instead of for each job in the matrix
-      run: ./gradlew :grpc-all:coveralls -x compileJava
+      run: ./gradlew :grpc-all:coveralls -PskipAndroid=true -x compileJava
     - name: Codecov
       uses: codecov/codecov-action@v3
