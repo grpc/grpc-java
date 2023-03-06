@@ -378,6 +378,7 @@ public abstract class NameResolver {
      * @since 1.49.0
      */
     @Nullable
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9406")
     public String getOverrideAuthority() {
       return overrideAuthority;
     }
@@ -508,7 +509,6 @@ public abstract class NameResolver {
        *
        * @since 1.25.0
        */
-      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
       public Builder setOffloadExecutor(Executor executor) {
         this.executor = executor;
         return this;
