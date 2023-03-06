@@ -76,6 +76,7 @@ public class OrcaMetricReportingServerInterceptorTest {
   private double memoryUtilizationMetrics = 0;
   private double qpsMetrics = 0;
 
+  private OrcaMetricReportingServerInterceptor metricReportingServerInterceptor;
   private MetricRecorder metricRecorder;
 
   private final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
@@ -84,7 +85,6 @@ public class OrcaMetricReportingServerInterceptorTest {
 
   @Before
   public void setUp() throws Exception {
-    OrcaMetricReportingServerInterceptor.setMetricRecorder(null);
     SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =
         new SimpleServiceGrpc.SimpleServiceImplBase() {
           @Override
@@ -101,9 +101,6 @@ public class OrcaMetricReportingServerInterceptorTest {
             CallMetricRecorder.getCurrent().recordCpuUtilizationMetric(cpuUtilizationMetrics);
             CallMetricRecorder.getCurrent().recordMemoryUtilizationMetric(memoryUtilizationMetrics);
             CallMetricRecorder.getCurrent().recordQpsMetric(qpsMetrics);
-            if (metricRecorder != null) {
-              OrcaMetricReportingServerInterceptor.setMetricRecorder(metricRecorder);
-            }
             SimpleResponse response =
                 SimpleResponse.newBuilder().setResponseMessage("Simple response").build();
             responseObserver.onNext(response);
@@ -111,7 +108,7 @@ public class OrcaMetricReportingServerInterceptorTest {
           }
         };
 
-    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor();
+    metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor();
     String serverName = InProcessServerBuilder.generateName();
     grpcCleanupRule.register(
         InProcessServerBuilder
@@ -224,6 +221,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     metricRecorder.putUtilizationMetric("serverUtil1", 0.7467);
     metricRecorder.putUtilizationMetric("serverUtil2", 0.2233);
 
+    metricReportingServerInterceptor.setMetricRecorder(metricRecorder);
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =
@@ -245,6 +243,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     metricRecorder.setMemoryUtilizationMetric(0.764);
     metricRecorder.setQps(1.618);
 
+    metricReportingServerInterceptor.setMetricRecorder(metricRecorder);
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =

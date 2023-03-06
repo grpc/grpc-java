@@ -55,7 +55,7 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
           "endpoint-load-metrics-bin",
           ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
-  private static MetricRecorder metricRecorder;
+  private volatile MetricRecorder metricRecorder;
 
   @VisibleForTesting
   OrcaMetricReportingServerInterceptor() {
@@ -65,7 +65,7 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
     return INSTANCE;
   }
 
-  public static void setMetricRecorder(MetricRecorder mr) {
+  public void setMetricRecorder(MetricRecorder mr) {
     metricRecorder = mr;
   }
 
