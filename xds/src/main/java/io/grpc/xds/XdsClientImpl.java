@@ -93,7 +93,7 @@ final class XdsClientImpl extends XdsClient
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private final LoadBalancerRegistry loadBalancerRegistry
       = LoadBalancerRegistry.getDefaultRegistry();
-  private final Map<ServerInfo, AbstractXdsClient> serverChannelMap = new HashMap<>();
+  private final Map<ServerInfo, ControlPlaneClient> serverChannelMap = new HashMap<>();
   private final Map<XdsResourceType<? extends ResourceUpdate>,
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
       resourceSubscribers = new HashMap<>();
@@ -144,7 +144,7 @@ final class XdsClientImpl extends XdsClient
     if (serverChannelMap.containsKey(serverInfo)) {
       return;
     }
-    AbstractXdsClient xdsChannel = new AbstractXdsClient(
+    ControlPlaneClient xdsChannel = new ControlPlaneClient(
         xdsChannelFactory,
         serverInfo,
         bootstrapInfo.node(),
@@ -218,7 +218,7 @@ final class XdsClientImpl extends XdsClient
               return;
             }
             isShutdown = true;
-            for (AbstractXdsClient xdsChannel : serverChannelMap.values()) {
+            for (ControlPlaneClient xdsChannel : serverChannelMap.values()) {
               xdsChannel.shutdown();
             }
             if (reportingLoad) {
@@ -490,7 +490,7 @@ final class XdsClientImpl extends XdsClient
    */
   private final class ResourceSubscriber<T extends ResourceUpdate> {
     @Nullable private final ServerInfo serverInfo;
-    @Nullable private final AbstractXdsClient xdsChannel;
+    @Nullable private final ControlPlaneClient xdsChannel;
     private final XdsResourceType<T> type;
     private final String resource;
     private final Set<ResourceWatcher<T>> watchers = new HashSet<>();
@@ -518,7 +518,7 @@ final class XdsClientImpl extends XdsClient
       // is created but not yet requested because the client is in backoff.
       this.metadata = ResourceMetadata.newResourceMetadataUnknown();
 
-      AbstractXdsClient xdsChannelTemp = null;
+      ControlPlaneClient xdsChannelTemp = null;
       try {
         maybeCreateXdsChannelWithLrs(serverInfo);
         xdsChannelTemp = serverChannelMap.get(serverInfo);

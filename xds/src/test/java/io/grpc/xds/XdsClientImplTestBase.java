@@ -158,7 +158,7 @@ public abstract class XdsClientImplTestBase {
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(AbstractXdsClient.RpcRetryTask.class.getSimpleName());
+          return command.toString().contains(ControlPlaneClient.RpcRetryTask.class.getSimpleName());
         }
       };
 
