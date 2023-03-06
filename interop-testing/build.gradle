@@ -29,6 +29,7 @@ dependencies {
             project(':grpc-services'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            project(':grpc-gcp-observability'),
             libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,

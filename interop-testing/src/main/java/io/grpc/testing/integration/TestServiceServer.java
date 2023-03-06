@@ -26,6 +26,7 @@ import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
+import io.grpc.gcp.observability.GcpObservability;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.services.MetricRecorder;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
@@ -58,11 +59,17 @@ public class TestServiceServer {
                 try {
                   System.out.println("Shutting down");
                   server.stop();
+                  if (server.enableObservability) {
+                    server.gcpObservability.close();
+                  }
                 } catch (Exception e) {
                   e.printStackTrace();
                 }
               }
             });
+    if (server.enableObservability) {
+      server.gcpObservability = GcpObservability.grpcInit();
+    }
     server.start();
     System.out.println("Server started on port " + server.port);
     server.blockUntilShutdown();
@@ -75,6 +82,8 @@ public class TestServiceServer {
   private ScheduledExecutorService executor;
   private Server server;
   private int localHandshakerPort = -1;
+  private boolean enableObservability = false;
+  private GcpObservability gcpObservability = null;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -111,6 +120,8 @@ public class TestServiceServer {
           usage = true;
           break;
         }
+      } else if ("enable_observability".equals(key)) {
+        enableObservability = true;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -132,6 +143,9 @@ public class TestServiceServer {
               + "\n  --local_handshaker_port=PORT"
               + "\n                        Use local ALTS handshaker service on the specified port "
               + "\n                        for testing. Only effective when --use_alts=true."
+              + "\n  --enable_observability=true|false "
+              + "\n                        Whether to enable GCP Observability. Default: "
+              + s.enableObservability
       );
       System.exit(1);
     }
