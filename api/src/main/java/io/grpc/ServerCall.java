@@ -189,7 +189,6 @@ public abstract class ServerCall<ReqT, RespT> {
    * encoding has been negotiated, this is a no-op. By default per-message compression is enabled,
    * but may not have any effect if compression is not enabled on the call.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public void setMessageCompression(boolean enabled) {
     // noop
   }
@@ -206,7 +205,6 @@ public abstract class ServerCall<ReqT, RespT> {
    * @param compressor the name of the compressor to use.
    * @throws IllegalArgumentException if the compressor name can not be found.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public void setCompression(String compressor) {
     // noop
   }
