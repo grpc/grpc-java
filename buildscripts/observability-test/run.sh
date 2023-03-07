@@ -28,13 +28,13 @@ cd "$(dirname "$0")"/../..
 #             $5: num_times
 
 if [ "$1" = "server" ] ; then
-  /grpc-java/interop-testing/build/install/grpc-interop-testing/bin/test-server \
-    --use_tls=false --enable_observability=true \
+  /grpc-java/bin/gcp-observability-interop \
+    server --use_tls=false \
     --port=$2
 
 elif [ "$1" = "client" ] ; then
-  /grpc-java/interop-testing/build/install/grpc-interop-testing/bin/test-client \
-    --use_tls=false --enable_observability=true \
+  /grpc-java/bin/gcp-observability-interop \
+    client --use_tls=false \
     --server_host=$2 --server_port=$3 \
     --test_case=$4 --num_times=$5
 
