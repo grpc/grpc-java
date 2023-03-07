@@ -55,6 +55,7 @@ include ":grpc-bom"
 include ":grpc-rls"
 include ":grpc-authz"
 include ":grpc-gcp-observability"
+include ":grpc-gcp-observability:interop"
 include ":grpc-istio-interop-testing"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
@@ -85,6 +86,7 @@ project(':grpc-bom').projectDir = "$rootDir/bom" as File
 project(':grpc-rls').projectDir = "$rootDir/rls" as File
 project(':grpc-authz').projectDir = "$rootDir/authz" as File
 project(':grpc-gcp-observability').projectDir = "$rootDir/gcp-observability" as File
+project(':grpc-gcp-observability:interop').projectDir = "$rootDir/gcp-observability/interop" as File
 project(':grpc-istio-interop-testing').projectDir = "$rootDir/istio-interop-testing" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {

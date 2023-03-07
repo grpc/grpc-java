@@ -51,7 +51,6 @@ dependencies {
         // Avoid grpc-netty-shaded dependency
         exclude group: 'io.grpc', module: 'grpc-alts'
         exclude group: 'io.grpc', module: 'grpc-xds'
-        exclude group: 'io.grpc', module: 'grpc-gcp-observability'
     }
     implementation libraries.junit
     implementation libraries.protobuf.java
