@@ -34,7 +34,6 @@ import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.InternalMetricRecorder;
 import io.grpc.services.MetricRecorder;
 import io.grpc.services.MetricReport;
-import javax.annotation.Nullable;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -61,14 +60,6 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   OrcaMetricReportingServerInterceptor(MetricRecorder metricRecorder) {
     this.metricRecorder = metricRecorder;
     OrcaMetricReportingServerInterceptor.instance = this;
-  }
-
-  /**
-   * Returns the server interceptor if created, otherwise {@code null}.
-   */
-  @Nullable
-  public static OrcaMetricReportingServerInterceptor getInstanceIfCreated() {
-    return instance;
   }
 
   public static OrcaMetricReportingServerInterceptor getOrCreateInstance(
