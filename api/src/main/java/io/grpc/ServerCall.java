@@ -194,10 +194,10 @@ public abstract class ServerCall<ReqT, RespT> {
   }
 
   /**
-   * Sets the compression algorithm for this call.  If the server does not support the compression
-   * algorithm, the call will fail.  This method may only be called before {@link #sendHeaders}.
-   * The compressor to use will be looked up in the {@link CompressorRegistry}.  Default gRPC
-   * servers support the "gzip" compressor.
+   * Sets the compression algorithm for this call.  This compression is utilized for sending.  If
+   * the server does not support the compression algorithm, the call will fail.  This method may
+   * only be called before {@link #sendHeaders}.  The compressor to use will be looked up in the
+   * {@link CompressorRegistry}.  Default gRPC servers support the "gzip" compressor.
    *
    * <p>It is safe to call this even if the client does not support the compression format chosen.
    * The implementation will handle negotiation with the client and may fall back to no compression.
