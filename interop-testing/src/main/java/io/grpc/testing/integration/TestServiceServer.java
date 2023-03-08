@@ -34,9 +34,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/** Server that manages startup/shutdown of a single {@code TestService}. */
+/**
+ * Server that manages startup/shutdown of a single {@code TestService}.
+ */
 public class TestServiceServer {
-  /** The main application allowing this server to be launched from the command line. */
+
+  /**
+   * The main application allowing this server to be launched from the command line.
+   */
   public static void main(String[] args) throws Exception {
     // Let Netty use Conscrypt if it is available.
     TestUtils.installConscryptIfAvailable();
@@ -164,7 +169,7 @@ public class TestServiceServer {
             ServerInterceptors.intercept(
                 new TestServiceImpl(executor, metricRecorder), TestServiceImpl.interceptors()))
         .addService(orcaOobService)
-        .intercept(OrcaMetricReportingServerInterceptor.getInstance())
+        .intercept(OrcaMetricReportingServerInterceptor.getOrCreateInstance(metricRecorder))
         .build()
         .start();
   }
@@ -183,7 +188,9 @@ public class TestServiceServer {
     return server.getPort();
   }
 
-  /** Await termination on the main thread since the grpc library uses daemon threads. */
+  /**
+   * Await termination on the main thread since the grpc library uses daemon threads.
+   */
   private void blockUntilShutdown() throws InterruptedException {
     if (server != null) {
       server.awaitTermination();

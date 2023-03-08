@@ -34,6 +34,7 @@ import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.InternalMetricRecorder;
 import io.grpc.services.MetricRecorder;
 import io.grpc.services.MetricReport;
+import javax.annotation.Nullable;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -46,8 +47,7 @@ import io.grpc.services.MetricReport;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9127")
 public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
-  private static final OrcaMetricReportingServerInterceptor INSTANCE =
-      new OrcaMetricReportingServerInterceptor();
+  private static volatile OrcaMetricReportingServerInterceptor instance;
 
   @VisibleForTesting
   static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
@@ -55,18 +55,32 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
           "endpoint-load-metrics-bin",
           ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
-  private volatile MetricRecorder metricRecorder;
+  private final MetricRecorder metricRecorder;
 
   @VisibleForTesting
-  OrcaMetricReportingServerInterceptor() {
+  OrcaMetricReportingServerInterceptor(MetricRecorder metricRecorder) {
+    this.metricRecorder = metricRecorder;
+    OrcaMetricReportingServerInterceptor.instance = this;
   }
 
-  public static OrcaMetricReportingServerInterceptor getInstance() {
-    return INSTANCE;
+  /**
+   * Returns the server interceptor if created, otherwise {@code null}.
+   */
+  @Nullable
+  public static OrcaMetricReportingServerInterceptor getInstanceIfCreated() {
+    return instance;
   }
 
-  public void setMetricRecorder(MetricRecorder mr) {
-    metricRecorder = mr;
+  public static OrcaMetricReportingServerInterceptor getOrCreateInstance(
+      MetricRecorder metricRecorder) {
+    if (instance == null) {
+      synchronized (OrcaMetricReportingServerInterceptor.class) {
+        if (instance == null) {
+          instance = new OrcaMetricReportingServerInterceptor(metricRecorder);
+        }
+      }
+    }
+    return instance;
   }
 
   @Override

@@ -76,7 +76,6 @@ public class OrcaMetricReportingServerInterceptorTest {
   private double memoryUtilizationMetrics = 0;
   private double qpsMetrics = 0;
 
-  private OrcaMetricReportingServerInterceptor metricReportingServerInterceptor;
   private MetricRecorder metricRecorder;
 
   private final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
@@ -108,7 +107,9 @@ public class OrcaMetricReportingServerInterceptorTest {
           }
         };
 
-    metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor();
+    metricRecorder = MetricRecorder.newInstance();
+    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor(
+        metricRecorder);
     String serverName = InProcessServerBuilder.generateName();
     grpcCleanupRule.register(
         InProcessServerBuilder
@@ -130,16 +131,17 @@ public class OrcaMetricReportingServerInterceptorTest {
     final CallMetricRecorder callMetricRecorder = new CallMetricRecorder();
     ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory =
         new ServerStreamTracer.Factory() {
-      @Override
-      public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-        return new ServerStreamTracer() {
           @Override
-          public Context filterContext(Context context) {
-            return context.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+          public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+            return new ServerStreamTracer() {
+              @Override
+              public Context filterContext(Context context) {
+                return context.withValue(InternalCallMetricRecorder.CONTEXT_KEY,
+                    callMetricRecorder);
+              }
+            };
           }
         };
-      }
-    };
 
     final AtomicReference<CallMetricRecorder> callMetricRecorderCapture = new AtomicReference<>();
     SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =
@@ -155,7 +157,8 @@ public class OrcaMetricReportingServerInterceptorTest {
           }
         };
 
-    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor();
+    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor(
+        metricRecorder);
     String serverName = InProcessServerBuilder.generateName();
     grpcCleanupRule.register(
         InProcessServerBuilder
@@ -215,13 +218,11 @@ public class OrcaMetricReportingServerInterceptorTest {
     applicationUtilizationMetrics.put("util3", 0.5742);
     cpuUtilizationMetrics = 0.3465;
     memoryUtilizationMetrics = 0.967;
-    metricRecorder = MetricRecorder.newInstance();
     metricRecorder.setMemoryUtilizationMetric(0.764);
     metricRecorder.setQps(1.618);
     metricRecorder.putUtilizationMetric("serverUtil1", 0.7467);
     metricRecorder.putUtilizationMetric("serverUtil2", 0.2233);
 
-    metricReportingServerInterceptor.setMetricRecorder(metricRecorder);
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =
@@ -238,12 +239,10 @@ public class OrcaMetricReportingServerInterceptorTest {
   @Test
   public void responseTrailersContainMergedMetricsFromCallMetricRecorderAndMetricRecorderNoMap() {
     qpsMetrics = 5142.77;
-    metricRecorder = MetricRecorder.newInstance();
     metricRecorder.setCpuUtilizationMetric(0.314159);
     metricRecorder.setMemoryUtilizationMetric(0.764);
     metricRecorder.setQps(1.618);
 
-    metricReportingServerInterceptor.setMetricRecorder(metricRecorder);
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =
@@ -257,6 +256,7 @@ public class OrcaMetricReportingServerInterceptorTest {
   }
 
   private static final class TrailersCapturingClientInterceptor implements ClientInterceptor {
+
     final AtomicReference<Metadata> trailersCapture;
 
     TrailersCapturingClientInterceptor(AtomicReference<Metadata> trailersCapture) {
@@ -284,6 +284,7 @@ public class OrcaMetricReportingServerInterceptorTest {
 
       private final class TrailersCapturingClientCallListener
           extends SimpleForwardingClientCallListener<RespT> {
+
         TrailersCapturingClientCallListener(ClientCall.Listener<RespT> responseListener) {
           super(responseListener);
         }
