@@ -28,6 +28,11 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
+# Build Android with Java 11, this adds it to the PATH
+sudo update-java-alternatives --set java-1.11.0-openjdk-amd64
+# Unset any existing JAVA_HOME env var to stop Gradle from using it
+unset JAVA_HOME
+
 GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 
 ./gradlew \
@@ -70,6 +75,7 @@ cp "$BASE_DIR/github/grpc-java/buildscripts/set_github_status.py" "$SET_GITHUB_S
 
 
 # Collect APK size and dex count stats for the helloworld example
+sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
 
 HELLO_WORLD_OUTPUT_DIR="$BASE_DIR/github/grpc-java/examples/android/helloworld/app/build/outputs"
 
@@ -87,6 +93,7 @@ new_apk_size="$(stat --printf=%s $HELLO_WORLD_OUTPUT_DIR/apk/release/app-release
 
 
 # Get the APK size and dex count stats using the pull request base commit
+sudo update-java-alternatives --set java-1.11.0-openjdk-amd64
 
 cd $BASE_DIR/github/grpc-java
 ./gradlew clean
@@ -96,6 +103,7 @@ git checkout HEAD^
 cd examples/android/helloworld/
 ../../gradlew build
 
+sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
 read -r ignored old_dex_count < \
   <("${ANDROID_HOME}/tools/bin/apkanalyzer" dex references app/build/outputs/apk/release/app-release-unsigned.apk)
 

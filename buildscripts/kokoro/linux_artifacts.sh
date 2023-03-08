@@ -16,6 +16,12 @@ trap spongify_logs EXIT
 # grpc-android, grpc-cronet and grpc-binder require the Android SDK, so build outside of Docker and
 # use --include-build for its grpc-core dependency
 echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
+
+# The sdkmanager needs Java 8, but now we switch to 11 as the Android builds
+# require it
+sudo update-java-alternatives --set java-1.11.0-openjdk-amd64
+unset JAVA_HOME
+
 LOCAL_MVN_TEMP=$(mktemp -d)
 GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 pushd "$GRPC_JAVA_DIR/android"
