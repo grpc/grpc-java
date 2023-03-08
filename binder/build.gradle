@@ -108,6 +108,9 @@ tasks.register("javadocs", Javadoc) {
             addStringOption('Xdoclint:none', '-quiet')
         }
     }
+    // This is to enable moving to Java 11. An existing problem with javadoc
+    // produces a warning under Java 8, but with Java 11 it fails the build.
+    failOnError false
 }
 
 tasks.register("javadocJar", Jar) {
