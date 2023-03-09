@@ -16,6 +16,8 @@
 
 package io.grpc.census;
 
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -35,6 +37,7 @@ import io.grpc.census.CensusTracingModule.CallAttemptsTracerFactory;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
 import io.grpc.testing.GrpcServerRule;
+import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.MessageEvent;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanBuilder;
@@ -42,6 +45,8 @@ import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
 import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Before;
@@ -61,7 +66,7 @@ import org.mockito.junit.MockitoRule;
  * Test for {@link CensusTracingModule}.
  */
 @RunWith(JUnit4.class)
-public class CensusTracingNoMessageEventTest {
+public class CensusTracingAnnotationEventTest {
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder().build();
 
@@ -125,6 +130,9 @@ public class CensusTracingNoMessageEventTest {
 
   @Captor
   private ArgumentCaptor<MessageEvent> messageEventCaptor;
+  @Captor
+  private ArgumentCaptor<Map<String, AttributeValue>> annotationAttributesCaptor;
+  private ArgumentCaptor<String> stringCaptor;
 
   private CensusTracingModule censusTracing;
 
@@ -145,8 +153,9 @@ public class CensusTracingNoMessageEventTest {
         .thenReturn(binarySpanContext);
     when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
         .thenReturn(fakeAttemptSpanContext);
+    stringCaptor = ArgumentCaptor.forClass(String.class);
 
-    censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler, false);
+    censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler);
   }
 
   @After
@@ -155,7 +164,7 @@ public class CensusTracingNoMessageEventTest {
   }
 
   @Test
-  public void clientBasicTracingNoMessageEvents() {
+  public void clientBasicTracingUncompressedSizeAnnotation() {
     CallAttemptsTracerFactory callTracer =
         censusTracing.newClientCallTracer(null, method);
     Metadata headers = new Metadata();
@@ -168,16 +177,63 @@ public class CensusTracingNoMessageEventTest {
     clientStreamTracer.outboundMessage(1);
     clientStreamTracer.outboundMessageSent(1, -1, 27);
     clientStreamTracer.inboundMessageRead(0, 255, 90);
+    clientStreamTracer.inboundUncompressedSize(90);
+    clientStreamTracer.inboundMessage(1);
+    clientStreamTracer.inboundMessageRead(1, 128, 60);
+    clientStreamTracer.inboundUncompressedSize(60);
 
     clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
 
     InOrder inOrder = inOrder(spyClientSpan, spyAttemptSpan);
-    inOrder.verify(spyAttemptSpan, times(0)).addMessageEvent(messageEventCaptor.capture());
+    inOrder.verify(spyAttemptSpan, times(2)).addMessageEvent(messageEventCaptor.capture());
+    List<MessageEvent> events = messageEventCaptor.getAllValues();
+    assertEquals(
+        MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
+        events.get(0));
+    assertEquals(
+        MessageEvent.builder(MessageEvent.Type.SENT, 1).setUncompressedMessageSize(27).build(),
+        events.get(1));
+
+    inOrder
+        .verify(spyAttemptSpan, times(1))
+        .addAnnotation(stringCaptor.capture(), annotationAttributesCaptor.capture());
+    assertEquals("↘ 255 bytes received", stringCaptor.getValue());
+    assertThat(annotationAttributesCaptor.getValue().get("id"))
+        .isEqualTo(AttributeValue.longAttributeValue(0));
+    assertThat(annotationAttributesCaptor.getValue().get("type"))
+        .isEqualTo(AttributeValue.stringAttributeValue("compressed"));
+
+    inOrder
+        .verify(spyClientSpan, times(1))
+        .addAnnotation(stringCaptor.capture(), annotationAttributesCaptor.capture());
+    assertEquals("↘ 90 bytes received", stringCaptor.getValue());
+    assertThat(annotationAttributesCaptor.getValue().get("id"))
+        .isEqualTo(AttributeValue.longAttributeValue(0));
+    assertThat(annotationAttributesCaptor.getValue().get("type"))
+        .isEqualTo(AttributeValue.stringAttributeValue("uncompressed"));
+
+    inOrder
+        .verify(spyAttemptSpan, times(1))
+        .addAnnotation(stringCaptor.capture(), annotationAttributesCaptor.capture());
+    assertEquals("↘ 128 bytes received", stringCaptor.getValue());
+    assertThat(annotationAttributesCaptor.getValue().get("id"))
+        .isEqualTo(AttributeValue.longAttributeValue(1));
+    assertThat(annotationAttributesCaptor.getValue().get("type"))
+        .isEqualTo(AttributeValue.stringAttributeValue("compressed"));
+
+    inOrder
+        .verify(spyClientSpan, times(1))
+        .addAnnotation(stringCaptor.capture(), annotationAttributesCaptor.capture());
+    assertEquals("↘ 60 bytes received", stringCaptor.getValue());
+    assertThat(annotationAttributesCaptor.getValue().get("id"))
+        .isEqualTo(AttributeValue.longAttributeValue(1));
+    assertThat(annotationAttributesCaptor.getValue().get("type"))
+        .isEqualTo(AttributeValue.stringAttributeValue("uncompressed"));
   }
 
   @Test
-  public void serverBasicTracingNoMessageEvents() {
+  public void serverBasicTracingUncompressedSizeAnnotation() {
     ServerStreamTracer.Factory tracerFactory = censusTracing.getServerTracerFactory();
     ServerStreamTracer serverStreamTracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
@@ -191,10 +247,37 @@ public class CensusTracingNoMessageEventTest {
     serverStreamTracer.outboundMessage(1);
     serverStreamTracer.outboundMessageSent(1, -1, 27);
     serverStreamTracer.inboundMessageRead(0, 255, 90);
+    serverStreamTracer.inboundUncompressedSize(90);
 
     serverStreamTracer.streamClosed(Status.CANCELLED);
 
     InOrder inOrder = inOrder(spyServerSpan);
-    inOrder.verify(spyServerSpan, times(0)).addMessageEvent(messageEventCaptor.capture());
+    inOrder.verify(spyServerSpan, times(2)).addMessageEvent(messageEventCaptor.capture());
+    List<MessageEvent> events = messageEventCaptor.getAllValues();
+    assertEquals(
+        MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
+        events.get(0));
+    assertEquals(
+        MessageEvent.builder(MessageEvent.Type.SENT, 1).setUncompressedMessageSize(27).build(),
+        events.get(1));
+
+    inOrder
+        .verify(spyServerSpan, times(2))
+        .addAnnotation(stringCaptor.capture(), annotationAttributesCaptor.capture());
+    List<String> annotationDescriptions = stringCaptor.getAllValues();
+    List<Map<String, AttributeValue>> annotationAttributes =
+        annotationAttributesCaptor.getAllValues();
+
+    assertEquals("↘ 255 bytes received", annotationDescriptions.get(0));
+    assertThat(annotationAttributes.get(0).get("id"))
+        .isEqualTo(AttributeValue.longAttributeValue(0));
+    assertThat(annotationAttributes.get(0).get("type"))
+        .isEqualTo(AttributeValue.stringAttributeValue("compressed"));
+
+    assertEquals("↘ 90 bytes received", annotationDescriptions.get(1));
+    assertThat(annotationAttributes.get(1).get("id"))
+        .isEqualTo(AttributeValue.longAttributeValue(0));
+    assertThat(annotationAttributes.get(1).get("type"))
+        .isEqualTo(AttributeValue.stringAttributeValue("uncompressed"));
   }
 }
