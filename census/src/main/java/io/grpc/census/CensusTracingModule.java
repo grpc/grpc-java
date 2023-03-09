@@ -42,6 +42,7 @@ import io.opencensus.trace.Status;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
@@ -228,16 +229,14 @@ final class CensusTracingModule {
 
   private void recordAnnotation(
       Span span, MessageEvent.Type type, int seqNo, boolean isCompressed, long size) {
-    StringBuilder messageTypeBuilder = new StringBuilder("compressed");
-    if (!isCompressed) {
-      messageTypeBuilder.insert(0, "un");
-    }
+    String messageType = isCompressed ? "compressed" : "uncompressed";
     Map<String, AttributeValue> attributes = new HashMap<>();
     attributes.put("id", AttributeValue.longAttributeValue(seqNo));
-    attributes.put("type", AttributeValue.stringAttributeValue(messageTypeBuilder.toString()));
+    attributes.put("type", AttributeValue.stringAttributeValue(messageType));
 
-    String messageDirection = type.name().equalsIgnoreCase("Sent") ? "↗ " : "↘ ";
-    String inlineDescription = messageDirection + size + " bytes " + type.name().toLowerCase();
+    String messageDirection = type == MessageEvent.Type.SENT ? "↗ " : "↘ ";
+    String inlineDescription =
+        messageDirection + size + " bytes " + type.name().toLowerCase(Locale.US);
     span.addAnnotation(inlineDescription, attributes);
   }
 
