@@ -38,7 +38,8 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.URI;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -165,17 +166,25 @@ public class DnsNameResolver extends NameResolver {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
-    // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
-    // opaque URI, thus the authority and host of the resulted URI would be null.
-    URI nameUri = URI.create("//" + checkNotNull(name, "name"));
-    Preconditions.checkArgument(nameUri.getHost() != null, "Invalid DNS name: %s", name);
-    authority = Preconditions.checkNotNull(nameUri.getAuthority(),
-        "nameUri (%s) doesn't have an authority", nameUri);
-    host = nameUri.getHost();
-    if (nameUri.getPort() == -1) {
+
+    // We use a URL instead of a URI because of a Java 8/Android bug affecting IPv6 resources
+    // with "_" or "." characters in the scope. The "http" protocol is used as a dummy value.
+    // https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6933879
+    URL nameUrl = null;
+    try {
+      nameUrl = new URL("http://" +  name);
+    } catch (MalformedURLException e) {
+      throw new IllegalArgumentException("Malformed resource name", e);
+    }
+
+    Preconditions.checkArgument(nameUrl.getHost() != null, "Invalid DNS name: %s", name);
+    authority = Preconditions.checkNotNull(nameUrl.getAuthority(),
+        "resource (%s) doesn't have an authority", name);
+    host = nameUrl.getHost();
+    if (nameUrl.getPort() == -1) {
       port = args.getDefaultPort();
     } else {
-      port = nameUri.getPort();
+      port = nameUrl.getPort();
     }
     this.proxyDetector = checkNotNull(args.getProxyDetector(), "proxyDetector");
     this.cacheTtlNanos = getNetworkAddressCacheTtlNanos(isAndroid);
