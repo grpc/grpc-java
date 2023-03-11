@@ -100,6 +100,7 @@ import io.opencensus.trace.propagation.SpanContextParseException;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -204,6 +205,8 @@ public class CensusModulesTest {
   private ArgumentCaptor<Status> statusCaptor;
   @Captor
   private ArgumentCaptor<MessageEvent> messageEventCaptor;
+  @Captor
+  private ArgumentCaptor<Map<String, AttributeValue>> annotationAttributesCaptor;
 
   private CensusStatsModule censusStats;
   private CensusTracingModule censusTracing;
@@ -229,7 +232,7 @@ public class CensusModulesTest {
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
             true, true, true, false /* real-time */, true);
-    censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler, true);
+    censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler);
   }
 
   @After
@@ -761,7 +764,7 @@ public class CensusModulesTest {
         .putAttribute("previous-rpc-attempts", AttributeValue.longAttributeValue(0));
     inOrder.verify(spyAttemptSpan)
         .putAttribute("transparent-retry", AttributeValue.booleanAttributeValue(false));
-    inOrder.verify(spyAttemptSpan, times(3)).addMessageEvent(messageEventCaptor.capture());
+    inOrder.verify(spyAttemptSpan, times(2)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
     assertEquals(
         MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
@@ -769,12 +772,14 @@ public class CensusModulesTest {
     assertEquals(
         MessageEvent.builder(MessageEvent.Type.SENT, 1).setUncompressedMessageSize(27).build(),
         events.get(1));
-    assertEquals(
-        MessageEvent.builder(MessageEvent.Type.RECEIVED, 0)
-            .setCompressedMessageSize(255)
-            .setUncompressedMessageSize(90)
-            .build(),
-        events.get(2));
+    ArgumentCaptor<String> stringCaptor = ArgumentCaptor.forClass(String.class);
+    inOrder.verify(spyAttemptSpan, times(1))
+        .addAnnotation(stringCaptor.capture(), annotationAttributesCaptor.capture());
+    assertEquals("↘ 255 bytes received", stringCaptor.getValue());
+    assertThat(annotationAttributesCaptor.getValue().get("id"))
+        .isEqualTo(AttributeValue.longAttributeValue(0));
+    assertThat(annotationAttributesCaptor.getValue().get("type"))
+        .isEqualTo(AttributeValue.stringAttributeValue("compressed"));
     inOrder.verify(spyAttemptSpan).end(
         EndSpanOptions.builder()
             .setStatus(io.opencensus.trace.Status.OK)
@@ -1310,7 +1315,7 @@ public class CensusModulesTest {
     serverStreamTracer.streamClosed(Status.CANCELLED);
 
     InOrder inOrder = inOrder(spyServerSpan);
-    inOrder.verify(spyServerSpan, times(3)).addMessageEvent(messageEventCaptor.capture());
+    inOrder.verify(spyServerSpan, times(2)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
     assertEquals(
         MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
@@ -1318,12 +1323,16 @@ public class CensusModulesTest {
     assertEquals(
         MessageEvent.builder(MessageEvent.Type.SENT, 1).setUncompressedMessageSize(27).build(),
         events.get(1));
-    assertEquals(
-        MessageEvent.builder(MessageEvent.Type.RECEIVED, 0)
-            .setCompressedMessageSize(255)
-            .setUncompressedMessageSize(90)
-            .build(),
-        events.get(2));
+
+    ArgumentCaptor<String> stringCaptor = ArgumentCaptor.forClass(String.class);
+    inOrder.verify(spyServerSpan, times(1))
+        .addAnnotation(stringCaptor.capture(), annotationAttributesCaptor.capture());
+    assertEquals("↘ 255 bytes received", stringCaptor.getValue());
+    assertThat(annotationAttributesCaptor.getValue().get("id"))
+        .isEqualTo(AttributeValue.longAttributeValue(0));
+    assertThat(annotationAttributesCaptor.getValue().get("type"))
+        .isEqualTo(AttributeValue.stringAttributeValue("compressed"));
+
     inOrder.verify(spyServerSpan).end(
         EndSpanOptions.builder()
             .setStatus(io.opencensus.trace.Status.CANCELLED)

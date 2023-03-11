@@ -36,42 +36,21 @@ public final class InternalCensusTracingAccessor {
    * Returns a {@link ClientInterceptor} with default tracing implementation.
    */
   public static ClientInterceptor getClientInterceptor() {
-    return getClientInterceptor(true);
-  }
-
-  /**
-   * Returns the client interceptor that facilitates Census-based stats reporting.
-   *
-   * @param addMessageEvents add message events to Spans
-   * @return a {@link ClientInterceptor} with default tracing implementation.
-   */
-  public static ClientInterceptor getClientInterceptor(
-      boolean addMessageEvents) {
     CensusTracingModule censusTracing =
         new CensusTracingModule(
             Tracing.getTracer(),
-            Tracing.getPropagationComponent().getBinaryFormat(),
-            addMessageEvents);
+            Tracing.getPropagationComponent().getBinaryFormat());
     return censusTracing.getClientInterceptor();
   }
 
   /**
-   * Returns a {@link ServerStreamTracer.Factory} with default stats implementation.
+   * Returns a {@link ServerStreamTracer.Factory} with default tracing implementation.
    */
   public static ServerStreamTracer.Factory getServerStreamTracerFactory() {
-    return getServerStreamTracerFactory(true);
-  }
-
-  /**
-   * Returns a {@link ServerStreamTracer.Factory} with default stats implementation.
-   */
-  public static ServerStreamTracer.Factory getServerStreamTracerFactory(
-      boolean addMessageEvents) {
     CensusTracingModule censusTracing =
         new CensusTracingModule(
             Tracing.getTracer(),
-            Tracing.getPropagationComponent().getBinaryFormat(),
-            addMessageEvents);
+            Tracing.getPropagationComponent().getBinaryFormat());
     return censusTracing.getServerTracerFactory();
   }
 }

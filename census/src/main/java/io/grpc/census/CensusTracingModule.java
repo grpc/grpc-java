@@ -41,6 +41,9 @@ import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Status;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -92,12 +95,9 @@ final class CensusTracingModule {
   final Metadata.Key<SpanContext> tracingHeader;
   private final TracingClientInterceptor clientInterceptor = new TracingClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
-  private final boolean addMessageEvents;
 
   CensusTracingModule(
-      Tracer censusTracer,
-      final BinaryFormat censusPropagationBinaryFormat,
-      boolean addMessageEvents) {
+      Tracer censusTracer, final BinaryFormat censusPropagationBinaryFormat) {
     this.censusTracer = checkNotNull(censusTracer, "censusTracer");
     checkNotNull(censusPropagationBinaryFormat, "censusPropagationBinaryFormat");
     this.tracingHeader =
@@ -117,7 +117,6 @@ final class CensusTracingModule {
               }
             }
           });
-    this.addMessageEvents = addMessageEvents;
   }
 
   /**
@@ -218,9 +217,6 @@ final class CensusTracingModule {
   private void recordMessageEvent(
       Span span, MessageEvent.Type type,
       int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-    if (!addMessageEvents) {
-      return;
-    }
     MessageEvent.Builder eventBuilder = MessageEvent.builder(type, seqNo);
     if (optionalUncompressedSize != -1) {
       eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
@@ -229,6 +225,19 @@ final class CensusTracingModule {
       eventBuilder.setCompressedMessageSize(optionalWireSize);
     }
     span.addMessageEvent(eventBuilder.build());
+  }
+
+  private void recordAnnotation(
+      Span span, MessageEvent.Type type, int seqNo, boolean isCompressed, long size) {
+    String messageType = isCompressed ? "compressed" : "uncompressed";
+    Map<String, AttributeValue> attributes = new HashMap<>();
+    attributes.put("id", AttributeValue.longAttributeValue(seqNo));
+    attributes.put("type", AttributeValue.stringAttributeValue(messageType));
+
+    String messageDirection = type == MessageEvent.Type.SENT ? "↗ " : "↘ ";
+    String inlineDescription =
+        messageDirection + size + " bytes " + type.name().toLowerCase(Locale.US);
+    span.addAnnotation(inlineDescription, attributes);
   }
 
   @VisibleForTesting
@@ -265,7 +274,7 @@ final class CensusTracingModule {
           "previous-rpc-attempts", AttributeValue.longAttributeValue(info.getPreviousAttempts()));
       attemptSpan.putAttribute(
           "transparent-retry", AttributeValue.booleanAttributeValue(info.isTransparentRetry()));
-      return new ClientTracer(attemptSpan, tracingHeader, isSampledToLocalTracing);
+      return new ClientTracer(attemptSpan, span, tracingHeader, isSampledToLocalTracing);
     }
 
     /**
@@ -291,12 +300,16 @@ final class CensusTracingModule {
 
   private final class ClientTracer extends ClientStreamTracer {
     private final Span span;
+    private final Span parentSpan;
     final Metadata.Key<SpanContext> tracingHeader;
     final boolean isSampledToLocalTracing;
+    volatile int seqNo;
 
     ClientTracer(
-        Span span, Metadata.Key<SpanContext> tracingHeader, boolean isSampledToLocalTracing) {
+        Span span, Span parentSpan, Metadata.Key<SpanContext> tracingHeader,
+        boolean isSampledToLocalTracing) {
       this.span = checkNotNull(span, "span");
+      this.parentSpan = checkNotNull(parentSpan, "parent span");
       this.tracingHeader = tracingHeader;
       this.isSampledToLocalTracing = isSampledToLocalTracing;
     }
@@ -319,8 +332,19 @@ final class CensusTracingModule {
     @Override
     public void inboundMessageRead(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-      recordMessageEvent(
-          span, MessageEvent.Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
+      recordAnnotation(
+          span, MessageEvent.Type.RECEIVED, seqNo, true, optionalWireSize);
+    }
+
+    @Override
+    public void inboundMessage(int seqNo) {
+      this.seqNo = seqNo;
+    }
+
+    @Override
+    public void inboundUncompressedSize(long bytes) {
+      recordAnnotation(
+          parentSpan, MessageEvent.Type.RECEIVED, seqNo, false, bytes);
     }
 
     @Override
@@ -334,6 +358,7 @@ final class CensusTracingModule {
     private final Span span;
     volatile boolean isSampledToLocalTracing;
     volatile int streamClosed;
+    private int seqNo;
 
     ServerTracer(String fullMethodName, @Nullable SpanContext remoteSpan) {
       checkNotNull(fullMethodName, "fullMethodName");
@@ -396,8 +421,19 @@ final class CensusTracingModule {
     @Override
     public void inboundMessageRead(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-      recordMessageEvent(
-          span, MessageEvent.Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
+      recordAnnotation(
+          span, MessageEvent.Type.RECEIVED, seqNo, true, optionalWireSize);
+    }
+
+    @Override
+    public void inboundMessage(int seqNo) {
+      this.seqNo = seqNo;
+    }
+
+    @Override
+    public void inboundUncompressedSize(long bytes) {
+      recordAnnotation(
+          span, MessageEvent.Type.RECEIVED, seqNo, false, bytes);
     }
   }
 
