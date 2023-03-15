@@ -52,6 +52,7 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Locale;
@@ -187,11 +188,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void start(Listener<RespT> observer, Metadata headers) {
-    PerfMark.startTask("ClientCall.start", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ClientCall.start")) {
+      PerfMark.attachTag(tag);
       startInternal(observer, headers);
-    } finally {
-      PerfMark.stopTask("ClientCall.start", tag);
     }
   }
 
@@ -446,23 +445,19 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void request(int numMessages) {
-    PerfMark.startTask("ClientCall.request", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ClientCall.request")) {
+      PerfMark.attachTag(tag);
       checkState(stream != null, "Not started");
       checkArgument(numMessages >= 0, "Number requested must be non-negative");
       stream.request(numMessages);
-    } finally {
-      PerfMark.stopTask("ClientCall.request", tag);
     }
   }
 
   @Override
   public void cancel(@Nullable String message, @Nullable Throwable cause) {
-    PerfMark.startTask("ClientCall.cancel", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ClientCall.cancel")) {
+      PerfMark.attachTag(tag);
       cancelInternal(message, cause);
-    } finally {
-      PerfMark.stopTask("ClientCall.cancel", tag);
     }
   }
 
@@ -497,11 +492,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void halfClose() {
-    PerfMark.startTask("ClientCall.halfClose", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ClientCall.halfClose")) {
+      PerfMark.attachTag(tag);
       halfCloseInternal();
-    } finally {
-      PerfMark.stopTask("ClientCall.halfClose", tag);
     }
   }
 
@@ -515,11 +508,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void sendMessage(ReqT message) {
-    PerfMark.startTask("ClientCall.sendMessage", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ClientCall.sendMessage")) {
+      PerfMark.attachTag(tag);
       sendMessageInternal(message);
-    } finally {
-      PerfMark.stopTask("ClientCall.sendMessage", tag);
     }
   }
 
@@ -603,104 +594,91 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     @Override
     public void headersRead(final Metadata headers) {
-      PerfMark.startTask("ClientStreamListener.headersRead", tag);
-      final Link link = PerfMark.linkOut();
+      try (TaskCloseable ignore = PerfMark.traceTask("ClientStreamListener.headersRead")) {
+        PerfMark.attachTag(tag);
+        final Link link = PerfMark.linkOut();
+        final class HeadersRead extends ContextRunnable {
+          HeadersRead() {
+            super(context);
+          }
 
-      final class HeadersRead extends ContextRunnable {
-        HeadersRead() {
-          super(context);
-        }
+          @Override
+          public void runInContext() {
+            try (TaskCloseable ignore = PerfMark.traceTask("ClientCall$Listener.headersRead")) {
+              PerfMark.attachTag(tag);
+              PerfMark.linkIn(link);
+              runInternal();
+            }
+          }
 
-        @Override
-        public void runInContext() {
-          PerfMark.startTask("ClientCall$Listener.headersRead", tag);
-          PerfMark.linkIn(link);
-          try {
-            runInternal();
-          } finally {
-            PerfMark.stopTask("ClientCall$Listener.headersRead", tag);
+          private void runInternal() {
+            if (exceptionStatus != null) {
+              return;
+            }
+            try {
+              observer.onHeaders(headers);
+            } catch (Throwable t) {
+              exceptionThrown(
+                  Status.CANCELLED.withCause(t).withDescription("Failed to read headers"));
+            }
           }
         }
-
-        private void runInternal() {
-          if (exceptionStatus != null) {
-            return;
-          }
-          try {
-            observer.onHeaders(headers);
-          } catch (Throwable t) {
-            exceptionThrown(
-                Status.CANCELLED.withCause(t).withDescription("Failed to read headers"));
-          }
-        }
-      }
-
-      try {
         callExecutor.execute(new HeadersRead());
-      } finally {
-        PerfMark.stopTask("ClientStreamListener.headersRead", tag);
       }
     }
 
     @Override
     public void messagesAvailable(final MessageProducer producer) {
-      PerfMark.startTask("ClientStreamListener.messagesAvailable", tag);
-      final Link link = PerfMark.linkOut();
-
-      final class MessagesAvailable extends ContextRunnable {
-        MessagesAvailable() {
-          super(context);
-        }
-
-        @Override
-        public void runInContext() {
-          PerfMark.startTask("ClientCall$Listener.messagesAvailable", tag);
-          PerfMark.linkIn(link);
-          try {
-            runInternal();
-          } finally {
-            PerfMark.stopTask("ClientCall$Listener.messagesAvailable", tag);
+      try (TaskCloseable ignore = PerfMark.traceTask("ClientStreamListener.messagesAvailable")) {
+        PerfMark.attachTag(tag);
+        final Link link = PerfMark.linkOut();
+        final class MessagesAvailable extends ContextRunnable {
+          MessagesAvailable() {
+            super(context);
           }
-        }
 
-        private void runInternal() {
-          if (exceptionStatus != null) {
-            GrpcUtil.closeQuietly(producer);
-            return;
-          }
-          try {
-            InputStream message;
-            while ((message = producer.next()) != null) {
-              try {
-                observer.onMessage(method.parseResponse(message));
-              } catch (Throwable t) {
-                GrpcUtil.closeQuietly(message);
-                throw t;
-              }
-              message.close();
+          @Override
+          public void runInContext() {
+            try (TaskCloseable ignore = PerfMark.traceTask("ClientCall$Listener.messagesAvailable")) {
+              PerfMark.attachTag(tag);
+              PerfMark.linkIn(link);
+              runInternal();
             }
-          } catch (Throwable t) {
-            GrpcUtil.closeQuietly(producer);
-            exceptionThrown(
-                Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
+          }
+
+          private void runInternal() {
+            if (exceptionStatus != null) {
+              GrpcUtil.closeQuietly(producer);
+              return;
+            }
+            try {
+              InputStream message;
+              while ((message = producer.next()) != null) {
+                try {
+                  observer.onMessage(method.parseResponse(message));
+                } catch (Throwable t) {
+                  GrpcUtil.closeQuietly(message);
+                  throw t;
+                }
+                message.close();
+              }
+            } catch (Throwable t) {
+              GrpcUtil.closeQuietly(producer);
+              exceptionThrown(
+                  Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
+            }
           }
         }
-      }
 
-      try {
         callExecutor.execute(new MessagesAvailable());
-      } finally {
-        PerfMark.stopTask("ClientStreamListener.messagesAvailable", tag);
       }
     }
 
     @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
-      PerfMark.startTask("ClientStreamListener.closed", tag);
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("ClientStreamListener.closed")) {
+        PerfMark.attachTag(tag);
         closedInternal(status, rpcProgress, trailers);
-      } finally {
-        PerfMark.stopTask("ClientStreamListener.closed", tag);
       }
     }
 
@@ -730,12 +708,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
         @Override
         public void runInContext() {
-          PerfMark.startTask("ClientCall$Listener.onClose", tag);
-          PerfMark.linkIn(link);
-          try {
+          try (TaskCloseable ignore = PerfMark.traceTask("ClientCall$Listener.onClose")) {
+            PerfMark.attachTag(tag);
+            PerfMark.linkIn(link);
             runInternal();
-          } finally {
-            PerfMark.stopTask("ClientCall$Listener.onClose", tag);
           }
         }
 
@@ -770,43 +746,38 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       if (method.getType().clientSendsOneMessage()) {
         return;
       }
+      try (TaskCloseable ignore = PerfMark.traceTask("ClientStreamListener.onReady")) {
+        PerfMark.attachTag(tag);
+        final Link link = PerfMark.linkOut();
 
-      PerfMark.startTask("ClientStreamListener.onReady", tag);
-      final Link link = PerfMark.linkOut();
+        final class StreamOnReady extends ContextRunnable {
+          StreamOnReady() {
+            super(context);
+          }
 
-      final class StreamOnReady extends ContextRunnable {
-        StreamOnReady() {
-          super(context);
-        }
+          @Override
+          public void runInContext() {
+            try (TaskCloseable ignore = PerfMark.traceTask("ClientCall$Listener.onReady")) {
+              PerfMark.attachTag(tag);
+              PerfMark.linkIn(link);
+              runInternal();
+            }
+          }
 
-        @Override
-        public void runInContext() {
-          PerfMark.startTask("ClientCall$Listener.onReady", tag);
-          PerfMark.linkIn(link);
-          try {
-            runInternal();
-          } finally {
-            PerfMark.stopTask("ClientCall$Listener.onReady", tag);
+          private void runInternal() {
+            if (exceptionStatus != null) {
+              return;
+            }
+            try {
+              observer.onReady();
+            } catch (Throwable t) {
+              exceptionThrown(
+                  Status.CANCELLED.withCause(t).withDescription("Failed to call onReady."));
+            }
           }
         }
 
-        private void runInternal() {
-          if (exceptionStatus != null) {
-            return;
-          }
-          try {
-            observer.onReady();
-          } catch (Throwable t) {
-            exceptionThrown(
-                Status.CANCELLED.withCause(t).withDescription("Failed to call onReady."));
-          }
-        }
-      }
-
-      try {
         callExecutor.execute(new StreamOnReady());
-      } finally {
-        PerfMark.stopTask("ClientStreamListener.onReady", tag);
       }
     }
   }

@@ -93,6 +93,7 @@ import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import java.text.MessageFormat;
 import java.util.List;
 import java.util.concurrent.Future;
@@ -473,8 +474,8 @@ class NettyServerHandler extends AbstractNettyHandler {
           transportTracer,
           method);
 
-      PerfMark.startTask("NettyServerHandler.onHeadersRead", state.tag());
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.onHeadersRead")) {
+        PerfMark.attachTag(state.tag());
         String authority = getOrUpdateAuthority((AsciiString) headers.authority());
         NettyServerStream stream = new NettyServerStream(
             ctx.channel(),
@@ -486,8 +487,6 @@ class NettyServerHandler extends AbstractNettyHandler {
         transportListener.streamCreated(stream, method, metadata);
         state.onStreamAllocated();
         http2Stream.setProperty(streamKey, state);
-      } finally {
-        PerfMark.stopTask("NettyServerHandler.onHeadersRead", state.tag());
       }
     } catch (Exception e) {
       logger.log(Level.WARNING, "Exception in onHeadersRead()", e);
@@ -513,11 +512,9 @@ class NettyServerHandler extends AbstractNettyHandler {
     flowControlPing().onDataRead(data.readableBytes(), padding);
     try {
       NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
-      PerfMark.startTask("NettyServerHandler.onDataRead", stream.tag());
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.onDataRead")) {
+        PerfMark.attachTag(stream.tag());
         stream.inboundDataReceived(data, endOfStream);
-      } finally {
-        PerfMark.stopTask("NettyServerHandler.onDataRead", stream.tag());
       }
     } catch (Throwable e) {
       logger.log(Level.WARNING, "Exception in onDataRead()", e);
@@ -530,12 +527,10 @@ class NettyServerHandler extends AbstractNettyHandler {
     try {
       NettyServerStream.TransportState stream = serverStream(connection().stream(streamId));
       if (stream != null) {
-        PerfMark.startTask("NettyServerHandler.onRstStreamRead", stream.tag());
-        try {
+        try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.onRstStreamRead")) {
+          PerfMark.attachTag(stream.tag());
           stream.transportReportStatus(
               Status.CANCELLED.withDescription("RST_STREAM received for code " + errorCode));
-        } finally {
-          PerfMark.stopTask("NettyServerHandler.onRstStreamRead", stream.tag());
         }
       }
     } catch (Throwable e) {
@@ -564,16 +559,14 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
     logger.log(level, "Stream Error", cause);
     Tag tag = serverStream != null ? serverStream.tag() : PerfMark.createTag();
-    PerfMark.startTask("NettyServerHandler.onStreamError", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.onStreamError")) {
+      PerfMark.attachTag(tag);
       if (serverStream != null) {
         serverStream.transportReportStatus(Utils.statusFromThrowable(cause));
       }
       // TODO(ejona): Abort the stream by sending headers to help the client with debugging.
       // Delegate to the base class to send a RST_STREAM.
       super.onStreamError(ctx, outbound, cause, http2Ex);
-    } finally {
-      PerfMark.stopTask("NettyServerHandler.onStreamError", tag);
     }
   }
 
@@ -699,16 +692,14 @@ class NettyServerHandler extends AbstractNettyHandler {
    */
   private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
       ChannelPromise promise) throws Http2Exception {
-    PerfMark.startTask("NettyServerHandler.sendGrpcFrame", cmd.stream().tag());
-    PerfMark.linkIn(cmd.getLink());
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.sendGrpcFrame")) {
+      PerfMark.attachTag(cmd.stream().tag());
+      PerfMark.linkIn(cmd.getLink());
       if (cmd.endStream()) {
         closeStreamWhenDone(promise, cmd.stream().id());
       }
       // Call the base class to write the HTTP/2 DATA frame.
       encoder().writeData(ctx, cmd.stream().id(), cmd.content(), 0, cmd.endStream(), promise);
-    } finally {
-      PerfMark.stopTask("NettyServerHandler.sendGrpcFrame", cmd.stream().tag());
     }
   }
 
@@ -717,9 +708,9 @@ class NettyServerHandler extends AbstractNettyHandler {
    */
   private void sendResponseHeaders(ChannelHandlerContext ctx, SendResponseHeadersCommand cmd,
       ChannelPromise promise) throws Http2Exception {
-    PerfMark.startTask("NettyServerHandler.sendResponseHeaders", cmd.stream().tag());
-    PerfMark.linkIn(cmd.getLink());
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.sendResponseHeaders")) {
+      PerfMark.attachTag(cmd.stream().tag());
+      PerfMark.linkIn(cmd.getLink());
       // TODO(carl-mastrangelo): remove this check once https://github.com/netty/netty/issues/6296
       // is fixed.
       int streamId = cmd.stream().id();
@@ -732,22 +723,18 @@ class NettyServerHandler extends AbstractNettyHandler {
         closeStreamWhenDone(promise, streamId);
       }
       encoder().writeHeaders(ctx, streamId, cmd.headers(), 0, cmd.endOfStream(), promise);
-    } finally {
-      PerfMark.stopTask("NettyServerHandler.sendResponseHeaders", cmd.stream().tag());
     }
   }
 
   private void cancelStream(ChannelHandlerContext ctx, CancelServerStreamCommand cmd,
       ChannelPromise promise) {
-    PerfMark.startTask("NettyServerHandler.cancelStream", cmd.stream().tag());
-    PerfMark.linkIn(cmd.getLink());
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.cancelStream")) {
+      PerfMark.attachTag(cmd.stream().tag());
+      PerfMark.linkIn(cmd.getLink());
       // Notify the listener if we haven't already.
       cmd.stream().transportReportStatus(cmd.reason());
       // Terminate the stream.
       encoder().writeRstStream(ctx, cmd.stream().id(), Http2Error.CANCEL.code(), promise);
-    } finally {
-      PerfMark.stopTask("NettyServerHandler.cancelStream", cmd.stream().tag());
     }
   }
 
@@ -774,13 +761,11 @@ class NettyServerHandler extends AbstractNettyHandler {
       public boolean visit(Http2Stream stream) throws Http2Exception {
         NettyServerStream.TransportState serverStream = serverStream(stream);
         if (serverStream != null) {
-          PerfMark.startTask("NettyServerHandler.forcefulClose", serverStream.tag());
-          PerfMark.linkIn(msg.getLink());
-          try {
+          try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.forcefulClose")) {
+            PerfMark.attachTag(serverStream.tag());
+            PerfMark.linkIn(msg.getLink());
             serverStream.transportReportStatus(msg.getStatus());
             resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.newPromise());
-          } finally {
-            PerfMark.stopTask("NettyServerHandler.forcefulClose", serverStream.tag());
           }
         }
         stream.close();
