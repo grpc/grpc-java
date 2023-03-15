@@ -623,6 +623,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
             }
           }
         }
+
         callExecutor.execute(new HeadersRead());
       }
     }
@@ -639,7 +640,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
           @Override
           public void runInContext() {
-            try (TaskCloseable ignore = PerfMark.traceTask("ClientCall$Listener.messagesAvailable")) {
+            try (TaskCloseable ignore =
+                     PerfMark.traceTask("ClientCall$Listener.messagesAvailable")) {
               PerfMark.attachTag(tag);
               PerfMark.linkIn(link);
               runInternal();

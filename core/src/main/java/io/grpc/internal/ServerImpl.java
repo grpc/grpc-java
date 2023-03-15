@@ -522,7 +522,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         @Override
         public void runInContext() {
-          try (TaskCloseable ignore = PerfMark.traceTask("ServerTransportListener$MethodLookup.startCall")) {
+          try (TaskCloseable ignore =
+                   PerfMark.traceTask("ServerTransportListener$MethodLookup.startCall")) {
             PerfMark.attachTag(tag);
             PerfMark.linkIn(link);
             runInternal();
@@ -595,7 +596,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         @Override
         public void runInContext() {
-          try (TaskCloseable ignore = PerfMark.traceTask("ServerTransportListener$HandleServerCall.startCall")) {
+          try (TaskCloseable ignore =
+                   PerfMark.traceTask("ServerTransportListener$HandleServerCall.startCall")) {
             PerfMark.linkIn(link);
             PerfMark.attachTag(tag);
             runInternal();
@@ -824,7 +826,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
           @Override
           public void runInContext() {
-            try (TaskCloseable ignore = PerfMark.traceTask("ServerCallListener(app).messagesAvailable")) {
+            try (TaskCloseable ignore =
+                     PerfMark.traceTask("ServerCallListener(app).messagesAvailable")) {
               PerfMark.attachTag(tag);
               PerfMark.linkIn(link);
               getListener().messagesAvailable(producer);
@@ -851,7 +854,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
           @Override
           public void runInContext() {
-            try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.halfClosed")) {
+            try (TaskCloseable ignore = PerfMark.traceTask("ServerCallListener(app).halfClosed")) {
               PerfMark.attachTag(tag);
               PerfMark.linkIn(link);
               getListener().halfClosed();
