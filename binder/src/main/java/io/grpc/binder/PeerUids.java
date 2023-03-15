@@ -59,6 +59,10 @@ public final class PeerUids {
   /**
    * Creates an interceptor that exposes the client's identity in the {@link Context} under {@link
    * #REMOTE_PEER}.
+   *
+   * <p>The returned interceptor only works with the Android Binder transport. If installed
+   * elsewhere, all intercepted requests will fail without ever reaching application-layer
+   * processing.
    */
   public static ServerInterceptor newPeerIdentifyingServerInterceptor() {
     return new ServerInterceptor() {
@@ -70,7 +74,8 @@ public final class PeerUids {
             new PeerUid(
                 checkNotNull(
                     call.getAttributes().get(BinderTransport.REMOTE_UID),
-                    "Expected transport attribute REMOTE_UID was missing"));
+                    "Expected BinderTransport attribute REMOTE_UID was missing. Is this "
+                        + "interceptor installed on an unsupported type of Server?"));
         return Contexts.interceptCall(context.withValue(REMOTE_PEER, client), call, headers, next);
       }
     };
