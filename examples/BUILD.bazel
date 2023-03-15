@@ -155,6 +155,15 @@ java_binary(
 )
 
 java_binary(
+    name = "custom-load-balance-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.customloadbalance.CustomLoadBalanceClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
     name = "name-resolve-client",
     testonly = 1,
     main_class = "io.grpc.examples.nameresolve.NameResolveClient",
