@@ -26,8 +26,13 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * A simple client that requests a greeting from the
- * {@link io.grpc.examples.helloworld.HelloWorldServer}.
+ * This is an example of using waitForReady.  This is a feature which can be used on a stub
+ * which will cause the rpcs to wait (until optional deadline is exceeded) for the
+ * server to become available before sending the request.  This is useful for batch workflows
+ * where there is no need to fail fast.
+ *
+ * Below is a simple client that requests a greeting from the
+ * {@link io.grpc.examples.helloworld.HelloWorldServer} and defines waitForReady on the stub.
  * To test,
  *   1. run this client without a server running - client rpc should hang
  *   2. start the server - client rpc should complete
