@@ -62,15 +62,15 @@ task HelloWorldDebuggableClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-task HelloWorldDebuggableServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.debug.HelloWorldDebuggableServer'
-    applicationName = 'hello-world-debuggable-server'
+task HostnameDebuggableServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.debug.HostnameDebuggableServer'
+    applicationName = 'hostname-debuggable-server'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 applicationDistribution.into('bin') {
     from(HelloWorldDebuggableClient)
-    from(HelloWorldDebuggableServer)
+    from(HostnameDebuggableServer)
     fileMode = 0755
 }

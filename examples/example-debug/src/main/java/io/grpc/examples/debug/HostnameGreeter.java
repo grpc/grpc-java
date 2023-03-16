@@ -45,12 +45,16 @@ public final class HostnameGreeter extends GreeterGrpc.GreeterImplBase {
   public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
     callCount++;
     HelloReply reply = HelloReply.newBuilder()
-        .setMessage(String.format("Hello %s, from %s.  You are the %d requester.,
-                req.getName(), serverName, callCount)
+        .setMessage(String.format("Hello %s, from %s.  You are requester number %d.",
+                req.getName(), serverName, callCount))
         .build();
     // Add a pause so that there is time to run debug commands
-    int sleep_interval = (callCount % 10) * 100; // 0 - 1 second
-    Thread.sleep(sleep_interval);
+    try {
+      int sleep_interval = (callCount % 10) * 100; // 0 - 1 second
+      Thread.sleep(sleep_interval);
+    } catch (InterruptedException e) {
+      responseObserver.onError(e);
+    }
     // Send the response
     responseObserver.onNext(reply);
     responseObserver.onCompleted();

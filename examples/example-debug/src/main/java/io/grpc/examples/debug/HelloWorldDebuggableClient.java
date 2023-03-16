@@ -19,8 +19,16 @@ package io.grpc.examples.debug;
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.StatusRuntimeException;
+import io.grpc.examples.helloworld.GreeterGrpc;
+import io.grpc.examples.helloworld.HelloReply;
+import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.services.AdminInterface;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -66,6 +74,7 @@ public class HelloWorldDebuggableClient {
     String user = "world";
     // Access a service running on the local machine on port 50051
     String target = "localhost:50051";
+    int debugPort = 51051;
     // Allow passing in the user and target strings as command line arguments
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
@@ -79,6 +88,16 @@ public class HelloWorldDebuggableClient {
     }
     if (args.length > 1) {
       target = args[1];
+      //
+      // Parse port number from target and add 1000 to it for debug port
+      String[] split = target.split(":");
+      if (split.length == 2) {
+        try {
+          debugPort = Integer.parseInt(split[1]) + 1000;
+        } catch (NumberFormatException e) {
+            System.err.println("Invalid port number " + split[1]);
+        }
+      }
     }
 
     // Create a communication channel to the server, known as a Channel. Channels are thread-safe
@@ -89,16 +108,17 @@ public class HelloWorldDebuggableClient {
     // use TLS, use TlsChannelCredentials instead.
     ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .build();
+    Server server = null;
     try {
       // Create a service from which grpcdebug can request debug info
-      final Server server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
+      server = Grpc.newServerBuilderForPort(debugPort, InsecureServerCredentials.create())
           .addService(ProtoReflectionService.newInstance())
           .addServices(AdminInterface.getStandardServices())
           .build()
           .start();
 
       // Do the client requests
-      HelloWorldClient client = new HelloWorldDebuggableClient(channel);
+      HelloWorldDebuggableClient client = new HelloWorldDebuggableClient(channel);
       for (int i=0; i < NUM_ITERATIONS; i++) {
         client.greet(user);
       }
@@ -108,7 +128,10 @@ public class HelloWorldDebuggableClient {
       // resources the channel should be shut down when it will no longer be used. If it may be used
       // again leave it running.
       channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
-      server.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+
+      if (server != null) {
+        server.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+      }
     }
   }
 }

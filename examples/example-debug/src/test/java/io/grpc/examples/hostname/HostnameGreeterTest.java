@@ -22,7 +22,7 @@ import static org.junit.Assert.assertTrue;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.examples.helloworld.HelloReply;
-import io.grpc.examples.hostname.HostnameGreeter;
+import io.grpc.examples.debug.HostnameGreeter;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.testing.GrpcCleanupRule;
@@ -53,7 +53,8 @@ public class HostnameGreeterTest {
 
     HelloReply reply =
         blockingStub.sayHello(HelloRequest.newBuilder().setName("you").build());
-    assertEquals("Hello you, from me", reply.getMessage());
+        assertTrue(reply.getMessage(), reply.getMessage().startsWith("Hello you, from me"));
+
   }
 
   @Test
