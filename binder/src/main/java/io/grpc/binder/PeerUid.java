@@ -1,4 +1,22 @@
+/*
+ * Copyright 2023 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.binder;
+
+import io.grpc.ExperimentalApi;
 
 /**
  * Identifies a gRPC/binder client or server by Android/Linux UID
@@ -12,6 +30,7 @@ package io.grpc.binder;
  * one). If you want the uid to pass to some other Android API, consider one of the static wrapper
  * methods of {@link PeerUids} instead (or propose a new one).
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class PeerUid {
 
   private final int uid;

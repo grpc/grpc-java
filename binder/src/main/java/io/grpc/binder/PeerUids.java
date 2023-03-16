@@ -1,3 +1,19 @@
+/*
+ * Copyright 2023 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.binder;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -8,6 +24,7 @@ import android.os.UserHandle;
 import androidx.annotation.RequiresApi;
 import io.grpc.Context;
 import io.grpc.Contexts;
+import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -16,6 +33,7 @@ import io.grpc.binder.internal.BinderTransport;
 import javax.annotation.Nullable;
 
 /** Static methods that operate on {@link PeerUid}. */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class PeerUids {
   /**
    * The client's authentic identity will be stored under this key in the server {@link Context}.
