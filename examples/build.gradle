@@ -28,7 +28,6 @@ def protocVersion = protobufVersion
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
-    implementation "io.grpc:grpc-services:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
     // examples/advanced need this for JsonFormat
@@ -168,13 +167,6 @@ task nameResolveClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-task reflectionServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.reflection.ReflectionServer'
-    applicationName = 'reflection-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -191,6 +183,5 @@ applicationDistribution.into('bin') {
     from(loadBalanceClient)
     from(nameResolveServer)
     from(nameResolveClient)
-    from(reflectionServer)
     fileMode = 0755
 }
