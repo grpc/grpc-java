@@ -149,7 +149,7 @@ public class GcpLogSink implements Sink {
         .writeLogEntriesSettings().getBatchingSettings();
     // Custom batching settings
     BatchingSettings grpcLoggingVBatchingSettings = loggingDefaultBatchingSettings.toBuilder()
-        .setDelayThreshold(Duration.ofSeconds(5L)).setFlowControlSettings(
+        .setDelayThreshold(Duration.ofSeconds(1L)).setFlowControlSettings(
             loggingDefaultBatchingSettings.getFlowControlSettings().toBuilder()
                 .setMaxOutstandingRequestBytes(52428800L) //50 MiB
                 .setLimitExceededBehavior(FlowController.LimitExceededBehavior.ThrowException)
@@ -209,7 +209,6 @@ public class GcpLogSink implements Sink {
       gcpLoggingClient.close();
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while closing", e);
-      e.printStackTrace();
     }
   }
 }
