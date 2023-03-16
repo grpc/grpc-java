@@ -187,19 +187,53 @@ TCP_MD5SIG                                                                      
 RCVBUF_ALLOCATOR                                                                   io.grpc.netty.shaded.io.netty.channel.AdaptiveRecvByteBufAllocator@360691a0   
 ```
 #### Displaying the list of gRPC client channels
+Command
 ```bash
 bin/grpcdebug/grpcdebug localhost:50051 channelz channels
 ```
-
+Output
+```text
+Channel ID   Target            State     Calls(Started/Succeeded/Failed)   Created Time   
+1            localhost:50051   READY     34/34/0                                          
+3            localhost:50051   READY     16/16/0
+```
 Note:  If you have a simple server that doesn't use gRPC clients to contact other
 servers, then this table will be empty.
 
 #### Displaying details of a gRPC client channel
+Command
 ```bash
-bin/grpcdebug/grpcdebug localhost:50051 channelz channel 1
+bin/grpcdebug/grpcdebug localhost:50051 channelz channel 3
+```
+Output
+```text   
+Channel ID:        3                 
+Target:            localhost:50051   
+State:             READY             
+Calls Started:     16                
+Calls Succeeded:   16                
+Calls Failed:      0                 
+Created Time:                        
+---
+Subchannel ID   Target                                               State     Calls(Started/Succeeded/Failed)   CreatedTime   
+10              [[[localhost/127.0.0.1:50051]/{}], [[localhost/0:0   READY     16/16/0                                                                                
 ```
 
 #### Displaying details of a gRPC client subchannel
+Command
 ```bash
-bin/grpcdebug/grpcdebug localhost:50051 channelz subchannel 1
+bin/grpcdebug/grpcdebug localhost:50051 channelz subchannel 10
+```
+Output
+```text
+Subchannel ID:     10                                                                           
+Target:            [[[localhost/127.0.0.1:50051]/{}], [[localhost/0:0:0:0:0:0:0:1:50051]/{}]]   
+State:             READY                                                                        
+Calls Started:     16                                                                           
+Calls Succeeded:   16                                                                           
+Calls Failed:      0                                                                            
+Created Time:                                                                                   
+---
+Socket ID   Local->Remote                      Streams(Started/Succeeded/Failed)   Messages(Sent/Received)   
+11          127.0.0.1:48536->127.0.0.1:50051   16/16/0                             12/12                     
 ```

@@ -134,7 +134,7 @@ public class HelloWorldDebuggableClient {
             break;
         }
       }
-      System.out.println("Completed " + NUM_ITERATIONS + "requests, sleeping for 30 seconds to give some time for command line");
+      System.out.println("Completed " + NUM_ITERATIONS + " requests, sleeping for 30 seconds to give some time for command line");
       Thread.sleep(30000); // Give some time for running grpcdebug
     } finally {
       // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
