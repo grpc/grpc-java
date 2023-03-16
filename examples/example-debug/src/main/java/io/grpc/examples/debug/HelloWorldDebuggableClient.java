@@ -106,8 +106,8 @@ public class HelloWorldDebuggableClient {
     //
     // For the example we use plaintext insecure credentials to avoid needing TLS certificates. To
     // use TLS, use TlsChannelCredentials instead.
-    ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
-        .build();
+    ManagedChannel channel1 = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create()).build();
+    ManagedChannel channel2 = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create()).build();
     Server server = null;
     try {
       // Create a service from which grpcdebug can request debug info
@@ -118,16 +118,30 @@ public class HelloWorldDebuggableClient {
           .start();
 
       // Do the client requests
-      HelloWorldDebuggableClient client = new HelloWorldDebuggableClient(channel);
+      HelloWorldDebuggableClient client1 = new HelloWorldDebuggableClient(channel1);
+      HelloWorldDebuggableClient client2 = new HelloWorldDebuggableClient(channel1);
+      HelloWorldDebuggableClient client3 = new HelloWorldDebuggableClient(channel2);
       for (int i=0; i < NUM_ITERATIONS; i++) {
-        client.greet(user);
+        switch (i % 3) {
+          case 0:
+            client1.greet(user);
+            break;
+          case 1:
+            client2.greet(user);
+            break;
+          case 2:
+            client3.greet(user);
+            break;
+        }
       }
-      Thread.sleep(10000); // Give some time for running grpcdebug
+      System.out.println("Completed " + NUM_ITERATIONS + "requests, sleeping for 30 seconds to give some time for command line");
+      Thread.sleep(30000); // Give some time for running grpcdebug
     } finally {
       // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
       // resources the channel should be shut down when it will no longer be used. If it may be used
       // again leave it running.
-      channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+      channel1.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+      channel2.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
 
       if (server != null) {
         server.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
