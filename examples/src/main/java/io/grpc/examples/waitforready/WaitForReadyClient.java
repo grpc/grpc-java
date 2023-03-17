@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.waitForReady;
+package io.grpc.examples.waitforready;
 
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
+import io.grpc.examples.hellowworld.GreeterGrpc;
+import io.grpc.examples.hellowworld.HelloRequest;
+import io.grpc.examples.hellowworld.HelloReply;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -77,7 +80,7 @@ public class WaitForReadyClient {
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
         System.err.println("Usage: [name [target]]");
-        System.err.println("");
+        System.err.println();
         System.err.println("  name    The name you wish to be greeted by. Defaults to " + user);
         System.err.println("  target  The server to connect to. Defaults to " + target);
         System.exit(1);
