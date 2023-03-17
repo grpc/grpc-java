@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,9 @@ import java.util.logging.Logger;
 
 /**
  * A client that creates a channelz service and then requests a greeting 50 times.
+ * It uses 2 channels to communicate with the server one of which is shared by 2 stubs and
+ * one of which has only 1 stub.  The requests are split over the 3 channels.
+ * Once completed, there is a 30 second sleep to allow more time to run the commandline debugger.
  */
 public class HelloWorldDebuggableClient {
 
@@ -43,12 +46,8 @@ public class HelloWorldDebuggableClient {
 
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
-  /** Construct client for accessing HelloWorld server using the existing channel. */
+  /** Construct client for accessing HelloWorld server using the specified channel. */
   public HelloWorldDebuggableClient(Channel channel) {
-    // 'channel' here is a Channel, not a ManagedChannel, so it is not this code's responsibility to
-    // shut it down.
-
-    // Passing Channels to code makes code easier to test and makes it easier to reuse Channels.
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
 
@@ -88,39 +87,28 @@ public class HelloWorldDebuggableClient {
     }
     if (args.length > 1) {
       target = args[1];
-      //
-      // Parse port number from target and add 1000 to it for debug port
-      String[] split = target.split(":");
-      if (split.length == 2) {
-        try {
-          debugPort = Integer.parseInt(split[1]) + 1000;
-        } catch (NumberFormatException e) {
-            System.err.println("Invalid port number " + split[1]);
-        }
-      }
     }
 
-    // Create a communication channel to the server, known as a Channel. Channels are thread-safe
-    // and reusable. It is common to create channels at the beginning of your application and reuse
-    // them until the application shuts down.
-    //
-    // For the example we use plaintext insecure credentials to avoid needing TLS certificates. To
-    // use TLS, use TlsChannelCredentials instead.
-    ManagedChannel channel1 = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create()).build();
-    ManagedChannel channel2 = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create()).build();
+    // Create a pair of communication channels to the server. Channels are thread-safe
+    // and reusable.
+    ManagedChannel channel1 = Grpc.newChannelBuilder(target,
+        InsecureChannelCredentials.create()).build();
+    ManagedChannel channel2 = Grpc.newChannelBuilder(target,
+        InsecureChannelCredentials.create()).build();
     Server server = null;
     try {
       // Create a service from which grpcdebug can request debug info
       server = Grpc.newServerBuilderForPort(debugPort, InsecureServerCredentials.create())
-          .addService(ProtoReflectionService.newInstance())
           .addServices(AdminInterface.getStandardServices())
           .build()
           .start();
 
-      // Do the client requests
+      // Create the 3 clients
       HelloWorldDebuggableClient client1 = new HelloWorldDebuggableClient(channel1);
       HelloWorldDebuggableClient client2 = new HelloWorldDebuggableClient(channel1);
       HelloWorldDebuggableClient client3 = new HelloWorldDebuggableClient(channel2);
+
+      // Do the client requests spreadying them over the 3 clients
       for (int i=0; i < NUM_ITERATIONS; i++) {
         switch (i % 3) {
           case 0:
@@ -134,7 +122,8 @@ public class HelloWorldDebuggableClient {
             break;
         }
       }
-      System.out.println("Completed " + NUM_ITERATIONS + " requests, sleeping for 30 seconds to give some time for command line");
+      System.out.println("Completed " + NUM_ITERATIONS +
+          " requests, will now sleep for 30 seconds to give some time for command line calls");
       Thread.sleep(30000); // Give some time for running grpcdebug
     } finally {
       // ManagedChannels use resources like threads and TCP connections. To prevent leaking these

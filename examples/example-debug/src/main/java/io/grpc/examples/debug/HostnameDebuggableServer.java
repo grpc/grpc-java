@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,9 +28,7 @@ import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A server that hosts HostnameGreeter, plus infrastructure services like health and reflection.
- *
- * <p>This server is intended to be a general purpose "dummy" server.
+ * A server that hosts HostnameGreeter, plus the channelz service which grpcdebug uses.
  */
 public final class HostnameDebuggableServer {
   static int port = 50051;
@@ -39,17 +37,37 @@ public final class HostnameDebuggableServer {
   public static void main(String[] args) throws IOException, InterruptedException {
     parseArgs(args); // sets port and hostname
 
-    HealthStatusManager health = new HealthStatusManager();
     final Server server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new HostnameGreeter(hostname))
-        .addService(ProtoReflectionService.newInstance())
-        .addService(health.getHealthService())
         .addServices(AdminInterface.getStandardServices()) // the key add for enabling grpcdebug
         .build()
         .start();
 
     System.out.println("Listening on port " + port);
 
+    addShutdownHook(server); // Configures cleanup
+    server.awaitTermination();  // Block until shutdown
+  }
+
+  private static void parseArgs(String[] args) {
+    if (args.length >= 1) {
+      try {
+        port = Integer.parseInt(args[0]);
+      } catch (NumberFormatException ex) {
+        System.err.println("Usage: [port [hostname]]");
+        System.err.println("");
+        System.err.println("  port      The listen port. Defaults to " + port);
+        System.err.println("  hostname  The name clients will see in greet responses. ");
+        System.err.println("            Defaults to the machine's hostname");
+        System.exit(1);
+      }
+    }
+    if (args.length >= 2) {
+      hostname = args[1];
+    }
+  }
+
+  private static void addShutdownHook(final Server server) {
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
@@ -69,29 +87,5 @@ public final class HostnameDebuggableServer {
         }
       }
     });
-    // This would normally be tied to the service's dependencies. For example, if HostnameGreeter
-    // used a Channel to contact a required service, then when 'channel.getState() ==
-    // TRANSIENT_FAILURE' we'd want to set NOT_SERVING. But HostnameGreeter has no dependencies, so
-    // hard-coding SERVING is appropriate.
-    health.setStatus("", ServingStatus.SERVING);
-    server.awaitTermination();
-  }
-
-  private static void parseArgs(String[] args) {
-    if (args.length >= 1) {
-      try {
-        port = Integer.parseInt(args[0]);
-      } catch (NumberFormatException ex) {
-        System.err.println("Usage: [port [hostname]]");
-        System.err.println("");
-        System.err.println("  port      The listen port. Defaults to " + port);
-        System.err.println("  hostname  The name clients will see in greet responses. ");
-        System.err.println("            Defaults to the machine's hostname");
-        System.exit(1);
-      }
-    }
-    if (args.length >= 2) {
-      hostname = args[1];
-    }
   }
 }

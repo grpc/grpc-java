@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -30,7 +31,7 @@ import java.util.logging.Logger;
 public final class HostnameGreeter extends GreeterGrpc.GreeterImplBase {
   private static final Logger logger = Logger.getLogger(HostnameGreeter.class.getName());
 
-  private volatile int callCount = 0;
+  private AtomicInteger callCount = new AtomicInteger();
 
   private final String serverName;
 
@@ -43,14 +44,14 @@ public final class HostnameGreeter extends GreeterGrpc.GreeterImplBase {
 
   @Override
   public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-    callCount++;
+    int curCount = callCount.incrementAndGet();
     HelloReply reply = HelloReply.newBuilder()
         .setMessage(String.format("Hello %s, from %s.  You are requester number %d.",
-                req.getName(), serverName, callCount))
+                req.getName(), serverName, curCount))
         .build();
     // Add a pause so that there is time to run debug commands
     try {
-      int sleep_interval = (callCount % 10) * 100; // 0 - 1 second
+      int sleep_interval = (curCount % 10) * 100; // 0 - 1 second
       Thread.sleep(sleep_interval);
     } catch (InterruptedException e) {
       responseObserver.onError(e);
