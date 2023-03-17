@@ -49,11 +49,11 @@ public class ShufflingPickFirstLoadBalancer extends LoadBalancer {
    * the gRPC library is aware of this interface, it will be populated by the
    * {@link ShufflingPickFirstLoadBalancerProvider}.
    */
-  static class ShufflingPickFirstLoadBalancerConfig {
+  static class Config {
 
     final Long randomSeed;
 
-    ShufflingPickFirstLoadBalancerConfig(Long randomSeed) {
+    Config(Long randomSeed) {
       this.randomSeed = randomSeed;
     }
   }
@@ -72,8 +72,8 @@ public class ShufflingPickFirstLoadBalancer extends LoadBalancer {
       return false;
     }
 
-    ShufflingPickFirstLoadBalancerConfig config
-        = (ShufflingPickFirstLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+    Config config
+        = (Config) resolvedAddresses.getLoadBalancingPolicyConfig();
 
     Collections.shuffle(servers,
         config.randomSeed != null ? new Random(config.randomSeed) : new Random());

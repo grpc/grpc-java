@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package io.grpc.examples.customloadbalance;
 
 import com.google.gson.Gson;
 import io.grpc.Channel;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -72,9 +74,9 @@ public class CustomLoadBalanceClient {
     String target = String.format("%s:///%s", exampleScheme, exampleServiceName);
 
     logger.info("Use default first_pick load balance policy");
-    ManagedChannel channel = ManagedChannelBuilder.forTarget(target)
-        .usePlaintext()
+    ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .build();
+
     try {
       CustomLoadBalanceClient client = new CustomLoadBalanceClient(channel);
       for (int i = 0; i < 5; i++) {
