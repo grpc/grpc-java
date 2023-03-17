@@ -29,6 +29,7 @@ import static org.mockito.Mockito.verify;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
+import com.google.rpc.Code;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -94,7 +95,7 @@ public class LogHelperTest {
     assertThat(LogHelper.socketAddressToProto(socketAddress))
         .isEqualTo(Address
             .newBuilder()
-            .setType(Address.Type.TYPE_IPV4)
+            .setType(Address.Type.IPV4)
             .setAddress("127.0.0.1")
             .setIpPort(12345)
             .build());
@@ -109,7 +110,7 @@ public class LogHelperTest {
     assertThat(LogHelper.socketAddressToProto(socketAddress))
         .isEqualTo(Address
             .newBuilder()
-            .setType(Address.Type.TYPE_IPV6)
+            .setType(Address.Type.IPV6)
             .setAddress("2001:db8::2:1") // RFC 5952 section 4: ipv6 canonical form required
             .setIpPort(12345)
             .build());
@@ -454,7 +455,7 @@ public class LogHelperTest {
     builder.setPeer(LogHelper.socketAddressToProto(peer));
     builder.setPayload(
         builder.getPayload().toBuilder()
-            .setStatusCode(Status.INTERNAL.getCode().value())
+            .setStatusCode(Code.forNumber(Status.INTERNAL.getCode().value()))
             .setStatusMessage("test description")
             .build());
     GrpcLogRecord base = builder.build();

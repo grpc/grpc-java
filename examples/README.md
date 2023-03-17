@@ -117,6 +117,8 @@ before trying out the examples.
 
 </details>
 
+- [Keep Alive](src/main/java/io/grpc/examples/keepalive)
+
 ### <a name="to-build-the-examples"></a> To build the examples
 
 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**

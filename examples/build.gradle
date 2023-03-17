@@ -174,9 +174,23 @@ task deadlineServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task keepAliveServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.keepalive.KeepAliveServer'
+    applicationName = 'keep-alive-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 task deadlineClient(type: CreateStartScripts) {
     mainClass = 'io.grpc.examples.deadline.DeadlineClient'
     applicationName = 'deadline-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task keepAliveClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.keepalive.KeepAliveClient'
+    applicationName = 'keep-alive-client'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
@@ -199,5 +213,7 @@ applicationDistribution.into('bin') {
     from(nameResolveClient)
     from(deadlineServer)
     from(deadlineClient)
+    from(keepAliveServer)
+    from(keepAliveClient)
     fileMode = 0755
 }
