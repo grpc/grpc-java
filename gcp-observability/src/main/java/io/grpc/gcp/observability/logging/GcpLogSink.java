@@ -136,7 +136,6 @@ public class GcpLogSink implements Sink {
       logger.log(Level.SEVERE, "Log entry = ", grpcLogEntryString);
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
-      throw new NullPointerException("Exception : " + e);
     }
   }
 
