@@ -21,11 +21,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-import android.app.Application;
-import android.app.Service;
 import android.content.Context;
-import android.content.Intent;
-import android.os.IBinder;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.io.ByteStreams;
@@ -37,7 +33,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolverRegistry;
-import io.grpc.Server;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
@@ -91,12 +86,14 @@ public final class BinderChannelSmokeTest {
   FakeNameResolverProvider fakeNameResolverProvider;
   ManagedChannel channel;
   AtomicReference<Metadata> headersCapture = new AtomicReference<>();
+  AtomicReference<PeerUid> clientUidCapture = new AtomicReference<>();
 
   @Before
   public void setUp() throws Exception {
     ServerCallHandler<String, String> callHandler =
         ServerCalls.asyncUnaryCall(
             (req, respObserver) -> {
+              clientUidCapture.set(PeerUids.REMOTE_PEER.get());
               respObserver.onNext(req);
               respObserver.onCompleted();
             });
@@ -104,6 +101,7 @@ public final class BinderChannelSmokeTest {
     ServerCallHandler<String, String> singleLargeResultCallHandler =
         ServerCalls.asyncUnaryCall(
             (req, respObserver) -> {
+              clientUidCapture.set(PeerUids.REMOTE_PEER.get());
               respObserver.onNext(createLargeString(SLIGHTLY_MORE_THAN_ONE_BLOCK));
               respObserver.onCompleted();
             });
@@ -118,7 +116,8 @@ public final class BinderChannelSmokeTest {
                 .addMethod(singleLargeResultMethod, singleLargeResultCallHandler)
                 .addMethod(bidiMethod, bidiCallHandler)
                 .build(),
-            TestUtils.recordRequestHeadersInterceptor(headersCapture));
+            TestUtils.recordRequestHeadersInterceptor(headersCapture),
+            PeerUids.newPeerIdentifyingServerInterceptor());
 
     AndroidComponentAddress serverAddress = HostServices.allocateService(appContext);
     fakeNameResolverProvider = new FakeNameResolverProvider(SERVER_TARGET_URI, serverAddress);
@@ -160,6 +159,12 @@ public final class BinderChannelSmokeTest {
   @Test
   public void testBasicCall() throws Exception {
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
+  }
+
+  @Test
+  public void testPeerUidIsRecorded() throws Exception {
+    assertThat(doCall("Hello").get()).isEqualTo("Hello");
+    assertThat(clientUidCapture.get()).isEqualTo(PeerUid.forCurrentProcess());
   }
 
   @Test

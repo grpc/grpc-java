@@ -66,6 +66,7 @@ dependencies {
         exclude group: 'junit', module: 'junit'
     }
     testImplementation libraries.truth
+    testImplementation project(':grpc-testing')
 
     androidTestAnnotationProcessor libraries.auto.value
     androidTestImplementation project(':grpc-testing')
