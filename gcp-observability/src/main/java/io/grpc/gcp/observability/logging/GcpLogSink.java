@@ -18,12 +18,15 @@ package io.grpc.gcp.observability.logging;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.api.gax.batching.BatchingSettings;
+import com.google.api.gax.batching.FlowController;
 import com.google.cloud.MonitoredResource;
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
 import com.google.cloud.logging.LoggingOptions;
 import com.google.cloud.logging.Payload.JsonPayload;
 import com.google.cloud.logging.Severity;
+import com.google.cloud.logging.v2.stub.LoggingServiceV2StubSettings;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -41,6 +44,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.threeten.bp.Duration;
 
 /**
  * Sink for Google Cloud Logging.
@@ -102,6 +106,7 @@ public class GcpLogSink implements Sink {
     if (servicesToExclude.contains(logProto.getServiceName())) {
       return;
     }
+    LogEntry grpcLogEntry = null;
     try {
       GrpcLogRecord.EventType eventType = logProto.getType();
       // TODO(DNVindhya): make sure all (int, long) values are not displayed as double
@@ -117,11 +122,18 @@ public class GcpLogSink implements Sink {
       if (!customTags.isEmpty()) {
         grpcLogEntryBuilder.setLabels(customTags);
       }
-      LogEntry grpcLogEntry = grpcLogEntryBuilder.build();
+      grpcLogEntry = grpcLogEntryBuilder.build();
       synchronized (this) {
         logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", eventType);
         gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
       }
+    } catch (FlowController.FlowControlRuntimeException e) {
+      String grpcLogEntryString = null;
+      if (grpcLogEntry != null) {
+        grpcLogEntryString = grpcLogEntry.toStructuredJsonString();
+      }
+      logger.log(Level.SEVERE, "Limit exceeded while writing log entry to cloud logging");
+      logger.log(Level.SEVERE, "Log entry = ", grpcLogEntryString);
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
     }
@@ -132,6 +144,16 @@ public class GcpLogSink implements Sink {
     if (!Strings.isNullOrEmpty(projectId)) {
       builder.setProjectId(projectId);
     }
+    BatchingSettings loggingDefaultBatchingSettings = LoggingServiceV2StubSettings.newBuilder()
+        .writeLogEntriesSettings().getBatchingSettings();
+    // Custom batching settings
+    BatchingSettings grpcLoggingVBatchingSettings = loggingDefaultBatchingSettings.toBuilder()
+        .setDelayThreshold(Duration.ofSeconds(1L)).setFlowControlSettings(
+            loggingDefaultBatchingSettings.getFlowControlSettings().toBuilder()
+                .setMaxOutstandingRequestBytes(52428800L) //50 MiB
+                .setLimitExceededBehavior(FlowController.LimitExceededBehavior.ThrowException)
+                .build()).build();
+    builder.setBatchingSettings(grpcLoggingVBatchingSettings);
     return builder.build().getService();
   }
 
