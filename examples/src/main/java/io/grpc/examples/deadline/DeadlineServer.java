@@ -35,7 +35,6 @@ public class DeadlineServer {
 
 
   private void start() throws IOException {
-    /* The port on which the server should run */
     int port = 50051;
     SlowGreeter slowGreeter = new SlowGreeter();
     server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
