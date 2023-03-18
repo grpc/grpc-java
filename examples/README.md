@@ -19,6 +19,8 @@ before trying out the examples.
 
 - [Error handling](src/main/java/io/grpc/examples/errorhandling)
 
+- [Client and Server Sharing](src/main/java/io/grpc/examples/multiplex)
+
 - [Compression](src/main/java/io/grpc/examples/experimental)
 
 - [Flow control](src/main/java/io/grpc/examples/manualflowcontrol)

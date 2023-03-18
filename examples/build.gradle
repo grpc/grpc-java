@@ -167,6 +167,20 @@ task nameResolveClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task nameResolveClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.multiplex.MultiplexingServer'
+    applicationName = 'multiplexing-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task nameResolveClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.multiplex.SharingClient'
+    applicationName = 'sharing-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -183,5 +197,7 @@ applicationDistribution.into('bin') {
     from(loadBalanceClient)
     from(nameResolveServer)
     from(nameResolveClient)
+    from(multiplexing-server)
+    from(sharing-client)
     fileMode = 0755
 }
