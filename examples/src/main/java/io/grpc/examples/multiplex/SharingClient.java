@@ -110,11 +110,10 @@ public class SharingClient {
     };
 
     StreamObserver<EchoRequest> requestObserver =
-        echoStub.BidirectionalStreamingEcho(responseObserver);
+        echoStub.bidirectionalStreamingEcho(responseObserver);
     try {
-      // Send numPoints points randomly selected from the features list.
       for (String curValue : valuesToSend) {
-        EchoRequest req = EchoRequest.newBuilder().setName(curValue).build();
+        EchoRequest req = EchoRequest.newBuilder().setMessage(curValue).build();
         requestObserver.onNext(req);
         // Sleep for a bit before sending the next one.
         Thread.sleep(random.nextInt(1000) + 500);
@@ -128,10 +127,14 @@ public class SharingClient {
       // Cancel RPC
       requestObserver.onError(e);
       throw e;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      requestObserver.onError(e);
     }
     // Mark the end of requests
     requestObserver.onCompleted();
 
+    return finishLatch;
   }
 
   /**

@@ -40,7 +40,7 @@ public class MultiplexingServer {
   private static final Logger logger = Logger.getLogger(MultiplexingServer.class.getName());
 
   private final int port;
-  private final Server server;
+  private Server server = null;
 
   public MultiplexingServer(int port) throws IOException {
     this.port = port;
