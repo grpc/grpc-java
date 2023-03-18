@@ -125,8 +125,8 @@ final class CensusTracingModule {
    */
   @VisibleForTesting
   CallAttemptsTracerFactory newClientCallTracer(
-      @Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
-    return new CallAttemptsTracerFactory(parentSpan, method);
+      @Nullable Span clientSpan, MethodDescriptor<?, ?> method) {
+    return new CallAttemptsTracerFactory(clientSpan, method);
   }
 
   /**
@@ -249,11 +249,11 @@ final class CensusTracingModule {
     private final Span span;
     private final String fullMethodName;
 
-    CallAttemptsTracerFactory(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
+    CallAttemptsTracerFactory(@Nullable Span clientSpan, MethodDescriptor<?, ?> method) {
       checkNotNull(method, "method");
       this.isSampledToLocalTracing = method.isSampledToLocalTracing();
       this.fullMethodName = method.getFullMethodName();
-      this.span = parentSpan;
+      this.span = clientSpan;
     }
 
     @Override
