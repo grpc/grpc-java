@@ -20,6 +20,7 @@ package grpc.observabilitylog.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "google/rpc/code.proto";
 
 option java_multiple_files = true;
 option java_package = "io.grpc.observabilitylog.v1";
@@ -97,7 +98,7 @@ message Payload {
   // the RPC timeout value
   google.protobuf.Duration timeout = 2;
   // The gRPC status code
-  uint32 status_code = 3;
+  google.rpc.Code status_code = 3;
   // The gRPC status message
   string status_message = 4;
   // The value of the grpc-status-details-bin metadata key, if any.
@@ -115,9 +116,9 @@ message Payload {
 message Address {
   enum Type {
     TYPE_UNKNOWN = 0;
-    TYPE_IPV4 = 1;  // in 1.2.3.4 form
-    TYPE_IPV6 = 2;  // IPv6 canonical form (RFC5952 section 4)
-    TYPE_UNIX = 3;  // UDS string
+    IPV4 = 1;  // in 1.2.3.4 form
+    IPV6 = 2;  // IPv6 canonical form (RFC5952 section 4)
+    UNIX = 3;  // UDS string
   }
   Type type = 1;
   string address = 2;

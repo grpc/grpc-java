@@ -23,6 +23,7 @@ import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 import com.google.common.base.Joiner;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
+import com.google.rpc.Code;
 import io.grpc.Attributes;
 import io.grpc.Deadline;
 import io.grpc.Grpc;
@@ -189,7 +190,7 @@ public class LogHelper {
 
     PayloadBuilderHelper<Payload.Builder> pair =
         createMetadataProto(metadata, maxHeaderBytes);
-    pair.payloadBuilder.setStatusCode(status.getCode().value());
+    pair.payloadBuilder.setStatusCode(Code.forNumber(status.getCode().value()));
     String statusDescription = status.getDescription();
     if (statusDescription != null) {
       pair.payloadBuilder.setStatusMessage(statusDescription);
@@ -417,10 +418,10 @@ public class LogHelper {
     if (address instanceof InetSocketAddress) {
       InetAddress inetAddress = ((InetSocketAddress) address).getAddress();
       if (inetAddress instanceof Inet4Address) {
-        builder.setType(Address.Type.TYPE_IPV4)
+        builder.setType(Address.Type.IPV4)
             .setAddress(InetAddressUtil.toAddrString(inetAddress));
       } else if (inetAddress instanceof Inet6Address) {
-        builder.setType(Address.Type.TYPE_IPV6)
+        builder.setType(Address.Type.IPV6)
             .setAddress(InetAddressUtil.toAddrString(inetAddress));
       } else {
         logger.log(Level.SEVERE, "unknown type of InetSocketAddress: {}", address);
@@ -430,7 +431,7 @@ public class LogHelper {
     } else if (address.getClass().getName().equals("io.netty.channel.unix.DomainSocketAddress")) {
       // To avoid a compiled time dependency on grpc-netty, we check against the
       // runtime class name.
-      builder.setType(Address.Type.TYPE_UNIX)
+      builder.setType(Address.Type.UNIX)
           .setAddress(address.toString());
     } else {
       builder.setType(Address.Type.TYPE_UNKNOWN).setAddress(address.toString());
