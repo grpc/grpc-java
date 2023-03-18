@@ -31,10 +31,11 @@ import io.grpc.examples.echo.EchoGrpc;
 import io.grpc.examples.echo.EchoRequest;
 import io.grpc.examples.echo.EchoResponse;
 import io.grpc.examples.helloworld.HelloWorldClient;
-import io.grpc.examples.routeguide.RouteGuideUtil;
+import io.grpc.stub.StreamObserver;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -51,6 +52,8 @@ public class SharingClient {
   private final GreeterGrpc.GreeterBlockingStub greeterStub1;
   private final GreeterGrpc.GreeterBlockingStub greeterStub2;
   private final EchoGrpc.EchoStub echoStub;
+
+  private Random random = new Random();
 
   /** Construct client for accessing HelloWorld server using the existing channel. */
   public SharingClient(Channel channel) {
@@ -95,7 +98,7 @@ public class SharingClient {
 
       @Override
       public void onError(Throwable t) {
-        logger.warning("Echo Failed: {0}", Status.fromThrowable(t));
+        logger.warning("Echo Failed: {0}" + Status.fromThrowable(t));
         finishLatch.countDown();
       }
 
@@ -111,7 +114,6 @@ public class SharingClient {
     try {
       // Send numPoints points randomly selected from the features list.
       for (String curValue : valuesToSend) {
-        int index = random.nextInt(features.size());
         EchoRequest req = EchoRequest.newBuilder().setName(curValue).build();
         requestObserver.onNext(req);
         // Sleep for a bit before sending the next one.

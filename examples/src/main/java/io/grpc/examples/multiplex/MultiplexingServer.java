@@ -87,7 +87,7 @@ public class MultiplexingServer {
        * Main launches the server from the command line.
        */
       public static void main(String[] args) throws IOException, InterruptedException {
-        final MultiplexingServer server = new io.grpc.examples.multiplex.MultiplexingServer();
+        final MultiplexingServer server = new MultiplexingServer(500051);
         server.start();
         server.blockUntilShutdown();
       }
