@@ -30,8 +30,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.Internal;
+import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
+import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
+import io.opencensus.trace.SpanContext;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Collection;
@@ -41,6 +44,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * Sink for Google Cloud Logging.
@@ -63,11 +67,16 @@ public class GcpLogSink implements Sink {
    * logging APIs also uses gRPC. */
   private volatile Logging gcpLoggingClient;
   private final Collection<String> servicesToExclude;
+  private final boolean isTraceEnabled;
+
+  private final TraceLoggingHelper traceLoggingHelper;
+
 
   @VisibleForTesting
   GcpLogSink(Logging loggingClient, String projectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Collection<String> servicesToExclude) {
-    this(projectId, locationTags, customTags, servicesToExclude);
+      ObservabilityConfig config, Collection<String> servicesToExclude,
+      TraceLoggingHelper traceLoggingHelper) {
+    this(projectId, locationTags, config, servicesToExclude, traceLoggingHelper);
     this.gcpLoggingClient = loggingClient;
   }
 
@@ -78,11 +87,14 @@ public class GcpLogSink implements Sink {
    * @param servicesToExclude service names for which log entries should not be generated
    */
   public GcpLogSink(String projectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Collection<String> servicesToExclude) {
+      ObservabilityConfig config, Collection<String> servicesToExclude,
+      TraceLoggingHelper traceLoggingHelper) {
     this.projectId = projectId;
-    this.customTags = getCustomTags(customTags, locationTags, projectId);
+    this.customTags = getCustomTags(config.getCustomTags(), locationTags, projectId);
     this.kubernetesResource = getResource(locationTags);
     this.servicesToExclude = checkNotNull(servicesToExclude, "servicesToExclude");
+    this.isTraceEnabled = config.isEnableCloudTracing();
+    this.traceLoggingHelper = traceLoggingHelper;
   }
 
   /**
@@ -91,7 +103,7 @@ public class GcpLogSink implements Sink {
    * @param logProto gRPC logging proto containing the message to be logged
    */
   @Override
-  public void write(GrpcLogRecord logProto) {
+  public void write(GrpcLogRecord logProto, @Nullable SpanContext spanContext) {
     if (gcpLoggingClient == null) {
       synchronized (this) {
         if (gcpLoggingClient == null) {
@@ -117,6 +129,7 @@ public class GcpLogSink implements Sink {
       if (!customTags.isEmpty()) {
         grpcLogEntryBuilder.setLabels(customTags);
       }
+      addTraceData(grpcLogEntryBuilder, spanContext, logProto.getLogger() == EventLogger.CLIENT);
       LogEntry grpcLogEntry = grpcLogEntryBuilder.build();
       synchronized (this) {
         logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", eventType);
@@ -126,6 +139,14 @@ public class GcpLogSink implements Sink {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
     }
   }
+
+  void addTraceData(LogEntry.Builder builder, SpanContext spanContext, boolean isClient) {
+    if (!isTraceEnabled) {
+      return;
+    }
+    traceLoggingHelper.enhanceLogEntry(builder, isClient ? spanContext : SpanContext.INVALID);
+  }
+
 
   Logging createLoggingClient() {
     LoggingOptions.Builder builder = LoggingOptions.newBuilder();

@@ -166,7 +166,7 @@ public class CensusTracingAnnotationEventTest {
   @Test
   public void clientBasicTracingUncompressedSizeAnnotation() {
     CallAttemptsTracerFactory callTracer =
-        censusTracing.newClientCallTracer(null, method);
+        censusTracing.newClientCallTracer(spyClientSpan, method);
     Metadata headers = new Metadata();
     ClientStreamTracer clientStreamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
     clientStreamTracer.streamCreated(Attributes.EMPTY, headers);

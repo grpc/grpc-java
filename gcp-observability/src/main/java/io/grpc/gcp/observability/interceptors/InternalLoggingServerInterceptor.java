@@ -113,7 +113,8 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           maxHeaderBytes,
           EventLogger.SERVER,
           callId,
-          peerAddress);
+          peerAddress,
+          null);
     } catch (Exception e) {
       // Catching generic exceptions instead of specific ones for all the events.
       // This way we can catch both expected and unexpected exceptions instead of re-throwing
@@ -139,6 +140,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   maxHeaderBytes,
                   EventLogger.SERVER,
                   callId,
+                  null,
                   null);
             } catch (Exception e) {
               logger.log(Level.SEVERE, "Unable to log response header", e);
@@ -160,7 +162,8 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   message,
                   maxMessageBytes,
                   EventLogger.SERVER,
-                  callId);
+                  callId,
+                  null);
             } catch (Exception e) {
               logger.log(Level.SEVERE, "Unable to log response message", e);
             }
@@ -181,6 +184,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   maxHeaderBytes,
                   EventLogger.SERVER,
                   callId,
+                  null,
                   null);
             } catch (Exception e) {
               logger.log(Level.SEVERE, "Unable to log trailer", e);
@@ -206,7 +210,8 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
               message,
               maxMessageBytes,
               EventLogger.SERVER,
-              callId);
+              callId,
+              null);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log request message", e);
         }
@@ -223,7 +228,8 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
               methodName,
               authority,
               EventLogger.SERVER,
-              callId);
+              callId,
+              null);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log half close", e);
         }
@@ -240,7 +246,8 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
               methodName,
               authority,
               EventLogger.SERVER,
-              callId);
+              callId,
+              null);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log cancel", e);
         }

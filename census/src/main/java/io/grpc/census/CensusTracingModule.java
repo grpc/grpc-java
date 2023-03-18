@@ -17,6 +17,7 @@
 package io.grpc.census;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.census.internal.ObservabilityCensusConstants.CLIENT_TRACE_SPAN_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
@@ -252,13 +253,7 @@ final class CensusTracingModule {
       checkNotNull(method, "method");
       this.isSampledToLocalTracing = method.isSampledToLocalTracing();
       this.fullMethodName = method.getFullMethodName();
-      this.span =
-          censusTracer
-              .spanBuilderWithExplicitParent(
-                  generateTraceSpanName(false, fullMethodName),
-                  parentSpan)
-              .setRecordEvents(true)
-              .startSpan();
+      this.span = parentSpan;
     }
 
     @Override
@@ -461,13 +456,20 @@ final class CensusTracingModule {
       // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
       // as Tracer.getCurrentSpan() except when no value available when the return value is null
       // for the direct access and BlankSpan when Tracer API is used.
-      final CallAttemptsTracerFactory tracerFactory =
-          newClientCallTracer(
-              io.opencensus.trace.unsafe.ContextUtils.getValue(Context.current()), method);
+      Span parentSpan = io.opencensus.trace.unsafe.ContextUtils.getValue(Context.current());
+      Span clientSpan = censusTracer
+          .spanBuilderWithExplicitParent(
+              generateTraceSpanName(false, method.getFullMethodName()),
+              parentSpan)
+          .setRecordEvents(true)
+          .startSpan();
+
+      final CallAttemptsTracerFactory tracerFactory = newClientCallTracer(clientSpan, method);
       ClientCall<ReqT, RespT> call =
           next.newCall(
               method,
-              callOptions.withStreamTracerFactory(tracerFactory));
+              callOptions.withStreamTracerFactory(tracerFactory)
+                  .withOption(CLIENT_TRACE_SPAN_CONTEXT_KEY, clientSpan.getContext()));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {
