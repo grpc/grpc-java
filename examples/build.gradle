@@ -167,10 +167,15 @@ task nameResolveClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-<<<<<<< HEAD
+//<<<<<<< HEAD
 task multiplexingServer(type: CreateStartScripts) {
     mainClass = 'io.grpc.examples.multiplex.MultiplexingServer'
     applicationName = 'multiplexing-server'
+//=======
+task deadlineServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.deadline.DeadlineServer'
+    applicationName = 'deadline-server'
+//>>>>>>> dc313f2e4 (examples: deadline example (#9958))
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
@@ -182,12 +187,22 @@ task keepAliveServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+//<<<<<<< HEAD
 task sharingClient(type: CreateStartScripts) {
     mainClass = 'io.grpc.examples.multiplex.SharingClient'
     applicationName = 'sharing-client'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
+//=======
+task deadlineClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.deadline.DeadlineClient'
+    applicationName = 'deadline-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+//>>>>>>> dc313f2e4 (examples: deadline example (#9958))
 task keepAliveClient(type: CreateStartScripts) {
     mainClass = 'io.grpc.examples.keepalive.KeepAliveClient'
     applicationName = 'keep-alive-client'
@@ -211,8 +226,13 @@ applicationDistribution.into('bin') {
     from(loadBalanceClient)
     from(nameResolveServer)
     from(nameResolveClient)
+//<<<<<<< HEAD
     from(multiplexingServer)
     from(sharingClient)
+//=======
+    from(deadlineServer)
+    from(deadlineClient)
+//>>>>>>> dc313f2e4 (examples: deadline example (#9958))
     from(keepAliveServer)
     from(keepAliveClient)
     fileMode = 0755

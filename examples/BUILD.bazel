@@ -190,3 +190,20 @@ java_binary(
     ],
 )
 
+java_binary(
+    name = "deadline-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.deadline.DeadlineServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "deadline-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.deadline.DeadlineClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
