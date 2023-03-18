@@ -23,10 +23,8 @@ import io.grpc.examples.echo.EchoGrpc;
 import io.grpc.examples.echo.EchoRequest;
 import io.grpc.examples.echo.EchoResponse;
 import io.grpc.stub.StreamObserver;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -37,15 +35,15 @@ import java.util.stream.Collectors;
 public class EchoServer extends EchoGrpc.EchoImplBase{
   private static final Logger logger = Logger.getLogger(EchoServer.class.getName());
 
-   @Override
-    public void UnaryEcho(EchoRequest request,
+  @Override
+    public void unaryEcho(EchoRequest request,
         StreamObserver<EchoResponse> responseObserver) {
       EchoResponse response = EchoResponse.newBuilder().setMessage(request.getMessage()).build();
       responseObserver.onNext(response);
     }
 
     @Override
-    public void ServerStreamingEcho(EchoRequest request,
+    public void serverStreamingEcho(EchoRequest request,
         StreamObserver<EchoResponse> responseObserver) {
       EchoResponse response = EchoResponse.newBuilder().setMessage(request.getMessage()).build();
       responseObserver.onNext(response);
@@ -53,7 +51,7 @@ public class EchoServer extends EchoGrpc.EchoImplBase{
     }
 
     @Override
-    public StreamObserver<EchoRequest> ClientStreamingEcho(
+    public StreamObserver<EchoRequest> clientStreamingEcho(
         final StreamObserver<EchoResponse> responseObserver) {
       return new StreamObserver<EchoRequest>() {
         List<String> requestList = new ArrayList<>();
@@ -79,7 +77,7 @@ public class EchoServer extends EchoGrpc.EchoImplBase{
     }
 
     @Override
-    public StreamObserver<EchoRequest> BidirectionalStreamingEcho(
+    public StreamObserver<EchoRequest> bidirectionalStreamingEcho(
         final StreamObserver<EchoResponse> responseObserver) {
       return new StreamObserver<EchoRequest>() {
         @Override
