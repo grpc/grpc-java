@@ -32,7 +32,6 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6012")
 @ThreadSafe
 public final class CallMetricRecorder {
-
   private static final CallMetricRecorder NOOP = new CallMetricRecorder().disable();
 
   static final Context.Key<CallMetricRecorder> CONTEXT_KEY =
@@ -67,7 +66,7 @@ public final class CallMetricRecorder {
 
   /**
    * Records a call metric measurement for utilization in the range [0, 1]. Values outside the valid
-   * range are rejected. If RPC has already finished, this method is no-op.
+   * range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -88,15 +87,15 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for request cost. If RPC has already finished, this method is
-   * no-op.
+   * Records a call metric measurement for request cost.
+   * If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
    * @return this recorder object
    * @since 1.47.0
-   * @deprecated use {@link #recordRequestCostMetric} instead. This method will be removed in the
-   *     future.
+   * @deprecated use {@link #recordRequestCostMetric} instead.
+   *     This method will be removed in the future.
    */
   @Deprecated
   @InlineMe(replacement = "this.recordRequestCostMetric(name, value)")
@@ -105,8 +104,8 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for request cost. If RPC has already finished, this method is
-   * no-op.
+   * Records a call metric measurement for request cost.
+   * If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -128,7 +127,7 @@ public final class CallMetricRecorder {
 
   /**
    * Records a call metric measurement for CPU utilization in the range [0, 1]. Values outside the
-   * valid range are rejected. If RPC has already finished, this method is no-op.
+   * valid range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -145,7 +144,7 @@ public final class CallMetricRecorder {
 
   /**
    * Records a call metric measurement for memory utilization in the range [0, 1]. Values outside
-   * the valid range are rejected. If RPC has already finished, this method is no-op.
+   * the valid range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -162,7 +161,7 @@ public final class CallMetricRecorder {
 
   /**
    * Records a call metric measurement for qps in the range [0, inf). Values outside the valid range
-   * are rejected. If RPC has already finished, this method is no-op.
+   * are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -176,6 +175,7 @@ public final class CallMetricRecorder {
     qps = value;
     return this;
   }
+
 
   /**
    * Returns all request cost metric values. No more metric values will be recorded after this

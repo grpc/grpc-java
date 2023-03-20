@@ -22,12 +22,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Implements the service/APIs for Out-of-Band metrics reporting, only for utilization metrics. A
- * user should use the public set-APIs to update the server machine's utilization metrics data.
+ * Implements the service/APIs for Out-of-Band metrics reporting, only for utilization metrics.
+ * A user should use the public set-APIs to update the server machine's utilization metrics data.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9006")
 public final class MetricRecorder {
-
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
   private volatile double cpuUtilization;
   private volatile double memoryUtilization;
@@ -37,12 +36,11 @@ public final class MetricRecorder {
     return new MetricRecorder();
   }
 
-  private MetricRecorder() {
-  }
+  private MetricRecorder() {}
 
   /**
    * Update the metrics value in the range [0, 1] corresponding to the specified key. Values outside
-   * the valid range are rejected.
+   * the valid range are ignored.
    */
   public void putUtilizationMetric(String key, double value) {
     if (!MetricRecorderHelper.isUtilizationValid(value)) {
@@ -67,7 +65,7 @@ public final class MetricRecorder {
 
   /**
    * Update the CPU utilization metrics data in the range [0, 1]. Values outside the valid range are
-   * rejected.
+   * ignored.
    */
   public void setCpuUtilizationMetric(double value) {
     if (!MetricRecorderHelper.isUtilizationValid(value)) {
@@ -85,7 +83,7 @@ public final class MetricRecorder {
 
   /**
    * Update the memory utilization metrics data in the range [0, 1]. Values outside the valid range
-   * are rejected.
+   * are ignored.
    */
   public void setMemoryUtilizationMetric(double value) {
     if (!MetricRecorderHelper.isUtilizationValid(value)) {
@@ -102,8 +100,7 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the QPS metrics data in the range [0, inf). Values outside the valid range are
-   * rejected.
+   * Update the QPS metrics data in the range [0, inf). Values outside the valid range are ignored.
    */
   public void setQps(double value) {
     if (!MetricRecorderHelper.isQpsValid(value)) {
@@ -120,7 +117,7 @@ public final class MetricRecorder {
   }
 
   MetricReport getMetricReport() {
-    return new MetricReport(cpuUtilization, memoryUtilization, qps, Collections.emptyMap(),
-        Collections.unmodifiableMap(metricsData));
+    return new MetricReport(cpuUtilization, memoryUtilization, qps,
+        Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
   }
 }

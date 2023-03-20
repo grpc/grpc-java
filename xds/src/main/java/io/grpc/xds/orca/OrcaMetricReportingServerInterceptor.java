@@ -38,15 +38,13 @@ import io.grpc.services.MetricReport;
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
  * handling under a {@link Context} that records custom per-request metrics provided by server
- * applications and sends to client side along with the response in the format of Open Request Cost
- * Aggregation (ORCA).
+ * applications and sends to client side along with the response in the format of Open Request
+ * Cost Aggregation (ORCA).
  *
  * @since 1.23.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9127")
 public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
-
-  private static volatile OrcaMetricReportingServerInterceptor instance;
 
   @VisibleForTesting
   static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
@@ -59,19 +57,10 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   @VisibleForTesting
   OrcaMetricReportingServerInterceptor(MetricRecorder metricRecorder) {
     this.metricRecorder = metricRecorder;
-    OrcaMetricReportingServerInterceptor.instance = this;
   }
 
-  public static OrcaMetricReportingServerInterceptor getOrCreateInstance(
-      MetricRecorder metricRecorder) {
-    if (instance == null) {
-      synchronized (OrcaMetricReportingServerInterceptor.class) {
-        if (instance == null) {
-          instance = new OrcaMetricReportingServerInterceptor(metricRecorder);
-        }
-      }
-    }
-    return instance;
+  public static OrcaMetricReportingServerInterceptor create(MetricRecorder metricRecorder) {
+    return new OrcaMetricReportingServerInterceptor(metricRecorder);
   }
 
   @Override
@@ -88,12 +77,12 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
-            OrcaLoadReport report = fromInternalReport(
+            OrcaLoadReport.Builder reportBuilder = metricRecorder != null ? fromInternalReport(
+                InternalMetricRecorder.getMetricReport(metricRecorder)) :
+                OrcaLoadReport.newBuilder();
+            mergeMetrics(reportBuilder,
                 InternalCallMetricRecorder.finalizeAndDump2(finalCallMetricRecorder));
-            if (metricRecorder != null) {
-              report = mergeMetrics(report,
-                  fromInternalReport(InternalMetricRecorder.getMetricReport(metricRecorder)));
-            }
+            OrcaLoadReport report = reportBuilder.build();
             if (!report.equals(OrcaLoadReport.getDefaultInstance())) {
               trailers.put(ORCA_ENDPOINT_LOAD_METRICS_KEY, report);
             }
@@ -107,43 +96,39 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         next);
   }
 
-  private static OrcaLoadReport fromInternalReport(MetricReport internalReport) {
+  private static OrcaLoadReport.Builder fromInternalReport(MetricReport internalReport) {
     return OrcaLoadReport.newBuilder()
         .setCpuUtilization(internalReport.getCpuUtilization())
         .setMemUtilization(internalReport.getMemoryUtilization())
         .setRpsFractional(internalReport.getQps())
         .putAllUtilization(internalReport.getUtilizationMetrics())
-        .putAllRequestCost(internalReport.getRequestCostMetrics())
-        .build();
+        .putAllRequestCost(internalReport.getRequestCostMetrics());
   }
 
   /**
-   * Return a merged {@link OrcaLoadReport} where the metrics from {@link CallMetricRecorder} takes
-   * a higher precedence compared to {@link MetricRecorder}.
+   * Modify the given {@link OrcaLoadReport.Builder} containing metrics for {@link MetricRecorder}
+   * such that metrics from the given {@link MetricReport} for {@link CallMetricRecorder} takes a
+   * higher precedence.
    */
-  private static OrcaLoadReport mergeMetrics(OrcaLoadReport callMetricRecorderReport,
-      OrcaLoadReport metricRecorderReport) {
-    // Merge metrics from the MetricRecorder first since metrics from the CallMetricRecorder takes a
-    // higher precedence.
-    OrcaLoadReport.Builder builder = metricRecorderReport.toBuilder()
-        .clearUtilization()
-        .clearRequestCost()
-        .putAllUtilization(callMetricRecorderReport.getUtilizationMap())
-        .putAllRequestCost(callMetricRecorderReport.getRequestCostMap());
-    // Overwrite only if the values from CallMetricRecorder are set
+  private static void mergeMetrics(
+      OrcaLoadReport.Builder metricRecorderReportBuilder,
+      MetricReport callMetricRecorderReport
+  ) {
+    metricRecorderReportBuilder.putAllUtilization(callMetricRecorderReport.getUtilizationMetrics())
+        .putAllRequestCost(callMetricRecorderReport.getRequestCostMetrics());
+    // Overwrite only if the values from the given MetricReport for CallMetricRecorder are set
     double cpu = callMetricRecorderReport.getCpuUtilization();
     if (isReportValueSet(cpu)) {
-      builder.setCpuUtilization(cpu);
+      metricRecorderReportBuilder.setCpuUtilization(cpu);
     }
-    double mem = callMetricRecorderReport.getMemUtilization();
+    double mem = callMetricRecorderReport.getMemoryUtilization();
     if (isReportValueSet(mem)) {
-      builder.setMemUtilization(mem);
+      metricRecorderReportBuilder.setMemUtilization(mem);
     }
-    double rps = callMetricRecorderReport.getRpsFractional();
+    double rps = callMetricRecorderReport.getQps();
     if (isReportValueSet(rps)) {
-      builder.setRpsFractional(rps);
+      metricRecorderReportBuilder.setRpsFractional(rps);
     }
-    return builder.build();
   }
 
   private static boolean isReportValueSet(double value) {

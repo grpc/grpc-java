@@ -75,7 +75,6 @@ public class OrcaMetricReportingServerInterceptorTest {
   private double cpuUtilizationMetrics = 0;
   private double memoryUtilizationMetrics = 0;
   private double qpsMetrics = 0;
-
   private MetricRecorder metricRecorder;
 
   private final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
@@ -136,8 +135,7 @@ public class OrcaMetricReportingServerInterceptorTest {
             return new ServerStreamTracer() {
               @Override
               public Context filterContext(Context context) {
-                return context.withValue(InternalCallMetricRecorder.CONTEXT_KEY,
-                    callMetricRecorder);
+                return context.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
               }
             };
           }
@@ -196,12 +194,10 @@ public class OrcaMetricReportingServerInterceptorTest {
     cpuUtilizationMetrics = 0.3465;
     memoryUtilizationMetrics = 0.764;
     qpsMetrics = 3.1415926535;
-
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =
         receivedTrailers.get(OrcaMetricReportingServerInterceptor.ORCA_ENDPOINT_LOAD_METRICS_KEY);
-
     assertThat(report.getUtilizationMap())
         .containsExactly("util1", 0.1082, "util2", 0.4936, "util3", 0.5342);
     assertThat(report.getRequestCostMap())
@@ -222,6 +218,8 @@ public class OrcaMetricReportingServerInterceptorTest {
     metricRecorder.setQps(1.618);
     metricRecorder.putUtilizationMetric("serverUtil1", 0.7467);
     metricRecorder.putUtilizationMetric("serverUtil2", 0.2233);
+    metricRecorder.putUtilizationMetric("util1", 0.01);
+    metricRecorder.putUtilizationMetric("util3", 0.99);
 
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
@@ -229,7 +227,8 @@ public class OrcaMetricReportingServerInterceptorTest {
         receivedTrailers.get(OrcaMetricReportingServerInterceptor.ORCA_ENDPOINT_LOAD_METRICS_KEY);
 
     assertThat(report.getUtilizationMap())
-        .containsExactly("util1", 0.1482, "util2", 0.4036, "util3", 0.5742);
+        .containsExactly("util1", 0.1482, "util2", 0.4036, "util3", 0.5742, "serverUtil1", 0.7467,
+            "serverUtil2", 0.2233);
     assertThat(report.getRequestCostMap()).isEmpty();
     assertThat(report.getCpuUtilization()).isEqualTo(0.3465);
     assertThat(report.getMemUtilization()).isEqualTo(0.967);
@@ -256,7 +255,6 @@ public class OrcaMetricReportingServerInterceptorTest {
   }
 
   private static final class TrailersCapturingClientInterceptor implements ClientInterceptor {
-
     final AtomicReference<Metadata> trailersCapture;
 
     TrailersCapturingClientInterceptor(AtomicReference<Metadata> trailersCapture) {
@@ -284,7 +282,6 @@ public class OrcaMetricReportingServerInterceptorTest {
 
       private final class TrailersCapturingClientCallListener
           extends SimpleForwardingClientCallListener<RespT> {
-
         TrailersCapturingClientCallListener(ClientCall.Listener<RespT> responseListener) {
           super(responseListener);
         }
