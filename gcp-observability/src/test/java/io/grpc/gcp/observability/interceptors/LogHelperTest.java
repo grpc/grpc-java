@@ -43,6 +43,11 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.observabilitylog.v1.Payload;
+import io.opencensus.trace.SpanContext;
+import io.opencensus.trace.SpanId;
+import io.opencensus.trace.TraceId;
+import io.opencensus.trace.TraceOptions;
+import io.opencensus.trace.Tracestate;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -75,10 +80,21 @@ public class LogHelperTest {
       Metadata.Key.of("c", Metadata.ASCII_STRING_MARSHALLER);
   private static final int HEADER_LIMIT = 10;
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
+  private static final SpanContext CLIENT_SPAN_CONTEXT = SpanContext.create(
+      TraceId.fromLowerBase16("4c6af40c499951eb7de2777ba1e4fefa"),
+      SpanId.fromLowerBase16("de52e84d13dd232d"),
+      TraceOptions.builder().setIsSampled(true).build(),
+      Tracestate.builder().build());
+  private static final SpanContext SERVER_SPAN_CONTEXT = SpanContext.create(
+      TraceId.fromLowerBase16("549a8a64db2d0c757fdf6bb1bfe84e2c"),
+      SpanId.fromLowerBase16("a5b7704614fe903d"),
+      TraceOptions.builder().setIsSampled(true).build(),
+      Tracestate.builder().build());
 
   private final Metadata nonEmptyMetadata = new Metadata();
   private final Sink sink = mock(GcpLogSink.class);
   private final LogHelper logHelper = new LogHelper(sink);
+
 
   @Before
   public void setUp() {
@@ -288,8 +304,9 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.CLIENT,
           callId,
-          null);
-      verify(sink).write(base);
+          null,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(base, CLIENT_SPAN_CONTEXT);
     }
 
     // logged on server
@@ -304,12 +321,14 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.SERVER,
           callId,
-          peerAddress);
+          peerAddress,
+          SERVER_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .setPeer(LogHelper.socketAddressToProto(peerAddress))
               .setLogger(EventLogger.SERVER)
-              .build());
+              .build(),
+          SERVER_SPAN_CONTEXT);
     }
 
     // timeout is null
@@ -324,11 +343,13 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.CLIENT,
           callId,
-          null);
+          null,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .setPayload(base.getPayload().toBuilder().clearTimeout().build())
-              .build());
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
 
     // peerAddress is not null (error on client)
@@ -343,7 +364,8 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.CLIENT,
           callId,
-          peerAddress);
+          peerAddress,
+          CLIENT_SPAN_CONTEXT);
       fail();
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().contains("peerAddress can only be specified by server");
@@ -386,8 +408,9 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.CLIENT,
           callId,
-          peerAddress);
-      verify(sink).write(base);
+          peerAddress,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(base, CLIENT_SPAN_CONTEXT);
     }
 
     // logged on server
@@ -401,12 +424,14 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.SERVER,
           callId,
-          null);
+          null,
+          SERVER_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .setLogger(EventLogger.SERVER)
               .clearPeer()
-              .build());
+              .build(),
+          SERVER_SPAN_CONTEXT);
     }
 
     // peerAddress is not null (error on server)
@@ -420,7 +445,8 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.SERVER,
           callId,
-          peerAddress);
+          peerAddress,
+          SERVER_SPAN_CONTEXT);
 
       fail();
     } catch (IllegalArgumentException expected) {
@@ -472,8 +498,9 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.CLIENT,
           callId,
-          peer);
-      verify(sink).write(base);
+          peer,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(base, CLIENT_SPAN_CONTEXT);
     }
 
     // logged on server
@@ -488,12 +515,14 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.SERVER,
           callId,
-          null);
+          null,
+          SERVER_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .clearPeer()
               .setLogger(EventLogger.SERVER)
-              .build());
+              .build(),
+          SERVER_SPAN_CONTEXT);
     }
 
     // peer address is null
@@ -508,11 +537,13 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.CLIENT,
           callId,
-          null);
+          null,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .clearPeer()
-              .build());
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
 
     // status description is null
@@ -527,11 +558,13 @@ public class LogHelperTest {
           HEADER_LIMIT,
           EventLogger.CLIENT,
           callId,
-          peer);
+          peer,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .setPayload(base.getPayload().toBuilder().clearStatusMessage().build())
-              .build());
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
   }
 
@@ -591,8 +624,9 @@ public class LogHelperTest {
           message,
           MESSAGE_LIMIT,
           EventLogger.CLIENT,
-          callId);
-      verify(sink).write(base);
+          callId,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(base, CLIENT_SPAN_CONTEXT);
     }
     // response message, logged on client
     {
@@ -605,11 +639,13 @@ public class LogHelperTest {
           message,
           MESSAGE_LIMIT,
           EventLogger.CLIENT,
-          callId);
+          callId,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .setType(EventType.SERVER_MESSAGE)
-              .build());
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
     // request message, logged on server
     {
@@ -622,11 +658,13 @@ public class LogHelperTest {
           message,
           MESSAGE_LIMIT,
           EventLogger.SERVER,
-          callId);
+          callId,
+          SERVER_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .setLogger(EventLogger.SERVER)
-              .build());
+              .build(),
+          SERVER_SPAN_CONTEXT);
     }
     // response message, logged on server
     {
@@ -639,12 +677,14 @@ public class LogHelperTest {
           message,
           MESSAGE_LIMIT,
           EventLogger.SERVER,
-          callId);
+          callId,
+          SpanContext.INVALID);
       verify(sink).write(
           base.toBuilder()
               .setType(EventType.SERVER_MESSAGE)
               .setLogger(EventLogger.SERVER)
-              .build());
+              .build(),
+          SpanContext.INVALID);
     }
     // message is not of type : com.google.protobuf.Message or byte[]
     {
@@ -657,12 +697,14 @@ public class LogHelperTest {
           "message",
           MESSAGE_LIMIT,
           EventLogger.CLIENT,
-          callId);
+          callId,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
               .clearPayload()
               .clearPayloadTruncated()
-              .build());
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
   }
 

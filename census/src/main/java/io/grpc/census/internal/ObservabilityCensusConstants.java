@@ -26,11 +26,13 @@ import static io.opencensus.contrib.grpc.metrics.RpcMeasureConstants.GRPC_SERVER
 import static io.opencensus.contrib.grpc.metrics.RpcMeasureConstants.GRPC_SERVER_STATUS;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.CallOptions;
 import io.opencensus.contrib.grpc.metrics.RpcViewConstants;
 import io.opencensus.stats.Aggregation;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
 import io.opencensus.stats.View;
+import io.opencensus.trace.SpanContext;
 import java.util.Arrays;
 
 // TODO(dnvindhya): Remove metric and view definitions from this class once it is moved to
@@ -41,6 +43,9 @@ import java.util.Arrays;
  */
 @VisibleForTesting
 public final class ObservabilityCensusConstants {
+
+  public static CallOptions.Key<SpanContext> CLIENT_TRACE_SPAN_CONTEXT_KEY
+      = CallOptions.Key.createWithDefault("Client span context for tracing", SpanContext.INVALID);
 
   static final Aggregation AGGREGATION_WITH_BYTES_HISTOGRAM =
       RpcViewConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC_VIEW.getAggregation();

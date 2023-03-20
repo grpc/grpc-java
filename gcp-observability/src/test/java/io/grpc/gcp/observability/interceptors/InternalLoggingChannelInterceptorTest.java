@@ -17,6 +17,7 @@
 package io.grpc.gcp.observability.interceptors;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.census.internal.ObservabilityCensusConstants.CLIENT_TRACE_SPAN_CONTEXT_KEY;
 import static io.grpc.gcp.observability.interceptors.LogHelperTest.BYTEARRAY_MARSHALLER;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
@@ -52,6 +53,11 @@ import io.grpc.internal.NoopClientCall;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import io.opencensus.trace.SpanContext;
+import io.opencensus.trace.SpanId;
+import io.opencensus.trace.TraceId;
+import io.opencensus.trace.TraceOptions;
+import io.opencensus.trace.Tracestate;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -83,6 +89,14 @@ public class InternalLoggingChannelInterceptorTest {
   public final MockitoRule mockito = MockitoJUnit.rule();
 
   private static final Charset US_ASCII = StandardCharsets.US_ASCII;
+  private static final SpanContext DEFAULT_CLIENT_SPAN_CONTEXT = SpanContext.INVALID;
+  private static final SpanContext SPAN_CONTEXT = SpanContext.create(
+      TraceId.fromLowerBase16("4c6af40c499951eb7de2777ba1e4fefa"),
+      SpanId.fromLowerBase16("de52e84d13dd232d"),
+      TraceOptions.builder().setIsSampled(true).build(),
+      Tracestate.builder().build());
+  private static final CallOptions CALL_OPTIONS_WITH_SPAN_CONTEXT =
+      CallOptions.DEFAULT.withOption(CLIENT_TRACE_SPAN_CONTEXT_KEY, SPAN_CONTEXT);
 
   private InternalLoggingChannelInterceptor.Factory factory;
   private AtomicReference<ClientCall.Listener<byte[]>> interceptedListener;
@@ -192,7 +206,8 @@ public class InternalLoggingChannelInterceptorTest {
           eq(filterParams.headerBytes()),
           eq(EventLogger.CLIENT),
           anyString(),
-          ArgumentMatchers.isNull());
+          ArgumentMatchers.isNull(),
+          eq(DEFAULT_CLIENT_SPAN_CONTEXT));
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(clientInitial, actualClientInitial.get());
     }
@@ -213,7 +228,8 @@ public class InternalLoggingChannelInterceptorTest {
           eq(filterParams.headerBytes()),
           eq(EventLogger.CLIENT),
           anyString(),
-          same(peer));
+          same(peer),
+          any(SpanContext.class));
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onHeaders(same(serverInitial));
     }
@@ -234,7 +250,8 @@ public class InternalLoggingChannelInterceptorTest {
           same(request),
           eq(filterParams.messageBytes()),
           eq(EventLogger.CLIENT),
-          anyString());
+          anyString(),
+          any(SpanContext.class));
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(request, actualRequest.get());
     }
@@ -251,7 +268,8 @@ public class InternalLoggingChannelInterceptorTest {
           eq("method"),
           eq("the-authority"),
           eq(EventLogger.CLIENT),
-          anyString());
+          anyString(),
+          any(SpanContext.class));
       halfCloseCalled.get(1, TimeUnit.MILLISECONDS);
       verifyNoMoreInteractions(mockLogHelper);
     }
@@ -272,7 +290,8 @@ public class InternalLoggingChannelInterceptorTest {
           same(response),
           eq(filterParams.messageBytes()),
           eq(EventLogger.CLIENT),
-          anyString());
+          anyString(),
+          any(SpanContext.class));
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onMessage(same(response));
     }
@@ -295,7 +314,8 @@ public class InternalLoggingChannelInterceptorTest {
           eq(filterParams.headerBytes()),
           eq(EventLogger.CLIENT),
           anyString(),
-          same(peer));
+          same(peer),
+          any(SpanContext.class));
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onClose(same(status), same(trailers));
     }
@@ -312,7 +332,8 @@ public class InternalLoggingChannelInterceptorTest {
           eq("method"),
           eq("the-authority"),
           eq(EventLogger.CLIENT),
-          anyString());
+          anyString(),
+          any(SpanContext.class));
       cancelCalled.get(1, TimeUnit.MILLISECONDS);
     }
   }
@@ -363,7 +384,8 @@ public class InternalLoggingChannelInterceptorTest {
             any(GrpcLogRecord.EventLogger.class),
             anyString(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(),
-                ArgumentMatchers.any()));
+                ArgumentMatchers.any()),
+            any(SpanContext.class));
     Duration timeout = callOptTimeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
@@ -422,7 +444,8 @@ public class InternalLoggingChannelInterceptorTest {
             any(GrpcLogRecord.EventLogger.class),
             anyString(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(),
-                ArgumentMatchers.any()));
+                ArgumentMatchers.any()),
+            any(SpanContext.class));
     Duration timeout = contextTimeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
@@ -484,7 +507,8 @@ public class InternalLoggingChannelInterceptorTest {
             any(GrpcLogRecord.EventLogger.class),
             anyString(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(),
-                ArgumentMatchers.any()));
+                ArgumentMatchers.any()),
+            any(SpanContext.class));
     Duration timeout = timeoutCaptor.getValue();
     assertThat(LogHelper.min(contextDeadline, callOptionsDeadline))
         .isSameInstanceAs(contextDeadline);
@@ -631,6 +655,174 @@ public class InternalLoggingChannelInterceptorTest {
       interceptedListener.get().onClose(status, trailers);
       interceptedLoggingCall.cancel(null, null);
       assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(7);
+    }
+  }
+
+  @Test
+  public void clientSpanContextLogged_contextSetViaCallOption() {
+    Channel channel = new Channel() {
+      @Override
+      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+          MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
+        return new NoopClientCall<RequestT, ResponseT>() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public void start(Listener<ResponseT> responseListener, Metadata headers) {
+            interceptedListener.set((Listener<byte[]>) responseListener);
+            actualClientInitial.set(headers);
+          }
+
+          @Override
+          public void sendMessage(RequestT message) {
+            actualRequest.set(message);
+          }
+
+          @Override
+          public void cancel(String message, Throwable cause) {
+            cancelCalled.set(null);
+          }
+
+          @Override
+          public void halfClose() {
+            halfCloseCalled.set(null);
+          }
+
+          @Override
+          public Attributes getAttributes() {
+            return Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer).build();
+          }
+        };
+      }
+
+      @Override
+      public String authority() {
+        return "the-authority";
+      }
+    };
+
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
+
+    MethodDescriptor<byte[], byte[]> method =
+        MethodDescriptor.<byte[], byte[]>newBuilder()
+            .setType(MethodType.UNKNOWN)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+            .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+            .build();
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
+        .thenReturn(FilterParams.create(true, 10, 10));
+
+    ClientCall<byte[], byte[]> interceptedLoggingCall =
+        factory.create()
+            .interceptCall(method,
+                CALL_OPTIONS_WITH_SPAN_CONTEXT,
+                channel);
+
+    {
+      interceptedLoggingCall.start(mockListener, new Metadata());
+      ArgumentCaptor<SpanContext> callOptSpanContextCaptor = ArgumentCaptor.forClass(
+          SpanContext.class);
+      verify(mockLogHelper, times(1))
+          .logClientHeader(
+              anyLong(),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              ArgumentMatchers.isNull(),
+              any(Metadata.class),
+              anyInt(),
+              any(GrpcLogRecord.EventLogger.class),
+              anyString(),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(),
+                  ArgumentMatchers.any()),
+              callOptSpanContextCaptor.capture());
+      SpanContext spanContext = callOptSpanContextCaptor.getValue();
+      assertThat(spanContext).isEqualTo(SPAN_CONTEXT);
+    }
+  }
+
+  @Test
+  public void clientSpanContextLogged_contextNotSetViaCallOption() {
+    Channel channel = new Channel() {
+      @Override
+      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+          MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
+        return new NoopClientCall<RequestT, ResponseT>() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public void start(Listener<ResponseT> responseListener, Metadata headers) {
+            interceptedListener.set((Listener<byte[]>) responseListener);
+            actualClientInitial.set(headers);
+          }
+
+          @Override
+          public void sendMessage(RequestT message) {
+            actualRequest.set(message);
+          }
+
+          @Override
+          public void cancel(String message, Throwable cause) {
+            cancelCalled.set(null);
+          }
+
+          @Override
+          public void halfClose() {
+            halfCloseCalled.set(null);
+          }
+
+          @Override
+          public Attributes getAttributes() {
+            return Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer).build();
+          }
+        };
+      }
+
+      @Override
+      public String authority() {
+        return "the-authority";
+      }
+    };
+
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
+
+    MethodDescriptor<byte[], byte[]> method =
+        MethodDescriptor.<byte[], byte[]>newBuilder()
+            .setType(MethodType.UNKNOWN)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+            .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+            .build();
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
+        .thenReturn(FilterParams.create(true, 10, 10));
+
+    ClientCall<byte[], byte[]> interceptedLoggingCall =
+        factory.create()
+            .interceptCall(method,
+                CallOptions.DEFAULT,
+                channel);
+
+    {
+      interceptedLoggingCall.start(mockListener, new Metadata());
+      ArgumentCaptor<SpanContext> callOptSpanContextCaptor = ArgumentCaptor.forClass(
+          SpanContext.class);
+      verify(mockLogHelper, times(1))
+          .logClientHeader(
+              anyLong(),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              ArgumentMatchers.isNull(),
+              any(Metadata.class),
+              anyInt(),
+              any(GrpcLogRecord.EventLogger.class),
+              anyString(),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(),
+                  ArgumentMatchers.any()),
+              callOptSpanContextCaptor.capture());
+      SpanContext spanContext = callOptSpanContextCaptor.getValue();
+      assertThat(spanContext).isEqualTo(DEFAULT_CLIENT_SPAN_CONTEXT);
     }
   }
 }
