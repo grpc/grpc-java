@@ -36,6 +36,7 @@ import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
 import io.grpc.gcp.observability.interceptors.LogHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
+import io.grpc.gcp.observability.logging.TraceLoggingHelper;
 import io.opencensus.common.Duration;
 import io.opencensus.contrib.grpc.metrics.RpcViewConstants;
 import io.opencensus.exporter.stats.stackdriver.StackdriverStatsConfiguration;
@@ -58,7 +59,8 @@ import java.util.stream.Collectors;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class GcpObservability implements AutoCloseable {
   private static final int METRICS_EXPORT_INTERVAL = 30;
-  private static final ImmutableSet<String> SERVICES_TO_EXCLUDE = ImmutableSet.of(
+  @VisibleForTesting
+  static final ImmutableSet<String> SERVICES_TO_EXCLUDE = ImmutableSet.of(
       "google.logging.v2.LoggingServiceV2", "google.monitoring.v3.MetricService",
       "google.devtools.cloudtrace.v2.TraceService");
   private static GcpObservability instance = null;
@@ -77,9 +79,11 @@ public final class GcpObservability implements AutoCloseable {
     if (instance == null) {
       GlobalLocationTags globalLocationTags = new GlobalLocationTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
+      TraceLoggingHelper traceLoggingHelper = new TraceLoggingHelper(
+          observabilityConfig.getProjectId());
       Sink sink = new GcpLogSink(observabilityConfig.getProjectId(),
-          globalLocationTags.getLocationTags(), observabilityConfig.getCustomTags(),
-          SERVICES_TO_EXCLUDE);
+          globalLocationTags.getLocationTags(), observabilityConfig,
+          SERVICES_TO_EXCLUDE, traceLoggingHelper);
       LogHelper helper = new LogHelper(sink);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.getInstance(observabilityConfig);
       instance = grpcInit(sink, observabilityConfig,

@@ -38,9 +38,11 @@ import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
 import io.grpc.gcp.observability.interceptors.LogHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
+import io.grpc.gcp.observability.logging.TraceLoggingHelper;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import io.opencensus.trace.SpanContext;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.regex.Pattern;
@@ -49,7 +51,9 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.AdditionalMatchers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
 @RunWith(JUnit4.class)
@@ -111,10 +115,12 @@ public class LoggingTest {
 
     @Override
     public void run() {
+      ObservabilityConfig config = mock(ObservabilityConfig.class);
+      when(config.getCustomTags()).thenReturn(CUSTOM_TAGS);
       Sink sink =
           new GcpLogSink(
-              PROJECT_ID, LOCATION_TAGS, CUSTOM_TAGS, Collections.emptySet());
-      ObservabilityConfig config = mock(ObservabilityConfig.class);
+              PROJECT_ID, LOCATION_TAGS, config, Collections.emptySet(),
+              mock(TraceLoggingHelper.class));
       LogHelper spyLogHelper = spy(new LogHelper(sink));
       ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
@@ -237,7 +243,9 @@ public class LoggingTest {
         // = 8
         assertThat(Mockito.mockingDetails(mockSink).getInvocations().size()).isEqualTo(12);
         ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
-        verify(mockSink, times(12)).write(captor.capture());
+        verify(mockSink, times(12)).write(captor.capture(),
+            AdditionalMatchers.or(ArgumentMatchers.isNull(),
+                ArgumentMatchers.any(SpanContext.class)));
         for (GrpcLogRecord record : captor.getAllValues()) {
           assertThat(record.getType()).isInstanceOf(GrpcLogRecord.EventType.class);
           assertThat(record.getLogger()).isInstanceOf(GrpcLogRecord.EventLogger.class);
