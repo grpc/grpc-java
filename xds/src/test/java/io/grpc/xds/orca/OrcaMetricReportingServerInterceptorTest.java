@@ -155,8 +155,8 @@ public class OrcaMetricReportingServerInterceptorTest {
           }
         };
 
-    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor(
-        metricRecorder);
+    ServerInterceptor metricReportingServerInterceptor =
+        OrcaMetricReportingServerInterceptor.create();
     String serverName = InProcessServerBuilder.generateName();
     grpcCleanupRule.register(
         InProcessServerBuilder

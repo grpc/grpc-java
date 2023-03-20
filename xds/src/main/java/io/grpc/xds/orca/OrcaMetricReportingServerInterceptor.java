@@ -46,6 +46,9 @@ import io.grpc.services.MetricReport;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9127")
 public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
+  private static final OrcaMetricReportingServerInterceptor INSTANCE =
+      new OrcaMetricReportingServerInterceptor(MetricRecorder.newInstance());
+
   @VisibleForTesting
   static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
       Metadata.Key.of(
@@ -57,6 +60,10 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   @VisibleForTesting
   OrcaMetricReportingServerInterceptor(MetricRecorder metricRecorder) {
     this.metricRecorder = metricRecorder;
+  }
+
+  public static OrcaMetricReportingServerInterceptor create() {
+    return INSTANCE;
   }
 
   public static OrcaMetricReportingServerInterceptor create(MetricRecorder metricRecorder) {
