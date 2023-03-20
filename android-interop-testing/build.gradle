@@ -52,6 +52,10 @@ android {
         disable 'InvalidPackage', 'HardcodedText', 'UsingOnClickInXml',
                 'MissingClass' // https://github.com/grpc/grpc-java/issues/8799
     }
+    packagingOptions {
+        exclude 'META-INF/INDEX.LIST'
+        exclude 'META-INF/io.netty.versions.properties'
+    }
 }
 
 dependencies {
@@ -60,7 +64,8 @@ dependencies {
     implementation libraries.androidx.annotation
     implementation 'com.google.android.gms:play-services-base:18.0.1'
 
-    implementation project(':grpc-auth'),
+    implementation project(':grpc-android'),
+            project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-okhttp'),
             project(':grpc-protobuf-lite'),
@@ -69,6 +74,7 @@ dependencies {
             libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
+            libraries.androidx.test.rules,
             libraries.opencensus.contrib.grpc.metrics
 
     implementation (libraries.google.auth.oauth2Http) {
@@ -81,7 +87,8 @@ dependencies {
 
     compileOnly libraries.javax.annotation
 
-    androidTestImplementation 'androidx.test.ext:junit:1.1.3',
+    androidTestImplementation project(':grpc-netty'),
+            'androidx.test.ext:junit:1.1.3',
             'androidx.test:runner:1.4.0'
 }
 

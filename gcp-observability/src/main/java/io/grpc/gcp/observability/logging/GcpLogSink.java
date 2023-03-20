@@ -18,20 +18,25 @@ package io.grpc.gcp.observability.logging;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.api.gax.batching.BatchingSettings;
+import com.google.api.gax.batching.FlowController;
 import com.google.cloud.MonitoredResource;
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
 import com.google.cloud.logging.LoggingOptions;
 import com.google.cloud.logging.Payload.JsonPayload;
 import com.google.cloud.logging.Severity;
+import com.google.cloud.logging.v2.stub.LoggingServiceV2StubSettings;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.Internal;
+import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
+import io.opencensus.trace.SpanContext;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Collection;
@@ -41,6 +46,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.threeten.bp.Duration;
 
 /**
  * Sink for Google Cloud Logging.
@@ -63,11 +69,16 @@ public class GcpLogSink implements Sink {
    * logging APIs also uses gRPC. */
   private volatile Logging gcpLoggingClient;
   private final Collection<String> servicesToExclude;
+  private final boolean isTraceEnabled;
+
+  private final TraceLoggingHelper traceLoggingHelper;
+
 
   @VisibleForTesting
   GcpLogSink(Logging loggingClient, String projectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Collection<String> servicesToExclude) {
-    this(projectId, locationTags, customTags, servicesToExclude);
+      ObservabilityConfig config, Collection<String> servicesToExclude,
+      TraceLoggingHelper traceLoggingHelper) {
+    this(projectId, locationTags, config, servicesToExclude, traceLoggingHelper);
     this.gcpLoggingClient = loggingClient;
   }
 
@@ -78,11 +89,14 @@ public class GcpLogSink implements Sink {
    * @param servicesToExclude service names for which log entries should not be generated
    */
   public GcpLogSink(String projectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Collection<String> servicesToExclude) {
+      ObservabilityConfig config, Collection<String> servicesToExclude,
+      TraceLoggingHelper traceLoggingHelper) {
     this.projectId = projectId;
-    this.customTags = getCustomTags(customTags, locationTags, projectId);
+    this.customTags = getCustomTags(config.getCustomTags(), locationTags, projectId);
     this.kubernetesResource = getResource(locationTags);
     this.servicesToExclude = checkNotNull(servicesToExclude, "servicesToExclude");
+    this.isTraceEnabled = config.isEnableCloudTracing();
+    this.traceLoggingHelper = traceLoggingHelper;
   }
 
   /**
@@ -91,7 +105,7 @@ public class GcpLogSink implements Sink {
    * @param logProto gRPC logging proto containing the message to be logged
    */
   @Override
-  public void write(GrpcLogRecord logProto) {
+  public void write(GrpcLogRecord logProto, SpanContext spanContext) {
     if (gcpLoggingClient == null) {
       synchronized (this) {
         if (gcpLoggingClient == null) {
@@ -102,6 +116,7 @@ public class GcpLogSink implements Sink {
     if (servicesToExclude.contains(logProto.getServiceName())) {
       return;
     }
+    LogEntry grpcLogEntry = null;
     try {
       GrpcLogRecord.EventType eventType = logProto.getType();
       // TODO(DNVindhya): make sure all (int, long) values are not displayed as double
@@ -117,14 +132,31 @@ public class GcpLogSink implements Sink {
       if (!customTags.isEmpty()) {
         grpcLogEntryBuilder.setLabels(customTags);
       }
-      LogEntry grpcLogEntry = grpcLogEntryBuilder.build();
+
+      addTraceData(grpcLogEntryBuilder, spanContext);
+      grpcLogEntry = grpcLogEntryBuilder.build();
+
       synchronized (this) {
         logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", eventType);
         gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
       }
+    } catch (FlowController.FlowControlRuntimeException e) {
+      String grpcLogEntryString = null;
+      if (grpcLogEntry != null) {
+        grpcLogEntryString = grpcLogEntry.toStructuredJsonString();
+      }
+      logger.log(Level.SEVERE, "Limit exceeded while writing log entry to cloud logging");
+      logger.log(Level.SEVERE, "Log entry = ", grpcLogEntryString);
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
     }
+  }
+
+  void addTraceData(LogEntry.Builder builder, SpanContext spanContext) {
+    if (!isTraceEnabled) {
+      return;
+    }
+    traceLoggingHelper.enhanceLogEntry(builder, spanContext);
   }
 
   Logging createLoggingClient() {
@@ -132,6 +164,16 @@ public class GcpLogSink implements Sink {
     if (!Strings.isNullOrEmpty(projectId)) {
       builder.setProjectId(projectId);
     }
+    BatchingSettings loggingDefaultBatchingSettings = LoggingServiceV2StubSettings.newBuilder()
+        .writeLogEntriesSettings().getBatchingSettings();
+    // Custom batching settings
+    BatchingSettings grpcLoggingVBatchingSettings = loggingDefaultBatchingSettings.toBuilder()
+        .setDelayThreshold(Duration.ofSeconds(1L)).setFlowControlSettings(
+            loggingDefaultBatchingSettings.getFlowControlSettings().toBuilder()
+                .setMaxOutstandingRequestBytes(52428800L) //50 MiB
+                .setLimitExceededBehavior(FlowController.LimitExceededBehavior.ThrowException)
+                .build()).build();
+    builder.setBatchingSettings(grpcLoggingVBatchingSettings);
     return builder.build().getService();
   }
 

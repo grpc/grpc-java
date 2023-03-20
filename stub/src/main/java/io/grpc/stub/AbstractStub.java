@@ -163,14 +163,11 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   /**
    *  Set's the compressor name to use for the call.  It is the responsibility of the application
    *  to make sure the server supports decoding the compressor picked by the client.  To be clear,
-   *  this is the compressor used by the stub to compress messages to the server.  To get
-   *  compressed responses from the server, set the appropriate {@link io.grpc.DecompressorRegistry}
-   *  on the {@link io.grpc.ManagedChannelBuilder}.
+   *  this is the compressor used by the stub to compress messages to the server.
    *
    * @since 1.0.0
    * @param compressorName the name (e.g. "gzip") of the compressor to use.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public final S withCompression(String compressorName) {
     return build(channel, callOptions.withCompression(compressorName));
   }

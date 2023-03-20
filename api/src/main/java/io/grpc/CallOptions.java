@@ -138,13 +138,12 @@ public final class CallOptions {
 
   /**
    * Sets the compression to use for the call.  The compressor must be a valid name known in the
-   * {@link CompressorRegistry}.
+   * {@link CompressorRegistry}.  By default, the "gzip" compressor will be available.
    *
    * <p>It is only safe to call this if the server supports the compression format chosen. There is
    * no negotiation performed; if the server does not support the compression chosen, the call will
    * fail.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public CallOptions withCompression(@Nullable String compressorName) {
     Builder builder = toBuilder(this);
     builder.compressorName = compressorName;
@@ -207,7 +206,6 @@ public final class CallOptions {
   /**
    * Returns the compressor's name.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   @Nullable
   public String getCompressor() {
     return compressorName;
