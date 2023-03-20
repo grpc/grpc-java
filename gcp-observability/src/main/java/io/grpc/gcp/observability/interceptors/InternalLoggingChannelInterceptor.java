@@ -16,6 +16,8 @@
 
 package io.grpc.gcp.observability.interceptors;
 
+import static io.grpc.census.internal.ObservabilityCensusConstants.CLIENT_TRACE_SPAN_CONTEXT_KEY;
+
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
 import io.grpc.CallOptions;
@@ -33,6 +35,7 @@ import io.grpc.Status;
 import io.grpc.gcp.observability.interceptors.ConfigFilterHelper.FilterParams;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import io.opencensus.trace.SpanContext;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -92,6 +95,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
     // Get the stricter deadline to calculate the timeout once the call starts
     final Deadline deadline = LogHelper.min(callOptions.getDeadline(),
         Context.current().getDeadline());
+    final SpanContext clientSpanContext = callOptions.getOption(CLIENT_TRACE_SPAN_CONTEXT_KEY);
 
     FilterParams filterParams = filterHelper.logRpcMethod(method.getFullMethodName(), true);
     if (!filterParams.log()) {
@@ -122,7 +126,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               maxHeaderBytes,
               EventLogger.CLIENT,
               callId,
-              null);
+              null,
+              clientSpanContext);
         } catch (Exception e) {
           // Catching generic exceptions instead of specific ones for all the events.
           // This way we can catch both expected and unexpected exceptions instead of re-throwing
@@ -148,7 +153,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       message,
                       maxMessageBytes,
                       EventLogger.CLIENT,
-                      callId);
+                      callId,
+                      clientSpanContext);
                 } catch (Exception e) {
                   logger.log(Level.SEVERE, "Unable to log response message", e);
                 }
@@ -168,7 +174,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       maxHeaderBytes,
                       EventLogger.CLIENT,
                       callId,
-                      LogHelper.getPeerAddress(getAttributes()));
+                      LogHelper.getPeerAddress(getAttributes()),
+                      clientSpanContext);
                 } catch (Exception e) {
                   logger.log(Level.SEVERE, "Unable to log response header", e);
                 }
@@ -189,7 +196,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       maxHeaderBytes,
                       EventLogger.CLIENT,
                       callId,
-                      LogHelper.getPeerAddress(getAttributes()));
+                      LogHelper.getPeerAddress(getAttributes()),
+                      clientSpanContext);
                 } catch (Exception e) {
                   logger.log(Level.SEVERE, "Unable to log trailer", e);
                 }
@@ -212,7 +220,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               message,
               maxMessageBytes,
               EventLogger.CLIENT,
-              callId);
+              callId,
+              clientSpanContext);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log request message", e);
         }
@@ -229,7 +238,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               methodName,
               authority,
               EventLogger.CLIENT,
-              callId);
+              callId,
+              clientSpanContext);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log half close", e);
         }
@@ -246,7 +256,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               methodName,
               authority,
               EventLogger.CLIENT,
-              callId);
+              callId,
+              clientSpanContext);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log cancel", e);
         }

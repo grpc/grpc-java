@@ -36,6 +36,7 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.observabilitylog.v1.Payload;
+import io.opencensus.trace.SpanContext;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -88,7 +89,8 @@ public class LogHelper {
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
       // null on client side
-      @Nullable SocketAddress peerAddress) {
+      @Nullable SocketAddress peerAddress,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -114,7 +116,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeer(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -129,7 +131,8 @@ public class LogHelper {
       int maxHeaderBytes,
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
-      @Nullable SocketAddress peerAddress) {
+      @Nullable SocketAddress peerAddress,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -155,7 +158,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeer(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -171,7 +174,8 @@ public class LogHelper {
       int maxHeaderBytes,
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
-      @Nullable SocketAddress peerAddress) {
+      @Nullable SocketAddress peerAddress,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -205,7 +209,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeer(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -220,7 +224,8 @@ public class LogHelper {
       T message,
       int maxMessageBytes,
       EventLogger eventLogger,
-      String callId) {
+      String callId,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -260,7 +265,7 @@ public class LogHelper {
       logEntryBuilder.setPayload(pair.payloadBuilder)
           .setPayloadTruncated(pair.truncated);
     }
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -272,7 +277,8 @@ public class LogHelper {
       String methodName,
       String authority,
       GrpcLogRecord.EventLogger eventLogger,
-      String callId) {
+      String callId,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -286,7 +292,7 @@ public class LogHelper {
         .setType(EventType.CLIENT_HALF_CLOSE)
         .setLogger(eventLogger)
         .setCallId(callId);
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -298,7 +304,8 @@ public class LogHelper {
       String methodName,
       String authority,
       GrpcLogRecord.EventLogger eventLogger,
-      String callId) {
+      String callId,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -312,7 +319,7 @@ public class LogHelper {
         .setType(EventType.CANCEL)
         .setLogger(eventLogger)
         .setCallId(callId);
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   // TODO(DNVindhya): Evaluate if we need following clause for metadata logging in GcpObservability
