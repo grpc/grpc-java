@@ -31,6 +31,9 @@ import io.grpc.Status;
 import io.grpc.gcp.observability.interceptors.ConfigFilterHelper.FilterParams;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import io.opencensus.trace.Span;
+import io.opencensus.trace.SpanContext;
+import io.opencensus.trace.unsafe.ContextHandleUtils;
 import java.net.SocketAddress;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -91,6 +94,8 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     Deadline deadline = Context.current().getDeadline();
     final Duration timeout = deadline == null ? null
         : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
+    Span span = ContextHandleUtils.getValue(ContextHandleUtils.currentContext());
+    final SpanContext serverSpanContext = span == null ? SpanContext.INVALID : span.getContext();
 
     FilterParams filterParams =
         filterHelper.logRpcMethod(call.getMethodDescriptor().getFullMethodName(), false);
@@ -114,7 +119,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           EventLogger.SERVER,
           callId,
           peerAddress,
-          null);
+          serverSpanContext);
     } catch (Exception e) {
       // Catching generic exceptions instead of specific ones for all the events.
       // This way we can catch both expected and unexpected exceptions instead of re-throwing
@@ -141,7 +146,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   EventLogger.SERVER,
                   callId,
                   null,
-                  null);
+                  serverSpanContext);
             } catch (Exception e) {
               logger.log(Level.SEVERE, "Unable to log response header", e);
             }
@@ -163,7 +168,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   maxMessageBytes,
                   EventLogger.SERVER,
                   callId,
-                  null);
+                  serverSpanContext);
             } catch (Exception e) {
               logger.log(Level.SEVERE, "Unable to log response message", e);
             }
@@ -185,7 +190,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   EventLogger.SERVER,
                   callId,
                   null,
-                  null);
+                  serverSpanContext);
             } catch (Exception e) {
               logger.log(Level.SEVERE, "Unable to log trailer", e);
             }
@@ -211,7 +216,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
               maxMessageBytes,
               EventLogger.SERVER,
               callId,
-              null);
+              serverSpanContext);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log request message", e);
         }
@@ -229,7 +234,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
               authority,
               EventLogger.SERVER,
               callId,
-              null);
+              serverSpanContext);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log half close", e);
         }
@@ -247,7 +252,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
               authority,
               EventLogger.SERVER,
               callId,
-              null);
+              serverSpanContext);
         } catch (Exception e) {
           logger.log(Level.SEVERE, "Unable to log cancel", e);
         }

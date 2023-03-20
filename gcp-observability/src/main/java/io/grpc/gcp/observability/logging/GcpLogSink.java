@@ -36,7 +36,6 @@ import io.grpc.Internal;
 import io.grpc.gcp.observability.ObservabilityConfig;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
-import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.opencensus.trace.SpanContext;
 import java.io.IOException;
 import java.time.Instant;
@@ -47,7 +46,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import org.threeten.bp.Duration;
 
 /**
@@ -107,7 +105,7 @@ public class GcpLogSink implements Sink {
    * @param logProto gRPC logging proto containing the message to be logged
    */
   @Override
-  public void write(GrpcLogRecord logProto, @Nullable SpanContext spanContext) {
+  public void write(GrpcLogRecord logProto, SpanContext spanContext) {
     if (gcpLoggingClient == null) {
       synchronized (this) {
         if (gcpLoggingClient == null) {
@@ -135,7 +133,7 @@ public class GcpLogSink implements Sink {
         grpcLogEntryBuilder.setLabels(customTags);
       }
 
-      addTraceData(grpcLogEntryBuilder, spanContext, logProto.getLogger() == EventLogger.CLIENT);
+      addTraceData(grpcLogEntryBuilder, spanContext);
       grpcLogEntry = grpcLogEntryBuilder.build();
 
       synchronized (this) {
@@ -154,13 +152,12 @@ public class GcpLogSink implements Sink {
     }
   }
 
-  void addTraceData(LogEntry.Builder builder, SpanContext spanContext, boolean isClient) {
+  void addTraceData(LogEntry.Builder builder, SpanContext spanContext) {
     if (!isTraceEnabled) {
       return;
     }
-    traceLoggingHelper.enhanceLogEntry(builder, isClient ? spanContext : SpanContext.INVALID);
+    traceLoggingHelper.enhanceLogEntry(builder, spanContext);
   }
-
 
   Logging createLoggingClient() {
     LoggingOptions.Builder builder = LoggingOptions.newBuilder();

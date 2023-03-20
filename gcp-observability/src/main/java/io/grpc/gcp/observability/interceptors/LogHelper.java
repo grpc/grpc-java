@@ -90,8 +90,7 @@ public class LogHelper {
       String callId,
       // null on client side
       @Nullable SocketAddress peerAddress,
-      // null on server side
-      @Nullable SpanContext spanContext) {
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -133,8 +132,7 @@ public class LogHelper {
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
       @Nullable SocketAddress peerAddress,
-      // null on server side
-      @Nullable SpanContext spanContext) {
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -177,8 +175,7 @@ public class LogHelper {
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
       @Nullable SocketAddress peerAddress,
-      // null on server side
-      @Nullable SpanContext spanContext) {
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -228,8 +225,7 @@ public class LogHelper {
       int maxMessageBytes,
       EventLogger eventLogger,
       String callId,
-      // null on server side
-      @Nullable SpanContext spanContext) {
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -282,8 +278,7 @@ public class LogHelper {
       String authority,
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
-      // null on server side
-      @Nullable SpanContext spanContext) {
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -310,8 +305,7 @@ public class LogHelper {
       String authority,
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
-      // null on server side
-      @Nullable SpanContext spanContext) {
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");

@@ -45,6 +45,7 @@ import io.grpc.gcp.observability.interceptors.ConfigFilterHelper.FilterParams;
 import io.grpc.internal.NoopServerCall;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import io.opencensus.trace.SpanContext;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -172,7 +173,7 @@ public class InternalLoggingServerInterceptorTest {
           eq(EventLogger.SERVER),
           anyString(),
           same(peer),
-          ArgumentMatchers.isNull());
+          eq(SpanContext.INVALID));
       verifyNoMoreInteractions(mockLogHelper);
     }
 
@@ -193,7 +194,7 @@ public class InternalLoggingServerInterceptorTest {
           eq(EventLogger.SERVER),
           anyString(),
           ArgumentMatchers.isNull(),
-          ArgumentMatchers.isNull());
+          eq(SpanContext.INVALID));
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(serverInitial, actualServerInitial.get());
     }
@@ -215,7 +216,7 @@ public class InternalLoggingServerInterceptorTest {
           eq(filterParams.messageBytes()),
           eq(EventLogger.SERVER),
           anyString(),
-          ArgumentMatchers.isNull());
+          eq(SpanContext.INVALID));
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onMessage(same(request));
     }
@@ -233,7 +234,7 @@ public class InternalLoggingServerInterceptorTest {
           eq("the-authority"),
           eq(EventLogger.SERVER),
           anyString(),
-          ArgumentMatchers.isNull());
+          eq(SpanContext.INVALID));
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onHalfClose();
     }
@@ -255,7 +256,7 @@ public class InternalLoggingServerInterceptorTest {
           eq(filterParams.messageBytes()),
           eq(EventLogger.SERVER),
           anyString(),
-          ArgumentMatchers.isNull());
+          eq(SpanContext.INVALID));
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(response, actualResponse.get());
     }
@@ -279,7 +280,7 @@ public class InternalLoggingServerInterceptorTest {
           eq(EventLogger.SERVER),
           anyString(),
           ArgumentMatchers.isNull(),
-          ArgumentMatchers.isNull());
+          eq(SpanContext.INVALID));
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(status, actualStatus.get());
       assertSame(trailers, actualTrailers.get());
@@ -298,7 +299,7 @@ public class InternalLoggingServerInterceptorTest {
           eq("the-authority"),
           eq(EventLogger.SERVER),
           anyString(),
-          ArgumentMatchers.isNull());
+          eq(SpanContext.INVALID));
       verify(mockListener).onCancel();
     }
   }
@@ -350,7 +351,7 @@ public class InternalLoggingServerInterceptorTest {
         eq(EventLogger.SERVER),
         anyString(),
         ArgumentMatchers.isNull(),
-            ArgumentMatchers.isNull());
+            eq(SpanContext.INVALID));
     verifyNoMoreInteractions(mockLogHelper);
     Duration timeout = timeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))

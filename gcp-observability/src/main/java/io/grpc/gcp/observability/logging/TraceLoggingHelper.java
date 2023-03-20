@@ -18,11 +18,11 @@ package io.grpc.gcp.observability.logging;
 
 import com.google.cloud.logging.LogEntry;
 import com.google.common.annotations.VisibleForTesting;
-import io.opencensus.trace.Span;
+import io.grpc.Internal;
 import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.TraceId;
-import io.opencensus.trace.unsafe.ContextHandleUtils;
 
+@Internal
 public class TraceLoggingHelper {
 
   private final String tracePrefix;
@@ -33,14 +33,7 @@ public class TraceLoggingHelper {
 
   @VisibleForTesting
   void enhanceLogEntry(LogEntry.Builder builder, SpanContext spanContext) {
-    addTracingData(tracePrefix,
-        spanContext != null && spanContext.isValid() ? spanContext : getServerSpanContext(),
-        builder);
-  }
-
-  private static SpanContext getServerSpanContext() {
-    Span span = ContextHandleUtils.getValue(ContextHandleUtils.currentContext());
-    return span == null ? SpanContext.INVALID : span.getContext();
+    addTracingData(tracePrefix, spanContext, builder);
   }
 
   private static void addTracingData(

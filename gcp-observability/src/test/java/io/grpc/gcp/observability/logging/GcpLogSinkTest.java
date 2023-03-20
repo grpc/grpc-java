@@ -287,26 +287,16 @@ public class GcpLogSinkTest {
     Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
         mockConfig, Collections.emptySet(), traceLoggingHelper);
 
-    // Client log
-    mockSink.write(LOG_PROTO, null);
-
     String expectedTrace =
         "projects/" + DEST_PROJECT_NAME + "/traces/00000000000000000000000000000000";
     String expectedSpanId = "0000000000000000";
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
-    verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
-    for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
-      LogEntry entry = it.next();
-      assertThat(entry.getTrace()).isEqualTo(expectedTrace);
-      assertThat(entry.getSpanId()).isEqualTo(expectedSpanId);
-      assertThat(entry.getTraceSampled()).isFalse();
-    }
 
     // Client log with default span context
     mockSink.write(LOG_PROTO , SpanContext.INVALID);
-    verify(mockLogging, times(2)).write(logEntrySetCaptor.capture());
+    verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
       assertThat(entry.getTrace()).isEqualTo(expectedTrace);
@@ -316,8 +306,8 @@ public class GcpLogSinkTest {
 
     // Server log
     GrpcLogRecord serverLogProto = LOG_PROTO.toBuilder().setLogger(EventLogger.SERVER).build();
-    mockSink.write(serverLogProto , null);
-    verify(mockLogging, times(3)).write(logEntrySetCaptor.capture());
+    mockSink.write(serverLogProto , SpanContext.INVALID);
+    verify(mockLogging, times(2)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
       assertThat(entry.getTrace()).isEqualTo(expectedTrace);
