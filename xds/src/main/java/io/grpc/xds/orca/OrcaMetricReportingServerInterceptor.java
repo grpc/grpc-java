@@ -84,9 +84,8 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
-            OrcaLoadReport.Builder reportBuilder = metricRecorder != null ? fromInternalReport(
-                InternalMetricRecorder.getMetricReport(metricRecorder)) :
-                OrcaLoadReport.newBuilder();
+            OrcaLoadReport.Builder reportBuilder = fromInternalReport(
+                InternalMetricRecorder.getMetricReport(metricRecorder));
             mergeMetrics(reportBuilder,
                 InternalCallMetricRecorder.finalizeAndDump2(finalCallMetricRecorder));
             OrcaLoadReport report = reportBuilder.build();
