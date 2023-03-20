@@ -29,7 +29,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
- * Observability server that manages startup/shutdown of a {@code Greeter} server.
+ * Observability server that manages startup/shutdown of a {@code Greeter} server and generates
+ * logs, metrics and traces based on the configuration.
  */
 public class ObservabilityHelloWorldServer {
   private static final Logger logger = Logger.getLogger(ObservabilityHelloWorldServer.class.getName());

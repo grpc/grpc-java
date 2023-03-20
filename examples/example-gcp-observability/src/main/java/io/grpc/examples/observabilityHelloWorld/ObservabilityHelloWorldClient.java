@@ -30,7 +30,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * A simple observability client that requests a greeting from the {@link HelloWorldServer}.
+ * A simple observability client that requests a greeting from the {@link HelloWorldServer} and
+ * generates logs, metrics and traces based on the configuration.
  */
 public class ObservabilityHelloWorldClient {
   private static final Logger logger = Logger.getLogger(ObservabilityHelloWorldClient.class.getName());
