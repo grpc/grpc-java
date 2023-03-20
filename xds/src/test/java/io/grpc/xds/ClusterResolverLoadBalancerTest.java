@@ -58,6 +58,8 @@ import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
+import io.grpc.util.OutlierDetectionLoadBalancerProvider;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
@@ -65,13 +67,17 @@ import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.Dis
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
+import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
+import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -107,7 +113,7 @@ public class ClusterResolverLoadBalancerTest {
   private static final String EDS_SERVICE_NAME2 = "backend-service-bar.googleapis.com";
   private static final String DNS_HOST_NAME = "dns-service.googleapis.com";
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
   private final Locality locality1 =
       Locality.create("test-region-1", "test-zone-1", "test-subzone-1");
   private final Locality locality2 =
@@ -116,10 +122,18 @@ public class ClusterResolverLoadBalancerTest {
       Locality.create("test-region-3", "test-zone-3", "test-subzone-3");
   private final UpstreamTlsContext tlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
+  private final OutlierDetection outlierDetection = OutlierDetection.create(
+      100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
+      FailurePercentageEjection.create(100, 100, 100, 100));
   private final DiscoveryMechanism edsDiscoveryMechanism1 =
-      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext);
+      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
+          null);
   private final DiscoveryMechanism edsDiscoveryMechanism2 =
-      DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext);
+      DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext,
+          null);
+  private final DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
+      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
+          outlierDetection);
   private final DiscoveryMechanism logicalDnsDiscoveryMechanism =
       DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null);
 
@@ -172,7 +186,6 @@ public class ClusterResolverLoadBalancerTest {
   private int xdsClientRefs;
   private ClusterResolverLoadBalancer loadBalancer;
 
-
   @Before
   public void setUp() throws URISyntaxException {
     MockitoAnnotations.initMocks(this);
@@ -182,6 +195,7 @@ public class ClusterResolverLoadBalancerTest {
     lbRegistry.register(new FakeLoadBalancerProvider(WEIGHTED_TARGET_POLICY_NAME));
     lbRegistry.register(
         new FakeLoadBalancerProvider("pick_first")); // needed by logical_dns
+    lbRegistry.register(new OutlierDetectionLoadBalancerProvider());
     NameResolver.Args args = NameResolver.Args.newBuilder()
         .setDefaultPort(8080)
         .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
@@ -313,9 +327,93 @@ public class ClusterResolverLoadBalancerTest {
         "least_request_experimental");
 
     assertThat(
-        childBalancer.attributes.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).containsEntry(
-        locality1, 100);
+        childBalancer.addresses.get(0).getAttributes()
+            .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
   }
+
+  @Test
+  public void edsClustersWithOutlierDetection() {
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest);
+    deliverLbConfig(config);
+    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
+    assertThat(childBalancers).isEmpty();
+
+    // Simple case with one priority and one locality
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
+    LocalityLbEndpoints localityLbEndpoints =
+        LocalityLbEndpoints.create(
+            Arrays.asList(
+                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true)),
+            100 /* localityWeight */, 1 /* priority */);
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME1,
+        ImmutableMap.of(locality1, localityLbEndpoints));
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.addresses).hasSize(1);
+    EquivalentAddressGroup addr = childBalancer.addresses.get(0);
+    assertThat(addr.getAddresses()).isEqualTo(endpoint.getAddresses());
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+    PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
+    assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER1 + "[child1]");
+    PriorityChildConfig priorityChildConfig =
+        Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
+
+    // The child config for priority should be outlier detection.
+    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+        .isEqualTo("outlier_detection_experimental");
+    OutlierDetectionLoadBalancerConfig outlierDetectionConfig =
+        (OutlierDetectionLoadBalancerConfig) priorityChildConfig.policySelection.getConfig();
+
+    // The outlier detection config should faithfully represent what came down from xDS.
+    assertThat(outlierDetectionConfig.intervalNanos).isEqualTo(outlierDetection.intervalNanos());
+    assertThat(outlierDetectionConfig.baseEjectionTimeNanos).isEqualTo(
+        outlierDetection.baseEjectionTimeNanos());
+    assertThat(outlierDetectionConfig.baseEjectionTimeNanos).isEqualTo(
+        outlierDetection.baseEjectionTimeNanos());
+    assertThat(outlierDetectionConfig.maxEjectionTimeNanos).isEqualTo(
+        outlierDetection.maxEjectionTimeNanos());
+    assertThat(outlierDetectionConfig.maxEjectionPercent).isEqualTo(
+        outlierDetection.maxEjectionPercent());
+
+    OutlierDetectionLoadBalancerConfig.SuccessRateEjection successRateEjection
+        = outlierDetectionConfig.successRateEjection;
+    assertThat(successRateEjection.stdevFactor).isEqualTo(
+        outlierDetection.successRateEjection().stdevFactor());
+    assertThat(successRateEjection.enforcementPercentage).isEqualTo(
+        outlierDetection.successRateEjection().enforcementPercentage());
+    assertThat(successRateEjection.minimumHosts).isEqualTo(
+        outlierDetection.successRateEjection().minimumHosts());
+    assertThat(successRateEjection.requestVolume).isEqualTo(
+        outlierDetection.successRateEjection().requestVolume());
+
+    OutlierDetectionLoadBalancerConfig.FailurePercentageEjection failurePercentageEjection
+        = outlierDetectionConfig.failurePercentageEjection;
+    assertThat(failurePercentageEjection.threshold).isEqualTo(
+        outlierDetection.failurePercentageEjection().threshold());
+    assertThat(failurePercentageEjection.enforcementPercentage).isEqualTo(
+        outlierDetection.failurePercentageEjection().enforcementPercentage());
+    assertThat(failurePercentageEjection.minimumHosts).isEqualTo(
+        outlierDetection.failurePercentageEjection().minimumHosts());
+    assertThat(failurePercentageEjection.requestVolume).isEqualTo(
+        outlierDetection.failurePercentageEjection().requestVolume());
+
+    // The wrapped configuration should not have been tampered with.
+    ClusterImplConfig clusterImplConfig =
+        (ClusterImplConfig) outlierDetectionConfig.childPolicy.getConfig();
+    assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
+        tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
+    WrrLocalityConfig wrrLocalityConfig =
+        (WrrLocalityConfig) clusterImplConfig.childPolicy.getConfig();
+    assertThat(wrrLocalityConfig.childPolicy.getProvider().getPolicyName()).isEqualTo(
+        "least_request_experimental");
+
+    assertThat(
+        childBalancer.addresses.get(0).getAttributes()
+            .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
+  }
+
 
   @Test
   public void onlyEdsClusters_receivedEndpoints() {
@@ -409,11 +507,20 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(wrrLocalityConfig3.childPolicy.getProvider().getPolicyName()).isEqualTo(
         "round_robin");
 
-    Map<Locality, Integer> localityWeights = childBalancer.attributes.get(
-        InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
-    assertThat(localityWeights).containsEntry(locality1, 70);
-    assertThat(localityWeights).containsEntry(locality2, 10);
-    assertThat(localityWeights).containsEntry(locality3, 20);
+    for (EquivalentAddressGroup eag : childBalancer.addresses) {
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality1) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(70);
+      }
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality2) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(10);
+      }
+      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality3) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(20);
+      }
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -589,9 +696,9 @@ public class ClusterResolverLoadBalancerTest {
         ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
 
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    Map<Locality, Integer> localityWeights = childBalancer.attributes.get(
-        InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS);
-    assertThat(localityWeights.keySet()).containsExactly(locality2);
+    for (EquivalentAddressGroup eag : childBalancer.addresses) {
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
+    }
   }
 
   @Test
@@ -983,7 +1090,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private void deliverLbConfig(ClusterResolverConfig config) {
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(
@@ -1070,16 +1177,24 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private static final class FakeXdsClient extends XdsClient {
-    private final Map<String, EdsResourceWatcher> watchers = new HashMap<>();
+    private final Map<String, ResourceWatcher<EdsUpdate>> watchers = new HashMap<>();
+
 
     @Override
-    void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
+                          ResourceWatcher<T> watcher) {
+      assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).doesNotContainKey(resourceName);
-      watchers.put(resourceName, watcher);
+      watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);
     }
 
     @Override
-    void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                           String resourceName,
+                                                           ResourceWatcher<T> watcher) {
+      assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
     }
@@ -1094,7 +1209,7 @@ public class ClusterResolverLoadBalancerTest {
         Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap) {
       if (watchers.containsKey(resource)) {
         watchers.get(resource).onChanged(
-            new EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
+            new XdsEndpointResource.EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
       }
     }
 
@@ -1105,7 +1220,7 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     void deliverError(Status error) {
-      for (EdsResourceWatcher watcher : watchers.values()) {
+      for (ResourceWatcher<EdsUpdate> watcher : watchers.values()) {
         watcher.onError(error);
       }
     }
@@ -1209,7 +1324,6 @@ public class ClusterResolverLoadBalancerTest {
     private final Helper helper;
     private List<EquivalentAddressGroup> addresses;
     private Object config;
-    private Attributes attributes;
     private Status upstreamError;
     private boolean shutdown;
 
@@ -1219,10 +1333,10 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
-      attributes = resolvedAddresses.getAttributes();
+      return true;
     }
 
     @Override
@@ -1234,16 +1348,6 @@ public class ClusterResolverLoadBalancerTest {
     public void shutdown() {
       shutdown = true;
       childBalancers.remove(this);
-    }
-
-    void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
-      SubchannelPicker picker = new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withSubchannel(subchannel);
-        }
-      };
-      helper.updateBalancingState(state, picker);
     }
   }
 }

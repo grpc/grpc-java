@@ -35,7 +35,7 @@ import io.grpc.StatusException;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -103,7 +103,7 @@ public class XdsServerBuilderTest {
     assertThat(socketAddress.getPort()).isGreaterThan(-1);
     if (mockXdsServingStatusListener != null) {
       if (notServingStatus != null) {
-        ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);
+        ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(Throwable.class);
         verify(mockXdsServingStatusListener, times(1)).onNotServing(argCaptor.capture());
         Throwable throwable = argCaptor.getValue();
         assertThat(throwable).isInstanceOf(StatusException.class);

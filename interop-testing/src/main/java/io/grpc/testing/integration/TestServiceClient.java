@@ -71,13 +71,13 @@ public class TestServiceClient {
     } finally {
       client.tearDown();
     }
-    System.exit(0);
   }
 
   private String serverHost = "localhost";
   private String serverHostOverride;
   private int serverPort = 8080;
   private String testCase = "empty_unary";
+  private int numTimes = 1;
   private boolean useTls = true;
   private boolean useAlts = false;
   private boolean useH2cUpgrade = false;
@@ -129,6 +129,8 @@ public class TestServiceClient {
         serverPort = Integer.parseInt(value);
       } else if ("test_case".equals(key)) {
         testCase = value;
+      } else if ("num_times".equals(key)) {
+        numTimes = Integer.parseInt(value);
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_upgrade".equals(key)) {
@@ -192,6 +194,8 @@ public class TestServiceClient {
           + "\n  --test_case=TESTCASE        Test case to run. Default " + c.testCase
           + "\n    Valid options:"
           + validTestCasesHelpText()
+          + "\n  --num_times=INT             Number of times to run the test case. Default: "
+          + c.numTimes
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
           + "\n  --use_alts=true|false       Whether to use ALTS. Enable ALTS will disable TLS."
           + "\n                              Default " + c.useAlts
@@ -266,7 +270,9 @@ public class TestServiceClient {
   private void run() {
     System.out.println("Running test " + testCase);
     try {
-      runTest(TestCases.fromString(testCase));
+      for (int i = 0; i < numTimes; i++) {
+        runTest(TestCases.fromString(testCase));
+      }
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -461,6 +467,7 @@ public class TestServiceClient {
 
       case RPC_SOAK: {
         tester.performSoakTest(
+            serverHost,
             false /* resetChannelPerIteration */,
             soakIterations,
             soakMaxFailures,
@@ -472,6 +479,7 @@ public class TestServiceClient {
 
       case CHANNEL_SOAK: {
         tester.performSoakTest(
+            serverHost,
             true /* resetChannelPerIteration */,
             soakIterations,
             soakMaxFailures,

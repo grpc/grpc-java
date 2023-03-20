@@ -66,28 +66,17 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   # --batch-mode reduces log spam
   mvn verify --batch-mode
   popd
-  pushd examples/example-alts
-  ../gradlew build $GRADLE_FLAGS
-  popd
-  pushd examples/example-hostname
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-tls
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-jwt-auth
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-xds
-  ../gradlew build $GRADLE_FLAGS
-  popd
+  for f in examples/example-*
+  do
+     pushd "$f"
+     ../gradlew build $GRADLE_FLAGS
+     if [ -f "pom.xml" ]; then
+       # --batch-mode reduces log spam
+       mvn verify --batch-mode
+     fi
+     popd
+  done
   # TODO(zpencer): also build the GAE examples
-  pushd examples/example-orca
-  ../gradlew build $GRADLE_FLAGS
-  popd
 fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)

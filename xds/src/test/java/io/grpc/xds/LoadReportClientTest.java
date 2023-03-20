@@ -33,12 +33,12 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
+import io.envoyproxy.envoy.config.core.v3.Node;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
+import io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
@@ -71,7 +71,6 @@ import org.mockito.MockitoAnnotations;
 /**
  * Unit tests for {@link LoadReportClient}.
  */
-// TODO(chengyuanzhang): missing LRS V3 test.
 @RunWith(JUnit4.class)
 public class LoadReportClientTest {
   // bootstrap node identifier
@@ -172,7 +171,7 @@ public class LoadReportClientTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
     addFakeStatsData();
-    lrsClient = new LoadReportClient(loadStatsManager, channel, Context.ROOT, false, NODE,
+    lrsClient = new LoadReportClient(loadStatsManager, channel, Context.ROOT, NODE,
         syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
         fakeClock.getStopwatchSupplier());
     syncContext.execute(new Runnable() {

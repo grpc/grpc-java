@@ -633,10 +633,6 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void abundantInitialResponse() {
-    Metadata headers = new Metadata();
-    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
-    when(args.getHeaders()).thenReturn(headers);
-
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
     assertEquals(1, fakeOobChannels.size());
@@ -719,10 +715,6 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void raceBetweenLoadReportingAndLbStreamClosure() {
-    Metadata headers = new Metadata();
-    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
-    when(args.getHeaders()).thenReturn(headers);
-
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
     assertEquals(1, fakeOobChannels.size());
@@ -2735,7 +2727,7 @@ public class GrpclbLoadBalancerTest {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        balancer.handleResolvedAddresses(
+        balancer.acceptResolvedAddresses(
             ResolvedAddresses.newBuilder()
                 .setAddresses(backendAddrs)
                 .setAttributes(attrs)

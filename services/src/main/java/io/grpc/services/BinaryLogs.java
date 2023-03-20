@@ -22,6 +22,8 @@ import io.grpc.protobuf.services.BinaryLogSink;
 import java.io.IOException;
 
 /**
+ * Utility class to create BinaryLog instances.
+ *
  * @deprecated Use {@link io.grpc.protobuf.services.BinaryLogs} instead.
  */
 @Deprecated

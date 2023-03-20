@@ -107,6 +107,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    */
   private final AtomicBoolean noMoreTransparentRetry = new AtomicBoolean();
   private final AtomicInteger localOnlyTransparentRetries = new AtomicInteger();
+  private final AtomicInteger inFlightSubStreams = new AtomicInteger();
+  private SavedCloseMasterListenerReason savedCloseMasterListenerReason;
 
   // Used for recording the share of buffer used for the current call out of the channel buffer.
   // This field would not be necessary if there is no channel buffer limit.
@@ -220,7 +222,17 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
+  // returns null means we should not create new sub streams, e.g. cancelled or
+  // other close condition is met for retriableStream.
+  @Nullable
   private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry) {
+    int inFlight;
+    do {
+      inFlight = inFlightSubStreams.get();
+      if (inFlight < 0) {
+        return null;
+      }
+    } while (!inFlightSubStreams.compareAndSet(inFlight, inFlight + 1));
     Substream sub = new Substream(previousAttemptCount);
     // one tracer per substream
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
@@ -367,6 +379,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     Substream substream = createSubstream(0, false);
+    if (substream == null) {
+      return;
+    }
     if (isHedging) {
       FutureCanceller scheduledHedgingRef = null;
 
@@ -434,16 +449,19 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void run() {
+      // It's safe to read state.hedgingAttemptCount here.
+      // If this run is not cancelled, the value of state.hedgingAttemptCount won't change
+      // until state.addActiveHedge() is called subsequently, even the state could possibly
+      // change.
+      Substream newSubstream = createSubstream(state.hedgingAttemptCount, false);
+      if (newSubstream == null) {
+        return;
+      }
       callExecutor.execute(
           new Runnable() {
             @SuppressWarnings("GuardedBy")
             @Override
             public void run() {
-              // It's safe to read state.hedgingAttemptCount here.
-              // If this run is not cancelled, the value of state.hedgingAttemptCount won't change
-              // until state.addActiveHedge() is called subsequently, even the state could possibly
-              // change.
-              Substream newSubstream = createSubstream(state.hedgingAttemptCount, false);
               boolean cancelled = false;
               FutureCanceller future = null;
 
@@ -490,15 +508,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     if (runnable != null) {
       runnable.run();
-      listenerSerializeExecutor.execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              isClosed = true;
-              masterListener.closed(reason, RpcProgress.PROCESSED, new Metadata());
-
-            }
-          });
+      safeCloseMasterListener(reason, RpcProgress.PROCESSED, new Metadata());
       return;
     }
 
@@ -803,6 +813,33 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
+  private void safeCloseMasterListener(Status status, RpcProgress progress, Metadata metadata) {
+    savedCloseMasterListenerReason = new SavedCloseMasterListenerReason(status, progress,
+        metadata);
+    if (inFlightSubStreams.addAndGet(Integer.MIN_VALUE) == Integer.MIN_VALUE) {
+      listenerSerializeExecutor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              isClosed = true;
+              masterListener.closed(status, progress, metadata);
+            }
+          });
+    }
+  }
+
+  private static final class SavedCloseMasterListenerReason {
+    private final Status status;
+    private final RpcProgress progress;
+    private final Metadata metadata;
+
+    SavedCloseMasterListenerReason(Status status, RpcProgress progress, Metadata metadata) {
+      this.status = status;
+      this.progress = progress;
+      this.metadata = metadata;
+    }
+  }
+
   private interface BufferEntry {
     /** Replays the buffer entry with the given stream. */
     void runWith(Substream substream);
@@ -817,6 +854,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void headersRead(final Metadata headers) {
+      if (substream.previousAttemptCount > 0) {
+        headers.discardAll(GRPC_PREVIOUS_RPC_ATTEMPTS);
+        headers.put(GRPC_PREVIOUS_RPC_ATTEMPTS, String.valueOf(substream.previousAttemptCount));
+      }
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
         if (throttle != null) {
@@ -840,19 +881,27 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         closedSubstreamsInsight.append(status.getCode());
       }
 
+      if (inFlightSubStreams.decrementAndGet() == Integer.MIN_VALUE) {
+        assert savedCloseMasterListenerReason != null;
+        listenerSerializeExecutor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                isClosed = true;
+                masterListener.closed(savedCloseMasterListenerReason.status,
+                    savedCloseMasterListenerReason.progress,
+                    savedCloseMasterListenerReason.metadata);
+              }
+            });
+        return;
+      }
+
       // handle a race between buffer limit exceeded and closed, when setting
       // substream.bufferLimitExceeded = true happens before state.substreamClosed(substream).
       if (substream.bufferLimitExceeded) {
         commitAndRun(substream);
         if (state.winningSubstream == substream) {
-          listenerSerializeExecutor.execute(
-              new Runnable() {
-                @Override
-                public void run() {
-                  isClosed = true;
-                  masterListener.closed(status, rpcProgress, trailers);
-                }
-              });
+          safeCloseMasterListener(status, rpcProgress, trailers);
         }
         return;
       }
@@ -863,14 +912,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           Status tooManyTransparentRetries = Status.INTERNAL
               .withDescription("Too many transparent retries. Might be a bug in gRPC")
               .withCause(status.asRuntimeException());
-          listenerSerializeExecutor.execute(
-              new Runnable() {
-                @Override
-                public void run() {
-                  isClosed = true;
-                  masterListener.closed(tooManyTransparentRetries, rpcProgress, trailers);
-                }
-              });
+          safeCloseMasterListener(tooManyTransparentRetries, rpcProgress, trailers);
         }
         return;
       }
@@ -881,6 +923,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                 && noMoreTransparentRetry.compareAndSet(false, true))) {
           // transparent retry
           final Substream newSubstream = createSubstream(substream.previousAttemptCount, true);
+          if (newSubstream == null) {
+            return;
+          }
           if (isHedging) {
             boolean commit = false;
             synchronized (lock) {
@@ -942,6 +987,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           } else {
             RetryPlan retryPlan = makeRetryDecision(status, trailers);
             if (retryPlan.shouldRetry) {
+              // retry
+              Substream newSubstream = createSubstream(substream.previousAttemptCount + 1, false);
+              if (newSubstream == null) {
+                return;
+              }
               // The check state.winningSubstream == null, checking if is not already committed, is
               // racy, but is still safe b/c the retry will also handle committed/cancellation
               FutureCanceller scheduledRetryCopy;
@@ -955,10 +1005,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                       new Runnable() {
                         @Override
                         public void run() {
-                          // retry
-                          Substream newSubstream = createSubstream(
-                              substream.previousAttemptCount + 1,
-                              false);
                           drain(newSubstream);
                         }
                       });
@@ -978,14 +1024,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
-        listenerSerializeExecutor.execute(
-            new Runnable() {
-              @Override
-              public void run() {
-                isClosed = true;
-                masterListener.closed(status, rpcProgress, trailers);
-              }
-            });
+        safeCloseMasterListener(status, rpcProgress, trailers);
       }
     }
 
@@ -1060,6 +1099,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       checkState(
           savedState.winningSubstream != null, "Headers should be received prior to messages.");
       if (savedState.winningSubstream != substream) {
+        GrpcUtil.closeQuietly(producer);
         return;
       }
       listenerSerializeExecutor.execute(

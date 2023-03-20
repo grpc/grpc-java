@@ -1,0 +1,111 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+}
+
+description = "gRPC: Servlet"
+
+// javax.servlet-api 4.0 requires a minimum of Java 8, so we might as well use that source level
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+def jettyVersion = '10.0.7'
+
+configurations {
+    itImplementation.extendsFrom(implementation)
+    undertowTestImplementation.extendsFrom(itImplementation)
+    tomcatTestImplementation.extendsFrom(itImplementation)
+    jettyTestImplementation.extendsFrom(itImplementation)
+}
+
+sourceSets {
+    // Create a test sourceset for each classpath - could be simplified if we made new test directories
+    undertowTest {}
+    tomcatTest {}
+
+    // Only compile these tests if java 11+ is being used
+    if (JavaVersion.current().isJava11Compatible()) {
+        jettyTest {}
+    }
+}
+
+dependencies {
+    api project(':grpc-api')
+    compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
+            libraries.javax.annotation // java 9, 10 needs it
+
+    implementation project(':grpc-core'),
+            libraries.guava
+
+    testImplementation 'javax.servlet:javax.servlet-api:4.0.1',
+        'org.jetbrains.kotlinx:lincheck:2.14.1'
+
+    itImplementation project(':grpc-servlet'),
+            project(':grpc-netty'),
+            project(':grpc-core').sourceSets.test.runtimeClasspath,
+            libraries.junit
+    itImplementation(project(':grpc-interop-testing')) {
+        // Avoid grpc-netty-shaded dependency
+        exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-xds'
+    }
+
+    undertowTestImplementation 'io.undertow:undertow-servlet:2.2.14.Final'
+
+    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.56'
+
+    jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
+            "org.eclipse.jetty.http2:http2-server:${jettyVersion}",
+            "org.eclipse.jetty:jetty-client:${jettyVersion}"
+            project(':grpc-testing')
+}
+
+test {
+    if (JavaVersion.current().isJava9Compatible()) {
+        jvmArgs += [
+                // required for Lincheck
+                '--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED',
+                '--add-exports=java.base/jdk.internal.util=ALL-UNNAMED',
+        ]
+    }
+}
+
+// Set up individual classpaths for each test, to avoid any mismatch,
+// and ensure they are only used when supported by the current jvm
+check.dependsOn(tasks.register('undertowTest', Test) {
+    classpath = sourceSets.undertowTest.runtimeClasspath
+    testClassesDirs = sourceSets.undertowTest.output.classesDirs
+})
+check.dependsOn(tasks.register('tomcat9Test', Test) {
+    classpath = sourceSets.tomcatTest.runtimeClasspath
+    testClassesDirs = sourceSets.tomcatTest.output.classesDirs
+
+    // Provide a temporary directory for tomcat to be deleted after test finishes
+    def tomcatTempDir = "$buildDir/tomcat_catalina_base"
+    systemProperty 'catalina.base', tomcatTempDir
+    doLast {
+        file(tomcatTempDir).deleteDir()
+    }
+
+    // tomcat-embed-core 9 presently performs illegal reflective access on
+    // java.io.ObjectStreamClass$Caches.localDescs and sun.rmi.transport.Target.ccl,
+    // see https://lists.apache.org/thread/s0xr7tk2kfkkxfjps9n7dhh4cypfdhyy
+    if (JavaVersion.current().isJava9Compatible()) {
+        jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
+    }
+})
+
+// Only run these tests if java 11+ is being used
+if (JavaVersion.current().isJava11Compatible()) {
+    check.dependsOn(tasks.register('jettyTest', Test) {
+        classpath = sourceSets.jettyTest.runtimeClasspath
+        testClassesDirs = sourceSets.jettyTest.output.classesDirs
+    })
+}
+
+jacocoTestReport {
+    executionData undertowTest, tomcat9Test
+    if (JavaVersion.current().isJava11Compatible()) {
+        executionData jettyTest
+    }
+}

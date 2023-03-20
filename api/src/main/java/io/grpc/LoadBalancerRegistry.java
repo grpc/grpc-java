@@ -107,9 +107,7 @@ public final class LoadBalancerRegistry {
       instance = new LoadBalancerRegistry();
       for (LoadBalancerProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
+        instance.addProvider(provider);
       }
       instance.refreshProviderMap();
     }

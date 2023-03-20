@@ -16,6 +16,9 @@
 
 package io.grpc.okhttp;
 
+import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
+import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
+
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -27,7 +30,10 @@ import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.internal.MaxConnectionIdleManager;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.ServerTransport;
@@ -91,6 +97,9 @@ final class OkHttpServerTransport implements ServerTransport,
   private ScheduledExecutorService scheduledExecutorService;
   private Attributes attributes;
   private KeepAliveManager keepAliveManager;
+  private MaxConnectionIdleManager maxConnectionIdleManager;
+  private ScheduledFuture<?> maxConnectionAgeMonitor;
+  private final KeepAliveEnforcer keepAliveEnforcer;
 
   private final Object lock = new Object();
   @GuardedBy("lock")
@@ -133,6 +142,8 @@ final class OkHttpServerTransport implements ServerTransport,
     logId = InternalLogId.allocate(getClass(), bareSocket.getRemoteSocketAddress().toString());
     transportExecutor = config.transportExecutorPool.getObject();
     scheduledExecutorService = config.scheduledExecutorServicePool.getObject();
+    keepAliveEnforcer = new KeepAliveEnforcer(config.permitKeepAliveWithoutCalls,
+        config.permitKeepAliveTimeInNanos, TimeUnit.NANOSECONDS);
   }
 
   public void start(ServerTransportListener listener) {
@@ -155,6 +166,27 @@ final class OkHttpServerTransport implements ServerTransport,
       asyncSink.becomeConnected(Okio.sink(socket), socket);
       FrameWriter rawFrameWriter = asyncSink.limitControlFramesWriter(
           variant.newWriter(Okio.buffer(asyncSink), false));
+      FrameWriter writeMonitoringFrameWriter = new ForwardingFrameWriter(rawFrameWriter) {
+        @Override
+        public void synReply(boolean outFinished, int streamId, List<Header> headerBlock)
+            throws IOException {
+          keepAliveEnforcer.resetCounters();
+          super.synReply(outFinished, streamId, headerBlock);
+        }
+
+        @Override
+        public void headers(int streamId, List<Header> headerBlock) throws IOException {
+          keepAliveEnforcer.resetCounters();
+          super.headers(streamId, headerBlock);
+        }
+
+        @Override
+        public void data(boolean outFinished, int streamId, Buffer source, int byteCount)
+            throws IOException {
+          keepAliveEnforcer.resetCounters();
+          super.data(outFinished, streamId, source, byteCount);
+        }
+      };
       synchronized (lock) {
         this.securityInfo = result.securityInfo;
 
@@ -163,7 +195,7 @@ final class OkHttpServerTransport implements ServerTransport,
         // does not propagate syscall errors through the FrameWriter. But we handle the
         // AsyncSink failures with the same TransportExceptionHandler instance so it is all
         // mixed back together.
-        frameWriter = new ExceptionHandlingFrameWriter(this, rawFrameWriter);
+        frameWriter = new ExceptionHandlingFrameWriter(this, writeMonitoringFrameWriter);
         outboundFlow = new OutboundFlowController(this, frameWriter);
 
         // These writes will be queued in the serializingExecutor waiting for this function to
@@ -189,6 +221,20 @@ final class OkHttpServerTransport implements ServerTransport,
         keepAliveManager.onTransportStarted();
       }
 
+      if (config.maxConnectionIdleNanos != MAX_CONNECTION_IDLE_NANOS_DISABLED) {
+        maxConnectionIdleManager = new MaxConnectionIdleManager(config.maxConnectionIdleNanos);
+        maxConnectionIdleManager.start(this::shutdown, scheduledExecutorService);
+      }
+
+      if (config.maxConnectionAgeInNanos != MAX_CONNECTION_AGE_NANOS_DISABLED) {
+        long maxConnectionAgeInNanos =
+            (long) ((.9D + Math.random() * .2D) * config.maxConnectionAgeInNanos);
+        maxConnectionAgeMonitor = scheduledExecutorService.schedule(
+            new LogExceptionRunnable(() -> shutdown(config.maxConnectionAgeGraceInNanos)),
+            maxConnectionAgeInNanos,
+            TimeUnit.NANOSECONDS);
+      }
+
       transportExecutor.execute(
           new FrameHandler(variant.newReader(Okio.buffer(Okio.source(socket)), false)));
     } catch (Error | IOException | RuntimeException ex) {
@@ -204,6 +250,10 @@ final class OkHttpServerTransport implements ServerTransport,
 
   @Override
   public void shutdown() {
+    shutdown(TimeUnit.SECONDS.toNanos(1L));
+  }
+
+  private void shutdown(Long graceTimeInNanos) {
     synchronized (lock) {
       if (gracefulShutdown || abruptShutdown) {
         return;
@@ -217,7 +267,7 @@ final class OkHttpServerTransport implements ServerTransport,
         // we also set a timer to limit the upper bound in case the PING is excessively stalled or
         // the client is malicious.
         secondGoawayTimer = scheduledExecutorService.schedule(
-            this::triggerGracefulSecondGoaway, 1, TimeUnit.SECONDS);
+            this::triggerGracefulSecondGoaway, graceTimeInNanos, TimeUnit.NANOSECONDS);
         frameWriter.goAway(Integer.MAX_VALUE, ErrorCode.NO_ERROR, new byte[0]);
         frameWriter.ping(false, 0, GRACEFUL_SHUTDOWN_PING);
         frameWriter.flush();
@@ -311,6 +361,13 @@ final class OkHttpServerTransport implements ServerTransport,
     if (keepAliveManager != null) {
       keepAliveManager.onTransportTermination();
     }
+    if (maxConnectionIdleManager != null) {
+      maxConnectionIdleManager.onTransportTermination();
+    }
+
+    if (maxConnectionAgeMonitor != null) {
+      maxConnectionAgeMonitor.cancel(false);
+    }
     transportExecutor = config.transportExecutorPool.returnObject(transportExecutor);
     scheduledExecutorService =
         config.scheduledExecutorServicePool.returnObject(scheduledExecutorService);
@@ -369,6 +426,12 @@ final class OkHttpServerTransport implements ServerTransport,
   void streamClosed(int streamId, boolean flush) {
     synchronized (lock) {
       streams.remove(streamId);
+      if (streams.isEmpty()) {
+        keepAliveEnforcer.onTransportIdle();
+        if (maxConnectionIdleManager != null) {
+          maxConnectionIdleManager.onTransportIdle();
+        }
+      }
       if (gracefulShutdown && streams.isEmpty()) {
         frameWriter.close();
       } else {
@@ -433,6 +496,11 @@ final class OkHttpServerTransport implements ServerTransport,
     final int flowControlWindow;
     final int maxInboundMessageSize;
     final int maxInboundMetadataSize;
+    final long maxConnectionIdleNanos;
+    final boolean permitKeepAliveWithoutCalls;
+    final long permitKeepAliveTimeInNanos;
+    final long maxConnectionAgeInNanos;
+    final long maxConnectionAgeGraceInNanos;
 
     public Config(
         OkHttpServerBuilder builder,
@@ -452,6 +520,11 @@ final class OkHttpServerTransport implements ServerTransport,
       flowControlWindow = builder.flowControlWindow;
       maxInboundMessageSize = builder.maxInboundMessageSize;
       maxInboundMetadataSize = builder.maxInboundMetadataSize;
+      maxConnectionIdleNanos = builder.maxConnectionIdleInNanos;
+      permitKeepAliveWithoutCalls = builder.permitKeepAliveWithoutCalls;
+      permitKeepAliveTimeInNanos = builder.permitKeepAliveTimeInNanos;
+      maxConnectionAgeInNanos = builder.maxConnectionAgeInNanos;
+      maxConnectionAgeGraceInNanos = builder.maxConnectionAgeGraceInNanos;
     }
   }
 
@@ -697,6 +770,12 @@ final class OkHttpServerTransport implements ServerTransport,
             authority == null ? null : asciiString(authority),
             statsTraceCtx,
             tracer);
+        if (streams.isEmpty()) {
+          keepAliveEnforcer.onTransportActive();
+          if (maxConnectionIdleManager != null) {
+            maxConnectionIdleManager.onTransportActive();
+          }
+        }
         streams.put(streamId, stream);
         listener.streamCreated(streamForApp, method, metadata);
         stream.onStreamAllocated();
@@ -829,6 +908,11 @@ final class OkHttpServerTransport implements ServerTransport,
 
     @Override
     public void ping(boolean ack, int payload1, int payload2) {
+      if (!keepAliveEnforcer.pingAcceptable()) {
+        abruptShutdown(ErrorCode.ENHANCE_YOUR_CALM, "too_many_pings",
+            Status.RESOURCE_EXHAUSTED.withDescription("Too many pings from client"), false);
+        return;
+      }
       long payload = (((long) payload1) << 32) | (payload2 & 0xffffffffL);
       if (!ack) {
         frameLogger.logPing(OkHttpFrameLogger.Direction.INBOUND, payload);
@@ -953,6 +1037,12 @@ final class OkHttpServerTransport implements ServerTransport,
       synchronized (lock) {
         Http2ErrorStreamState stream =
             new Http2ErrorStreamState(streamId, lock, outboundFlow, config.flowControlWindow);
+        if (streams.isEmpty()) {
+          keepAliveEnforcer.onTransportActive();
+          if (maxConnectionIdleManager != null) {
+            maxConnectionIdleManager.onTransportActive();
+          }
+        }
         streams.put(streamId, stream);
         if (inFinished) {
           stream.inboundDataReceived(new Buffer(), 0, true);

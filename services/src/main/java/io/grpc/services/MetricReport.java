@@ -30,14 +30,16 @@ import java.util.Map;
 public final class MetricReport {
   private double cpuUtilization;
   private double memoryUtilization;
+  private double qps;
   private Map<String, Double> requestCostMetrics;
   private Map<String, Double> utilizationMetrics;
 
-  MetricReport(double cpuUtilization, double memoryUtilization,
-                   Map<String, Double> requestCostMetrics,
-                   Map<String, Double> utilizationMetrics) {
+  MetricReport(double cpuUtilization, double memoryUtilization, double qps,
+               Map<String, Double> requestCostMetrics,
+               Map<String, Double> utilizationMetrics) {
     this.cpuUtilization = cpuUtilization;
     this.memoryUtilization = memoryUtilization;
+    this.qps = qps;
     this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
     this.utilizationMetrics = checkNotNull(utilizationMetrics, "utilizationMetrics");
   }
@@ -58,6 +60,10 @@ public final class MetricReport {
     return utilizationMetrics;
   }
 
+  public double getQps() {
+    return qps;
+  }
+
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
@@ -65,6 +71,7 @@ public final class MetricReport {
         .add("memoryUtilization", memoryUtilization)
         .add("requestCost", requestCostMetrics)
         .add("utilization", utilizationMetrics)
+        .add("qps", qps)
         .toString();
   }
 }

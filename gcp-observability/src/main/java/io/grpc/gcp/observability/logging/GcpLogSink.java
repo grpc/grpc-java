@@ -18,12 +18,15 @@ package io.grpc.gcp.observability.logging;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.api.gax.batching.BatchingSettings;
+import com.google.api.gax.batching.FlowController;
 import com.google.cloud.MonitoredResource;
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
 import com.google.cloud.logging.LoggingOptions;
 import com.google.cloud.logging.Payload.JsonPayload;
 import com.google.cloud.logging.Severity;
+import com.google.cloud.logging.v2.stub.LoggingServiceV2StubSettings;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -33,6 +36,7 @@ import io.grpc.Internal;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
@@ -40,6 +44,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.threeten.bp.Duration;
 
 /**
  * Sink for Google Cloud Logging.
@@ -50,41 +55,37 @@ public class GcpLogSink implements Sink {
 
   private static final String DEFAULT_LOG_NAME =
       "microservices.googleapis.com%2Fobservability%2Fgrpc";
+  private static final Severity DEFAULT_LOG_LEVEL = Severity.DEBUG;
   private static final String K8S_MONITORED_RESOURCE_TYPE = "k8s_container";
   private static final Set<String> kubernetesResourceLabelSet
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
       "pod_name", "container_name");
-  private static final long FALLBACK_FLUSH_LIMIT = 100L;
   private final String projectId;
   private final Map<String, String> customTags;
   private final MonitoredResource kubernetesResource;
-  private final Long flushLimit;
   /** Lazily initialize cloud logging client to avoid circular initialization. Because cloud
    * logging APIs also uses gRPC. */
   private volatile Logging gcpLoggingClient;
-  private long flushCounter;
   private final Collection<String> servicesToExclude;
 
   @VisibleForTesting
-  GcpLogSink(Logging loggingClient, String destinationProjectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Long flushLimit, Collection<String> servicesToExclude) {
-    this(destinationProjectId, locationTags, customTags, flushLimit, servicesToExclude);
+  GcpLogSink(Logging loggingClient, String projectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Collection<String> servicesToExclude) {
+    this(projectId, locationTags, customTags, servicesToExclude);
     this.gcpLoggingClient = loggingClient;
   }
 
   /**
    * Retrieves a single instance of GcpLogSink.
    *
-   * @param destinationProjectId cloud project id to write logs
+   * @param projectId GCP project id to write logs
    * @param servicesToExclude service names for which log entries should not be generated
    */
-  public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
-      Map<String, String> customTags, Long flushLimit, Collection<String> servicesToExclude) {
-    this.projectId = destinationProjectId;
-    this.customTags = getCustomTags(customTags, locationTags, destinationProjectId);
+  public GcpLogSink(String projectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Collection<String> servicesToExclude) {
+    this.projectId = projectId;
+    this.customTags = getCustomTags(customTags, locationTags, projectId);
     this.kubernetesResource = getResource(locationTags);
-    this.flushLimit = flushLimit != null ? flushLimit : FALLBACK_FLUSH_LIMIT;
-    this.flushCounter = 0L;
     this.servicesToExclude = checkNotNull(servicesToExclude, "servicesToExclude");
   }
 
@@ -105,30 +106,34 @@ public class GcpLogSink implements Sink {
     if (servicesToExclude.contains(logProto.getServiceName())) {
       return;
     }
+    LogEntry grpcLogEntry = null;
     try {
-      GrpcLogRecord.EventType event = logProto.getEventType();
-      Severity logEntrySeverity = getCloudLoggingLevel(logProto.getLogLevel());
+      GrpcLogRecord.EventType eventType = logProto.getType();
       // TODO(DNVindhya): make sure all (int, long) values are not displayed as double
       // For now, every value is being converted as string because of JsonFormat.printer().print
+      Map<String, Object> logProtoMap = protoToMapConverter(logProto);
       LogEntry.Builder grpcLogEntryBuilder =
-          LogEntry.newBuilder(JsonPayload.of(protoToMapConverter(logProto)))
-              .setSeverity(logEntrySeverity)
+          LogEntry.newBuilder(JsonPayload.of(logProtoMap))
+              .setSeverity(DEFAULT_LOG_LEVEL)
               .setLogName(DEFAULT_LOG_NAME)
-              .setResource(kubernetesResource);
+              .setResource(kubernetesResource)
+              .setTimestamp(Instant.now());
 
       if (!customTags.isEmpty()) {
         grpcLogEntryBuilder.setLabels(customTags);
       }
-      LogEntry grpcLogEntry = grpcLogEntryBuilder.build();
+      grpcLogEntry = grpcLogEntryBuilder.build();
       synchronized (this) {
-        logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", event);
+        logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", eventType);
         gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
-        flushCounter = ++flushCounter;
-        if (flushCounter >= flushLimit) {
-          gcpLoggingClient.flush();
-          flushCounter = 0L;
-        }
       }
+    } catch (FlowController.FlowControlRuntimeException e) {
+      String grpcLogEntryString = null;
+      if (grpcLogEntry != null) {
+        grpcLogEntryString = grpcLogEntry.toStructuredJsonString();
+      }
+      logger.log(Level.SEVERE, "Limit exceeded while writing log entry to cloud logging");
+      logger.log(Level.SEVERE, "Log entry = ", grpcLogEntryString);
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
     }
@@ -139,17 +144,27 @@ public class GcpLogSink implements Sink {
     if (!Strings.isNullOrEmpty(projectId)) {
       builder.setProjectId(projectId);
     }
+    BatchingSettings loggingDefaultBatchingSettings = LoggingServiceV2StubSettings.newBuilder()
+        .writeLogEntriesSettings().getBatchingSettings();
+    // Custom batching settings
+    BatchingSettings grpcLoggingVBatchingSettings = loggingDefaultBatchingSettings.toBuilder()
+        .setDelayThreshold(Duration.ofSeconds(1L)).setFlowControlSettings(
+            loggingDefaultBatchingSettings.getFlowControlSettings().toBuilder()
+                .setMaxOutstandingRequestBytes(52428800L) //50 MiB
+                .setLimitExceededBehavior(FlowController.LimitExceededBehavior.ThrowException)
+                .build()).build();
+    builder.setBatchingSettings(grpcLoggingVBatchingSettings);
     return builder.build().getService();
   }
 
   @VisibleForTesting
   static Map<String, String> getCustomTags(Map<String, String> customTags,
-      Map<String, String> locationTags, String destinationProjectId) {
+      Map<String, String> locationTags, String projectId) {
     ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
     String sourceProjectId = locationTags.get("project_id");
-    if (!Strings.isNullOrEmpty(destinationProjectId)
+    if (!Strings.isNullOrEmpty(projectId)
         && !Strings.isNullOrEmpty(sourceProjectId)
-        && !Objects.equals(sourceProjectId, destinationProjectId)) {
+        && !Objects.equals(sourceProjectId, projectId)) {
       tagsBuilder.put("source_project_id", sourceProjectId);
     }
     if (customTags != null) {
@@ -175,27 +190,9 @@ public class GcpLogSink implements Sink {
   @SuppressWarnings("unchecked")
   private Map<String, Object> protoToMapConverter(GrpcLogRecord logProto)
       throws IOException {
-    JsonFormat.Printer printer = JsonFormat.printer().preservingProtoFieldNames();
+    JsonFormat.Printer printer = JsonFormat.printer();
     String recordJson = printer.print(logProto);
     return (Map<String, Object>) JsonParser.parse(recordJson);
-  }
-
-  private Severity getCloudLoggingLevel(GrpcLogRecord.LogLevel recordLevel) {
-    switch (recordLevel.getNumber()) {
-      case 1: // GrpcLogRecord.LogLevel.LOG_LEVEL_TRACE
-      case 2: // GrpcLogRecord.LogLevel.LOG_LEVEL_DEBUG
-        return Severity.DEBUG;
-      case 3: // GrpcLogRecord.LogLevel.LOG_LEVEL_INFO
-        return Severity.INFO;
-      case 4: // GrpcLogRecord.LogLevel.LOG_LEVEL_WARN
-        return Severity.WARNING;
-      case 5: // GrpcLogRecord.LogLevel.LOG_LEVEL_ERROR
-        return Severity.ERROR;
-      case 6: // GrpcLogRecord.LogLevel.LOG_LEVEL_CRITICAL
-        return Severity.CRITICAL;
-      default:
-        return Severity.DEFAULT;
-    }
   }
 
   /**

@@ -57,9 +57,9 @@ import io.grpc.xds.Stats.UpstreamLocalityStats;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SslContextProvider;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.SslContextProvider;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -88,7 +88,7 @@ public class ClusterImplLoadBalancerTest {
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("api.google.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("api.google.com", InsecureChannelCredentials.create());
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -282,7 +282,7 @@ public class ClusterImplLoadBalancerTest {
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, null,
         Collections.singletonList(DropOverload.create("lb", 1_000_000)),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.singletonList(endpoint))
             .setAttributes(
@@ -470,12 +470,20 @@ public class ClusterImplLoadBalancerTest {
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(leafBalancer.name).isEqualTo("round_robin");
+
     // Simulates leaf load balancer creating subchannels.
     CreateSubchannelArgs args =
         CreateSubchannelArgs.newBuilder()
             .setAddresses(leafBalancer.addresses)
             .build();
     Subchannel subchannel = leafBalancer.helper.createSubchannel(args);
+    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_CLUSTER_NAME))
+          .isEqualTo(CLUSTER);
+    }
+
+    // An address update should also retain the cluster attribute.
+    subchannel.updateAddresses(leafBalancer.addresses);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_CLUSTER_NAME))
           .isEqualTo(CLUSTER);
@@ -571,7 +579,7 @@ public class ClusterImplLoadBalancerTest {
 
   private void deliverAddressesAndConfig(List<EquivalentAddressGroup> addresses,
       ClusterImplConfig config) {
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(addresses)
             .setAttributes(
@@ -677,10 +685,11 @@ public class ClusterImplLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
       attributes = resolvedAddresses.getAttributes();
+      return true;
     }
 
     @Override
@@ -759,6 +768,10 @@ public class ClusterImplLoadBalancerTest {
     @Override
     public Attributes getAttributes() {
       return attrs;
+    }
+
+    @Override
+    public void updateAddresses(List<EquivalentAddressGroup> addrs) {
     }
   }
 

@@ -132,6 +132,11 @@ tasks.named("compileJava").configure {
             it.options.errorprone.excludedPaths,
             ".*/build/generated/sources/annotationProcessor/java/.*",
             "|")
+    // remove after upgrade error-prone
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/tmp/compileJava/compileTransaction/annotation-output/io/grpc/xds/.*",
+            "|")
 }
 
 tasks.named("jar").configure {

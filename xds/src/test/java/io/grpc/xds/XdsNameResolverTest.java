@@ -24,6 +24,7 @@ import static io.grpc.xds.FaultFilter.HEADER_DELAY_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_PERCENTAGE_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -86,7 +87,9 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -143,7 +146,7 @@ public class XdsNameResolverTest {
   private final TestChannel channel = new TestChannel();
   private BootstrapInfo bootstrapInfo = BootstrapInfo.builder()
       .servers(ImmutableList.of(ServerInfo.create(
-          "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+          "td.googleapis.com", InsecureChannelCredentials.create())))
       .node(Node.newBuilder().build())
       .build();
   private String expectedLdsResourceName = AUTHORITY;
@@ -229,7 +232,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_templateWithoutXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate("%s/id=1")
         .build();
@@ -247,7 +250,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_templateWithXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
@@ -802,6 +805,7 @@ public class XdsNameResolverTest {
     // A different resolver/Channel.
     resolver.shutdown();
     reset(mockListener);
+    when(mockRandom.nextLong()).thenReturn(123L);
     resolver = new XdsNameResolver(null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
@@ -991,6 +995,7 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_simpleCallSucceeds_routeToWeightedCluster() {
     when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
+    when(mockRandom.nextLong(anyLong())).thenReturn(90L, 10L);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -1733,7 +1738,7 @@ public class XdsNameResolverTest {
     assertThat(testCall).isNull();
     verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
         "Deadline exceeded after up to 5000 ns of fault-injected delay:"
-            + " Deadline exceeded after 0.000004000s. "));
+            + " Deadline CallOptions will be exceeded in 0.000004000s. "));
   }
 
   @Test
@@ -2038,12 +2043,8 @@ public class XdsNameResolverTest {
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
-    Map<String, ?> bootstrap;
-
     @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      this.bootstrap = bootstrap;
-    }
+    public void setBootstrapOverride(Map<String, ?> bootstrap) {}
 
     @Override
     @Nullable
@@ -2071,8 +2072,8 @@ public class XdsNameResolverTest {
     // Should never be subscribing to more than one LDS and RDS resource at any point of time.
     private String ldsResource;  // should always be AUTHORITY
     private String rdsResource;
-    private LdsResourceWatcher ldsWatcher;
-    private RdsResourceWatcher rdsWatcher;
+    private ResourceWatcher<LdsUpdate> ldsWatcher;
+    private ResourceWatcher<RdsUpdate> rdsWatcher;
 
     @Override
     BootstrapInfo getBootstrapInfo() {
@@ -2080,37 +2081,49 @@ public class XdsNameResolverTest {
     }
 
     @Override
-    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
-      assertThat(ldsResource).isNull();
-      assertThat(ldsWatcher).isNull();
-      assertThat(resourceName).isEqualTo(expectedLdsResourceName);
-      ldsResource = resourceName;
-      ldsWatcher = watcher;
+    @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
+                                                    String resourceName,
+                                                    ResourceWatcher<T> watcher) {
+
+      switch (resourceType.typeName()) {
+        case "LDS":
+          assertThat(ldsResource).isNull();
+          assertThat(ldsWatcher).isNull();
+          assertThat(resourceName).isEqualTo(expectedLdsResourceName);
+          ldsResource = resourceName;
+          ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
+          break;
+        case "RDS":
+          assertThat(rdsResource).isNull();
+          assertThat(rdsWatcher).isNull();
+          rdsResource = resourceName;
+          rdsWatcher = (ResourceWatcher<RdsUpdate>) watcher;
+          break;
+        default:
+      }
     }
 
     @Override
-    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
-      assertThat(ldsResource).isNotNull();
-      assertThat(ldsWatcher).isNotNull();
-      assertThat(resourceName).isEqualTo(expectedLdsResourceName);
-      ldsResource = null;
-      ldsWatcher = null;
-    }
-
-    @Override
-    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
-      assertThat(rdsResource).isNull();
-      assertThat(rdsWatcher).isNull();
-      rdsResource = resourceName;
-      rdsWatcher = watcher;
-    }
-
-    @Override
-    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
-      assertThat(rdsResource).isNotNull();
-      assertThat(rdsWatcher).isNotNull();
-      rdsResource = null;
-      rdsWatcher = null;
+    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                           String resourceName,
+                                                           ResourceWatcher<T> watcher) {
+      switch (type.typeName()) {
+        case "LDS":
+          assertThat(ldsResource).isNotNull();
+          assertThat(ldsWatcher).isNotNull();
+          assertThat(resourceName).isEqualTo(expectedLdsResourceName);
+          ldsResource = null;
+          ldsWatcher = null;
+          break;
+        case "RDS":
+          assertThat(rdsResource).isNotNull();
+          assertThat(rdsWatcher).isNotNull();
+          rdsResource = null;
+          rdsWatcher = null;
+          break;
+        default:
+      }
     }
 
     void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {

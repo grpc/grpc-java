@@ -244,11 +244,8 @@ public abstract class AbstractInteropTest {
 
   protected static final Empty EMPTY = Empty.getDefaultInstance();
 
-  private void startServer() {
-    maybeStartHandshakerServer();
-    ServerBuilder<?> builder = getServerBuilder();
+  private void configBuilder(@Nullable ServerBuilder<?> builder) {
     if (builder == null) {
-      server = null;
       return;
     }
     testServiceExecutor = Executors.newScheduledThreadPool(2);
@@ -266,6 +263,14 @@ public abstract class AbstractInteropTest {
                 new TestServiceImpl(testServiceExecutor),
                 allInterceptors))
         .addStreamTracerFactory(serverStreamTracerFactory);
+  }
+
+  protected void startServer(@Nullable ServerBuilder<?> builder) {
+    maybeStartHandshakerServer();
+    if (builder == null) {
+      server = null;
+      return;
+    }
 
     try {
       server = builder.build().start();
@@ -333,7 +338,9 @@ public abstract class AbstractInteropTest {
    */
   @Before
   public void setUp() {
-    startServer();
+    ServerBuilder<?> serverBuilder = getServerBuilder();
+    configBuilder(serverBuilder);
+    startServer(serverBuilder);
     channel = createChannel();
 
     blockingStub =
@@ -932,7 +939,7 @@ public abstract class AbstractInteropTest {
     requestStream.onCompleted();
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
+    assertEquals(responseSizes.size() * (long) numRequests, recorder.getValues().size());
     for (int ix = 0; ix < recorder.getValues().size(); ++ix) {
       StreamingOutputCallResponse response = recorder.getValues().get(ix);
       int length = response.getPayload().getBody().size();
@@ -966,7 +973,7 @@ public abstract class AbstractInteropTest {
     requestStream.onCompleted();
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
+    assertEquals(responseSizes.size() * (long) numRequests, recorder.getValues().size());
     for (int ix = 0; ix < recorder.getValues().size(); ++ix) {
       StreamingOutputCallResponse response = recorder.getValues().get(ix);
       int length = response.getPayload().getBody().size();
@@ -1118,7 +1125,8 @@ public abstract class AbstractInteropTest {
     requestStream.onCompleted();
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    org.junit.Assert.assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
+    org.junit.Assert.assertEquals(
+        responseSizes.size() * (long) numRequests, recorder.getValues().size());
 
     // Assert that our side channel object is echoed back in both headers and trailers
     Assert.assertEquals(metadataValue, headersCapture.get().get(Util.METADATA_KEY));
@@ -1241,7 +1249,7 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
       assertThat(ex.getStatus().getDescription())
-        .startsWith("ClientCall started after deadline exceeded");
+        .startsWith("ClientCall started after CallOptions deadline was exceeded");
     }
 
     // CensusStreamTracerModule record final status in the interceptor, thus is guaranteed to be
@@ -1274,7 +1282,7 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
       assertThat(ex.getStatus().getDescription())
-        .startsWith("ClientCall started after deadline exceeded");
+        .startsWith("ClientCall started after CallOptions deadline was exceeded");
     }
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
@@ -2025,6 +2033,7 @@ public abstract class AbstractInteropTest {
     * and channel creation behavior.
    */
   public void performSoakTest(
+      String serverUri,
       boolean resetChannelPerIteration,
       int soakIterations,
       int maxFailures,
@@ -2057,21 +2066,22 @@ public abstract class AbstractInteropTest {
       SoakIterationResult result = performOneSoakIteration(soakStub);
       SocketAddress peer = clientCallCapture
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
-      System.err.print(
+      StringBuilder logStr = new StringBuilder(
           String.format(
               Locale.US,
-              "soak iteration: %d elapsed_ms: %d peer: %s",
-              i, result.getLatencyMs(), peer != null ? peer.toString() : "null"));
+              "soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
+              i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
       if (!result.getStatus().equals(Status.OK)) {
         totalFailures++;
-        System.err.println(String.format(" failed: %s", result.getStatus()));
+        logStr.append(String.format(" failed: %s", result.getStatus()));
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
         totalFailures++;
-        System.err.println(
+        logStr.append(
             " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
       } else {
-        System.err.println(" succeeded");
+        logStr.append(" succeeded");
       }
+      System.err.println(logStr.toString());
       iterationsDone++;
       latencies.recordValue(result.getLatencyMs());
       long remainingNs = earliestNextStartNs - System.nanoTime();
@@ -2084,20 +2094,12 @@ public abstract class AbstractInteropTest {
     System.err.println(
         String.format(
             Locale.US,
-            "soak test ran: %d / %d iterations\n"
-                + "total failures: %d\n"
-                + "max failures threshold: %d\n"
-                + "max acceptable per iteration latency ms: %d\n"
-                + " p50 soak iteration latency: %d ms\n"
-                + " p90 soak iteration latency: %d ms\n"
-                + "p100 soak iteration latency: %d ms\n"
-                + "See breakdown above for which iterations succeeded, failed, and "
-                + "why for more info.",
+            "(server_uri: %s) soak test ran: %d / %d iterations. total failures: %d. "
+                + "p50: %d ms, p90: %d ms, p100: %d ms",
+            serverUri,
             iterationsDone,
             soakIterations,
             totalFailures,
-            maxFailures,
-            maxAcceptablePerIterationLatencyMs,
             latencies.getValueAtPercentile(50),
             latencies.getValueAtPercentile(90),
             latencies.getValueAtPercentile(100)));
@@ -2105,8 +2107,9 @@ public abstract class AbstractInteropTest {
     String timeoutErrorMessage =
         String.format(
             Locale.US,
-            "soak test consumed all %d seconds of time and quit early, only "
-                + "having ran %d out of desired %d iterations.",
+            "(server_uri: %s) soak test consumed all %d seconds of time and quit early, "
+                + "only having ran %d out of desired %d iterations.",
+            serverUri,
             overallTimeoutSeconds,
             iterationsDone,
             soakIterations);
@@ -2115,8 +2118,9 @@ public abstract class AbstractInteropTest {
     String tooManyFailuresErrorMessage =
         String.format(
             Locale.US,
-            "soak test total failures: %d exceeds max failures threshold: %d.",
-            totalFailures, maxFailures);
+            "(server_uri: %s) soak test total failures: %d exceeds max failures "
+                + "threshold: %d.",
+            serverUri, totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
   }
 
@@ -2126,7 +2130,7 @@ public abstract class AbstractInteropTest {
     }
   }
 
-  /** Helper for getting remote address from {@link io.grpc.ServerCall#getAttributes()} */
+  /** Helper for getting remote address from {@link io.grpc.ServerCall#getAttributes()}. */
   protected SocketAddress obtainRemoteClientAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub =
         blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
@@ -2136,7 +2140,7 @@ public abstract class AbstractInteropTest {
     return serverCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
   }
 
-  /** Helper for getting remote address from {@link io.grpc.ClientCall#getAttributes()} */
+  /** Helper for getting remote address from {@link io.grpc.ClientCall#getAttributes()}. */
   protected SocketAddress obtainRemoteServerAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
         .withInterceptors(recordClientCallInterceptor(clientCallCapture))
@@ -2147,7 +2151,7 @@ public abstract class AbstractInteropTest {
     return clientCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
   }
 
-  /** Helper for getting local address from {@link io.grpc.ServerCall#getAttributes()} */
+  /** Helper for getting local address from {@link io.grpc.ServerCall#getAttributes()}. */
   protected SocketAddress obtainLocalServerAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub =
         blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
@@ -2157,7 +2161,7 @@ public abstract class AbstractInteropTest {
     return serverCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR);
   }
 
-  /** Helper for getting local address from {@link io.grpc.ClientCall#getAttributes()} */
+  /** Helper for getting local address from {@link io.grpc.ClientCall#getAttributes()}. */
   protected SocketAddress obtainLocalClientAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
         .withInterceptors(recordClientCallInterceptor(clientCallCapture))
@@ -2168,7 +2172,7 @@ public abstract class AbstractInteropTest {
     return clientCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR);
   }
 
-  /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#getAttributes()} */
+  /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#getAttributes()}. */
   protected void assertX500SubjectDn(String tlsInfo) {
     TestServiceGrpc.TestServiceBlockingStub stub =
         blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
@@ -2398,10 +2402,10 @@ public abstract class AbstractInteropTest {
     if (isServer) {
       assertEquals(
           requests.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_SERVER_REQUEST_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC));
       assertEquals(
           responses.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC));
       assertEquals(
           uncompressedRequestsSize,
           record.getMetricAsLongOrFail(
@@ -2410,18 +2414,18 @@ public abstract class AbstractInteropTest {
           uncompressedResponsesSize,
           record.getMetricAsLongOrFail(
               DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_SERVER_LATENCY));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY));
       // It's impossible to get the expected wire sizes because it may be compressed, so we just
       // check if they are recorded.
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_REQUEST_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC));
     } else {
       assertEquals(
           requests.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC));
       assertEquals(
           responses.size(),
-          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_COUNT));
+          record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC));
       assertEquals(
           uncompressedRequestsSize,
           record.getMetricAsLongOrFail(
@@ -2430,11 +2434,11 @@ public abstract class AbstractInteropTest {
           uncompressedResponsesSize,
           record.getMetricAsLongOrFail(
               DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY));
       // It's impossible to get the expected wire sizes because it may be compressed, so we just
       // check if they are recorded.
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_BYTES));
-      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC));
+      assertNotNull(record.getMetric(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC));
     }
   }
 

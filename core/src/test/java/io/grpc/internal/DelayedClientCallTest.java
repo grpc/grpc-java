@@ -27,7 +27,9 @@ import static org.mockito.Mockito.verify;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ClientCall;
 import io.grpc.ClientCall.Listener;
+import io.grpc.Context;
 import io.grpc.Deadline;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingTestUtil;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -36,6 +38,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -105,7 +108,8 @@ public class DelayedClientCallTest {
         callExecutor, fakeClock.getScheduledExecutorService(), Deadline.after(10, SECONDS));
     delayedClientCall.start(listener, new Metadata());
     callMeMaybe(delayedClientCall.setCall(mockRealCall));
-    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     Metadata metadata = new Metadata();
@@ -130,7 +134,8 @@ public class DelayedClientCallTest {
     callMeMaybe(delayedClientCall.setCall(mockRealCall));
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
-    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     verify(mockRealCall).request(1);
@@ -147,7 +152,8 @@ public class DelayedClientCallTest {
     Runnable r = delayedClientCall.setCall(mockRealCall);
     assertThat(r).isNotNull();
     r.run();
-    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     verify(mockRealCall).request(1);
@@ -182,13 +188,43 @@ public class DelayedClientCallTest {
     assertThat(r).isNotNull();
     r.run();
     delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
-    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     verify(mockRealCall).request(1);
     verify(mockRealCall).cancel(any(), any());
     realCallListener.onClose(Status.CANCELLED, null);
     verify(listener).onClose(Status.CANCELLED, null);
+  }
+
+  @Test
+  public void delayedCallsRunUnderContext() throws Exception {
+    Context.Key<Object> contextKey = Context.key("foo");
+    Object goldenValue = new Object();
+    DelayedClientCall<String, Integer> delayedClientCall =
+        Context.current().withValue(contextKey, goldenValue).call(() ->
+          new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null));
+    AtomicReference<Context> readyContext = new AtomicReference<>();
+    delayedClientCall.start(new ClientCall.Listener<Integer>() {
+      @Override public void onReady() {
+        readyContext.set(Context.current());
+      }
+    }, new Metadata());
+    AtomicReference<Context> startContext = new AtomicReference<>();
+    Runnable r = delayedClientCall.setCall(new SimpleForwardingClientCall<String, Integer>(
+        mockRealCall) {
+      @Override public void start(Listener<Integer> listener, Metadata metadata) {
+        startContext.set(Context.current());
+        listener.onReady(); // Delayed until call finishes draining
+        assertThat(readyContext.get()).isNull();
+        super.start(listener, metadata);
+      }
+    });
+    assertThat(r).isNotNull();
+    r.run();
+    assertThat(contextKey.get(startContext.get())).isEqualTo(goldenValue);
+    assertThat(contextKey.get(readyContext.get())).isEqualTo(goldenValue);
   }
 
   private void callMeMaybe(Runnable r) {

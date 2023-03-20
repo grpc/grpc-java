@@ -20,11 +20,13 @@ tasks.named("compileJava").configure {
 }
 
 dependencies {
-    def cloudLoggingVersion = '3.6.1'
+    def cloudLoggingVersion = '3.14.5'
 
     annotationProcessor libraries.auto.value
     api project(':grpc-api')
-    
+
+    // TODO(dnvindhya): Prefer using our own libraries, update the dependencies
+    //  in gradle/libs.versions instead
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-alts'),
@@ -33,11 +35,12 @@ dependencies {
             libraries.opencensus.contrib.grpc.metrics,
             libraries.opencensus.exporter.stats.stackdriver,
             libraries.opencensus.exporter.trace.stackdriver,
-            libraries.animalsniffer.annotations, // Prefer our version
-            libraries.google.auth.credentials, // Prefer our version
-            libraries.protobuf.java.util, // Prefer our version
-            libraries.gson, // Prefer our version
-            libraries.perfmark.api, // Prefer our version
+            project(':grpc-xds'), // Align grpc versions
+            project(':grpc-services'), // Align grpc versions
+            ('com.google.protobuf:protobuf-java:3.21.12'),
+            ('com.google.api.grpc:proto-google-common-protos:2.14.2'),
+            ('com.google.auth:google-auth-library-oauth2-http:1.16.0'),
+            ('io.opencensus:opencensus-api:0.31.1'),
             ('com.google.guava:guava:31.1-jre')
 
     runtimeOnly libraries.opencensus.impl

@@ -183,7 +183,11 @@ public class NameResolverRegistryTest {
         });
 
     assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+    assertThat(registry.asFactory().newNameResolver(URI.create("/0.0.0.0:80"), args)).isNull();
+    assertThat(registry.asFactory().newNameResolver(URI.create("///0.0.0.0:80"), args)).isNull();
     assertThat(registry.asFactory().newNameResolver(URI.create("other:///0.0.0.0:80"), args))
+            .isSameInstanceAs(nr);
+    assertThat(registry.asFactory().newNameResolver(URI.create("OTHER:///0.0.0.0:80"), args))
             .isSameInstanceAs(nr);
     assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("dns");
   }

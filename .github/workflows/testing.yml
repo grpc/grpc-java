@@ -21,14 +21,14 @@ jobs:
       fail-fast: false # Should swap to true if we grow a large matrix
 
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-java@v2
+    - uses: actions/checkout@v3
+    - uses: actions/setup-java@v3
       with:
         java-version: ${{ matrix.jre }}
         distribution: 'temurin'
 
     - name: Gradle cache
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           ~/.gradle/caches
@@ -37,7 +37,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
     - name: Maven cache
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           ~/.m2/repository
@@ -46,7 +46,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-maven-
     - name: Protobuf cache
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: /tmp/protobuf-cache
         key: ${{ runner.os }}-maven-${{ hashFiles('buildscripts/make_dependencies.sh') }}
@@ -55,7 +55,7 @@ jobs:
       run: buildscripts/kokoro/unix.sh
     - name: Post Failure Upload Test Reports to Artifacts
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Test Reports (JRE ${{ matrix.jre }})
         path: ./*/build/reports/tests/**
@@ -65,6 +65,6 @@ jobs:
 
     - name: Coveralls
       if: matrix.jre == 8 # Upload once, instead of for each job in the matrix
-      run: ./gradlew :grpc-all:coveralls -x compileJava
+      run: ./gradlew :grpc-all:coveralls -PskipAndroid=true -x compileJava
     - name: Codecov
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v3

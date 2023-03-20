@@ -18,36 +18,47 @@ package io.grpc.gcp.observability;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.cloud.ServiceOptions;
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
-import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.opencensus.trace.Sampler;
 import io.opencensus.trace.samplers.Samplers;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * gRPC GcpObservability configuration processor.
  */
 final class ObservabilityConfigImpl implements ObservabilityConfig {
-  private static final String CONFIG_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY";
-  private static final String CONFIG_FILE_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY_JSON";
+  private static final Logger logger = Logger
+      .getLogger(ObservabilityConfigImpl.class.getName());
+  private static final String CONFIG_ENV_VAR_NAME = "GRPC_GCP_OBSERVABILITY_CONFIG";
+  private static final String CONFIG_FILE_ENV_VAR_NAME = "GRPC_GCP_OBSERVABILITY_CONFIG_FILE";
   // Tolerance for floating-point comparisons.
   private static final double EPSILON = 1e-6;
+
+  private static final Pattern METHOD_NAME_REGEX =
+      Pattern.compile("^([*])|((([\\w.]+)/((?:\\w+)|[*])))$");
 
   private boolean enableCloudLogging = false;
   private boolean enableCloudMonitoring = false;
   private boolean enableCloudTracing = false;
-  private String destinationProjectId = null;
-  private Long flushMessageCount = null;
-  private List<LogFilter> logFilters;
-  private List<EventType> eventTypes;
+  private String projectId = null;
+
+  private List<LogFilter> clientLogFilters;
+  private List<LogFilter> serverLogFilters;
   private Sampler sampler;
   private Map<String, String> customTags;
 
@@ -63,7 +74,10 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   void parseFile(String configFile) throws IOException {
-    parse(new String(Files.readAllBytes(Paths.get(configFile)), Charsets.UTF_8));
+    String configFileContent =
+        new String(Files.readAllBytes(Paths.get(configFile)), Charsets.UTF_8);
+    checkArgument(!configFileContent.isEmpty(), CONFIG_FILE_ENV_VAR_NAME + " is empty!");
+    parse(configFileContent);
   }
 
   @SuppressWarnings("unchecked")
@@ -73,96 +87,151 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   private void parseConfig(Map<String, ?> config) {
-    if (config != null) {
-      Boolean value = JsonUtil.getBoolean(config, "enable_cloud_logging");
-      if (value != null) {
-        enableCloudLogging = value;
-      }
-      value = JsonUtil.getBoolean(config, "enable_cloud_monitoring");
-      if (value != null) {
-        enableCloudMonitoring = value;
-      }
-      value = JsonUtil.getBoolean(config, "enable_cloud_tracing");
-      if (value != null) {
-        enableCloudTracing = value;
-      }
-      destinationProjectId = JsonUtil.getString(config, "destination_project_id");
-      flushMessageCount = JsonUtil.getNumberAsLong(config, "flush_message_count");
-      List<?> rawList = JsonUtil.getList(config, "log_filters");
-      if (rawList != null) {
-        List<Map<String, ?>> jsonLogFilters = JsonUtil.checkObjectList(rawList);
-        ImmutableList.Builder<LogFilter> logFiltersBuilder = new ImmutableList.Builder<>();
-        for (Map<String, ?> jsonLogFilter : jsonLogFilters) {
-          logFiltersBuilder.add(parseJsonLogFilter(jsonLogFilter));
-        }
-        this.logFilters = logFiltersBuilder.build();
-      }
-      rawList = JsonUtil.getList(config, "event_types");
-      if (rawList != null) {
-        List<String> jsonEventTypes = JsonUtil.checkStringList(rawList);
-        ImmutableList.Builder<EventType> eventTypesBuilder = new ImmutableList.Builder<>();
-        for (String jsonEventType : jsonEventTypes) {
-          eventTypesBuilder.add(convertEventType(jsonEventType));
-        }
-        this.eventTypes = eventTypesBuilder.build();
-      }
-      Double samplingRate = JsonUtil.getNumberAsDouble(config, "global_trace_sampling_rate");
-      if (samplingRate == null) {
-        this.sampler = Samplers.probabilitySampler(0.0);
+    checkArgument(config != null, "Invalid configuration");
+    if (config.isEmpty()) {
+      clientLogFilters = Collections.emptyList();
+      serverLogFilters = Collections.emptyList();
+      customTags = Collections.emptyMap();
+      return;
+    }
+    projectId = fetchProjectId(JsonUtil.getString(config, "project_id"));
+
+    Map<String, ?> rawCloudLoggingObject = JsonUtil.getObject(config, "cloud_logging");
+    if (rawCloudLoggingObject != null) {
+      enableCloudLogging = true;
+      ImmutableList.Builder<LogFilter> clientFiltersBuilder = new ImmutableList.Builder<>();
+      ImmutableList.Builder<LogFilter> serverFiltersBuilder = new ImmutableList.Builder<>();
+      parseLoggingObject(rawCloudLoggingObject, clientFiltersBuilder, serverFiltersBuilder);
+      clientLogFilters = clientFiltersBuilder.build();
+      serverLogFilters = serverFiltersBuilder.build();
+    }
+
+    Map<String, ?> rawCloudMonitoringObject = JsonUtil.getObject(config, "cloud_monitoring");
+    if (rawCloudMonitoringObject != null) {
+      enableCloudMonitoring = true;
+    }
+
+    Map<String, ?> rawCloudTracingObject = JsonUtil.getObject(config, "cloud_trace");
+    if (rawCloudTracingObject != null) {
+      enableCloudTracing = true;
+      sampler = parseTracingObject(rawCloudTracingObject);
+    }
+
+    Map<String, ?> rawCustomTagsObject = JsonUtil.getObject(config, "labels");
+    if (rawCustomTagsObject != null) {
+      customTags = parseCustomTags(rawCustomTagsObject);
+    }
+
+    if (clientLogFilters == null) {
+      clientLogFilters = Collections.emptyList();
+    }
+    if (serverLogFilters == null) {
+      serverLogFilters = Collections.emptyList();
+    }
+    if (customTags == null) {
+      customTags = Collections.emptyMap();
+    }
+  }
+
+  private static String fetchProjectId(String configProjectId) {
+    // If project_id is not specified in config, get default GCP project id from the environment
+    String projectId = configProjectId != null ? configProjectId : getDefaultGcpProjectId();
+    checkArgument(projectId != null, "Unable to detect project_id");
+    logger.log(Level.FINEST, "Found project ID : ", projectId);
+    return projectId;
+  }
+
+  private static String getDefaultGcpProjectId() {
+    return ServiceOptions.getDefaultProjectId();
+  }
+
+  private static void parseLoggingObject(
+      Map<String, ?> rawLoggingConfig,
+      ImmutableList.Builder<LogFilter> clientFilters,
+      ImmutableList.Builder<LogFilter> serverFilters) {
+    parseRpcEvents(JsonUtil.getList(rawLoggingConfig, "client_rpc_events"), clientFilters);
+    parseRpcEvents(JsonUtil.getList(rawLoggingConfig, "server_rpc_events"), serverFilters);
+  }
+
+  private static Sampler parseTracingObject(Map<String, ?> rawCloudTracingConfig) {
+    Sampler defaultSampler = Samplers.probabilitySampler(0.0);
+    Double samplingRate = JsonUtil.getNumberAsDouble(rawCloudTracingConfig, "sampling_rate");
+    if (samplingRate == null) {
+      return defaultSampler;
+    }
+    checkArgument(samplingRate >= 0.0 && samplingRate <= 1.0,
+        "'sampling_rate' needs to be between [0.0, 1.0]");
+    // Using alwaysSample() instead of probabilitySampler() because according to
+    // {@link io.opencensus.trace.samplers.ProbabilitySampler#shouldSample}
+    // there is a (very) small chance of *not* sampling if probability = 1.00.
+    return 1 - samplingRate < EPSILON ? Samplers.alwaysSample()
+        : Samplers.probabilitySampler(samplingRate);
+  }
+
+  private static Map<String, String> parseCustomTags(Map<String, ?> rawCustomTags) {
+    ImmutableMap.Builder<String, String> builder = new ImmutableMap.Builder<>();
+    for (Map.Entry<String, ?> entry: rawCustomTags.entrySet()) {
+      checkArgument(
+          entry.getValue() instanceof String,
+          "'labels' needs to be a map of <string, string>");
+      builder.put(entry.getKey(), (String) entry.getValue());
+    }
+    return builder.build();
+  }
+
+  private static void parseRpcEvents(List<?> rpcEvents, ImmutableList.Builder<LogFilter> filters) {
+    if (rpcEvents == null) {
+      return;
+    }
+    List<Map<String, ?>> jsonRpcEvents = JsonUtil.checkObjectList(rpcEvents);
+    for (Map<String, ?> jsonClientRpcEvent : jsonRpcEvents) {
+      filters.add(parseJsonLogFilter(jsonClientRpcEvent));
+    }
+  }
+
+  private static LogFilter parseJsonLogFilter(Map<String, ?> logFilterMap) {
+    ImmutableSet.Builder<String> servicesSetBuilder = new ImmutableSet.Builder<>();
+    ImmutableSet.Builder<String> methodsSetBuilder = new ImmutableSet.Builder<>();
+    boolean wildCardFilter = false;
+
+    boolean excludeFilter =
+        Boolean.TRUE.equals(JsonUtil.getBoolean(logFilterMap, "exclude"));
+    List<String> methodsList = JsonUtil.getListOfStrings(logFilterMap, "methods");
+    if (methodsList != null) {
+      wildCardFilter = extractMethodOrServicePattern(
+              methodsList, excludeFilter, servicesSetBuilder, methodsSetBuilder);
+    }
+    Integer maxHeaderBytes = JsonUtil.getNumberAsInteger(logFilterMap, "max_metadata_bytes");
+    Integer maxMessageBytes = JsonUtil.getNumberAsInteger(logFilterMap, "max_message_bytes");
+
+    return new LogFilter(
+        servicesSetBuilder.build(),
+        methodsSetBuilder.build(),
+        wildCardFilter,
+        maxHeaderBytes != null ? maxHeaderBytes.intValue() : 0,
+        maxMessageBytes != null ? maxMessageBytes.intValue() : 0,
+        excludeFilter);
+  }
+
+  private static boolean extractMethodOrServicePattern(List<String> patternList, boolean exclude,
+      ImmutableSet.Builder<String> servicesSetBuilder,
+      ImmutableSet.Builder<String> methodsSetBuilder) {
+    boolean globalFilter = false;
+    for (String methodOrServicePattern : patternList) {
+      Matcher matcher = METHOD_NAME_REGEX.matcher(methodOrServicePattern);
+      checkArgument(
+          matcher.matches(), "invalid service or method filter : " + methodOrServicePattern);
+      if ("*".equals(methodOrServicePattern)) {
+        checkArgument(!exclude, "cannot have 'exclude' and '*' wildcard in the same filter");
+        globalFilter = true;
+      } else if ("*".equals(matcher.group(5))) {
+        String service = matcher.group(4);
+        servicesSetBuilder.add(service);
       } else {
-        checkArgument(
-            samplingRate >= 0.0 && samplingRate <= 1.0,
-            "'global_trace_sampling_rate' needs to be between [0.0, 1.0]");
-        // Using alwaysSample() instead of probabilitySampler() because according to
-        // {@link io.opencensus.trace.samplers.ProbabilitySampler#shouldSample}
-        // there is a (very) small chance of *not* sampling if probability = 1.00.
-        if (1 - samplingRate < EPSILON) {
-          this.sampler = Samplers.alwaysSample();
-        } else {
-          this.sampler = Samplers.probabilitySampler(samplingRate);
-        }
-      }
-      Map<String, ?> rawCustomTags = JsonUtil.getObject(config, "custom_tags");
-      if (rawCustomTags != null) {
-        ImmutableMap.Builder<String, String> builder = new ImmutableMap.Builder<>();
-        for (Map.Entry<String, ?> entry: rawCustomTags.entrySet()) {
-          checkArgument(
-                  entry.getValue() instanceof String,
-                  "'custom_tags' needs to be a map of <string, string>");
-          builder.put(entry.getKey(), (String) entry.getValue());
-        }
-        customTags = builder.build();
+        methodsSetBuilder.add(methodOrServicePattern);
       }
     }
-  }
-
-  private EventType convertEventType(String val) {
-    switch (val) {
-      case "GRPC_CALL_UNKNOWN":
-        return EventType.GRPC_CALL_UNKNOWN;
-      case "GRPC_CALL_REQUEST_HEADER":
-        return EventType.GRPC_CALL_REQUEST_HEADER;
-      case "GRPC_CALL_RESPONSE_HEADER":
-        return EventType.GRPC_CALL_RESPONSE_HEADER;
-      case "GRPC_CALL_REQUEST_MESSAGE":
-        return EventType.GRPC_CALL_REQUEST_MESSAGE;
-      case "GRPC_CALL_RESPONSE_MESSAGE":
-        return EventType.GRPC_CALL_RESPONSE_MESSAGE;
-      case "GRPC_CALL_TRAILER":
-        return EventType.GRPC_CALL_TRAILER;
-      case "GRPC_CALL_HALF_CLOSE":
-        return EventType.GRPC_CALL_HALF_CLOSE;
-      case "GRPC_CALL_CANCEL":
-        return EventType.GRPC_CALL_CANCEL;
-      default:
-        throw new IllegalArgumentException("Unknown event type value:" + val);
-    }
-  }
-
-  private LogFilter parseJsonLogFilter(Map<String, ?> logFilterMap) {
-    return new LogFilter(JsonUtil.getString(logFilterMap, "pattern"),
-        JsonUtil.getNumberAsInteger(logFilterMap, "header_bytes"),
-        JsonUtil.getNumberAsInteger(logFilterMap, "message_bytes"));
+    return globalFilter;
   }
 
   @Override
@@ -181,23 +250,18 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   @Override
-  public String getDestinationProjectId() {
-    return destinationProjectId;
+  public String getProjectId() {
+    return projectId;
   }
 
   @Override
-  public Long getFlushMessageCount() {
-    return flushMessageCount;
+  public List<LogFilter> getClientLogFilters() {
+    return clientLogFilters;
   }
 
   @Override
-  public List<LogFilter> getLogFilters() {
-    return logFilters;
-  }
-
-  @Override
-  public List<EventType> getEventTypes() {
-    return eventTypes;
+  public List<LogFilter> getServerLogFilters() {
+    return serverLogFilters;
   }
 
   @Override

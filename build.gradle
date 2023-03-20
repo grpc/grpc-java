@@ -1,6 +1,4 @@
 plugins {
-    id "com.android.application" apply false // Necessary for Android plugin to find its classes
-    id "com.android.library" apply false
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
     id "net.ltgt.errorprone" apply false
@@ -20,7 +18,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.50.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.55.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -70,7 +68,9 @@ subprojects {
                     all().each { task ->
                         // Recompile protos when build.gradle has been changed, because
                         // it's possible the version of protoc has been changed.
-                        task.inputs.file "${rootProject.projectDir}/build.gradle"
+                        task.inputs.file("${rootProject.projectDir}/build.gradle")
+                          .withPathSensitivity(PathSensitivity.RELATIVE)
+                          .withPropertyName('root build.gradle')
                         if (isAndroid) {
                             task.builtins {
                                 java { option 'lite' }
@@ -175,8 +175,7 @@ subprojects {
 
     if (!project.hasProperty('errorProne') || errorProne.toBoolean()) {
         dependencies {
-            errorprone libs.errorprone.core
-            errorproneJavac libs.errorprone.javac
+            errorprone JavaVersion.current().isJava11Compatible() ? libs.errorprone.core : libs.errorprone.corejava8
         }
     } else {
         // Disable Error Prone
@@ -245,8 +244,6 @@ subprojects {
         }
 
         tasks.named("compileJava").configure {
-            // This project targets Java 7 (no method references)
-            options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             // This project targets Java 7 (no time.Duration class)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
@@ -256,7 +253,6 @@ subprojects {
         tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
-            options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
         }
@@ -300,7 +296,7 @@ subprojects {
             // depends on core; core's testCompile depends on testing)
             includeTests = false
             if (project.hasProperty('jmhIncludeSingleClass')) {
-                include = [
+                includes = [
                     project.property('jmhIncludeSingleClass')
                 ]
             }

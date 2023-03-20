@@ -35,9 +35,9 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.XdsClient.CdsResourceWatcher;
-import io.grpc.xds.XdsClient.CdsUpdate;
-import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayDeque;
@@ -79,9 +79,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (this.resolvedAddresses != null) {
-      return;
+      return true;
     }
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
@@ -91,6 +91,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     logger.log(XdsLogLevel.INFO, "Config: {0}", config);
     cdsLbState = new CdsLbState(config.name);
     cdsLbState.start();
+    return true;
   }
 
   @Override
@@ -159,7 +160,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
               instance = DiscoveryMechanism.forEds(
                   clusterState.name, clusterState.result.edsServiceName(),
                   clusterState.result.lrsServerInfo(), clusterState.result.maxConcurrentRequests(),
-                  clusterState.result.upstreamTlsContext());
+                  clusterState.result.upstreamTlsContext(), clusterState.result.outlierDetection());
             } else {  // logical DNS
               instance = DiscoveryMechanism.forLogicalDns(
                   clusterState.name, clusterState.result.dnsHostName(),
@@ -221,7 +222,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
     }
 
-    private final class ClusterState implements CdsResourceWatcher {
+    private final class ClusterState implements ResourceWatcher<CdsUpdate> {
       private final String name;
       @Nullable
       private Map<String, ClusterState> childClusterStates;
@@ -237,12 +238,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       private void start() {
-        xdsClient.watchCdsResource(name, this);
+        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this);
       }
 
       void shutdown() {
         shutdown = true;
-        xdsClient.cancelCdsResourceWatch(name, this);
+        xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, this);
         if (childClusterStates != null) {  // recursively shut down all descendants
           for (ClusterState state : childClusterStates.values()) {
             state.shutdown();
@@ -300,6 +301,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             if (shutdown) {
               return;
             }
+
             logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
             discovered = true;
             result = update;

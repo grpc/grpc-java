@@ -16,7 +16,8 @@
 
 package io.grpc.examples.alts;
 
-import io.grpc.alts.AltsServerBuilder;
+import io.grpc.alts.AltsServerCredentials;
+import io.grpc.Grpc;
 import io.grpc.Server;
 import io.grpc.examples.helloworld.GreeterGrpc.GreeterImplBase;
 import io.grpc.examples.helloworld.HelloReply;
@@ -82,7 +83,7 @@ public final class HelloWorldAltsServer extends GreeterImplBase {
   private void start(String[] args) throws IOException, InterruptedException {
     parseArgs(args);
     server =
-        AltsServerBuilder.forPort(port)
+        Grpc.newServerBuilderForPort(port, AltsServerCredentials.create())
             .addService(this)
             .executor(Executors.newFixedThreadPool(1))
             .build();

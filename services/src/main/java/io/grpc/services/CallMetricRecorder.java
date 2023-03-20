@@ -43,6 +43,7 @@ public final class CallMetricRecorder {
       new AtomicReference<>();
   private double cpuUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
+  private double qps = 0;
   private volatile boolean disabled;
 
   /**
@@ -158,6 +159,23 @@ public final class CallMetricRecorder {
     return this;
   }
 
+  /**
+   * Records a call metric measurement for qps.
+   * If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   * @since 1.54.0
+   */
+  public CallMetricRecorder recordQpsMetric(double value) {
+    if (disabled) {
+      return this;
+    }
+    qps = value;
+    return this;
+  }
+
 
   /**
    * Returns all request cost metric values. No more metric values will be recorded after this
@@ -187,8 +205,8 @@ public final class CallMetricRecorder {
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    return new MetricReport(cpuUtilizationMetric,
-        memoryUtilizationMetric, Collections.unmodifiableMap(savedRequestCostMetrics),
+    return new MetricReport(cpuUtilizationMetric, memoryUtilizationMetric, qps,
+        Collections.unmodifiableMap(savedRequestCostMetrics),
         Collections.unmodifiableMap(savedUtilizationMetrics)
     );
   }

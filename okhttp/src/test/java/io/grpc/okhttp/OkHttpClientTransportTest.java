@@ -1685,7 +1685,7 @@ public class OkHttpClientTransportTest {
   public void invalidAuthorityPropagates() {
     clientTransport = new OkHttpClientTransport(
         channelBuilder.buildTransportFactory(),
-        new InetSocketAddress("host", 1234),
+        new InetSocketAddress("localhost", 1234),
         "invalid_authority",
         "userAgent",
         EAG_ATTRS,
@@ -1875,6 +1875,37 @@ public class OkHttpClientTransportTest {
     assertEquals("Not UNAVAILABLE: " + captor.getValue(),
         Status.UNAVAILABLE.getCode(), error.getCode());
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+  }
+
+  @Test
+  public void proxy_serverHangs() throws Exception {
+    ServerSocket serverSocket = new ServerSocket(0);
+    InetSocketAddress targetAddress = InetSocketAddress.createUnresolved("theservice", 80);
+    clientTransport = new OkHttpClientTransport(
+        channelBuilder.buildTransportFactory(),
+        targetAddress,
+        "authority",
+        "userAgent",
+        EAG_ATTRS,
+        HttpConnectProxiedSocketAddress.newBuilder()
+            .setTargetAddress(targetAddress)
+            .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
+            .build(),
+        tooManyPingsRunnable);
+    clientTransport.proxySocketTimeout = 10;
+    clientTransport.start(transportListener);
+
+    Socket sock = serverSocket.accept();
+    serverSocket.close();
+
+    BufferedReader reader = new BufferedReader(new InputStreamReader(sock.getInputStream(), UTF_8));
+    assertEquals("CONNECT theservice:80 HTTP/1.1", reader.readLine());
+    assertEquals("Host: theservice:80", reader.readLine());
+    while (!"".equals(reader.readLine())) {}
+
+    verify(transportListener, timeout(200)).transportShutdown(any(Status.class));
+    verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
+    sock.close();
   }
 
   @Test

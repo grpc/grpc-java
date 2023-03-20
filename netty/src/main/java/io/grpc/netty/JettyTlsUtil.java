@@ -34,6 +34,7 @@ final class JettyTlsUtil {
 
   private static class Java9AlpnUnavailabilityCauseHolder {
 
+    @SuppressWarnings("StaticAssignmentOfThrowable")
     static final Throwable cause = checkAlpnAvailability();
 
     static Throwable checkAlpnAvailability() {
@@ -56,9 +57,8 @@ final class JettyTlsUtil {
     }
   }
 
-  /**
-   * Indicates whether or not the Jetty ALPN jar is installed in the boot classloader.
-   */
+  /** Indicates whether or not the Jetty ALPN jar is installed in the boot classloader. */
+  @SuppressWarnings("StaticAssignmentOfThrowable")
   static synchronized boolean isJettyAlpnConfigured() {
     try {
       Class.forName("org.eclipse.jetty.alpn.ALPN", true, null);
@@ -78,9 +78,8 @@ final class JettyTlsUtil {
     return jettyAlpnUnavailabilityCause;
   }
 
-  /**
-   * Indicates whether or not the Jetty NPN jar is installed in the boot classloader.
-   */
+  /** Indicates whether or not the Jetty NPN jar is installed in the boot classloader. */
+  @SuppressWarnings("StaticAssignmentOfThrowable")
   static synchronized boolean isJettyNpnConfigured() {
     try {
       Class.forName("org.eclipse.jetty.npn.NextProtoNego", true, null);

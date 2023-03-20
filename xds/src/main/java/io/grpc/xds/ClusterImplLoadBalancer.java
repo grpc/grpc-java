@@ -45,7 +45,7 @@ import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -102,7 +102,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
@@ -134,6 +134,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
             .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
             .build());
+    return true;
   }
 
   @Override
@@ -160,11 +161,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
-  }
-
-  @Override
-  public boolean canHandleEmptyAddressListFromNameResolution() {
-    return true;
   }
 
   /**
@@ -198,17 +194,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      List<EquivalentAddressGroup> addresses = new ArrayList<>();
-      for (EquivalentAddressGroup eag : args.getAddresses()) {
-        Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
-            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
-        if (enableSecurity && sslContextProviderSupplier != null) {
-          attrBuilder.set(
-              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-              sslContextProviderSupplier);
-        }
-        addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
-      }
+      List<EquivalentAddressGroup> addresses = withAdditionalAttributes(args.getAddresses());
       Locality locality = args.getAddresses().get(0).getAttributes().get(
           InternalXdsAttributes.ATTR_LOCALITY);  // all addresses should be in the same locality
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
@@ -234,10 +220,31 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         }
 
         @Override
+        public void updateAddresses(List<EquivalentAddressGroup> addresses) {
+          delegate().updateAddresses(withAdditionalAttributes(addresses));
+        }
+
+        @Override
         protected Subchannel delegate() {
           return subchannel;
         }
       };
+    }
+
+    private List<EquivalentAddressGroup> withAdditionalAttributes(
+        List<EquivalentAddressGroup> addresses) {
+      List<EquivalentAddressGroup> newAddresses = new ArrayList<>();
+      for (EquivalentAddressGroup eag : addresses) {
+        Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
+            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
+        if (enableSecurity && sslContextProviderSupplier != null) {
+          attrBuilder.set(
+              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+              sslContextProviderSupplier);
+        }
+        newAddresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
+      }
+      return newAddresses;
     }
 
     @Override

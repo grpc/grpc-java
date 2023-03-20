@@ -19,26 +19,25 @@ package io.grpc.binder;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
-import android.app.Service;
 import android.content.Context;
-import android.content.Intent;
-import android.os.IBinder;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.base.Function;
 import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
+import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,6 +58,7 @@ public final class BinderSecurityTest {
   @Nullable ManagedChannel channel;
   Map<String, MethodDescriptor<Empty, Empty>> methods = new HashMap<>();
   List<MethodDescriptor<Empty, Empty>> calls = new ArrayList<>();
+  CountingServerInterceptor countingServerInterceptor;
 
   @Before
   public void setupServiceDefinitionsAndMethods() {
@@ -86,6 +86,7 @@ public final class BinderSecurityTest {
       }
       serviceDefinitions.add(builder.build());
     }
+    countingServerInterceptor = new CountingServerInterceptor();
   }
 
   @After
@@ -120,6 +121,7 @@ public final class BinderSecurityTest {
       ServerSecurityPolicy serverPolicy) {
     BinderServerBuilder serverBuilder = BinderServerBuilder.forAddress(listenAddr, receiver);
     serverBuilder.securityPolicy(serverPolicy);
+    serverBuilder.intercept(countingServerInterceptor);
 
     for (ServerServiceDefinition serviceDefinition : serviceDefinitions) {
       serverBuilder.addService(serviceDefinition);
@@ -195,6 +197,27 @@ public final class BinderSecurityTest {
     }
   }
 
+  @Test
+  public void testSecurityInterceptorIsClosestToTransport() throws Exception {
+    createChannel(
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy("foo", policy((uid) -> true))
+            .servicePolicy("bar", policy((uid) -> false))
+            .servicePolicy("baz", policy((uid) -> false))
+            .build(),
+        SecurityPolicies.internalOnly());
+    assertThat(countingServerInterceptor.numInterceptedCalls).isEqualTo(0);
+    for (MethodDescriptor<Empty, Empty> method : methods.values()) {
+      try {
+        ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, null);
+      } catch (StatusRuntimeException sre) {
+        // Ignore.
+      }
+    }
+    // Only the foo calls should have made it to the user interceptor.
+    assertThat(countingServerInterceptor.numInterceptedCalls).isEqualTo(2);
+  }
+
   private static SecurityPolicy policy(Function<Integer, Boolean> func) {
     return new SecurityPolicy() {
       @Override
@@ -202,5 +225,18 @@ public final class BinderSecurityTest {
         return func.apply(uid) ? Status.OK : Status.PERMISSION_DENIED;
       }
     };
+  }
+
+  private final class CountingServerInterceptor implements ServerInterceptor {
+    int numInterceptedCalls;
+
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next) {
+      numInterceptedCalls += 1;
+      return next.startCall(call, headers);
+    }
   }
 }

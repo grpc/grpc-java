@@ -20,6 +20,6 @@ RUN yum install -y \
     yum clean all
 
 # Install Maven
-RUN curl -Ls http://apache.cs.utah.edu/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.tar.gz | \
+RUN curl -Ls http://dlcdn.apache.org/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.tar.gz | \
     tar xz -C /var/local
 ENV PATH /var/local/apache-maven-3.3.9/bin:$PATH

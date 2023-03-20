@@ -135,3 +135,57 @@ java_binary(
         ":examples",
     ],
 )
+
+java_binary(
+    name = "load-balance-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.loadbalance.LoadBalanceClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "load-balance-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.loadbalance.LoadBalanceServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "name-resolve-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.nameresolve.NameResolveClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "name-resolve-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.nameresolve.NameResolveServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "deadline-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.deadline.DeadlineServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "deadline-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.deadline.DeadlineClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)

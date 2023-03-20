@@ -494,10 +494,6 @@ public final class EchoTestServer {
       }
     }
 
-    void writeMessage(String message) {
-      sb.append(message);
-    }
-
     @Override
     public String toString() {
       return sb.toString();

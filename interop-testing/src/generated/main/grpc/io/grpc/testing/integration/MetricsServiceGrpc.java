@@ -123,7 +123,7 @@ public final class MetricsServiceGrpc {
 
   /**
    */
-  public static abstract class MetricsServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -131,7 +131,7 @@ public final class MetricsServiceGrpc {
      * the service
      * </pre>
      */
-    public void getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request,
+    default void getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetAllGaugesMethod(), responseObserver);
     }
@@ -141,34 +141,28 @@ public final class MetricsServiceGrpc {
      * Returns the value of one gauge
      * </pre>
      */
-    public void getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request,
+    default void getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Metrics.GaugeResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetGaugeMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getGetAllGaugesMethod(),
-            io.grpc.stub.ServerCalls.asyncServerStreamingCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Metrics.EmptyMessage,
-                io.grpc.testing.integration.Metrics.GaugeResponse>(
-                  this, METHODID_GET_ALL_GAUGES)))
-          .addMethod(
-            getGetGaugeMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Metrics.GaugeRequest,
-                io.grpc.testing.integration.Metrics.GaugeResponse>(
-                  this, METHODID_GET_GAUGE)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service MetricsService.
    */
-  public static final class MetricsServiceStub extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
+  public static abstract class MetricsServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return MetricsServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service MetricsService.
+   */
+  public static final class MetricsServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
     private MetricsServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -205,8 +199,10 @@ public final class MetricsServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service MetricsService.
    */
-  public static final class MetricsServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
+  public static final class MetricsServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
     private MetricsServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -242,8 +238,10 @@ public final class MetricsServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service MetricsService.
    */
-  public static final class MetricsServiceFutureStub extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {
+  public static final class MetricsServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {
     private MetricsServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -275,10 +273,10 @@ public final class MetricsServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final MetricsServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(MetricsServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -309,6 +307,25 @@ public final class MetricsServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getGetAllGaugesMethod(),
+          io.grpc.stub.ServerCalls.asyncServerStreamingCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Metrics.EmptyMessage,
+              io.grpc.testing.integration.Metrics.GaugeResponse>(
+                service, METHODID_GET_ALL_GAUGES)))
+        .addMethod(
+          getGetGaugeMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Metrics.GaugeRequest,
+              io.grpc.testing.integration.Metrics.GaugeResponse>(
+                service, METHODID_GET_GAUGE)))
+        .build();
   }
 
   private static abstract class MetricsServiceBaseDescriptorSupplier
