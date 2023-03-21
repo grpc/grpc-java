@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.observabilityHelloWorld;
+package io.grpc.examples.gcpObservability;
 
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
@@ -32,13 +32,12 @@ import java.util.logging.Logger;
  * Observability server that manages startup/shutdown of a {@code Greeter} server and generates
  * logs, metrics and traces based on the configuration.
  */
-public class ObservabilityHelloWorldServer {
-  private static final Logger logger = Logger.getLogger(ObservabilityHelloWorldServer.class.getName());
+public class gcpObservabilityServer {
+  private static final Logger logger = Logger.getLogger(gcpObservabilityServer.class.getName());
 
   private Server server;
 
   private void start() throws IOException {
-    /* The port on which the server should run */
     int port = 50051;
     server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
@@ -48,10 +47,9 @@ public class ObservabilityHelloWorldServer {
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
-        // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC server since JVM is shutting down");
         try {
-          ObservabilityHelloWorldServer.this.stop();
+          gcpObservabilityServer.this.stop();
         } catch (InterruptedException e) {
           e.printStackTrace(System.err);
         }
@@ -66,9 +64,6 @@ public class ObservabilityHelloWorldServer {
     }
   }
 
-  /**
-   * Await termination on the main thread since the grpc library uses daemon threads.
-   */
   private void blockUntilShutdown() throws InterruptedException {
     if (server != null) {
       server.awaitTermination();
@@ -81,7 +76,7 @@ public class ObservabilityHelloWorldServer {
   public static void main(String[] args) throws IOException, InterruptedException {
     // Initialize observability
     try (GcpObservability observability = GcpObservability.grpcInit()) {
-      final ObservabilityHelloWorldServer server = new ObservabilityHelloWorldServer();
+      final gcpObservabilityServer server = new gcpObservabilityServer();
       server.start();
       server.blockUntilShutdown();
     } // observability.close() called implicitly

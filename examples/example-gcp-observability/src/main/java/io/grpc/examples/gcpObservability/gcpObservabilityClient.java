@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.observabilityHelloWorld;
+package io.grpc.examples.gcpObservability;
 
 import io.grpc.Channel;
 import io.grpc.Grpc;
@@ -33,18 +33,13 @@ import java.util.logging.Logger;
  * A simple observability client that requests a greeting from the {@link HelloWorldServer} and
  * generates logs, metrics and traces based on the configuration.
  */
-public class ObservabilityHelloWorldClient {
-  private static final Logger logger = Logger.getLogger(ObservabilityHelloWorldClient.class.getName());
-  private static final int EXPORT_INTERVAL = 60;
+public class gcpObservabilityClient {
+  private static final Logger logger = Logger.getLogger(gcpObservabilityClient.class.getName());
 
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
   /** Construct client for accessing HelloWorld server using the existing channel. */
-  public ObservabilityHelloWorldClient(Channel channel) {
-    // 'channel' here is a Channel, not a ManagedChannel, so it is not this code's responsibility to
-    // shut it down.
-
-    // Passing Channels to code makes code easier to test and makes it easier to reuse Channels.
+  public gcpObservabilityClient(Channel channel) {
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
 
@@ -68,9 +63,7 @@ public class ObservabilityHelloWorldClient {
    */
   public static void main(String[] args) throws Exception {
     String user = "world";
-    // Access a service running on the local machine on port 50051
     String target = "localhost:50051";
-    // Allow passing in the user and target strings as command line arguments
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
         System.err.println("Usage: [name [target]]");
@@ -87,28 +80,14 @@ public class ObservabilityHelloWorldClient {
 
     // Initialize observability
     try (GcpObservability observability = GcpObservability.grpcInit()) {
-      // Create a communication channel to the server, known as a Channel. Channels are thread-safe
-      // and reusable. It is common to create channels at the beginning of your application and reuse
-      // them until the application shuts down.
-      //
-      // For the example we use plaintext insecure credentials to avoid needing TLS certificates. To
-      // use TLS, use TlsChannelCredentials instead.
       ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
           .build();
       try {
-        ObservabilityHelloWorldClient client = new ObservabilityHelloWorldClient(channel);
+        gcpObservabilityClient client = new gcpObservabilityClient(channel);
         client.greet(user);
       } finally {
-        // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
-        // resources the channel should be shut down when it will no longer be used. If it may be used
-        // again leave it running.
         channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
       }
-      System.out.println(
-          String.format(
-              "Sleeping %d seconds before shutdown to ensure all records are flushed.",
-              EXPORT_INTERVAL));
-      Thread.sleep(TimeUnit.MILLISECONDS.convert(EXPORT_INTERVAL, TimeUnit.SECONDS));
     } // observability.close() called implicitly
   }
 }

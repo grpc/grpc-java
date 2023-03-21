@@ -12,6 +12,6 @@
     }]
   },
   "labels": {
-    "environment" : "observability-example"
+    "environment" : "example-server"
   }
 }
