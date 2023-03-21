@@ -122,14 +122,16 @@ public final class GcpObservability implements AutoCloseable {
         throw new IllegalStateException("GcpObservability already closed!");
       }
       sink.close();
-      try {
-        // Sleeping before shutdown to ensure all metrics and traces are flushed
-        Thread.sleep(TimeUnit.MILLISECONDS.convert(2 * METRICS_EXPORT_INTERVAL, TimeUnit.SECONDS));
-      } catch (InterruptedException e) {
-        logger.log(Level.SEVERE, "Caught exception during sleep", e);
-      } finally {
-        instance = null;
+      if (config.isEnableCloudMonitoring() || config.isEnableCloudTracing()) {
+        try {
+          // Sleeping before shutdown to ensure all metrics and traces are flushed
+          Thread.sleep(
+              TimeUnit.MILLISECONDS.convert(2 * METRICS_EXPORT_INTERVAL, TimeUnit.SECONDS));
+        } catch (InterruptedException e) {
+          logger.log(Level.SEVERE, "Caught exception during sleep", e);
+        }
       }
+      instance = null;
     }
   }
 
