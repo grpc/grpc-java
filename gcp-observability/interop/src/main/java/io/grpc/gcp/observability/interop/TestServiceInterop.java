@@ -47,11 +47,6 @@ public final class TestServiceInterop {
       } else {
         TestServiceServer.main(args);
       }
-      // TODO(stanleycheung): remove this once the observability exporter plugin is able to
-      //                      gracefully flush observability data to cloud at shutdown
-      final int o11yCloseSleepSeconds = 65;
-      System.out.println("Sleeping " + o11yCloseSleepSeconds + " seconds before exiting");
-      Thread.sleep(TimeUnit.MILLISECONDS.convert(o11yCloseSleepSeconds, TimeUnit.SECONDS));
     }
   }
 
