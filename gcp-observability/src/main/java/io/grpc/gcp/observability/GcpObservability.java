@@ -53,11 +53,16 @@ import io.opencensus.trace.config.TraceConfig;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /** The main class for gRPC Google Cloud Platform Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class GcpObservability implements AutoCloseable {
+
+  private static final Logger logger = Logger.getLogger(GcpObservability.class.getName());
   private static final int METRICS_EXPORT_INTERVAL = 30;
   @VisibleForTesting
   static final ImmutableSet<String> SERVICES_TO_EXCLUDE = ImmutableSet.of(
@@ -117,7 +122,14 @@ public final class GcpObservability implements AutoCloseable {
         throw new IllegalStateException("GcpObservability already closed!");
       }
       sink.close();
-      instance = null;
+      try {
+        // Sleeping before shutdown to ensure all metrics and traces are flushed
+        Thread.sleep(TimeUnit.MILLISECONDS.convert(2 * METRICS_EXPORT_INTERVAL, TimeUnit.SECONDS));
+      } catch (InterruptedException e) {
+        logger.log(Level.SEVERE, "Caught exception during sleep", e);
+      } finally {
+        instance = null;
+      }
     }
   }
 
