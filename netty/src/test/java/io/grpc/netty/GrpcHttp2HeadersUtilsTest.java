@@ -42,6 +42,8 @@ import io.netty.handler.codec.http2.Http2HeadersEncoder;
 import io.netty.handler.codec.http2.Http2HeadersEncoder.SensitivityDetector;
 import io.netty.util.AsciiString;
 import java.util.Arrays;
+import java.util.Iterator;
+import java.util.Map;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -299,6 +301,37 @@ public class GrpcHttp2HeadersUtilsTest {
     assertThat(http2Headers.size()).isEqualTo(5);
     assertThat(http2Headers.getAll(AsciiString.of("multiple")))
         .containsExactly(AsciiString.of("value1"), AsciiString.of("value2"));
+  }
+
+  @Test
+  public void headerIterator_empty() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    Iterator<Map.Entry<CharSequence, CharSequence>> it = http2Headers.iterator();
+    assertThat(it.hasNext()).isFalse();
+  }
+
+  @Test
+  public void headerIteartor_nonEmpty() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of("notit1"), AsciiString.of("val1"));
+    http2Headers.add(AsciiString.of("multiple"), AsciiString.of("value1"));
+    http2Headers.add(AsciiString.of("notit2"), AsciiString.of("val2"));
+    http2Headers.add(AsciiString.of("multiple"), AsciiString.of("value2"));
+    http2Headers.add(AsciiString.of("notit3"), AsciiString.of("val3"));
+    Iterator<Map.Entry<CharSequence, CharSequence>> it = http2Headers.iterator();
+
+    assertNextEntry(it, "notit1", AsciiString.of("val1"));
+    assertNextEntry(it, "multiple", AsciiString.of("value1"));
+    assertNextEntry(it, "notit2", AsciiString.of("val2"));
+    assertNextEntry(it, "multiple", AsciiString.of("value2"));
+    assertNextEntry(it, "notit3", AsciiString.of("val3"));
+  }
+
+  private static void assertNextEntry(
+      Iterator<Map.Entry<CharSequence, CharSequence>> it, CharSequence key, CharSequence value) {
+    Map.Entry<CharSequence, CharSequence> entry = it.next();
+    assertThat(entry.getKey()).isEqualTo(key);
+    assertThat(entry.getValue()).isEqualTo(value);
   }
 
   @Test
