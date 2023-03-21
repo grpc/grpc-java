@@ -70,6 +70,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import okio.Buffer;
 import okio.BufferedSource;
 import okio.ByteString;
@@ -170,7 +171,7 @@ public class OkHttpServerTransportTest {
     pingPong();
     fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(6)); // > 1.1 * 5
     fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1));
-    verifyGracefulShutdown(1);
+    verifyGracefulShutdown(1, TimeUnit.SECONDS.toNanos(1));
   }
 
   @Test
@@ -204,7 +205,7 @@ public class OkHttpServerTransportTest {
 
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
-    verifyGracefulShutdown(1);
+    verifyGracefulShutdown(1, null);
   }
 
   @Test
@@ -228,7 +229,7 @@ public class OkHttpServerTransportTest {
     pingPong();
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
-    verifyGracefulShutdown(1);
+    verifyGracefulShutdown(1, null);
   }
 
   @Test
@@ -402,7 +403,7 @@ public class OkHttpServerTransportTest {
     pingPong();
 
     serverTransport.shutdown();
-    verifyGracefulShutdown(1);
+    verifyGracefulShutdown(1, null);
     verify(transportListener, never()).transportTerminated();
 
     MockStreamListener streamListener = mockTransportListener.newStreams.pop();
@@ -1219,7 +1220,7 @@ public class OkHttpServerTransportTest {
     return metadata;
   }
 
-  private void verifyGracefulShutdown(int lastStreamId)
+  private void verifyGracefulShutdown(int lastStreamId, @Nullable Long gracePeriodNanos)
       throws IOException {
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).goAway(2147483647, ErrorCode.NO_ERROR, ByteString.EMPTY);
@@ -1229,12 +1230,16 @@ public class OkHttpServerTransportTest {
     clientFrameWriter.flush();
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).goAway(lastStreamId, ErrorCode.NO_ERROR, ByteString.EMPTY);
+    if (gracePeriodNanos != null) {
+      assertThat(fakeClock.forwardNanos(gracePeriodNanos)).isEqualTo(1);
+      assertThat(socket.isClosed()).isTrue();
+    }
   }
 
   private void shutdownAndTerminate(int lastStreamId) throws IOException {
     assertThat(serverTransport.getActiveStreams().length).isEqualTo(0);
     serverTransport.shutdown();
-    verifyGracefulShutdown(lastStreamId);
+    verifyGracefulShutdown(lastStreamId, null);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isFalse();
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }
@@ -1369,6 +1374,7 @@ public class OkHttpServerTransportTest {
         // PipedInputStream can only be woken by PipedOutputStream, so PipedOutputStream.close() is
         // a better imitation of Socket.close().
         inputStreamSource.close();
+        super.close();
       }
     }
 

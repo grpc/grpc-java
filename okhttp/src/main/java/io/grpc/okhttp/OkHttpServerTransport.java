@@ -60,6 +60,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.BufferedSource;
@@ -73,6 +74,9 @@ final class OkHttpServerTransport implements ServerTransport,
       ExceptionHandlingFrameWriter.TransportExceptionHandler, OutboundFlowController.Transport {
   private static final Logger log = Logger.getLogger(OkHttpServerTransport.class.getName());
   private static final int GRACEFUL_SHUTDOWN_PING = 0x1111;
+
+  private static final long GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(1);
+
   private static final int KEEPALIVE_PING = 0xDEAD;
   private static final ByteString HTTP_METHOD = ByteString.encodeUtf8(":method");
   private static final ByteString CONNECT_METHOD = ByteString.encodeUtf8("CONNECT");
@@ -250,10 +254,10 @@ final class OkHttpServerTransport implements ServerTransport,
 
   @Override
   public void shutdown() {
-    shutdown(TimeUnit.SECONDS.toNanos(1L));
+    shutdown(null);
   }
 
-  private void shutdown(Long graceTimeInNanos) {
+  private void shutdown(@Nullable Long graceTimeInNanos) {
     synchronized (lock) {
       if (gracefulShutdown || abruptShutdown) {
         return;
@@ -267,7 +271,8 @@ final class OkHttpServerTransport implements ServerTransport,
         // we also set a timer to limit the upper bound in case the PING is excessively stalled or
         // the client is malicious.
         secondGoawayTimer = scheduledExecutorService.schedule(
-            this::triggerGracefulSecondGoaway, graceTimeInNanos, TimeUnit.NANOSECONDS);
+            () -> triggerGracefulSecondGoaway(graceTimeInNanos),
+            GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS, TimeUnit.NANOSECONDS);
         frameWriter.goAway(Integer.MAX_VALUE, ErrorCode.NO_ERROR, new byte[0]);
         frameWriter.ping(false, 0, GRACEFUL_SHUTDOWN_PING);
         frameWriter.flush();
@@ -275,7 +280,7 @@ final class OkHttpServerTransport implements ServerTransport,
     }
   }
 
-  private void triggerGracefulSecondGoaway() {
+  private void triggerGracefulSecondGoaway(@Nullable Long gracePeriodNanos) {
     synchronized (lock) {
       if (secondGoawayTimer == null) {
         return;
@@ -288,6 +293,10 @@ final class OkHttpServerTransport implements ServerTransport,
         frameWriter.close();
       } else {
         frameWriter.flush();
+      }
+      if (gracePeriodNanos != null) {
+        forcefulCloseTimer = scheduledExecutorService.schedule(
+            this::triggerForcefulClose, gracePeriodNanos, TimeUnit.NANOSECONDS);
       }
     }
   }
@@ -926,7 +935,7 @@ final class OkHttpServerTransport implements ServerTransport,
           return;
         }
         if (GRACEFUL_SHUTDOWN_PING == payload) {
-          triggerGracefulSecondGoaway();
+          triggerGracefulSecondGoaway(null);
           return;
         }
         log.log(Level.INFO, "Received unexpected ping ack: " + payload);
