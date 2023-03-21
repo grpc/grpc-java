@@ -325,6 +325,7 @@ public class GrpcHttp2HeadersUtilsTest {
     assertNextEntry(it, "notit2", AsciiString.of("val2"));
     assertNextEntry(it, "multiple", AsciiString.of("value2"));
     assertNextEntry(it, "notit3", AsciiString.of("val3"));
+    assertThat(it.hasNext()).isFalse();
   }
 
   private static void assertNextEntry(
