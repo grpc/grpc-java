@@ -44,18 +44,6 @@ public class gcpObservabilityServer {
         .build()
         .start();
     logger.info("Server started, listening on " + port);
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      public void run() {
-        System.err.println("*** shutting down gRPC server since JVM is shutting down");
-        try {
-          gcpObservabilityServer.this.stop();
-        } catch (InterruptedException e) {
-          e.printStackTrace(System.err);
-        }
-        System.err.println("*** server shut down");
-      }
-    });
   }
 
   private void stop() throws InterruptedException {
@@ -74,12 +62,31 @@ public class gcpObservabilityServer {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-    // Initialize observability
-    try (GcpObservability observability = GcpObservability.grpcInit()) {
+    try {
+      // Initialize observability
+      GcpObservability observability = GcpObservability.grpcInit();
       final gcpObservabilityServer server = new gcpObservabilityServer();
       server.start();
+
+      Runtime.getRuntime().addShutdownHook(new Thread() {
+        @Override
+        public void run() {
+          System.err.println("*** shutting down gRPC server since JVM is shutting down");
+          try {
+            server.stop();
+            // Shut down observability
+            observability.close();
+          } catch (InterruptedException e) {
+            e.printStackTrace(System.err);
+          }
+          System.err.println("*** server shut down");
+        }
+      });
+
       server.blockUntilShutdown();
-    } // observability.close() called implicitly
+    } finally {
+      logger.info("Server shut down");
+    }
   }
 
   static class GreeterImpl extends GreeterGrpc.GreeterImplBase {
