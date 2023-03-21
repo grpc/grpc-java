@@ -20,7 +20,6 @@ import io.grpc.gcp.observability.GcpObservability;
 import io.grpc.testing.integration.TestServiceClient;
 import io.grpc.testing.integration.TestServiceServer;
 import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Combined interop client and server for observability testing.
