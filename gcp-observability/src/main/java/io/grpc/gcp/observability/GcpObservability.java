@@ -132,9 +132,9 @@ public final class GcpObservability implements AutoCloseable {
     }
     if (config.isEnableCloudMonitoring()) {
       clientInterceptors.add(getConditionalInterceptor(
-          InternalCensusStatsAccessor.getClientInterceptor(true, true, true, true)));
+          InternalCensusStatsAccessor.getClientInterceptor(true, true, false, true)));
       tracerFactories.add(
-          InternalCensusStatsAccessor.getServerStreamTracerFactory(true, true, true));
+          InternalCensusStatsAccessor.getServerStreamTracerFactory(true, true, false));
     }
     if (config.isEnableCloudTracing()) {
       clientInterceptors.add(
