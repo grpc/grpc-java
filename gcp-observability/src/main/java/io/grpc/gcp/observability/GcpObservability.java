@@ -128,6 +128,7 @@ public final class GcpObservability implements AutoCloseable {
           Thread.sleep(
               TimeUnit.MILLISECONDS.convert(2 * METRICS_EXPORT_INTERVAL, TimeUnit.SECONDS));
         } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
           logger.log(Level.SEVERE, "Caught exception during sleep", e);
         }
       }
