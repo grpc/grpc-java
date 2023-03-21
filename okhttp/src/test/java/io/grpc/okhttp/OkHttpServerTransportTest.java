@@ -70,7 +70,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import okio.Buffer;
 import okio.BufferedSource;
 import okio.ByteString;
@@ -156,7 +155,7 @@ public class OkHttpServerTransportTest {
   @Test
   public void maxConnectionAge() throws Exception {
     serverBuilder.maxConnectionAge(5, TimeUnit.SECONDS)
-        .maxConnectionAgeGrace(1, TimeUnit.SECONDS);
+        .maxConnectionAgeGrace(3, TimeUnit.SECONDS);
     initTransport();
     handshake();
     clientFrameWriter.headers(1, Arrays.asList(
@@ -170,8 +169,10 @@ public class OkHttpServerTransportTest {
         new Header("some-client-sent-trailer", "trailer-value")));
     pingPong();
     fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(6)); // > 1.1 * 5
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1));
-    verifyGracefulShutdown(1, TimeUnit.SECONDS.toNanos(1));
+    verifyGracefulShutdown(1);
+    pingPong();
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(3));
+    assertThat(socket.isClosed()).isTrue();
   }
 
   @Test
@@ -205,7 +206,7 @@ public class OkHttpServerTransportTest {
 
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
-    verifyGracefulShutdown(1, null);
+    verifyGracefulShutdown(1);
   }
 
   @Test
@@ -229,7 +230,7 @@ public class OkHttpServerTransportTest {
     pingPong();
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
     fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
-    verifyGracefulShutdown(1, null);
+    verifyGracefulShutdown(1);
   }
 
   @Test
@@ -403,7 +404,7 @@ public class OkHttpServerTransportTest {
     pingPong();
 
     serverTransport.shutdown();
-    verifyGracefulShutdown(1, null);
+    verifyGracefulShutdown(1);
     verify(transportListener, never()).transportTerminated();
 
     MockStreamListener streamListener = mockTransportListener.newStreams.pop();
@@ -1220,7 +1221,7 @@ public class OkHttpServerTransportTest {
     return metadata;
   }
 
-  private void verifyGracefulShutdown(int lastStreamId, @Nullable Long gracePeriodNanos)
+  private void verifyGracefulShutdown(int lastStreamId)
       throws IOException {
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).goAway(2147483647, ErrorCode.NO_ERROR, ByteString.EMPTY);
@@ -1230,16 +1231,12 @@ public class OkHttpServerTransportTest {
     clientFrameWriter.flush();
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).goAway(lastStreamId, ErrorCode.NO_ERROR, ByteString.EMPTY);
-    if (gracePeriodNanos != null) {
-      assertThat(fakeClock.forwardNanos(gracePeriodNanos)).isEqualTo(1);
-      assertThat(socket.isClosed()).isTrue();
-    }
   }
 
   private void shutdownAndTerminate(int lastStreamId) throws IOException {
     assertThat(serverTransport.getActiveStreams().length).isEqualTo(0);
     serverTransport.shutdown();
-    verifyGracefulShutdown(lastStreamId, null);
+    verifyGracefulShutdown(lastStreamId);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isFalse();
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }
