@@ -169,7 +169,9 @@ public class CancellationServer {
       Context currentContext = Context.current();
       // Let's start a multi-part operation. We can check cancellation periodically.
       for (int i = 0; i < 10; i++) {
-        // serverCallStreamObserver.isCancelled() would be equivalent here.
+        // ServerCallStreamObserver.isCancelled() returns true only if the RPC is cancelled.
+        // Context.isCancelled() is similar, but also returns true when the RPC completes normally.
+        // It doesn't matter which API is used here.
         if (currentContext.isCancelled()) {
           System.out.println("Unary RPC cancelled");
           responseObserver.onError(
