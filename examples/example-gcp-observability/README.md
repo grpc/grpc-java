@@ -3,7 +3,7 @@ gRPC GCP Observability Example
 
 The GCP Observability example consists of a Hello World client and a Hello World server instrumented for logs, metrics and tracing. 
 
-__Please refer to GCP Observability [user guide](https://cloud.google.com/stackdriver/docs/solutions/grpc/set-up-observability) for setup.__
+__Please refer to GCP Observability user guide for setup.__
 
 ### Build the example
 
