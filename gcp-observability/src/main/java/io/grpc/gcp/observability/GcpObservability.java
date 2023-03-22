@@ -51,18 +51,30 @@ import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.Tracing;
 import io.opencensus.trace.config.TraceConfig;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /** The main class for gRPC Google Cloud Platform Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class GcpObservability implements AutoCloseable {
+
+  private static final Logger logger = Logger.getLogger(GcpObservability.class.getName());
   private static final int METRICS_EXPORT_INTERVAL = 30;
+
+  static final String DEFAULT_METRIC_CUSTOM_TAG_KEY = "opencensus_task";
   @VisibleForTesting
   static final ImmutableSet<String> SERVICES_TO_EXCLUDE = ImmutableSet.of(
       "google.logging.v2.LoggingServiceV2", "google.monitoring.v3.MetricService",
       "google.devtools.cloudtrace.v2.TraceService");
+
   private static GcpObservability instance = null;
   private final Sink sink;
   private final ObservabilityConfig config;
@@ -184,12 +196,17 @@ public final class GcpObservability implements AutoCloseable {
       if (projectId != null) {
         statsConfigurationBuilder.setProjectId(projectId);
       }
+      Map<LabelKey, LabelValue> constantLabels = new HashMap<>();
+      constantLabels.put(
+          LabelKey.create(DEFAULT_METRIC_CUSTOM_TAG_KEY, DEFAULT_METRIC_CUSTOM_TAG_KEY),
+          LabelValue.create(generateDefaultMetricTagValue()));
       if (customTags != null) {
-        Map<LabelKey, LabelValue> constantLabels = customTags.entrySet().stream()
-            .collect(Collectors.toMap(e -> LabelKey.create(e.getKey(), e.getKey()),
-                e -> LabelValue.create(e.getValue())));
-        statsConfigurationBuilder.setConstantLabels(constantLabels);
+        for (Map.Entry<String, String> mapEntry : customTags.entrySet()) {
+          constantLabels.putIfAbsent(LabelKey.create(mapEntry.getKey(), mapEntry.getKey()),
+              LabelValue.create(mapEntry.getValue()));
+        }
       }
+      statsConfigurationBuilder.setConstantLabels(constantLabels);
       statsConfigurationBuilder.setExportInterval(Duration.create(METRICS_EXPORT_INTERVAL, 0));
       StackdriverStatsExporter.createAndRegister(statsConfigurationBuilder.build());
     }
@@ -211,6 +228,20 @@ public final class GcpObservability implements AutoCloseable {
       }
       StackdriverTraceExporter.createAndRegister(traceConfigurationBuilder.build());
     }
+  }
+
+  private static String generateDefaultMetricTagValue() {
+    final String jvmName = ManagementFactory.getRuntimeMXBean().getName();
+    if (jvmName.indexOf('@') < 1) {
+      String hostname = "localhost";
+      try {
+        hostname = InetAddress.getLocalHost().getHostName();
+      } catch (UnknownHostException e) {
+        logger.log(Level.INFO, "Unable to get the hostname.", e);
+      }
+      return "java-" + new SecureRandom().nextInt() + "@" + hostname;
+    }
+    return "java-" + jvmName;
   }
 
   private GcpObservability(
