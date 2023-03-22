@@ -58,6 +58,7 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -129,6 +130,16 @@ public final class GcpObservability implements AutoCloseable {
         throw new IllegalStateException("GcpObservability already closed!");
       }
       sink.close();
+      if (config.isEnableCloudMonitoring() || config.isEnableCloudTracing()) {
+        try {
+          // Sleeping before shutdown to ensure all metrics and traces are flushed
+          Thread.sleep(
+              TimeUnit.MILLISECONDS.convert(2 * METRICS_EXPORT_INTERVAL, TimeUnit.SECONDS));
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          logger.log(Level.SEVERE, "Caught exception during sleep", e);
+        }
+      }
       instance = null;
     }
   }
