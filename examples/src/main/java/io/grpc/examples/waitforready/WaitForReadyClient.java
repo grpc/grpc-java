@@ -17,6 +17,7 @@
 package io.grpc.examples.waitforready;
 
 import io.grpc.Channel;
+import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
