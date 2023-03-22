@@ -140,6 +140,13 @@ task manualFlowControlServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task waitForReadyClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.waitforready.WaitForReadyClient'
+    applicationName = 'wait-for-ready-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 task loadBalanceServer(type: CreateStartScripts) {
     mainClass = 'io.grpc.examples.loadbalance.LoadBalanceServer'
     applicationName = 'load-balance-server'
@@ -222,6 +229,7 @@ applicationDistribution.into('bin') {
     from(compressingHelloWorldClient)
     from(manualFlowControlClient)
     from(manualFlowControlServer)
+    from(waitForReadyClient)
     from(loadBalanceServer)
     from(loadBalanceClient)
     from(nameResolveServer)
