@@ -47,12 +47,24 @@ public class WaitForReadyClient {
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
   /**
-   *  Construct client for accessing HelloWorld server using the existing channel.
+   *  Construct client for accessing HelloWorld server using the existing channel which will
+   *  wait for the server to become ready, however long that may take, before sending the request.
    */
   public WaitForReadyClient(Channel channel) {
     // This is the only difference from the simple HelloWorld example
     blockingStub = GreeterGrpc.newBlockingStub(channel).withWaitForReady();
   }
+
+  /**
+   *  Construct a client for accessing HelloWorld server using the existing channel which will
+   *  wait for the server to become ready, up to the specified deadline, before sending the request.
+   *  if the deadline is exceeded before the server becomes ready, then the rpc call will fail with
+   *  a Status of DEADLINE_EXCEEDED without the request being sent.
+   */
+  public WaitForReadyClient(Channel channel, Deadline deadline) {
+    blockingStub = GreeterGrpc.newBlockingStub(channel).withWaitForReady().withDeadline(deadline);
+  }
+
 
   /** Say hello to server. */
   public void greet(String name) {
@@ -100,6 +112,13 @@ public class WaitForReadyClient {
     ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .build();
     try {
+      // If server isn't running, this will fail after 5 seconds.  Will also fail if the server is
+      // running particularly slowly and takes more than 5 minutes to respond.
+      WaitForReadyClient clientWithTimeout =
+          new WaitForReadyClient(channel, Deadline.after(5, TimeUnit.SECONDS));
+      clientWithTimeout.greet(user);
+
+      // This will wait forever until the server becomes ready
       WaitForReadyClient client = new WaitForReadyClient(channel);
       client.greet(user);
     } finally {
