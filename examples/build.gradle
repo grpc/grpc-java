@@ -231,6 +231,20 @@ task cancellationServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task healthServiceServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.healthservice.HealthServiceServer'
+    applicationName = 'health-service-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task healthServiceClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.healthservice.HealthServiceClient'
+    applicationName = 'health-service-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -256,5 +270,7 @@ applicationDistribution.into('bin') {
     from(healthServiceClient)
     from(cancellationClient)
     from(cancellationServer)
+    from(healthServiceServer)
+    from(healthServiceClient)
     fileMode = 0755
 }
