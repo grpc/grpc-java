@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.gcpObservability;
+package io.grpc.examples.gcpobservability;
 
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
@@ -32,8 +32,8 @@ import java.util.logging.Logger;
  * Observability server that manages startup/shutdown of a {@code Greeter} server and generates
  * logs, metrics and traces based on the configuration.
  */
-public class gcpObservabilityServer {
-  private static final Logger logger = Logger.getLogger(gcpObservabilityServer.class.getName());
+public class GcpObservabilityServer {
+  private static final Logger logger = Logger.getLogger(GcpObservabilityServer.class.getName());
 
   private Server server;
 
@@ -62,31 +62,27 @@ public class gcpObservabilityServer {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-    try {
-      // Initialize observability
-      GcpObservability observability = GcpObservability.grpcInit();
-      final gcpObservabilityServer server = new gcpObservabilityServer();
-      server.start();
+    // Initialize observability
+    GcpObservability observability = GcpObservability.grpcInit();
+    final GcpObservabilityServer server = new GcpObservabilityServer();
+    server.start();
 
-      Runtime.getRuntime().addShutdownHook(new Thread() {
-        @Override
-        public void run() {
-          System.err.println("*** shutting down gRPC server since JVM is shutting down");
-          try {
-            server.stop();
-            // Shut down observability
-            observability.close();
-          } catch (InterruptedException e) {
-            e.printStackTrace(System.err);
-          }
-          System.err.println("*** server shut down");
+    Runtime.getRuntime().addShutdownHook(new Thread() {
+      @Override
+      public void run() {
+        System.err.println("*** shutting down gRPC server since JVM is shutting down");
+        try {
+          server.stop();
+        } catch (InterruptedException e) {
+          e.printStackTrace(System.err);
         }
-      });
+        // Shut down observability
+        observability.close();
+        System.err.println("*** server shut down");
+      }
+    });
 
-      server.blockUntilShutdown();
-    } finally {
-      logger.info("Server shut down");
-    }
+    server.blockUntilShutdown();
   }
 
   static class GreeterImpl extends GreeterGrpc.GreeterImplBase {

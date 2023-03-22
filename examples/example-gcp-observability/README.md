@@ -7,7 +7,7 @@ __Please refer to GCP Observability [user guide](https://cloud.google.com/stackd
 
 ### Build the example
 
-Build the Observability client & server. From the grpc-java/examples/example-gcp-observability
+Build the Observability client & server. From the `grpc-java/examples/example-gcp-observability`
 directory:
 ```
 $ ../gradlew installDist
@@ -27,13 +27,13 @@ is not set then `GRPC_GCP_OBSERVABILITY_CONFIG` environment variable to gRPC GCP
 
 1. To start the observability-enabled example server on its default port of 50051, run:
 ```
-$ export GRPC_GCP_OBSERVABILITY_CONFIG_FILE=src/main/resources/io/grpc/examples/gcpObservability/gcp_observability_server_config.json
+$ export GRPC_GCP_OBSERVABILITY_CONFIG_FILE=src/main/resources/io/grpc/examples/gcpobservability/gcp_observability_server_config.json
 $ ./build/install/example-gcp-observability/bin/gcp-observability-server
 ```
 
 2. In a different terminal window, run the observability-enabled example client:
 ```
-$ export GRPC_GCP_OBSERVABILITY_CONFIG_FILE=src/main/resources/io/grpc/examples/gcpObservability/gcp_observability_client_config.json
+$ export GRPC_GCP_OBSERVABILITY_CONFIG_FILE=src/main/resources/io/grpc/examples/gcpobservability/gcp_observability_client_config.json
 $ ./build/install/example-gcp-observability/bin/gcp-observability-client
 ```
 

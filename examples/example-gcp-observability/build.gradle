@@ -48,14 +48,14 @@ protobuf {
 startScripts.enabled = false
 
 task ObservabilityHelloWorldServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.gcpObservability.gcpObservabilityServer'
+    mainClass = 'io.grpc.examples.gcpobservability.GcpObservabilityServer'
     applicationName = 'gcp-observability-server'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task ObservabilityHelloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.gcpObservability.gcpObservabilityClient'
+    mainClass = 'io.grpc.examples.gcpobservability.GcpObservabilityClient'
     applicationName = 'gcp-observability-client'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath

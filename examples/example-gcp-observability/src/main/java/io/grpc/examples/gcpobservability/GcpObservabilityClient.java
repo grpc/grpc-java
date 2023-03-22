@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.gcpObservability;
+package io.grpc.examples.gcpobservability;
 
 import io.grpc.Channel;
 import io.grpc.Grpc;
@@ -33,13 +33,13 @@ import java.util.logging.Logger;
  * A simple observability client that requests a greeting from the {@link HelloWorldServer} and
  * generates logs, metrics and traces based on the configuration.
  */
-public class gcpObservabilityClient {
-  private static final Logger logger = Logger.getLogger(gcpObservabilityClient.class.getName());
+public class GcpObservabilityClient {
+  private static final Logger logger = Logger.getLogger(GcpObservabilityClient.class.getName());
 
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
   /** Construct client for accessing HelloWorld server using the existing channel. */
-  public gcpObservabilityClient(Channel channel) {
+  public GcpObservabilityClient(Channel channel) {
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
 
@@ -83,7 +83,7 @@ public class gcpObservabilityClient {
       ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
           .build();
       try {
-        gcpObservabilityClient client = new gcpObservabilityClient(channel);
+        GcpObservabilityClient client = new GcpObservabilityClient(channel);
         client.greet(user);
       } finally {
         channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
