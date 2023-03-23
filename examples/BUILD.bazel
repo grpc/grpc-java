@@ -51,6 +51,22 @@ java_grpc_library(
     deps = [":route_guide_java_proto"],
 )
 
+proto_library(
+    name = "echo_proto",
+    srcs = ["src/main/proto/grpc/examples/echo/echo.proto"],
+)
+
+java_proto_library(
+    name = "echo_java_proto",
+    deps = [":echo_proto"],
+)
+
+java_grpc_library(
+    name = "echo_java_grpc",
+    srcs = [":echo_proto"],
+    deps = [":echo_java_proto"],
+)
+
 java_library(
     name = "examples",
     testonly = 1,
@@ -65,6 +81,8 @@ java_library(
     ],
     deps = [
         ":_health_java_grpc",
+        ":echo_java_grpc",
+        ":echo_java_proto",
         ":hello_streaming_java_grpc",
         ":hello_streaming_java_proto",
         ":helloworld_java_grpc",
