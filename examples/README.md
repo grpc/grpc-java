@@ -23,6 +23,8 @@ before trying out the examples.
 
 - [Flow control](src/main/java/io/grpc/examples/manualflowcontrol)
 
+- [Wait For Ready](src/main/java/io/grpc/examples/waitforready)
+
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
 - <details>

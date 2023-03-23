@@ -21,8 +21,8 @@ import static org.junit.Assert.assertEquals;
 
 import android.net.LocalSocketAddress.Namespace;
 import androidx.test.InstrumentationRegistry;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.rule.ActivityTestRule;
-import androidx.test.runner.AndroidJUnit4;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Server;
 import io.grpc.android.UdsChannelBuilder;

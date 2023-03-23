@@ -139,6 +139,13 @@ task manualFlowControlServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task waitForReadyClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.waitforready.WaitForReadyClient'
+    applicationName = 'wait-for-ready-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 task loadBalanceServer(type: CreateStartScripts) {
     mainClass = 'io.grpc.examples.loadbalance.LoadBalanceServer'
     applicationName = 'load-balance-server'
@@ -195,6 +202,20 @@ task keepAliveClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task cancellationClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.cancellation.CancellationClient'
+    applicationName = 'cancellation-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task cancellationServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.cancellation.CancellationServer'
+    applicationName = 'cancellation-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -207,6 +228,7 @@ applicationDistribution.into('bin') {
     from(compressingHelloWorldClient)
     from(manualFlowControlClient)
     from(manualFlowControlServer)
+    from(waitForReadyClient)
     from(loadBalanceServer)
     from(loadBalanceClient)
     from(nameResolveServer)
@@ -215,5 +237,7 @@ applicationDistribution.into('bin') {
     from(deadlineClient)
     from(keepAliveServer)
     from(keepAliveClient)
+    from(cancellationClient)
+    from(cancellationServer)
     fileMode = 0755
 }
