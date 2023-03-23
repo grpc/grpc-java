@@ -136,7 +136,9 @@ final class CustomBackendMetricsLoadBalancerProvider extends LoadBalancerProvide
                   public void onLoadReport(MetricReport callMetricReport) {
                     AtomicReference<TestOrcaReport> reportRef =
                         args.getCallOptions().getOption(ORCA_RPC_REPORT_KEY);
-                    reportRef.set(fromCallMetricReport(callMetricReport));
+                    if (reportRef != null) {
+                      reportRef.set(fromCallMetricReport(callMetricReport));
+                    }
                   }
                 }));
       }
