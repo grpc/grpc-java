@@ -73,6 +73,7 @@ java_library(
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_java//api",
+        "@io_grpc_grpc_java//context",
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//stub",
         "@maven//:com_google_api_grpc_proto_google_common_protos",
