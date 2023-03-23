@@ -10,6 +10,8 @@ quote() {
   done
 }
 
+readonly docker_image=$1; shift
+
 readonly grpc_java_dir="$(dirname "$(readlink -f "$0")")/.."
 if [[ -t 0 ]]; then
   DOCKER_ARGS="-it"
@@ -21,5 +23,5 @@ fi
 # the original exit code. $DOCKER_ARGS can not be quoted, otherwise it becomes a '' which confuses
 # docker.
 exec docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
-  grpc-java-artifacts \
+  $docker_image \
   bash -c "function fixFiles() { chown -R $(id -u):$(id -g) /grpc-java; }; trap fixFiles EXIT; $(quote "$@")"

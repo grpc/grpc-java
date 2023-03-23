@@ -11,7 +11,7 @@ readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 trap spongify_logs EXIT
 
 "$GRPC_JAVA_DIR"/buildscripts/build_docker.sh
-"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh /grpc-java/buildscripts/build_artifacts_in_docker.sh
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-x86 /grpc-java/buildscripts/build_artifacts_in_docker.sh
 
 # grpc-android, grpc-cronet and grpc-binder require the Android SDK, so build outside of Docker and
 # use --include-build for its grpc-core dependency
@@ -59,3 +59,9 @@ SKIP_TESTS=true ARCH=aarch_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
 # for ppc64le platform
 sudo apt-get install -y g++-powerpc64le-linux-gnu
 SKIP_TESTS=true ARCH=ppcle_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
+
+# for s390x platform
+# building these artifacts inside a Docker container as we have specific requirements
+# for GCC (version 11.x needed) which in turn requires Ubuntu 22.04 LTS
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-multiarch /grpc-java/buildscripts/build_s390x_artifacts_in_docker.sh
+
