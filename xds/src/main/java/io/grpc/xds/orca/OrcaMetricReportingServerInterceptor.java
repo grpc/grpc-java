@@ -34,6 +34,7 @@ import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.InternalMetricRecorder;
 import io.grpc.services.MetricRecorder;
 import io.grpc.services.MetricReport;
+import javax.annotation.Nullable;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -47,7 +48,7 @@ import io.grpc.services.MetricReport;
 public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
-      new OrcaMetricReportingServerInterceptor(MetricRecorder.newInstance());
+      new OrcaMetricReportingServerInterceptor(null);
 
   @VisibleForTesting
   static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
@@ -55,10 +56,11 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
           "endpoint-load-metrics-bin",
           ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
+  @Nullable
   private final MetricRecorder metricRecorder;
 
   @VisibleForTesting
-  OrcaMetricReportingServerInterceptor(MetricRecorder metricRecorder) {
+  OrcaMetricReportingServerInterceptor(@Nullable MetricRecorder metricRecorder) {
     this.metricRecorder = metricRecorder;
   }
 
@@ -66,7 +68,8 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
     return INSTANCE;
   }
 
-  public static OrcaMetricReportingServerInterceptor create(MetricRecorder metricRecorder) {
+  public static OrcaMetricReportingServerInterceptor create(
+      @Nullable MetricRecorder metricRecorder) {
     return new OrcaMetricReportingServerInterceptor(metricRecorder);
   }
 
@@ -84,8 +87,9 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
-            OrcaLoadReport.Builder reportBuilder = fromInternalReport(
-                InternalMetricRecorder.getMetricReport(metricRecorder));
+            OrcaLoadReport.Builder reportBuilder = metricRecorder != null ? fromInternalReport(
+                InternalMetricRecorder.getMetricReport(metricRecorder))
+                : OrcaLoadReport.newBuilder();
             mergeMetrics(reportBuilder,
                 InternalCallMetricRecorder.finalizeAndDump2(finalCallMetricRecorder));
             OrcaLoadReport report = reportBuilder.build();
