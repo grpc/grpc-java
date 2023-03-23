@@ -102,6 +102,7 @@ public class SharingClient {
     StreamObserver<EchoResponse> responseObserver = new StreamObserver<EchoResponse>() {
       @Override
       public void onNext(EchoResponse response) {
+        System.out.println("Received an echo: " + response.getMessage());
         valuesReceived.add(response.getMessage());
       }
 
@@ -127,6 +128,7 @@ public class SharingClient {
 
         try {
           for (String curValue : valuesToSend) {
+            System.out.println("Sending an echo request for: " + curValue);
             EchoRequest req = EchoRequest.newBuilder().setMessage(curValue).build();
             requestObserver.onNext(req);
 
