@@ -46,9 +46,12 @@ import io.netty.handler.codec.http2.DefaultHttp2HeadersDecoder;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
 import io.netty.util.internal.PlatformDependent;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A headers utils providing custom gRPC implementations of {@link DefaultHttp2HeadersDecoder}.
@@ -288,6 +291,11 @@ class GrpcHttp2HeadersUtils {
       return numHeaders();
     }
 
+    @Override
+    public Iterator<Map.Entry<CharSequence, CharSequence>> iterator() {
+      return namesAndValuesToImmutableList().iterator();
+    }
+
     protected static void appendNameAndValue(StringBuilder builder, CharSequence name,
         CharSequence value, boolean prependSeparator) {
       if (prependSeparator) {
@@ -296,14 +304,22 @@ class GrpcHttp2HeadersUtils {
       builder.append(name).append(": ").append(value);
     }
 
-    protected final String namesAndValuesToString() {
-      StringBuilder builder = new StringBuilder();
-      boolean prependSeparator = false;
+    private List<Map.Entry<CharSequence, CharSequence>> namesAndValuesToImmutableList() {
+      ArrayList<Map.Entry<CharSequence, CharSequence>> list = new ArrayList<>(values.length);
       for (int i = 0; i < namesAndValuesIdx; i += 2) {
         String name = new String(namesAndValues[i], US_ASCII);
         // If binary headers, the value is base64 encoded.
         AsciiString value = values[i / 2];
-        appendNameAndValue(builder, name, value, prependSeparator);
+        list.add(new AbstractMap.SimpleImmutableEntry<CharSequence, CharSequence>(name, value));
+      }
+      return Collections.unmodifiableList(list);
+    }
+
+    protected final String namesAndValuesToString() {
+      StringBuilder builder = new StringBuilder();
+      boolean prependSeparator = false;
+      for (Map.Entry<CharSequence, CharSequence> entry : namesAndValuesToImmutableList()) {
+        appendNameAndValue(builder, entry.getKey(), entry.getValue(), prependSeparator);
         prependSeparator = true;
       }
       return builder.toString();

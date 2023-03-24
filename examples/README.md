@@ -23,6 +23,8 @@ before trying out the examples.
 
 - [Flow control](src/main/java/io/grpc/examples/manualflowcontrol)
 
+- [Wait For Ready](src/main/java/io/grpc/examples/waitforready)
+
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
 - <details>
@@ -116,6 +118,8 @@ before trying out the examples.
   `retrying-hello-world-client`.
 
 </details>
+
+- [Keep Alive](src/main/java/io/grpc/examples/keepalive)
 
 ### <a name="to-build-the-examples"></a> To build the examples
 

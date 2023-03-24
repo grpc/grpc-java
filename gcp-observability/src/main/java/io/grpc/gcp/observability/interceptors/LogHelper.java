@@ -23,6 +23,7 @@ import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 import com.google.common.base.Joiner;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
+import com.google.rpc.Code;
 import io.grpc.Attributes;
 import io.grpc.Deadline;
 import io.grpc.Grpc;
@@ -35,6 +36,7 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.observabilitylog.v1.Payload;
+import io.opencensus.trace.SpanContext;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -87,7 +89,8 @@ public class LogHelper {
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
       // null on client side
-      @Nullable SocketAddress peerAddress) {
+      @Nullable SocketAddress peerAddress,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -113,7 +116,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeer(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -128,7 +131,8 @@ public class LogHelper {
       int maxHeaderBytes,
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
-      @Nullable SocketAddress peerAddress) {
+      @Nullable SocketAddress peerAddress,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -154,7 +158,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeer(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -170,7 +174,8 @@ public class LogHelper {
       int maxHeaderBytes,
       GrpcLogRecord.EventLogger eventLogger,
       String callId,
-      @Nullable SocketAddress peerAddress) {
+      @Nullable SocketAddress peerAddress,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -182,7 +187,7 @@ public class LogHelper {
 
     PayloadBuilderHelper<Payload.Builder> pair =
         createMetadataProto(metadata, maxHeaderBytes);
-    pair.payloadBuilder.setStatusCode(status.getCode().value());
+    pair.payloadBuilder.setStatusCode(Code.forNumber(status.getCode().value()));
     String statusDescription = status.getDescription();
     if (statusDescription != null) {
       pair.payloadBuilder.setStatusMessage(statusDescription);
@@ -204,7 +209,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeer(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -219,7 +224,8 @@ public class LogHelper {
       T message,
       int maxMessageBytes,
       EventLogger eventLogger,
-      String callId) {
+      String callId,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -259,7 +265,7 @@ public class LogHelper {
       logEntryBuilder.setPayload(pair.payloadBuilder)
           .setPayloadTruncated(pair.truncated);
     }
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -271,7 +277,8 @@ public class LogHelper {
       String methodName,
       String authority,
       GrpcLogRecord.EventLogger eventLogger,
-      String callId) {
+      String callId,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -285,7 +292,7 @@ public class LogHelper {
         .setType(EventType.CLIENT_HALF_CLOSE)
         .setLogger(eventLogger)
         .setCallId(callId);
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   /**
@@ -297,7 +304,8 @@ public class LogHelper {
       String methodName,
       String authority,
       GrpcLogRecord.EventLogger eventLogger,
-      String callId) {
+      String callId,
+      SpanContext spanContext) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
     checkNotNull(authority, "authority");
@@ -311,7 +319,7 @@ public class LogHelper {
         .setType(EventType.CANCEL)
         .setLogger(eventLogger)
         .setCallId(callId);
-    sink.write(logEntryBuilder.build());
+    sink.write(logEntryBuilder.build(), spanContext);
   }
 
   // TODO(DNVindhya): Evaluate if we need following clause for metadata logging in GcpObservability
@@ -404,10 +412,10 @@ public class LogHelper {
     if (address instanceof InetSocketAddress) {
       InetAddress inetAddress = ((InetSocketAddress) address).getAddress();
       if (inetAddress instanceof Inet4Address) {
-        builder.setType(Address.Type.TYPE_IPV4)
+        builder.setType(Address.Type.IPV4)
             .setAddress(InetAddressUtil.toAddrString(inetAddress));
       } else if (inetAddress instanceof Inet6Address) {
-        builder.setType(Address.Type.TYPE_IPV6)
+        builder.setType(Address.Type.IPV6)
             .setAddress(InetAddressUtil.toAddrString(inetAddress));
       } else {
         logger.log(Level.SEVERE, "unknown type of InetSocketAddress: {}", address);
@@ -417,7 +425,7 @@ public class LogHelper {
     } else if (address.getClass().getName().equals("io.netty.channel.unix.DomainSocketAddress")) {
       // To avoid a compiled time dependency on grpc-netty, we check against the
       // runtime class name.
-      builder.setType(Address.Type.TYPE_UNIX)
+      builder.setType(Address.Type.UNIX)
           .setAddress(address.toString());
     } else {
       builder.setType(Address.Type.TYPE_UNKNOWN).setAddress(address.toString());

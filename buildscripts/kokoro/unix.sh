@@ -11,6 +11,8 @@
 #  ARCH=aarch_64 ./buildscripts/kokoro/unix.sh
 # For ppc64le arch:
 #  ARCH=ppcle_64 ./buildscripts/kokoro/unix.sh
+# For s390x arch:
+#  ARCH=s390_64 ./buildscripts/kokoro/unix.sh
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
 set -exu -o pipefail
@@ -64,34 +66,23 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   # --batch-mode reduces log spam
   mvn verify --batch-mode
   popd
-  pushd examples/example-alts
-  ../gradlew build $GRADLE_FLAGS
-  popd
-  pushd examples/example-hostname
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-tls
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-jwt-auth
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-xds
-  ../gradlew build $GRADLE_FLAGS
-  popd
+  for f in examples/example-*
+  do
+     pushd "$f"
+     ../gradlew build $GRADLE_FLAGS
+     if [ -f "pom.xml" ]; then
+       # --batch-mode reduces log spam
+       mvn verify --batch-mode
+     fi
+     popd
+  done
   # TODO(zpencer): also build the GAE examples
-  pushd examples/example-orca
-  ../gradlew build $GRADLE_FLAGS
-  popd
 fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
-  if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" ]]; then
+  if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" || "$ARCH" = "s390_64" ]]; then
     GRADLE_FLAGS+=" -x grpc-compiler:generateTestProto -x grpc-compiler:generateTestLiteProto"
     GRADLE_FLAGS+=" -x grpc-compiler:testGolden -x grpc-compiler:testLiteGolden"
     GRADLE_FLAGS+=" -x grpc-compiler:testDeprecatedGolden -x grpc-compiler:testDeprecatedLiteGolden"

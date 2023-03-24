@@ -15,7 +15,7 @@ repositories {
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-def grpcVersion = '1.54.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.55.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.21.7'
 
 dependencies {
@@ -23,7 +23,7 @@ dependencies {
             "io.grpc:grpc-servlet:${grpcVersion}",
             "io.grpc:grpc-stub:${grpcVersion}"
 
-    providedImplementation "javax.servlet:javax.servlet-api:4.0.1",
+    compileOnly "javax.servlet:javax.servlet-api:4.0.1",
             "org.apache.tomcat:annotations-api:6.0.53"
 }
 

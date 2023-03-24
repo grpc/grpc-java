@@ -67,6 +67,6 @@ jobs:
       if: matrix.jre == 8 # Upload once, instead of for each job in the matrix
       env:
         COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-      run: ./gradlew :grpc-all:coveralls -x compileJava
+      run: ./gradlew :grpc-all:coveralls -PskipAndroid=true -x compileJava
     - name: Codecov
       uses: codecov/codecov-action@v3

@@ -60,7 +60,7 @@ import javax.annotation.Nullable;
  * Common base type for XdsClient implementations, which encapsulates the layer abstraction of
  * the xDS RPC stream.
  */
-final class AbstractXdsClient {
+final class ControlPlaneClient {
 
   public static final String CLOSED_BY_SERVER = "Closed by server";
   private final SynchronizationContext syncContext;
@@ -92,7 +92,7 @@ final class AbstractXdsClient {
 
   /** An entity that manages ADS RPCs over a single channel. */
   // TODO: rename to XdsChannel
-  AbstractXdsClient(
+  ControlPlaneClient(
       XdsChannelFactory xdsChannelFactory,
       ServerInfo serverInfo,
       Node bootstrapNode,
@@ -388,7 +388,7 @@ final class AbstractXdsClient {
 
         @Override
         public void beforeStart(ClientCallStreamObserver<DiscoveryRequest> requestStream) {
-          requestStream.setOnReadyHandler(AbstractXdsClient.this::readyHandler);
+          requestStream.setOnReadyHandler(ControlPlaneClient.this::readyHandler);
         }
 
         @Override

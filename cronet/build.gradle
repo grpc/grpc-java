@@ -13,10 +13,11 @@ repositories {
 }
 
 android {
-    compileSdkVersion 29
+    namespace 'io.grpc.cronet'
+    compileSdkVersion 31
     defaultConfig {
         minSdkVersion 19
-        targetSdkVersion 29
+        targetSdkVersion 31
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
