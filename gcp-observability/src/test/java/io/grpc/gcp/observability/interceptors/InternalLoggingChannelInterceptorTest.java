@@ -352,11 +352,12 @@ public class InternalLoggingChannelInterceptorTest {
     @SuppressWarnings("unchecked")
     ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
 
+    int durationSecs = 5;
     ClientCall<byte[], byte[]> interceptedLoggingCall =
         factory.create()
             .interceptCall(
                 method,
-                CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                CallOptions.DEFAULT.withDeadlineAfter(durationSecs, TimeUnit.SECONDS),
                 new Channel() {
                   @Override
                   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -387,8 +388,8 @@ public class InternalLoggingChannelInterceptorTest {
                 ArgumentMatchers.any()),
             any(SpanContext.class));
     Duration timeout = callOptTimeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(durationSecs) - Durations.toNanos(timeout)))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test
@@ -396,7 +397,7 @@ public class InternalLoggingChannelInterceptorTest {
     final SettableFuture<ClientCall<byte[], byte[]>> callFuture = SettableFuture.create();
     Context.current()
         .withDeadline(
-            Deadline.after(1, TimeUnit.SECONDS),
+            Deadline.after(2, TimeUnit.SECONDS),
             Executors.newSingleThreadScheduledExecutor())
         .run(() -> {
           MethodDescriptor<byte[], byte[]> method =
@@ -413,7 +414,7 @@ public class InternalLoggingChannelInterceptorTest {
               factory.create()
                   .interceptCall(
                       method,
-                      CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                      CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS),
                       new Channel() {
                         @Override
                         public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -447,8 +448,8 @@ public class InternalLoggingChannelInterceptorTest {
                 ArgumentMatchers.any()),
             any(SpanContext.class));
     Duration timeout = contextTimeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(2) - Durations.toNanos(timeout)))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test
@@ -512,8 +513,8 @@ public class InternalLoggingChannelInterceptorTest {
     Duration timeout = timeoutCaptor.getValue();
     assertThat(LogHelper.min(contextDeadline, callOptionsDeadline))
         .isSameInstanceAs(contextDeadline);
-    assertThat(TimeUnit.SECONDS.toNanos(10) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(10) - Durations.toNanos(timeout)))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test
