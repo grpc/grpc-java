@@ -14,13 +14,20 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.helloworld;
+package io.grpc.examples.healthservice.;
 
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
+import io.grpc.Context;
+import io.grpc.examples.helloworld.HelloReply;
+import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+import io.grpc.examples.helloworld.GreeterGrpc;
+import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -49,7 +56,7 @@ public class HealthServiceServer {
         // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC server since JVM is shutting down");
         try {
-          HelloWorldServer.this.stop();
+          HealthServiceServer.this.stop();
         } catch (InterruptedException e) {
           e.printStackTrace(System.err);
         }
@@ -84,7 +91,7 @@ public class HealthServiceServer {
     server.blockUntilShutdown();
   }
 
-  static class GreeterImpl extends GreeterGrpc.GreeterImplBase {
+  private class GreeterImpl extends GreeterGrpc.GreeterImplBase {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
@@ -96,7 +103,7 @@ public class HealthServiceServer {
     }
 
     private void updateHealthStatus(HelloRequest req) {
-      if (req.getMessage().length < 5) {
+      if (req.getName().length() < 5) {
         logger.warning("Tiny message received, throwing a temper tantrum");
       }
 

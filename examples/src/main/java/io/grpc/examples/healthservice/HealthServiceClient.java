@@ -14,45 +14,47 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.helloworld;
+package io.grpc.examples.healthservice;
 
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
+import io.grpc.examples.helloworld.GreeterGrpc;
+import io.grpc.examples.helloworld.HelloReply;
+import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.health.v1.HealthCheckRequest;
+import io.grpc.health.v1.HealthCheckResponse;
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+import io.grpc.health.v1.HealthGrpc;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * A simple client that requests a greeting from the {@link HelloWorldServer}.
+ * A client that requests a greeting from the {@link HelloWorldServer}.
  */
-public class HelloWorldClient {
-  private static final Logger logger = Logger.getLogger(HelloWorldClient.class.getName());
+public class HealthServiceClient {
+  private static final Logger logger = Logger.getLogger(HealthServiceClient.class.getName());
 
-  private final GreeterGrpc.GreeterBlockingStub blockingStub;
-
-  private final HealthGrpc.HealthStub stub;
-  private final HealthGrpc.HealthBlockingStub blockingStub;
+  private final GreeterGrpc.GreeterBlockingStub greeterBlockingStub;
+  private final HealthGrpc.HealthStub healthStub;
+  private final HealthGrpc.HealthBlockingStub healthBlockingStub;
 
   private final HealthCheckRequest healthRequest;
 
   /** Construct client for accessing HelloWorld server using the existing channel. */
-  public HelloWorldClient(Channel channel) {
-    stub = HealthGrpc.newStub(channel);
-    blockingStub = HealthGrpc.newBlockingStub(channel);
-
-    healthRequest =
-        HealthCheckRequest.newBuilder().setService(HealthStatusManager.SERVICE_NAME_ALL_SERVICES)
-            .build();
-
-    checkHealth();
+  public HealthServiceClient(Channel channel) {
+    greeterBlockingStub = GreeterGrpc.newBlockingStub(channel);
+    healthStub = HealthGrpc.newStub(channel);
+    healthBlockingStub = HealthGrpc.newBlockingStub(channel);
+    healthRequest = HealthCheckRequest.getDefaultInstance();
   }
 
   private ServingStatus checkHealth(String prefix) {
     HealthCheckResponse response =
-        blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS).check(request);
+        healthBlockingStub.check(healthRequest);
     logger.info(prefix + ", current health is: " + response.getStatus());
     return response.getStatus();
   }
@@ -63,7 +65,7 @@ public class HelloWorldClient {
     HelloRequest request = HelloRequest.newBuilder().setName(name).build();
     HelloReply response;
     try {
-      response = blockingStub.sayHello(request);
+      response = greeterBlockingStub.sayHello(request);
     } catch (StatusRuntimeException e) {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
       return;
@@ -92,7 +94,7 @@ public class HelloWorldClient {
     }
     if (args.length > 1) {
       users = new String[args.length-1];
-      for (i=0; i < users.length; i++) {
+      for (int i=0; i < users.length; i++) {
         users[i] = args[i+1];
       }
     }
@@ -107,10 +109,10 @@ public class HelloWorldClient {
         .build();
     try {
       // Set a watch
-      HelloWorldClient client = new HelloWorldClient(channel);
+      HealthServiceClient client = new HealthServiceClient(channel);
       client.checkHealth("Before call");
-      client.greet(user[0]);
-      client.checkHealth("After user " + user[0]);
+      client.greet(users[0]);
+      client.checkHealth("After user " + users[0]);
       for (String user : users) {
         client.greet(user);
       }
