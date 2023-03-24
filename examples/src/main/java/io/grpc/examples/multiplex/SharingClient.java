@@ -221,6 +221,19 @@ public class SharingClient {
       if (responseObserver != null) {
         responseObserver.onError(Status.ABORTED.asException());
       }
+
     }
+
+    // These are needed for visibility from the parent object
+    @Override
+    protected boolean set(@Nullable RespT resp) {
+      return super.set(resp);
+    }
+
+    @Override
+    protected boolean setException(Throwable throwable) {
+      return super.setException(throwable);
+    }
+
   }
 }
