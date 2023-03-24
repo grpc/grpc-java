@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,6 +78,9 @@ public class HealthServiceClient {
    * greeting. The second argument is the target server.
    */
   public static void main(String[] args) throws Exception {
+    System.setProperty("java.util.logging.SimpleFormatter.format",
+        "%1$tH:%1$tM:%1$tS %4$s %2$s: %5$s%6$s%n");
+
     String[] users = {"world", "foo", "I am Grut"};
     // Access a service running on the local machine on port 50051
     String target = "localhost:50051";
@@ -117,8 +120,9 @@ public class HealthServiceClient {
         client.greet(user);
       }
       client.checkHealth("After all users");
-      Thread.sleep(5000);
-      client.checkHealth("After 5 second wait");
+      Thread.sleep(10000);
+      client.checkHealth("After 10 second wait");
+      client.greet("Larry");
     } finally {
       // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
       // resources the channel should be shut down when it will no longer be used. If it may be used

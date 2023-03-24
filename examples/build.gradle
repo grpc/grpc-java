@@ -27,6 +27,7 @@ def protocVersion = protobufVersion
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
@@ -195,6 +196,20 @@ task keepAliveClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task healthServiceServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.healthservice.HealthServiceServer'
+    applicationName = 'health-service-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task healthServiceClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.healthservice.HealthServiceClient'
+    applicationName = 'health-service-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -215,5 +230,7 @@ applicationDistribution.into('bin') {
     from(deadlineClient)
     from(keepAliveServer)
     from(keepAliveClient)
+    from(healthServiceServer)
+    from(healthServiceClient)
     fileMode = 0755
 }

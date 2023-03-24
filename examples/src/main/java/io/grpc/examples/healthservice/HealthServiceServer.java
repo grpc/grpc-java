@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.healthservice.;
+package io.grpc.examples.healthservice;
 
 import io.grpc.Grpc;
+import io.grpc.Context;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
-import io.grpc.Context;
+import io.grpc.Status;
+import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
-import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
@@ -64,7 +65,7 @@ public class HealthServiceServer {
       }
     });
 
-    health.setStatus("Greeter", ServingStatus.SERVING);
+    health.setStatus("", ServingStatus.SERVING);
   }
 
   private void stop() throws InterruptedException {
@@ -86,39 +87,57 @@ public class HealthServiceServer {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws IOException, InterruptedException {
+    System.setProperty("java.util.logging.SimpleFormatter.format",
+        "%1$tH:%1$tM:%1$tS %4$s %2$s: %5$s%6$s%n");
+
     final HealthServiceServer server = new HealthServiceServer();
     server.start();
     server.blockUntilShutdown();
   }
 
   private class GreeterImpl extends GreeterGrpc.GreeterImplBase {
+    boolean isServing = true;
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-      HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
-      responseObserver.onNext(reply);
-      responseObserver.onCompleted();
-
-      updateHealthStatus(req);
+      if (shouldServe(req)) {
+        HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
+        responseObserver.onNext(reply);
+        responseObserver.onCompleted();
+      } else {
+        responseObserver.onError(
+            Status.INTERNAL.withDescription("Not Serving right now").asRuntimeException());
+      }
     }
 
-    private void updateHealthStatus(HelloRequest req) {
-      if (req.getName().length() < 5) {
-        logger.warning("Tiny message received, throwing a temper tantrum");
+    private boolean shouldServe(HelloRequest req) {
+      if (!isServing) {
+        return false;
+      }
+      if (req.getName().length() >= 5) {
+        return true; 
       }
 
-      health.setStatus("Greeter", ServingStatus.NOT_SERVING);
+      logger.warning("Tiny message received, throwing a temper tantrum");
+      health.setStatus("", ServingStatus.NOT_SERVING);
+      isServing = false;
 
-      // In 2 seconds set it back to serving
-      Context.current()
-          .withDeadlineAfter(2, TimeUnit.SECONDS, Executors.newSingleThreadScheduledExecutor())
-          .run(new Runnable() {
-            @Override
-            public void run() {
-              health.setStatus("Greeter", ServingStatus.SERVING);
-              logger.info("tantrum complete");
-            }
-          });
+      // In 10 seconds set it back to serving
+      new Thread(new Runnable() {
+        @Override
+        public void run() {
+          try {
+            Thread.sleep(10000);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+          }
+          isServing = true;
+          health.setStatus("", ServingStatus.SERVING);
+          logger.info("tantrum complete");
+        }
+      }).start();
+      return false;
     }
   }
 }
