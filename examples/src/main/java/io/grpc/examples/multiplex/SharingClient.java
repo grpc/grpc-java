@@ -18,7 +18,6 @@ package io.grpc.examples.multiplex;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.AbstractFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -34,10 +33,8 @@ import io.grpc.examples.echo.EchoResponse;
 import io.grpc.examples.helloworld.HelloWorldClient;
 import io.grpc.stub.StreamObserver;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -142,8 +139,8 @@ public class SharingClient {
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           requestObserver.onError(e);
+          return;
         }
-
 
         // Mark the end of requests
         requestObserver.onCompleted();
@@ -212,37 +209,18 @@ public class SharingClient {
   }
 
   private class StreamingFuture<RespT> extends AbstractFuture<RespT> {
-    private StreamObserver<EchoResponse> requestObserver = null;
 
-    private void setObserver(StreamObserver<EchoResponse> requestObserver) {
-      this.requestObserver = requestObserver;
+    private StreamObserver<EchoResponse> responseObserver = null;
+
+    private void setObserver(StreamObserver<EchoResponse> responseObserver) {
+      this.responseObserver = responseObserver;
     }
 
     @Override
     protected void interruptTask() {
-      if (requestObserver != null) {
-        requestObserver.onError(new RuntimeException("Stream was cancelled through a future"));
+      if (responseObserver != null) {
+        responseObserver.onError(Status.ABORTED.asException());
       }
-    }
-
-    @Override
-    protected boolean set(@Nullable RespT resp) {
-      return super.set(resp);
-    }
-
-    @Override
-    protected boolean setException(Throwable throwable) {
-      return super.setException(throwable);
-    }
-
-    @Override
-    protected String pendingToString() {
-      if (isCancelled()) {
-        return "Cancelled";
-      }
-
-      return super.pendingToString();
     }
   }
-
 }
