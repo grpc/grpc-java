@@ -194,7 +194,9 @@ final class AsyncServletOutputStreamWriter {
     // being set to false by runOrBuffer() concurrently.
     while (writeState.get().readyAndDrained) {
       parkingThread = Thread.currentThread();
-      LockSupport.parkNanos(Duration.ofMinutes(1).toNanos()); // should return immediately
+      // Try to sleep for an extremely long time to avoid writeState being changed at exactly
+      // the time when sleep time expires (in extreme scenario, such as #9917).
+      LockSupport.parkNanos(Duration.ofHours(1).toNanos()); // should return immediately
     }
     parkingThread = null;
   }
