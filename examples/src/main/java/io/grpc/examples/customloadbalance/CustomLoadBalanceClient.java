@@ -35,15 +35,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * This client is intended for connecting with the @{link LoadBalanceServer} in the "loadbalance"
+ * This client is intended for connecting with the {@code LoadBalanceServer} in the "loadbalance"
  * example.
  */
 public class CustomLoadBalanceClient {
 
   private static final Logger logger = Logger.getLogger(CustomLoadBalanceClient.class.getName());
-
-  public static final String exampleScheme = "example";
-  public static final String exampleServiceName = "lb.example.grpc.io";
 
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
@@ -71,7 +68,7 @@ public class CustomLoadBalanceClient {
 
     NameResolverRegistry.getDefaultRegistry().register(new ExampleNameResolverProvider());
 
-    String target = String.format("%s:///%s", exampleScheme, exampleServiceName);
+    String target = "example:///lb.example.grpc.io";
 
     logger.info("Use default first_pick load balance policy");
     ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
@@ -92,7 +89,7 @@ public class CustomLoadBalanceClient {
     // parseLoadBalancingPolicyConfig() gets called.
     Map<String, ?> serviceConfig = new Gson().fromJson(
         "{ \"loadBalancingConfig\": " +
-        "    [ { \"example.shuffling_pick_first\": { \"randomSeed\": 123 } } ]" +
+        "    [ { \"grpc.examples.customloadbalance.ShufflingPickFirst\": { \"randomSeed\": 123 } } ]" +
         "}",
         Map.class);
     channel = ManagedChannelBuilder.forTarget(target)

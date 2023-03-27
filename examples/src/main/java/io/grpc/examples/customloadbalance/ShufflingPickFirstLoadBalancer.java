@@ -39,14 +39,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * shuffling of the list of servers so that the first server provided in {@link ResolvedAddresses}
  * won't necessarily be the server the channel will connect to.
  */
-public class ShufflingPickFirstLoadBalancer extends LoadBalancer {
+class ShufflingPickFirstLoadBalancer extends LoadBalancer {
 
   private final Helper helper;
   private Subchannel subchannel;
 
   /**
    * This class defines the configuration used by this {@link LoadBalancer}. Note that no part of
-   * the gRPC library is aware of this interface, it will be populated by the
+   * the gRPC library is aware of this class, it will be populated by the
    * {@link ShufflingPickFirstLoadBalancerProvider}.
    */
   static class Config {
@@ -91,8 +91,7 @@ public class ShufflingPickFirstLoadBalancer extends LoadBalancer {
       });
       this.subchannel = subchannel;
 
-      helper.updateBalancingState(CONNECTING,
-          new Picker(PickResult.withSubchannel(this.subchannel)));
+      helper.updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
