@@ -97,6 +97,7 @@ public class EchoService extends EchoGrpc.EchoImplBase {
       public void onError(Throwable t) {
         logger.log(Level.WARNING,
             "echo stream cancelled or had a problem and is no longer usable " + t.getMessage());
+        responseObserver.onError(t);
       }
 
       @Override
