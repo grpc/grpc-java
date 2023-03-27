@@ -64,6 +64,7 @@ java_library(
         "@io_grpc_grpc_java//netty",
     ],
     deps = [
+        ":_health_java_grpc",
         ":hello_streaming_java_grpc",
         ":hello_streaming_java_proto",
         ":helloworld_java_grpc",
@@ -211,3 +212,11 @@ java_binary(
         ":examples",
     ],
 )
+
+java_grpc_library(
+    name = "_health_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:health_proto"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:health_java_proto"],
+)
+
