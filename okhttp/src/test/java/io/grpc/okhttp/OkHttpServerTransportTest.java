@@ -176,6 +176,16 @@ public class OkHttpServerTransportTest {
   }
 
   @Test
+  public void maxConnectionAge_shutdown() throws Exception {
+    serverBuilder.maxConnectionAge(5, TimeUnit.SECONDS)
+        .maxConnectionAgeGrace(3, TimeUnit.SECONDS);
+    initTransport();
+    handshake();
+    shutdownAndTerminate(0);
+    assertThat(fakeClock.numPendingTasks()).isEqualTo(0);
+  }
+
+  @Test
   public void maxConnectionIdleTimer() throws Exception {
     initTransport();
     handshake();

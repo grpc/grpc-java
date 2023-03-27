@@ -60,6 +60,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.BufferedSource;
@@ -234,11 +235,8 @@ final class OkHttpServerTransport implements ServerTransport,
       if (config.maxConnectionAgeInNanos != MAX_CONNECTION_AGE_NANOS_DISABLED) {
         long maxConnectionAgeInNanos =
             (long) ((.9D + Math.random() * .2D) * config.maxConnectionAgeInNanos);
-        synchronized (lock) {
-          gracefulShutdownPeriod = config.maxConnectionAgeGraceInNanos;
-        }
         maxConnectionAgeMonitor = scheduledExecutorService.schedule(
-            new LogExceptionRunnable(this::shutdown),
+            new LogExceptionRunnable(() -> shutdown(config.maxConnectionAgeGraceInNanos)),
             maxConnectionAgeInNanos,
             TimeUnit.NANOSECONDS);
       }
@@ -258,11 +256,16 @@ final class OkHttpServerTransport implements ServerTransport,
 
   @Override
   public void shutdown() {
+    shutdown(null);
+  }
+
+  private void shutdown(@Nullable Long gracefulShutdownPeriod) {
     synchronized (lock) {
       if (gracefulShutdown || abruptShutdown) {
         return;
       }
       gracefulShutdown = true;
+      this.gracefulShutdownPeriod = gracefulShutdownPeriod;
       if (frameWriter == null) {
         handshakeShutdown = true;
         GrpcUtil.closeQuietly(bareSocket);
