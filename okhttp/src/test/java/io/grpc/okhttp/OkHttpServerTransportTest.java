@@ -155,7 +155,7 @@ public class OkHttpServerTransportTest {
   @Test
   public void maxConnectionAge() throws Exception {
     serverBuilder.maxConnectionAge(5, TimeUnit.SECONDS)
-        .maxConnectionAgeGrace(1, TimeUnit.SECONDS);
+        .maxConnectionAgeGrace(3, TimeUnit.SECONDS);
     initTransport();
     handshake();
     clientFrameWriter.headers(1, Arrays.asList(
@@ -169,8 +169,20 @@ public class OkHttpServerTransportTest {
         new Header("some-client-sent-trailer", "trailer-value")));
     pingPong();
     fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(6)); // > 1.1 * 5
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1));
     verifyGracefulShutdown(1);
+    pingPong();
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(3));
+    assertThat(socket.isClosed()).isTrue();
+  }
+
+  @Test
+  public void maxConnectionAge_shutdown() throws Exception {
+    serverBuilder.maxConnectionAge(5, TimeUnit.SECONDS)
+        .maxConnectionAgeGrace(3, TimeUnit.SECONDS);
+    initTransport();
+    handshake();
+    shutdownAndTerminate(0);
+    assertThat(fakeClock.numPendingTasks()).isEqualTo(0);
   }
 
   @Test
@@ -1369,6 +1381,7 @@ public class OkHttpServerTransportTest {
         // PipedInputStream can only be woken by PipedOutputStream, so PipedOutputStream.close() is
         // a better imitation of Socket.close().
         inputStreamSource.close();
+        super.close();
       }
     }
 
