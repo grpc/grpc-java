@@ -25,8 +25,6 @@ import java.util.Map;
 
 public class ShufflingPickFirstLoadBalancerProvider extends LoadBalancerProvider {
 
-  private static final String RANDOM_SEED_KEY = "randomSeed";
-
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
     Long randomSeed = null;
