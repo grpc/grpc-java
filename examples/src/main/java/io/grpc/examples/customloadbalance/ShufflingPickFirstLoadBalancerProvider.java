@@ -34,17 +34,15 @@ public class ShufflingPickFirstLoadBalancerProvider extends LoadBalancerProvider
     // The load balancing configuration generally comes from a remote source over the wire, be
     // defensive when parsing it.
     try {
-      if (rawLoadBalancingPolicyConfig.containsKey(RANDOM_SEED_KEY)) {
-        Object randomSeedObj = rawLoadBalancingPolicyConfig.get("randomSeed");
-        if (randomSeedObj instanceof Double) {
-          randomSeed = ((Double) randomSeedObj).longValue();
-        }
+      Object randomSeedObj = rawLoadBalancingPolicyConfig.get("randomSeed");
+      if (randomSeedObj instanceof Double) {
+        randomSeed = ((Double) randomSeedObj).longValue();
       }
+      return ConfigOrError.fromConfig(new ShufflingPickFirstLoadBalancer.Config(randomSeed));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
           Status.UNAVAILABLE.withDescription("unable to parse LB config").withCause(e));
     }
-    return ConfigOrError.fromConfig(new ShufflingPickFirstLoadBalancer.Config(randomSeed));
   }
 
   @Override
