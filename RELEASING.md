@@ -110,15 +110,13 @@ Tagging the Release
    $ git checkout v$MAJOR.$MINOR.x
    $ git pull upstream v$MAJOR.$MINOR.x
    $ git checkout -b release
+   
    # Bump documented gRPC versions.
    # Also update protoc version to match protobuf version in gradle/libs.versions.toml.
    $ ${EDITOR:-nano -w} README.md
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
    $ ${EDITOR:-nano -w} cronet/README.md
-   # Bump protobuf plugin version if needed in README.md and multiple examples
-   # build.gradle files.
-   $ ${EDITOR:-nano -w} examples/*/build.gradle examples/android/*/build.gradle \
-    examples/build.gradle
+   
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 4. Change root build files to remove "-SNAPSHOT" for the next release version
@@ -194,7 +192,15 @@ that updated the README into the master branch.
 ```bash
 $ git checkout -b bump-readme master
 $ git cherry-pick v$MAJOR.$MINOR.$PATCH^
-$ git push
+$ git push --set-upstream origin bump-readme
+```
+
+NOTE: If you add to your ~/.gitconfig the following, you don't need the
+`--set-upstream`
+
+```text
+[push]
+	autoSetupRemote = true
 ```
 
 Create a PR and go through the review process
