@@ -160,6 +160,13 @@ task loadBalanceClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task customLoadBalanceClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.customloadbalance.CustomLoadBalanceClient'
+    applicationName = 'custom-load-balance-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 task nameResolveServer(type: CreateStartScripts) {
     mainClass = 'io.grpc.examples.nameresolve.NameResolveServer'
     applicationName = 'name-resolve-server'
@@ -245,6 +252,7 @@ applicationDistribution.into('bin') {
     from(waitForReadyClient)
     from(loadBalanceServer)
     from(loadBalanceClient)
+    from(customLoadBalanceClient)
     from(nameResolveServer)
     from(nameResolveClient)
     from(deadlineServer)
