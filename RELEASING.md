@@ -117,10 +117,6 @@ Tagging the Release
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
    $ ${EDITOR:-nano -w} cronet/README.md
    
-   # Bump protobuf plugin version, if needed, in README.md and multiple
-   # examples build.gradle files.
-   $ ${EDITOR:-nano -w} README.md examples/*/build.gradle \
-    examples/android/*/build.gradle examples/build.gradle
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 4. Change root build files to remove "-SNAPSHOT" for the next release version
