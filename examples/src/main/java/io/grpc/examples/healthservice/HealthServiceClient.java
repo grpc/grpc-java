@@ -19,6 +19,8 @@ package io.grpc.examples.healthservice;
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
@@ -28,6 +30,8 @@ import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -50,6 +54,9 @@ public class HealthServiceClient {
     healthStub = HealthGrpc.newStub(channel);
     healthBlockingStub = HealthGrpc.newBlockingStub(channel);
     healthRequest = HealthCheckRequest.getDefaultInstance();
+    LoadBalancerProvider roundRobin = LoadBalancerRegistry.getDefaultRegistry()
+        .getProvider("round_robin");
+
   }
 
   private ServingStatus checkHealth(String prefix) {
@@ -73,9 +80,45 @@ public class HealthServiceClient {
     logger.info("Greeting: " + response.getMessage());
   }
 
+
+  private static void runTest(String[] users, ManagedChannel channel)
+      throws InterruptedException {
+    try {
+      // Set a watch
+      HealthServiceClient client = new HealthServiceClient(channel);
+      client.checkHealth("Before call");
+      client.greet(users[0]);
+      client.checkHealth("After user " + users[0]);
+      for (String user : users) {
+        client.greet(user);
+        Thread.sleep(100); // Since the health update is asynchronous give it time to propagate
+      }
+      client.checkHealth("After all users");
+      Thread.sleep(10000);
+      client.checkHealth("After 10 second wait");
+      client.greet("Larry");
+    } finally {
+      // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
+      // resources the channel should be shut down when it will no longer be used. If it may be used
+      // again leave it running.
+      channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+    }
+  }
+  private static Map<String, Object> generateHealthConfig(String serviceName) {
+    Map<String, Object> config = new HashMap<>();
+    Map<String, Object> serviceMap = new HashMap<>();
+
+    config.put("healthCheckConfig", serviceMap);
+    serviceMap.put("serviceName", serviceName);
+    return config;
+  }
+
   /**
    * Greet server. If provided, the first element of {@code args} is the name to use in the
-   * greeting. The second argument is the target server.
+   * greeting. The second argument is the target server.  The server should also provide the health
+   * service.  This has an example of using the health service directly through the unary call check
+   * to get the current health and indirectly through the round robin load balancer, which uses the
+   * streaming rpc (see {@link  io.grpc.protobuf.services.HealthCheckingLoadBalancerFactory}).
    */
   public static void main(String[] args) throws Exception {
     System.setProperty("java.util.logging.SimpleFormatter.format",
@@ -102,32 +145,18 @@ public class HealthServiceClient {
       }
     }
 
-    // Create a communication channel to the server, known as a Channel. Channels are thread-safe
-    // and reusable. It is common to create channels at the beginning of your application and reuse
-    // them until the application shuts down.
-    //
-    // For the example we use plaintext insecure credentials to avoid needing TLS certificates. To
-    // use TLS, use TlsChannelCredentials instead.
-    ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
+    // Will see failures because of server stopping processing
+    ManagedChannel channelSimple = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .build();
-    try {
-      // Set a watch
-      HealthServiceClient client = new HealthServiceClient(channel);
-      client.checkHealth("Before call");
-      client.greet(users[0]);
-      client.checkHealth("After user " + users[0]);
-      for (String user : users) {
-        client.greet(user);
-      }
-      client.checkHealth("After all users");
-      Thread.sleep(10000);
-      client.checkHealth("After 10 second wait");
-      client.greet("Larry");
-    } finally {
-      // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
-      // resources the channel should be shut down when it will no longer be used. If it may be used
-      // again leave it running.
-      channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
-    }
+    runTest(users, channelSimple);
+
+    // Will block sending requests, so will not see failures since the round robin load balancer
+    // Uses the health service's watch rpc
+    ManagedChannel channelRR = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
+        .defaultLoadBalancingPolicy("round_robin")
+        .defaultServiceConfig(generateHealthConfig(""))
+        .build();
+    runTest(users, channelRR);
+
   }
 }
