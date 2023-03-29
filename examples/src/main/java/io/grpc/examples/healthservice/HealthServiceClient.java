@@ -22,6 +22,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
@@ -76,26 +77,53 @@ public class HealthServiceClient {
     } catch (StatusRuntimeException e) {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
       return;
+    } catch (Exception e) {
+      e.printStackTrace();
+      return;
     }
     logger.info("Greeting: " + response.getMessage());
   }
 
 
-  private static void runTest(String[] users, ManagedChannel channel)
+  private static void runTest(String target, String[] users, boolean useRoundRobin)
       throws InterruptedException {
+    ManagedChannelBuilder<?> builder =
+        Grpc.newChannelBuilder(target, InsecureChannelCredentials.create());
+
+    if (useRoundRobin) {
+      builder = builder
+        .defaultLoadBalancingPolicy("round_robin")
+        .defaultServiceConfig(generateHealthConfig(""));
+    }
+
+    ManagedChannel channel = builder.build();
+
+    System.out.println("\nDoing test with" + (useRoundRobin ? "" : "out")
+      + " the Round Robin load balancer\n");
+
     try {
       // Set a watch
       HealthServiceClient client = new HealthServiceClient(channel);
-      client.checkHealth("Before call");
+      if (!useRoundRobin) {
+        client.checkHealth("Before call");
+      }
       client.greet(users[0]);
-      client.checkHealth("After user " + users[0]);
+      if (!useRoundRobin) {
+        client.checkHealth("After user " + users[0]);
+      }
+
       for (String user : users) {
         client.greet(user);
         Thread.sleep(100); // Since the health update is asynchronous give it time to propagate
       }
-      client.checkHealth("After all users");
-      Thread.sleep(10000);
-      client.checkHealth("After 10 second wait");
+
+      if (!useRoundRobin) {
+        client.checkHealth("After all users");
+        Thread.sleep(10000);
+        client.checkHealth("After 10 second wait");
+      } else {
+        Thread.sleep(10000);
+      }
       client.greet("Larry");
     } finally {
       // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
@@ -145,18 +173,12 @@ public class HealthServiceClient {
       }
     }
 
-    // Will see failures because of server stopping processing
-    ManagedChannel channelSimple = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
-        .build();
-    runTest(users, channelSimple);
+    // Will see failures of rpc's sent when server stops processing them that come from the server
+    runTest(target, users, false);
 
-    // Will block sending requests, so will not see failures since the round robin load balancer
-    // Uses the health service's watch rpc
-    ManagedChannel channelRR = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
-        .defaultLoadBalancingPolicy("round_robin")
-        .defaultServiceConfig(generateHealthConfig(""))
-        .build();
-    runTest(users, channelRR);
+    // The client will throw an error when sending the rpc to a non-serving service because the
+    // round robin load balancer uses the health service's watch rpc
+    runTest(target, users, true);
 
   }
 }

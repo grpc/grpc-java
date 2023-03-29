@@ -100,17 +100,23 @@ public class HealthServiceServer {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-      if (shouldServe(req)) {
+      if (!isServing) {
+        responseObserver.onError(
+            Status.INTERNAL.withDescription("Not Serving right now").asRuntimeException());
+        return;
+      }
+
+      if (validateRequest(req)) {
         HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
         responseObserver.onNext(reply);
         responseObserver.onCompleted();
       } else {
         responseObserver.onError(
-            Status.INTERNAL.withDescription("Not Serving right now").asRuntimeException());
+            Status.INVALID_ARGUMENT.withDescription("Offended by short name").asRuntimeException());
       }
     }
 
-    private boolean shouldServe(HelloRequest req) {
+    private boolean validateRequest(HelloRequest req) {
       if (!isServing) {
         return false;
       }
