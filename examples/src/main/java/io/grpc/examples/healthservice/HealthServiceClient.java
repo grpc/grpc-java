@@ -31,6 +31,7 @@ import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -161,7 +162,7 @@ public class HealthServiceClient {
         System.err.println("Usage: [target [name] [name] ...]");
         System.err.println("");
         System.err.println("  target  The server to connect to. Defaults to " + target);
-        System.err.println("  name    The names you wish to be greeted by. Defaults to " + users);
+        System.err.println("  name    The names you wish to be greeted by. Defaults to " + Arrays.toString(users));
         System.exit(1);
       }
       target = args[0];
