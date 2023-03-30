@@ -24,6 +24,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.rpc.Code;
 import com.google.rpc.DebugInfo;
 import com.google.rpc.Status;
@@ -101,7 +102,13 @@ public class DetailErrorSample {
     Status status = StatusProto.fromThrowable(t);
     Verify.verify(status.getCode() == Code.INVALID_ARGUMENT.getNumber());
     Verify.verify(status.getMessage().equals("Email or password malformed"));
-    Verify.verify(status.getDetails(0).equals(DEBUG_DESC));
+    try {
+      DebugInfo unpackedDetail = status.getDetails(0).unpack(DebugInfo.class);
+      Verify.verify(unpackedDetail.equals(DEBUG_INFO));
+    } catch (InvalidProtocolBufferException e) {
+      Verify.verify(false, "Message was a different type than expected");
+    }
+
   }
 
   void blockingCall() {
@@ -110,6 +117,7 @@ public class DetailErrorSample {
       stub.sayHello(HelloRequest.newBuilder().build());
     } catch (Exception e) {
       verifyErrorReply(e);
+      System.out.println("blocking call received expected error");
     }
   }
 
@@ -125,6 +133,7 @@ public class DetailErrorSample {
       throw new RuntimeException(e);
     } catch (ExecutionException e) {
       verifyErrorReply(e.getCause());
+      System.out.println("future call direct received expected error");
     }
   }
 
@@ -146,6 +155,7 @@ public class DetailErrorSample {
           @Override
           public void onFailure(Throwable t) {
             verifyErrorReply(t);
+            System.out.println("future callback received expected error");
             latch.countDown();
           }
         },
@@ -170,6 +180,7 @@ public class DetailErrorSample {
       @Override
       public void onError(Throwable t) {
         verifyErrorReply(t);
+        System.out.println("Async call received expected error");
         latch.countDown();
       }
 
