@@ -26,7 +26,7 @@ In your app module's `build.gradle` file, include a dependency on both `grpc-cro
 Google Play Services Client Library for Cronet
 
 ```
-implementation 'io.grpc:grpc-cronet:1.52.1'
+implementation 'io.grpc:grpc-cronet:1.54.0'
 implementation 'com.google.android.gms:play-services-cronet:16.0.0'
 ```
 

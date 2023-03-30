@@ -76,7 +76,8 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
      $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-5. Continue with Google-internal steps at go/grpc/java/releasing.
+5. Continue with Google-internal steps at go/grpc/java/releasing, but stop
+   before `Auto releasing using kokoro`.
 6. Create a milestone for the next release.
 7. Move items out of the release milestone that didn't make the cut. Issues that
    may be backported should stay in the release milestone. Treat issues with the
@@ -109,11 +110,13 @@ Tagging the Release
    $ git checkout v$MAJOR.$MINOR.x
    $ git pull upstream v$MAJOR.$MINOR.x
    $ git checkout -b release
+   
    # Bump documented gRPC versions.
    # Also update protoc version to match protobuf version in gradle/libs.versions.toml.
    $ ${EDITOR:-nano -w} README.md
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
    $ ${EDITOR:-nano -w} cronet/README.md
+   
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 4. Change root build files to remove "-SNAPSHOT" for the next release version
@@ -184,12 +187,23 @@ Update README.md
 ----------------
 After waiting ~1 day and verifying that the release appears on [Maven
 Central](https://search.maven.org/search?q=g:io.grpc), cherry-pick the commit
-that updated the README into the master branch and go through review process.
+that updated the README into the master branch.
 
-```
+```bash
 $ git checkout -b bump-readme master
 $ git cherry-pick v$MAJOR.$MINOR.$PATCH^
+$ git push --set-upstream origin bump-readme
 ```
+
+NOTE: If you add to your ~/.gitconfig the following, you don't need the
+`--set-upstream`
+
+```text
+[push]
+	autoSetupRemote = true
+```
+
+Create a PR and go through the review process
 
 Update version referenced by tutorials
 --------------------------------------

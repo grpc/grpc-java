@@ -161,6 +161,13 @@ task loadBalanceClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task customLoadBalanceClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.customloadbalance.CustomLoadBalanceClient'
+    applicationName = 'custom-load-balance-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 task nameResolveServer(type: CreateStartScripts) {
     mainClass = 'io.grpc.examples.nameresolve.NameResolveServer'
     applicationName = 'name-resolve-server'
@@ -203,16 +210,23 @@ task keepAliveClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-task healthServiceServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.healthservice.HealthServiceServer'
-    applicationName = 'health-service-server'
+task cancellationClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.cancellation.CancellationClient'
+    applicationName = 'cancellation-client'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
-task cancellationClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.cancellation.CancellationClient'
-    applicationName = 'cancellation-client'
+task cancellationServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.cancellation.CancellationServer'
+    applicationName = 'cancellation-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task healthServiceServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.healthservice.HealthServiceServer'
+    applicationName = 'health-service-server'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
@@ -224,9 +238,16 @@ task healthServiceClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-task cancellationServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.cancellation.CancellationServer'
-    applicationName = 'cancellation-server'
+task multiplexingServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.multiplex.MultiplexingServer'
+    applicationName = 'multiplexing-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task sharingClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.multiplex.SharingClient'
+    applicationName = 'sharing-client'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
@@ -246,6 +267,7 @@ applicationDistribution.into('bin') {
     from(waitForReadyClient)
     from(loadBalanceServer)
     from(loadBalanceClient)
+    from(customLoadBalanceClient)
     from(nameResolveServer)
     from(nameResolveClient)
     from(deadlineServer)
@@ -256,5 +278,7 @@ applicationDistribution.into('bin') {
     from(healthServiceClient)
     from(cancellationClient)
     from(cancellationServer)
+    from(multiplexingServer)
+    from(sharingClient)
     fileMode = 0755
 }
