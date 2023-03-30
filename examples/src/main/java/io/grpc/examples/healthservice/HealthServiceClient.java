@@ -91,6 +91,11 @@ public class HealthServiceClient {
     ManagedChannelBuilder<?> builder =
         Grpc.newChannelBuilder(target, InsecureChannelCredentials.create());
 
+    // Round Robin, when a healthCheckConfig is present in the default service configuration, runs
+    // a watch on the health service and when picking an endpoint will
+    // consider a transport to a server whose service is not in SERVING state to be unavailable.
+    // Since we only have a single server we are connecting to, then the load balancer will
+    // return an error without sending the RPC.
     if (useRoundRobin) {
       builder = builder
         .defaultLoadBalancingPolicy("round_robin")
@@ -103,7 +108,6 @@ public class HealthServiceClient {
       + " the Round Robin load balancer\n");
 
     try {
-      // Set a watch
       HealthServiceClient client = new HealthServiceClient(channel);
       if (!useRoundRobin) {
         client.checkHealth("Before call");
@@ -143,11 +147,15 @@ public class HealthServiceClient {
   }
 
   /**
-   * Greet server. If provided, the first element of {@code args} is the name to use in the
-   * greeting. The second argument is the target server.  The server should also provide the health
-   * service.  This has an example of using the health service directly through the unary call check
-   * to get the current health and indirectly through the round robin load balancer, which uses the
-   * streaming rpc (see {@link  io.grpc.protobuf.services.HealthCheckingLoadBalancerFactory}).
+   * Uses a server with both a greet service and the health service.
+   * If provided, the first element of {@code args} is the name to use in the
+   * greeting. The second argument is the target server.
+   * This has an example of using the health service directly through the unary call
+   * <a href="https://github.com/grpc/grpc-java/blob/master/services/src/main/proto/grpc/health/v1/health.proto">check</a>
+   * to get the current health.  It also utilizes the health of the server's greet service
+   * indirectly through the round robin load balancer, which uses the streaming rpc
+   * <strong>watch</strong> (you can see how it is done in
+   * {@link  io.grpc.protobuf.services.HealthCheckingLoadBalancerFactory}).
    */
   public static void main(String[] args) throws Exception {
     System.setProperty("java.util.logging.SimpleFormatter.format",
@@ -174,11 +182,12 @@ public class HealthServiceClient {
       }
     }
 
-    // Will see failures of rpc's sent when server stops processing them that come from the server
+    // Will see failures of rpc's sent while server service is not serving, where the failures come
+    // from the server
     runTest(target, users, false);
 
     // The client will throw an error when sending the rpc to a non-serving service because the
-    // round robin load balancer uses the health service's watch rpc
+    // round robin load balancer uses the health service's watch rpc.
     runTest(target, users, true);
 
   }

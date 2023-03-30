@@ -17,7 +17,6 @@
 package io.grpc.examples.healthservice;
 
 import io.grpc.Grpc;
-import io.grpc.Context;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.Status;
@@ -28,7 +27,6 @@ import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -106,44 +104,37 @@ public class HealthServiceServer {
         return;
       }
 
-      if (validateRequest(req)) {
+      if (isNameLongEnough(req)) {
         HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
         responseObserver.onNext(reply);
         responseObserver.onCompleted();
       } else {
+        logger.warning("Tiny message received, throwing a temper tantrum");
+        health.setStatus("", ServingStatus.NOT_SERVING);
+        isServing = false;
+
+        // In 10 seconds set it back to serving
+        new Thread(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              Thread.sleep(10000);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              return;
+            }
+            isServing = true;
+            health.setStatus("", ServingStatus.SERVING);
+            logger.info("tantrum complete");
+          }
+        }).start();
         responseObserver.onError(
             Status.INVALID_ARGUMENT.withDescription("Offended by short name").asRuntimeException());
       }
     }
 
-    private boolean validateRequest(HelloRequest req) {
-      if (!isServing) {
-        return false;
-      }
-      if (req.getName().length() >= 5) {
-        return true; 
-      }
-
-      logger.warning("Tiny message received, throwing a temper tantrum");
-      health.setStatus("", ServingStatus.NOT_SERVING);
-      isServing = false;
-
-      // In 10 seconds set it back to serving
-      new Thread(new Runnable() {
-        @Override
-        public void run() {
-          try {
-            Thread.sleep(10000);
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return;
-          }
-          isServing = true;
-          health.setStatus("", ServingStatus.SERVING);
-          logger.info("tantrum complete");
-        }
-      }).start();
-      return false;
+    private boolean isNameLongEnough(HelloRequest req) {
+      return isServing && req.getName().length() >= 5;
     }
   }
 }
