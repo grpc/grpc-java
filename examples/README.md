@@ -119,6 +119,20 @@ before trying out the examples.
 
 </details>
 
+- <details>
+  <summary>Health Service</summary>
+
+  The [health service example](src/main/java/io/grpc/examples/healthservice)
+  provides a HelloWorld gRPC server that doesn't like short names along with a
+  health service.  It also provides a client application which makes HelloWorld 
+  calls and checks the health status.  
+
+  The client application also shows how the round robin load balancer can
+  utilize the health status to avoid making calls to a service that is
+  not actively serving.
+</details>
+
+
 - [Keep Alive](src/main/java/io/grpc/examples/keepalive)
 
 ### <a name="to-build-the-examples"></a> To build the examples

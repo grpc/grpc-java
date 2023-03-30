@@ -80,6 +80,7 @@ java_library(
         "@io_grpc_grpc_java//netty",
     ],
     deps = [
+        ":_health_java_grpc",
         ":echo_java_grpc",
         ":echo_java_proto",
         ":hello_streaming_java_grpc",
@@ -93,7 +94,11 @@ java_library(
         "@io_grpc_grpc_java//api",
         "@io_grpc_grpc_java//context",
         "@io_grpc_grpc_java//protobuf",
+        "@io_grpc_grpc_java//services:health",
+        "@io_grpc_grpc_java//services:healthlb",
         "@io_grpc_grpc_java//stub",
+        "@io_grpc_grpc_proto//:health_proto",
+        "@io_grpc_grpc_proto//:health_java_proto",
         "@maven//:com_google_api_grpc_proto_google_common_protos",
         "@maven//:com_google_code_findbugs_jsr305",
         "@maven//:com_google_code_gson_gson",
@@ -217,3 +222,29 @@ java_binary(
         ":examples",
     ],
 )
+
+java_binary(
+    name = "healthservice-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.healthservice.HealthServiceServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "healthservice-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.healthservice.HealthServiceClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_grpc_library(
+    name = "_health_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:health_proto"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:health_java_proto"],
+)
+
