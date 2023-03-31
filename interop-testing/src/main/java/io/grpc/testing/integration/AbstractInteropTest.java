@@ -1777,7 +1777,7 @@ public abstract class AbstractInteropTest {
     final TestOrcaReport answer2 = TestOrcaReport.newBuilder()
         .setCpuUtilization(0.29309)
         .setMemoryUtilization(0.2)
-        .putUtilization("util", 100.2039)
+        .putUtilization("util", 0.2039)
         .build();
 
     final int retryLimit = 5;

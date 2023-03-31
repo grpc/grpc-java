@@ -64,10 +64,16 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
     this.metricRecorder = metricRecorder;
   }
 
-  public static OrcaMetricReportingServerInterceptor create() {
+  public static OrcaMetricReportingServerInterceptor getInstance() {
     return INSTANCE;
   }
 
+  /**
+   * Creates a new {@link OrcaMetricReportingServerInterceptor} instance with the given
+   * {@link MetricRecorder}. When both {@link CallMetricRecorder} and {@link MetricRecorder} exist,
+   * the metrics are merged such that per-request metrics from {@link CallMetricRecorder} takes a
+   * higher precedence compared to metrics from {@link MetricRecorder}.
+   */
   public static OrcaMetricReportingServerInterceptor create(
       @Nullable MetricRecorder metricRecorder) {
     return new OrcaMetricReportingServerInterceptor(metricRecorder);
