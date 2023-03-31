@@ -26,18 +26,8 @@ $ VERSION_FILES=(
   examples/android/helloworld/app/build.gradle
   examples/android/routeguide/app/build.gradle
   examples/android/strictmode/app/build.gradle
-  examples/example-alts/build.gradle
-  examples/example-gauth/build.gradle
-  examples/example-gauth/pom.xml
-  examples/example-jwt-auth/build.gradle
-  examples/example-jwt-auth/pom.xml
-  examples/example-hostname/build.gradle
-  examples/example-hostname/pom.xml
-  examples/example-servlet/build.gradle
-  examples/example-tls/build.gradle
-  examples/example-tls/pom.xml
-  examples/example-xds/build.gradle
-  examples/example-orca/build.gradle
+  examples/example-*/build.gradle
+  examples/example-*/pom.xml
   )
 ```
 
