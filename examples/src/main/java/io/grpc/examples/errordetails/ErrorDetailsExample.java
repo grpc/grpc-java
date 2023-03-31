@@ -61,16 +61,15 @@ public class ErrorDetailsExample {
   public static void main(String[] args) throws Exception {
     Server server = null;
     ManagedChannel channel = null;
-    ErrorDetailsExample errorDetailsExample = new ErrorDetailsExample();
 
     try {
-      server = errorDetailsExample.launchServer();
+      server = launchServer();
       channel = Grpc.newChannelBuilderForAddress(
           "localhost", server.getPort(), InsecureChannelCredentials.create()).build();
 
-      errorDetailsExample.runClientTests(channel);
+      runClientTests(channel);
     } finally {
-      errorDetailsExample.cleanup(channel, server);
+      cleanup(channel, server);
     }
   }
 
@@ -78,7 +77,7 @@ public class ErrorDetailsExample {
   /**
    * Create server and start it
    */
-  Server launchServer() throws Exception {
+  static Server launchServer() throws Exception {
     return Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
         .addService(new GreeterGrpc.GreeterImplBase() {
           @Override
@@ -96,14 +95,14 @@ public class ErrorDetailsExample {
         .start();
   }
 
-  private void runClientTests(Channel channel) {
+  private static void runClientTests(Channel channel) {
     blockingCall(channel);
     futureCallDirect(channel);
     futureCallCallback(channel);
     asyncCall(channel);
   }
 
-  private void cleanup(ManagedChannel channel, Server server) throws InterruptedException {
+  private static void cleanup(ManagedChannel channel, Server server) throws InterruptedException {
 
     // Shutdown client and server for resources to be cleanly released
     if (channel != null) {
@@ -134,7 +133,7 @@ public class ErrorDetailsExample {
     }
   }
 
-  void blockingCall(Channel channel) {
+  static void blockingCall(Channel channel) {
     GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
     try {
       stub.sayHello(HelloRequest.newBuilder().build());
@@ -144,7 +143,7 @@ public class ErrorDetailsExample {
     }
   }
 
-  void futureCallDirect(Channel channel) {
+  static void futureCallDirect(Channel channel) {
     GreeterFutureStub stub = GreeterGrpc.newFutureStub(channel);
     ListenableFuture<HelloReply> response =
         stub.sayHello(HelloRequest.newBuilder().build());
@@ -160,7 +159,7 @@ public class ErrorDetailsExample {
     }
   }
 
-  void futureCallCallback(Channel channel) {
+  static void futureCallCallback(Channel channel) {
     GreeterFutureStub stub = GreeterGrpc.newFutureStub(channel);
     ListenableFuture<HelloReply> response =
         stub.sayHello(HelloRequest.newBuilder().build());
@@ -189,7 +188,7 @@ public class ErrorDetailsExample {
     }
   }
 
-  void asyncCall(Channel channel) {
+  static void asyncCall(Channel channel) {
     GreeterStub stub = GreeterGrpc.newStub(channel);
     HelloRequest request = HelloRequest.newBuilder().build();
     final CountDownLatch latch = new CountDownLatch(1);
