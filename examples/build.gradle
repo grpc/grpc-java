@@ -252,6 +252,13 @@ task sharingClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task errorDetails(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.errordetails.ErrorDetailsExample'
+    applicationName = 'error-details'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -280,5 +287,6 @@ applicationDistribution.into('bin') {
     from(cancellationServer)
     from(multiplexingServer)
     from(sharingClient)
+    from(errorDetails)
     fileMode = 0755
 }
