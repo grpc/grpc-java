@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,11 +28,11 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.rpc.Code;
 import com.google.rpc.DebugInfo;
 import com.google.rpc.Status;
+import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.GreeterGrpc.GreeterBlockingStub;
@@ -40,7 +40,6 @@ import io.grpc.examples.helloworld.GreeterGrpc.GreeterFutureStub;
 import io.grpc.examples.helloworld.GreeterGrpc.GreeterStub;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.protobuf.ProtoUtils;
 import io.grpc.protobuf.StatusProto;
 import io.grpc.stub.StreamObserver;
 import java.util.concurrent.CountDownLatch;
@@ -51,10 +50,7 @@ import javax.annotation.Nullable;
 /**
  * Shows how to set and read com.google.rpc.Status objects as google.rpc.Status error details.
  */
-public class DetailErrorSample {
-  private static final Metadata.Key<DebugInfo> DEBUG_INFO_TRAILER_KEY =
-      ProtoUtils.keyForProto(DebugInfo.getDefaultInstance());
-
+public class ErrorDetailsExample {
   private static final DebugInfo DEBUG_INFO =
       DebugInfo.newBuilder()
           .addStackEntries("stack_entry_1")
@@ -62,40 +58,68 @@ public class DetailErrorSample {
           .addStackEntries("stack_entry_3")
           .setDetail("detailed error info.").build();
 
-  private static final String DEBUG_DESC = "detailed error description";
-
   public static void main(String[] args) throws Exception {
-    new DetailErrorSample().run();
-  }
+    Server server = null;
+    ManagedChannel channel = null;
+    ErrorDetailsExample errorDetailsExample = new ErrorDetailsExample();
 
-  private ManagedChannel channel;
-
-  void run() throws Exception {
-    Server server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-        .addService(new GreeterGrpc.GreeterImplBase() {
-      @Override
-      public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
-        // This is com.google.rpc.Status, not io.grpc.Status
-        Status status = Status.newBuilder()
-            .setCode(Code.INVALID_ARGUMENT.getNumber())
-            .setMessage("Email or password malformed")
-            .addDetails(Any.pack(DEBUG_INFO))
-            .build();
-        responseObserver.onError(StatusProto.toStatusRuntimeException(status));
-      }
-    }).build().start();
-    channel = Grpc.newChannelBuilderForAddress(
+    try {
+      server = errorDetailsExample.launchServer();
+      channel = Grpc.newChannelBuilderForAddress(
           "localhost", server.getPort(), InsecureChannelCredentials.create()).build();
 
-    blockingCall();
-    futureCallDirect();
-    futureCallCallback();
-    asyncCall();
+      errorDetailsExample.runClientTests(channel);
+    } finally {
+      errorDetailsExample.cleanup(channel, server);
+    }
+  }
 
-    channel.shutdown();
-    server.shutdown();
-    channel.awaitTermination(1, TimeUnit.SECONDS);
-    server.awaitTermination();
+
+  /**
+   * Create server and start it
+   */
+  Server launchServer() throws Exception {
+    return Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+        .addService(new GreeterGrpc.GreeterImplBase() {
+          @Override
+          public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
+            // This is com.google.rpc.Status, not io.grpc.Status
+            Status status = Status.newBuilder()
+                .setCode(Code.INVALID_ARGUMENT.getNumber())
+                .setMessage("Email or password malformed")
+                .addDetails(Any.pack(DEBUG_INFO))
+                .build();
+            responseObserver.onError(StatusProto.toStatusRuntimeException(status));
+          }
+        })
+        .build()
+        .start();
+  }
+
+  private void runClientTests(Channel channel) {
+    blockingCall(channel);
+    futureCallDirect(channel);
+    futureCallCallback(channel);
+    asyncCall(channel);
+  }
+
+  private void cleanup(ManagedChannel channel, Server server) throws InterruptedException {
+
+    // Shutdown client and server for resources to be cleanly released
+    if (channel != null) {
+      channel.shutdown();
+    }
+    if (server != null) {
+      server.shutdown();
+    }
+
+    // Wait for cleanup to complete
+    if (channel != null) {
+      channel.awaitTermination(1, TimeUnit.SECONDS);
+    }
+    if (server != null) {
+      server.awaitTermination(1, TimeUnit.SECONDS);
+    }
   }
 
   static void verifyErrorReply(Throwable t) {
@@ -108,10 +132,9 @@ public class DetailErrorSample {
     } catch (InvalidProtocolBufferException e) {
       Verify.verify(false, "Message was a different type than expected");
     }
-
   }
 
-  void blockingCall() {
+  void blockingCall(Channel channel) {
     GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
     try {
       stub.sayHello(HelloRequest.newBuilder().build());
@@ -121,7 +144,7 @@ public class DetailErrorSample {
     }
   }
 
-  void futureCallDirect() {
+  void futureCallDirect(Channel channel) {
     GreeterFutureStub stub = GreeterGrpc.newFutureStub(channel);
     ListenableFuture<HelloReply> response =
         stub.sayHello(HelloRequest.newBuilder().build());
@@ -137,7 +160,7 @@ public class DetailErrorSample {
     }
   }
 
-  void futureCallCallback() {
+  void futureCallCallback(Channel channel) {
     GreeterFutureStub stub = GreeterGrpc.newFutureStub(channel);
     ListenableFuture<HelloReply> response =
         stub.sayHello(HelloRequest.newBuilder().build());
@@ -166,7 +189,7 @@ public class DetailErrorSample {
     }
   }
 
-  void asyncCall() {
+  void asyncCall(Channel channel) {
     GreeterStub stub = GreeterGrpc.newStub(channel);
     HelloRequest request = HelloRequest.newBuilder().build();
     final CountDownLatch latch = new CountDownLatch(1);
