@@ -253,7 +253,7 @@ task sharingClient(type: CreateStartScripts) {
 }
 
 task errorDetails(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.errordetails.DetailErrorSample'
+    mainClass = 'io.grpc.examples.errordetails.ErrorDetailsExample'
     applicationName = 'error-details'
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath

@@ -140,7 +140,7 @@ public class ErrorDetailsExample {
       stub.sayHello(HelloRequest.newBuilder().build());
     } catch (Exception e) {
       verifyErrorReply(e);
-      System.out.println("blocking call received expected error");
+      System.out.println("Blocking call received expected error details");
     }
   }
 
@@ -156,7 +156,7 @@ public class ErrorDetailsExample {
       throw new RuntimeException(e);
     } catch (ExecutionException e) {
       verifyErrorReply(e.getCause());
-      System.out.println("future call direct received expected error");
+      System.out.println("Future call direct received expected error details");
     }
   }
 
@@ -178,7 +178,7 @@ public class ErrorDetailsExample {
           @Override
           public void onFailure(Throwable t) {
             verifyErrorReply(t);
-            System.out.println("future callback received expected error");
+            System.out.println("Future callback received expected error details");
             latch.countDown();
           }
         },
@@ -203,7 +203,7 @@ public class ErrorDetailsExample {
       @Override
       public void onError(Throwable t) {
         verifyErrorReply(t);
-        System.out.println("Async call received expected error");
+        System.out.println("Async call received expected error details");
         latch.countDown();
       }
 
