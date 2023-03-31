@@ -129,6 +129,13 @@ final class LoadReportClient {
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
+  /**
+   * Returns {@code true} if the client has already been started.
+   */
+  boolean isStarted() {
+    return started;
+  }
+
   @VisibleForTesting
   static class LoadReportingTask implements Runnable {
     private final LrsStream stream;

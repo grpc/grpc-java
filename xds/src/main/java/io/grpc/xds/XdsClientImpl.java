@@ -107,7 +107,6 @@ final class XdsClientImpl extends XdsClient
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final TimeProvider timeProvider;
-  private boolean reportingLoad;
   private final TlsContextManager tlsContextManager;
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -221,10 +220,8 @@ final class XdsClientImpl extends XdsClient
             for (ControlPlaneClient xdsChannel : serverChannelMap.values()) {
               xdsChannel.shutdown();
             }
-            if (reportingLoad) {
-              for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
-                lrsClient.stopLoadReporting();
-              }
+            for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
+              lrsClient.stopLoadReporting();
             }
             cleanUpResourceTimers();
           }
@@ -350,10 +347,7 @@ final class XdsClientImpl extends XdsClient
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        if (!reportingLoad) {
-          serverLrsClientMap.get(serverInfo).startLoadReporting();
-          reportingLoad = true;
-        }
+        serverLrsClientMap.get(serverInfo).startLoadReporting();
       }
     });
     return dropCounter;
@@ -368,10 +362,7 @@ final class XdsClientImpl extends XdsClient
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        if (!reportingLoad) {
-          serverLrsClientMap.get(serverInfo).startLoadReporting();
-          reportingLoad = true;
-        }
+        serverLrsClientMap.get(serverInfo).startLoadReporting();
       }
     });
     return loadCounter;
@@ -380,6 +371,12 @@ final class XdsClientImpl extends XdsClient
   @Override
   Bootstrapper.BootstrapInfo getBootstrapInfo() {
     return bootstrapInfo;
+  }
+
+  @VisibleForTesting
+  @Override
+  Map<ServerInfo, LoadReportClient> getServerLrsClientMap() {
+    return ImmutableMap.copyOf(serverLrsClientMap);
   }
 
   @Override
