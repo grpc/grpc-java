@@ -69,7 +69,8 @@ final class LoadReportClient {
   @Nullable
   private ScheduledHandle lrsRpcRetryTimer;
   @Nullable
-  private LrsStream lrsStream;
+  @VisibleForTesting
+  LrsStream lrsStream;
 
   LoadReportClient(
       LoadStatsManager2 loadStatsManager,
@@ -127,13 +128,6 @@ final class LoadReportClient {
       lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
     }
     // Do not shutdown channel as it is not owned by LrsClient.
-  }
-
-  /**
-   * Returns {@code true} if the client has already been started.
-   */
-  boolean isStarted() {
-    return started;
   }
 
   @VisibleForTesting

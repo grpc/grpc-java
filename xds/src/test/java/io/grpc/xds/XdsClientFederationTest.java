@@ -143,7 +143,7 @@ public class XdsClientFederationTest {
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterLocalityStats(entry.getKey(), "clusterName", "edsServiceName",
           Locality.create("", "", ""));
-      assertThat(entry.getValue().isStarted()).isTrue();
+      assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
 
@@ -170,7 +170,7 @@ public class XdsClientFederationTest {
     // corresponding LRS client should be started
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
-      assertThat(entry.getValue().isStarted()).isTrue();
+      assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
 
