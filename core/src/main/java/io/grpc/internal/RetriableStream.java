@@ -282,14 +282,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       synchronized (lock) {
         savedState = state;
-        if (streamStarted) {
-          if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
-            // committed but not me, to be cancelled
-            break;
-          }
-          if (savedState.cancelled) {
-            break;
-          }
+        if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
+          // committed but not me, to be cancelled
+          break;
+        }
+        if (savedState.cancelled) {
+          break;
         }
         if (index == savedState.buffer.size()) { // I'm drained
           state = savedState.substreamDrained(substream);
@@ -326,15 +324,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (bufferEntry instanceof RetriableStream.StartEntry) {
           streamStarted = true;
         }
-        if (streamStarted) {
-          savedState = state;
-          if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
-            // committed but not me, to be cancelled
-            break;
-          }
-          if (savedState.cancelled) {
-            break;
-          }
+        savedState = state;
+        if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
+          // committed but not me, to be cancelled
+          break;
+        }
+        if (savedState.cancelled) {
+          break;
         }
       }
     }
@@ -344,6 +340,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       return;
     }
 
+    if (!streamStarted) {
+      // Start stream so inFlightSubStreams is decremented in Sublistener.closed()
+      substream.stream.start(new Sublistener(substream));
+    }
     substream.stream.cancel(
         state.winningSubstream == substream ? cancellationStatus : CANCELLED_BECAUSE_COMMITTED);
   }
@@ -484,6 +484,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               }
 
               if (cancelled) {
+                // Start stream so inFlightSubStreams is decremented in Sublistener.closed()
+                newSubstream.stream.start(new Sublistener(newSubstream));
                 newSubstream.stream.cancel(Status.CANCELLED.withDescription("Unneeded hedging"));
                 return;
               }
@@ -507,6 +509,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Runnable runnable = commit(noopSubstream);
 
     if (runnable != null) {
+      synchronized (lock) {
+        state = state.substreamDrained(noopSubstream);
+      }
       runnable.run();
       safeCloseMasterListener(reason, RpcProgress.PROCESSED, new Metadata());
       return;
