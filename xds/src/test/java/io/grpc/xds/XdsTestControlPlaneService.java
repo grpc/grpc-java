@@ -25,6 +25,7 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.SynchronizationContext;
 import io.grpc.stub.StreamObserver;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -75,25 +76,32 @@ final class XdsTestControlPlaneService extends
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
   private final Map<String, HashMap<String, Message>> xdsResources = new HashMap<>();
-  private ImmutableMap<String, HashMap<StreamObserver<DiscoveryResponse>, Set<String>>> subscribers
+  private ImmutableMap<String, Map<StreamObserver<DiscoveryResponse>, Set<String>>> subscribers
       = ImmutableMap.of(
-          ADS_TYPE_URL_LDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
-          ADS_TYPE_URL_RDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
-          ADS_TYPE_URL_CDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
-          ADS_TYPE_URL_EDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>()
-          );
+      ADS_TYPE_URL_LDS,
+      Collections.synchronizedMap(new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>()),
+      ADS_TYPE_URL_RDS,
+      Collections.synchronizedMap(new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>()),
+      ADS_TYPE_URL_CDS,
+      Collections.synchronizedMap(new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>()),
+      ADS_TYPE_URL_EDS,
+      Collections.synchronizedMap(new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>()));
   private final ImmutableMap<String, AtomicInteger> xdsVersions = ImmutableMap.of(
       ADS_TYPE_URL_LDS, new AtomicInteger(1),
       ADS_TYPE_URL_RDS, new AtomicInteger(1),
       ADS_TYPE_URL_CDS, new AtomicInteger(1),
       ADS_TYPE_URL_EDS, new AtomicInteger(1)
   );
-  private final ImmutableMap<String, HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>>
+  private final ImmutableMap<String, Map<StreamObserver<DiscoveryResponse>, AtomicInteger>>
       xdsNonces = ImmutableMap.of(
-      ADS_TYPE_URL_LDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
-      ADS_TYPE_URL_RDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
-      ADS_TYPE_URL_CDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
-      ADS_TYPE_URL_EDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()
+      ADS_TYPE_URL_LDS,
+      Collections.synchronizedMap(new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()),
+      ADS_TYPE_URL_RDS,
+      Collections.synchronizedMap(new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()),
+      ADS_TYPE_URL_CDS,
+      Collections.synchronizedMap(new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()),
+      ADS_TYPE_URL_EDS,
+      Collections.synchronizedMap(new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>())
   );
 
 
