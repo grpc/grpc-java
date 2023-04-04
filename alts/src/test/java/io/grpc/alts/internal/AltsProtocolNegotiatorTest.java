@@ -354,6 +354,34 @@ public class AltsProtocolNegotiatorTest {
         .isEqualTo(SecurityLevel.PRIVACY_AND_INTEGRITY);
   }
 
+  @Test
+  public void getAltsMaxConcurrentHandshakes_success() throws Exception {
+    System.setProperty(AltsProtocolNegotiator.ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE, "10");
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes()).isEqualTo(10);
+  }
+
+  @Test
+  public void getAltsMaxConcurrentHandshakes_envVariableNotSet() throws Exception {
+    System.clearProperty(AltsProtocolNegotiator.ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE);
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes())
+        .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
+  }
+
+  @Test
+  public void getAltsMaxConcurrentHandshakes_envVariableNotANumber() throws Exception {
+    System.setProperty(
+        AltsProtocolNegotiator.ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE, "not-a-number");
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes())
+        .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
+  }
+
+  @Test
+  public void getAltsMaxConcurrentHandshakes_envVariableNegative() throws Exception {
+    System.setProperty(AltsProtocolNegotiator.ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE, "-10");
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes())
+        .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
+  }
+
   private void doHandshake() throws Exception {
     // Capture the client frame and add to the server.
     assertEquals(1, channel.outboundMessages().size());

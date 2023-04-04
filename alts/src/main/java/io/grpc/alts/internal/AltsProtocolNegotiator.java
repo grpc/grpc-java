@@ -54,10 +54,12 @@ import javax.annotation.Nullable;
 // TODO(carl-mastrangelo): rename this AltsProtocolNegotiators.
 public final class AltsProtocolNegotiator {
   private static final Logger logger = Logger.getLogger(AltsProtocolNegotiator.class.getName());
-  // Avoid performing too many handshakes in parallel, as it may cause queuing in the handshake
-  // server and cause unbounded blocking on the event loop (b/168808426). This is a workaround until
-  // there is an async TSI handshaking API to avoid the blocking.
-  private static final AsyncSemaphore handshakeSemaphore = new AsyncSemaphore(32);
+  @VisibleForTesting
+  static final String ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE =
+      "GRPC_ALTS_MAX_CONCURRENT_HANDSHAKES";
+  @VisibleForTesting static final int DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES = 32;
+  private static final AsyncSemaphore handshakeSemaphore =
+      new AsyncSemaphore(getAltsMaxConcurrentHandshakes());
 
   @Grpc.TransportAttr
   public static final Attributes.Key<TsiPeer> TSI_PEER_KEY =
@@ -421,6 +423,27 @@ public final class AltsProtocolNegotiator {
       return new SecurityDetails(
           SecurityLevel.PRIVACY_AND_INTEGRITY,
           new Security(new OtherSecurity("alts", Any.pack(altsContext.context))));
+    }
+  }
+
+  @VisibleForTesting
+  static int getAltsMaxConcurrentHandshakes() {
+    String altsMaxConcurrentHandshakes = System.getenv(ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE);
+    if (altsMaxConcurrentHandshakes == null) {
+      return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
+    }
+    try {
+      int effectiveMaxConcurrentHandshakes = Integer.parseInt(altsMaxConcurrentHandshakes);
+      if (effectiveMaxConcurrentHandshakes < 0) {
+        logger.warning(
+            "GRPC_ALTS_MAX_CONCURRENT_HANDSHAKES environment variable set to invalid value.");
+        return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
+      }
+      return effectiveMaxConcurrentHandshakes;
+    } catch (NumberFormatException e) {
+      logger.warning(
+          "GRPC_ALTS_MAX_CONCURRENT_HANDSHAKES environment variable set to invalid value.");
+      return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
     }
   }
 
