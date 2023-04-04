@@ -34,6 +34,11 @@ public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   }
 
   @Override
+  public void startConnecting() {
+    delegate().startConnecting();
+  }
+
+  @Override
   public void outboundHeaders() {
     delegate().outboundHeaders();
   }
