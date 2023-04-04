@@ -29,6 +29,7 @@ import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
@@ -172,6 +173,34 @@ public class XdsClientFederationTest {
       xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
       assertThat(entry.getValue().lrsStream).isNotNull();
     }
+  }
+
+  /**
+   * Assures that {@link LoadReportClient}s have distinct {@link LoadStatsManager2}s so that they
+   * only report on the traffic for their own control plane.
+   */
+  @Test
+  public void lrsClientsHaveDistinctLoadStatsManagers() throws InterruptedException {
+    trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener("test-server"));
+    directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener(
+            "xdstp://server-one/envoy.config.listener.v3.Listener/test-server"));
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "test-server", mockWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
+
+    // With two control planes and a watcher for each, there should be two LRS clients.
+    assertThat(xdsClient.getServerLrsClientMap().size()).isEqualTo(2);
+
+    // Collect the LoadStatManagers and make sure they are distinct for each control plane.
+    HashSet<LoadStatsManager2> loadStatManagers = new HashSet<>();
+    for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
+      xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
+      loadStatManagers.add(entry.getValue().loadStatsManager);
+    }
+    assertThat(loadStatManagers).containsNoDuplicates();
   }
 
   private Map<String, ?> defaultBootstrapOverride() {

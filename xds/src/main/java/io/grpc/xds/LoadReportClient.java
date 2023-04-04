@@ -61,7 +61,8 @@ final class LoadReportClient {
   private final ScheduledExecutorService timerService;
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final LoadStatsManager2 loadStatsManager;
+  @VisibleForTesting
+  final LoadStatsManager2 loadStatsManager;
 
   private boolean started;
   @Nullable

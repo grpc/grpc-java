@@ -98,7 +98,7 @@ final class XdsClientImpl extends XdsClient
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
       resourceSubscribers = new HashMap<>();
   private final Map<String, XdsResourceType<?>> subscribedResourceTypeUrls = new HashMap<>();
-  private final LoadStatsManager2 loadStatsManager;
+  private final Map<ServerInfo, LoadStatsManager2> loadStatsManagerMap = new HashMap<>();
   private final Map<ServerInfo, LoadReportClient> serverLrsClientMap = new HashMap<>();
   private final XdsChannelFactory xdsChannelFactory;
   private final Bootstrapper.BootstrapInfo bootstrapInfo;
@@ -125,7 +125,6 @@ final class XdsClientImpl extends XdsClient
     this.bootstrapInfo = bootstrapInfo;
     this.context = context;
     this.timeService = timeService;
-    loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.stopwatchSupplier = stopwatchSupplier;
     this.timeProvider = timeProvider;
@@ -155,6 +154,8 @@ final class XdsClientImpl extends XdsClient
         backoffPolicyProvider,
         stopwatchSupplier,
         this);
+    LoadStatsManager2 loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
+    loadStatsManagerMap.put(serverInfo, loadStatsManager);
     LoadReportClient lrsClient = new LoadReportClient(
         loadStatsManager, xdsChannel.channel(), context, bootstrapInfo.node(), syncContext,
         timeService, backoffPolicyProvider, stopwatchSupplier);
@@ -342,6 +343,7 @@ final class XdsClientImpl extends XdsClient
   @Override
   ClusterDropStats addClusterDropStats(
       final ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName) {
+    LoadStatsManager2 loadStatsManager = loadStatsManagerMap.get(serverInfo);
     ClusterDropStats dropCounter =
         loadStatsManager.getClusterDropStats(clusterName, edsServiceName);
     syncContext.execute(new Runnable() {
@@ -357,6 +359,7 @@ final class XdsClientImpl extends XdsClient
   ClusterLocalityStats addClusterLocalityStats(
       final ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
+    LoadStatsManager2 loadStatsManager = loadStatsManagerMap.get(serverInfo);
     ClusterLocalityStats loadCounter =
         loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
     syncContext.execute(new Runnable() {
