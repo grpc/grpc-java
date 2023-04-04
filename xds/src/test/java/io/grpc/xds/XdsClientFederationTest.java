@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -23,11 +24,13 @@ import static org.mockito.Mockito.verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.UUID;
 import org.junit.After;
 import org.junit.Before;
@@ -114,6 +117,61 @@ public class XdsClientFederationTest {
     verify(mockWatcher, timeout(20000)).onResourceDoesNotExist("test-server");
     verify(mockDirectPathWatcher, times(0)).onResourceDoesNotExist(
             "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
+  }
+
+  /**
+   * Assures that when an {@link XdsClient} is asked to add cluster locality stats it appropriately
+   * starts {@link LoadReportClient}s to do that.
+   */
+  @Test
+  public void lrsClientsStartedForLocalityStats() throws InterruptedException {
+    trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener("test-server"));
+    directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener(
+            "xdstp://server-one/envoy.config.listener.v3.Listener/test-server"));
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "test-server", mockWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
+
+    // With two control planes and a watcher for each, there should be two LRS clients.
+    assertThat(xdsClient.getServerLrsClientMap().size()).isEqualTo(2);
+
+    // When the XdsClient is asked to report locality stats for a control plane server, the
+    // corresponding LRS client should be started
+    for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
+      xdsClient.addClusterLocalityStats(entry.getKey(), "clusterName", "edsServiceName",
+          Locality.create("", "", ""));
+      assertThat(entry.getValue().lrsStream).isNotNull();
+    }
+  }
+
+  /**
+   * Assures that when an {@link XdsClient} is asked to add cluster locality stats it appropriately
+   * starts {@link LoadReportClient}s to do that.
+   */
+  @Test
+  public void lrsClientsStartedForDropStats() throws InterruptedException {
+    trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener("test-server"));
+    directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
+        ControlPlaneRule.buildClientListener(
+            "xdstp://server-one/envoy.config.listener.v3.Listener/test-server"));
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "test-server", mockWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
+
+    // With two control planes and a watcher for each, there should be two LRS clients.
+    assertThat(xdsClient.getServerLrsClientMap().size()).isEqualTo(2);
+
+    // When the XdsClient is asked to report drop stats for a control plane server, the
+    // corresponding LRS client should be started
+    for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
+      xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
+      assertThat(entry.getValue().lrsStream).isNotNull();
+    }
   }
 
   private Map<String, ?> defaultBootstrapOverride() {

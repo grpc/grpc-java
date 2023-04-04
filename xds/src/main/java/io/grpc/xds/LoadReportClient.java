@@ -69,7 +69,8 @@ final class LoadReportClient {
   @Nullable
   private ScheduledHandle lrsRpcRetryTimer;
   @Nullable
-  private LrsStream lrsStream;
+  @VisibleForTesting
+  LrsStream lrsStream;
 
   LoadReportClient(
       LoadStatsManager2 loadStatsManager,
