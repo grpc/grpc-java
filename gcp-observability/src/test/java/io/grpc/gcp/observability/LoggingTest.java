@@ -63,12 +63,6 @@ public class LoggingTest {
   public static final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
   private static final String PROJECT_ID = "PROJECT";
-  private static final ImmutableMap<String, String> LOCATION_TAGS = ImmutableMap.of(
-      "project_id", "PROJECT",
-      "location", "us-central1-c",
-      "cluster_name", "grpc-observability-cluster",
-      "namespace_name", "default" ,
-      "pod_name", "app1-6c7c58f897-n92c5");
   private static final ImmutableMap<String, String> CUSTOM_TAGS = ImmutableMap.of(
       "KEY1", "Value1",
       "KEY2", "VALUE2");
@@ -119,7 +113,7 @@ public class LoggingTest {
       when(config.getCustomTags()).thenReturn(CUSTOM_TAGS);
       Sink sink =
           new GcpLogSink(
-              PROJECT_ID, LOCATION_TAGS, config, Collections.emptySet(),
+              PROJECT_ID, config, Collections.emptySet(),
               mock(TraceLoggingHelper.class));
       LogHelper spyLogHelper = spy(new LogHelper(sink));
       ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
