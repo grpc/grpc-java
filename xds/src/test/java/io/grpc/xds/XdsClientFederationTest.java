@@ -23,6 +23,8 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Filter.NamedFilterConfig;
@@ -33,6 +35,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -125,7 +128,7 @@ public class XdsClientFederationTest {
    * starts {@link LoadReportClient}s to do that.
    */
   @Test
-  public void lrsClientsStartedForLocalityStats() throws InterruptedException {
+  public void lrsClientsStartedForLocalityStats() throws InterruptedException, ExecutionException {
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
@@ -144,16 +147,18 @@ public class XdsClientFederationTest {
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterLocalityStats(entry.getKey(), "clusterName", "edsServiceName",
           Locality.create("", "", ""));
+      waitForSyncContext(entry.getValue().syncContext);
       assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
+
 
   /**
    * Assures that when an {@link XdsClient} is asked to add cluster locality stats it appropriately
    * starts {@link LoadReportClient}s to do that.
    */
   @Test
-  public void lrsClientsStartedForDropStats() throws InterruptedException {
+  public void lrsClientsStartedForDropStats() throws InterruptedException, ExecutionException {
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
@@ -171,6 +176,7 @@ public class XdsClientFederationTest {
     // corresponding LRS client should be started
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
+      waitForSyncContext(entry.getValue().syncContext);
       assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
@@ -201,6 +207,19 @@ public class XdsClientFederationTest {
       loadStatManagers.add(entry.getValue().loadStatsManager);
     }
     assertThat(loadStatManagers).containsNoDuplicates();
+  }
+
+  // Waits for all SynchronizationContext tasks to finish, assuming no new ones get added.
+  private static void waitForSyncContext(SynchronizationContext syncContext)
+      throws InterruptedException, ExecutionException {
+    final SettableFuture<Boolean> done = SettableFuture.create();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        done.set(true);
+      }
+    });
+    done.get();
   }
 
   private Map<String, ?> defaultBootstrapOverride() {

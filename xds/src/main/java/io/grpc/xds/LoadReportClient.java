@@ -57,7 +57,8 @@ final class LoadReportClient {
   private final Channel channel;
   private final Context context;
   private final Node node;
-  private final SynchronizationContext syncContext;
+  @VisibleForTesting
+  final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
