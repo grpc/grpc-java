@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.api.gax.batching.BatchingSettings;
 import com.google.api.gax.batching.FlowController;
-import com.google.cloud.MonitoredResource;
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
 import com.google.cloud.logging.LoggingOptions;
@@ -30,7 +29,6 @@ import com.google.cloud.logging.v2.stub.LoggingServiceV2StubSettings;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.Internal;
 import io.grpc.gcp.observability.ObservabilityConfig;
@@ -42,8 +40,6 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.threeten.bp.Duration;
@@ -58,13 +54,8 @@ public class GcpLogSink implements Sink {
   private static final String DEFAULT_LOG_NAME =
       "microservices.googleapis.com%2Fobservability%2Fgrpc";
   private static final Severity DEFAULT_LOG_LEVEL = Severity.DEBUG;
-  private static final String K8S_MONITORED_RESOURCE_TYPE = "k8s_container";
-  private static final Set<String> kubernetesResourceLabelSet
-      = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
-      "pod_name", "container_name");
   private final String projectId;
   private final Map<String, String> customTags;
-  private final MonitoredResource kubernetesResource;
   /** Lazily initialize cloud logging client to avoid circular initialization. Because cloud
    * logging APIs also uses gRPC. */
   private volatile Logging gcpLoggingClient;
@@ -75,10 +66,10 @@ public class GcpLogSink implements Sink {
 
 
   @VisibleForTesting
-  GcpLogSink(Logging loggingClient, String projectId, Map<String, String> locationTags,
+  GcpLogSink(Logging loggingClient, String projectId,
       ObservabilityConfig config, Collection<String> servicesToExclude,
       TraceLoggingHelper traceLoggingHelper) {
-    this(projectId, locationTags, config, servicesToExclude, traceLoggingHelper);
+    this(projectId, config, servicesToExclude, traceLoggingHelper);
     this.gcpLoggingClient = loggingClient;
   }
 
@@ -88,12 +79,11 @@ public class GcpLogSink implements Sink {
    * @param projectId GCP project id to write logs
    * @param servicesToExclude service names for which log entries should not be generated
    */
-  public GcpLogSink(String projectId, Map<String, String> locationTags,
+  public GcpLogSink(String projectId,
       ObservabilityConfig config, Collection<String> servicesToExclude,
       TraceLoggingHelper traceLoggingHelper) {
     this.projectId = projectId;
-    this.customTags = getCustomTags(config.getCustomTags(), locationTags, projectId);
-    this.kubernetesResource = getResource(locationTags);
+    this.customTags = getCustomTags(config.getCustomTags());
     this.servicesToExclude = checkNotNull(servicesToExclude, "servicesToExclude");
     this.isTraceEnabled = config.isEnableCloudTracing();
     this.traceLoggingHelper = traceLoggingHelper;
@@ -126,7 +116,6 @@ public class GcpLogSink implements Sink {
           LogEntry.newBuilder(JsonPayload.of(logProtoMap))
               .setSeverity(DEFAULT_LOG_LEVEL)
               .setLogName(DEFAULT_LOG_NAME)
-              .setResource(kubernetesResource)
               .setTimestamp(Instant.now());
 
       if (!customTags.isEmpty()) {
@@ -178,34 +167,14 @@ public class GcpLogSink implements Sink {
   }
 
   @VisibleForTesting
-  static Map<String, String> getCustomTags(Map<String, String> customTags,
-      Map<String, String> locationTags, String projectId) {
+  static Map<String, String> getCustomTags(Map<String, String> customTags) {
     ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
-    String sourceProjectId = locationTags.get("project_id");
-    if (!Strings.isNullOrEmpty(projectId)
-        && !Strings.isNullOrEmpty(sourceProjectId)
-        && !Objects.equals(sourceProjectId, projectId)) {
-      tagsBuilder.put("source_project_id", sourceProjectId);
-    }
     if (customTags != null) {
       tagsBuilder.putAll(customTags);
     }
     return tagsBuilder.buildOrThrow();
   }
 
-  @VisibleForTesting
-  static MonitoredResource getResource(Map<String, String> resourceTags) {
-    MonitoredResource.Builder builder = MonitoredResource.newBuilder(K8S_MONITORED_RESOURCE_TYPE);
-    if ((resourceTags != null) && !resourceTags.isEmpty()) {
-      for (Map.Entry<String, String> entry : resourceTags.entrySet()) {
-        String resourceKey = entry.getKey();
-        if (kubernetesResourceLabelSet.contains(resourceKey)) {
-          builder.addLabel(resourceKey, entry.getValue());
-        }
-      }
-    }
-    return builder.build();
-  }
 
   @SuppressWarnings("unchecked")
   private Map<String, Object> protoToMapConverter(GrpcLogRecord logProto)
