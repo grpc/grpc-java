@@ -746,6 +746,7 @@ public class CensusModulesTest {
         censusTracing.newClientCallTracer(spyClientSpan, method);
     Metadata headers = new Metadata();
     ClientStreamTracer clientStreamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
+    clientStreamTracer.createPendingStream();
     clientStreamTracer.streamCreated(Attributes.EMPTY, headers);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Attempt.package1.service2.method3"), eq(spyClientSpan));
@@ -767,6 +768,8 @@ public class CensusModulesTest {
         .putAttribute("previous-rpc-attempts", AttributeValue.longAttributeValue(0));
     inOrder.verify(spyAttemptSpan)
         .putAttribute("transparent-retry", AttributeValue.booleanAttributeValue(false));
+    inOrder.verify(spyAttemptSpan).addAnnotation("Delayed name resolution complete");
+    inOrder.verify(spyAttemptSpan).addAnnotation("Delayed LB pick complete");
     inOrder.verify(spyAttemptSpan, times(2)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
     assertEquals(

@@ -48,7 +48,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * this information. The streams that are processed immediately on ready transports by the time
    * the RPC comes do not go through the pending process, thus this callback will not be invoked.
    */
-  public void startConnecting() {
+  public void createPendingStream() {
   }
 
   /**

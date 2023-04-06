@@ -299,6 +299,7 @@ final class CensusTracingModule {
     final Metadata.Key<SpanContext> tracingHeader;
     final boolean isSampledToLocalTracing;
     volatile int seqNo;
+    boolean isPendingStream;
 
     ClientTracer(
         Span span, Span parentSpan, Metadata.Key<SpanContext> tracingHeader,
@@ -315,6 +316,15 @@ final class CensusTracingModule {
         headers.discardAll(tracingHeader);
         headers.put(tracingHeader, span.getContext());
       }
+      if (isPendingStream) {
+        span.addAnnotation("Delayed LB pick complete");
+      }
+    }
+
+    @Override
+    public void createPendingStream() {
+      isPendingStream = true;
+      span.addAnnotation("Delayed name resolution complete");
     }
 
     @Override
