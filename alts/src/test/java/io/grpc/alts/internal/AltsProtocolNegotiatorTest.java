@@ -356,29 +356,24 @@ public class AltsProtocolNegotiatorTest {
 
   @Test
   public void getAltsMaxConcurrentHandshakes_success() throws Exception {
-    System.setProperty(AltsProtocolNegotiator.ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE, "10");
-    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes()).isEqualTo(10);
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes("10")).isEqualTo(10);
   }
 
   @Test
   public void getAltsMaxConcurrentHandshakes_envVariableNotSet() throws Exception {
-    System.clearProperty(AltsProtocolNegotiator.ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE);
-    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes())
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes(null))
         .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
   }
 
   @Test
   public void getAltsMaxConcurrentHandshakes_envVariableNotANumber() throws Exception {
-    System.setProperty(
-        AltsProtocolNegotiator.ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE, "not-a-number");
-    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes())
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes("not-a-number"))
         .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
   }
 
   @Test
   public void getAltsMaxConcurrentHandshakes_envVariableNegative() throws Exception {
-    System.setProperty(AltsProtocolNegotiator.ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE, "-10");
-    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes())
+    assertThat(AltsProtocolNegotiator.getAltsMaxConcurrentHandshakes("-10"))
         .isEqualTo(AltsProtocolNegotiator.DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES);
   }
 

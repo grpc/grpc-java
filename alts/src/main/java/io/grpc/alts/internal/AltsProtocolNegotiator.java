@@ -427,9 +427,8 @@ public final class AltsProtocolNegotiator {
   }
 
   @VisibleForTesting
-  static int getAltsMaxConcurrentHandshakes() {
-    String altsMaxConcurrentHandshakes = System.getenv(ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE);
-    if (altsMaxConcurrentHandshakes == null) {
+  static int getAltsMaxConcurrentHandshakes(String altsMaxConcurrentHandshakes) {
+  if (altsMaxConcurrentHandshakes == null) {
       return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
     }
     try {
@@ -445,6 +444,11 @@ public final class AltsProtocolNegotiator {
           "GRPC_ALTS_MAX_CONCURRENT_HANDSHAKES environment variable set to invalid value.");
       return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
     }
+  }
+
+  private static int getAltsMaxConcurrentHandshakes() {
+    return getAltsMaxConcurrentHandshakes(
+        System.getenv(ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE));
   }
 
   private AltsProtocolNegotiator() {}
