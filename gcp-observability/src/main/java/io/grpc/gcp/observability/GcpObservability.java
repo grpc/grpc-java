@@ -90,12 +90,10 @@ public final class GcpObservability implements AutoCloseable {
    */
   public static synchronized GcpObservability grpcInit() throws IOException {
     if (instance == null) {
-      GlobalLocationTags globalLocationTags = new GlobalLocationTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       TraceLoggingHelper traceLoggingHelper = new TraceLoggingHelper(
           observabilityConfig.getProjectId());
-      Sink sink = new GcpLogSink(observabilityConfig.getProjectId(),
-          globalLocationTags.getLocationTags(), observabilityConfig,
+      Sink sink = new GcpLogSink(observabilityConfig.getProjectId(), observabilityConfig,
           SERVICES_TO_EXCLUDE, traceLoggingHelper);
       LogHelper helper = new LogHelper(sink);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.getInstance(observabilityConfig);

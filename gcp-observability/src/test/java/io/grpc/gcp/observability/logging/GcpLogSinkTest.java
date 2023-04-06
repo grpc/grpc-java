@@ -24,7 +24,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.cloud.MonitoredResource;
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
 import com.google.common.collect.ImmutableMap;
@@ -64,12 +63,6 @@ public class GcpLogSinkTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
 
-  private static final ImmutableMap<String, String> LOCATION_TAGS =
-      ImmutableMap.of("project_id", "PROJECT",
-      "location", "us-central1-c",
-      "cluster_name", "grpc-observability-cluster",
-      "namespace_name", "default" ,
-      "pod_name", "app1-6c7c58f897-n92c5");
   private static final ImmutableMap<String, String> CUSTOM_TAGS =
       ImmutableMap.of("KEY1", "Value1",
       "KEY2", "VALUE2");
@@ -119,7 +112,7 @@ public class GcpLogSinkTest {
   @SuppressWarnings("unchecked")
   public void verifyWrite() throws Exception {
     when(mockConfig.getCustomTags()).thenReturn(CUSTOM_TAGS);
-    GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+    GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME,
         mockConfig, Collections.emptySet(), new TraceLoggingHelper(DEST_PROJECT_NAME));
     sink.write(LOG_PROTO, null);
 
@@ -138,9 +131,8 @@ public class GcpLogSinkTest {
   @SuppressWarnings("unchecked")
   public void verifyWriteWithTags() {
     when(mockConfig.getCustomTags()).thenReturn(CUSTOM_TAGS);
-    GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+    GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME,
         mockConfig, Collections.emptySet(), new TraceLoggingHelper(DEST_PROJECT_NAME));
-    MonitoredResource expectedMonitoredResource = GcpLogSink.getResource(LOCATION_TAGS);
     sink.write(LOG_PROTO, null);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
@@ -149,7 +141,6 @@ public class GcpLogSinkTest {
     System.out.println(logEntrySetCaptor.getValue());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
-      assertThat(entry.getResource()).isEqualTo(expectedMonitoredResource);
       assertThat(entry.getLabels()).isEqualTo(CUSTOM_TAGS);
       assertThat(entry.getPayload().getData()).isEqualTo(EXPECTED_STRUCT_LOG_PROTO);
       assertThat(entry.getLogName()).isEqualTo(EXPECTED_LOG_NAME);
@@ -163,7 +154,7 @@ public class GcpLogSinkTest {
     Map<String, String> emptyCustomTags = null;
     when(mockConfig.getCustomTags()).thenReturn(emptyCustomTags);
     Map<String, String> expectedEmptyLabels = new HashMap<>();
-    GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+    GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME,
         mockConfig, Collections.emptySet(), new TraceLoggingHelper(DEST_PROJECT_NAME));
     sink.write(LOG_PROTO, null);
 
@@ -183,9 +174,9 @@ public class GcpLogSinkTest {
     Map<String, String> emptyCustomTags = null;
     when(mockConfig.getCustomTags()).thenReturn(emptyCustomTags);
     String projectId = "PROJECT";
-    Map<String, String> expectedLabels = GcpLogSink.getCustomTags(emptyCustomTags, LOCATION_TAGS,
-        projectId);
-    GcpLogSink sink = new GcpLogSink(mockLogging, projectId, LOCATION_TAGS,
+    Map<String, String> expectedLabels = GcpLogSink.getCustomTags(emptyCustomTags
+    );
+    GcpLogSink sink = new GcpLogSink(mockLogging, projectId,
         mockConfig, Collections.emptySet(), new TraceLoggingHelper(DEST_PROJECT_NAME));
     sink.write(LOG_PROTO, null);
 
@@ -201,7 +192,7 @@ public class GcpLogSinkTest {
 
   @Test
   public void verifyClose() throws Exception {
-    GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+    GcpLogSink sink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME,
         mockConfig, Collections.emptySet(), new TraceLoggingHelper(DEST_PROJECT_NAME));
     sink.write(LOG_PROTO, null);
     verify(mockLogging, times(1)).write(anyIterable());
@@ -212,7 +203,7 @@ public class GcpLogSinkTest {
 
   @Test
   public void verifyExclude() throws Exception {
-    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME,
         mockConfig, Collections.singleton("service"), new TraceLoggingHelper(DEST_PROJECT_NAME));
     mockSink.write(LOG_PROTO, null);
     verifyNoInteractions(mockLogging);
@@ -229,7 +220,7 @@ public class GcpLogSinkTest {
 
     TraceLoggingHelper traceLoggingHelper = new TraceLoggingHelper(DEST_PROJECT_NAME);
     when(mockConfig.isEnableCloudTracing()).thenReturn(false);
-    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME,
         mockConfig, Collections.emptySet(), traceLoggingHelper);
     mockSink.write(LOG_PROTO, validSpanContext);
 
@@ -260,7 +251,7 @@ public class GcpLogSinkTest {
 
     TraceLoggingHelper traceLoggingHelper = new TraceLoggingHelper(DEST_PROJECT_NAME);
     when(mockConfig.isEnableCloudTracing()).thenReturn(true);
-    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME,
         mockConfig, Collections.emptySet(), traceLoggingHelper);
     mockSink.write(LOG_PROTO, validSpanContext);
 
@@ -284,7 +275,7 @@ public class GcpLogSinkTest {
   public void verifyTraceDataLogs_withNullSpanContext() throws Exception {
     TraceLoggingHelper traceLoggingHelper = new TraceLoggingHelper(DEST_PROJECT_NAME);
     when(mockConfig.isEnableCloudTracing()).thenReturn(true);
-    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME, LOCATION_TAGS,
+    Sink mockSink = new GcpLogSink(mockLogging, DEST_PROJECT_NAME,
         mockConfig, Collections.emptySet(), traceLoggingHelper);
 
     String expectedTrace =
