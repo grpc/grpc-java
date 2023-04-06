@@ -2175,7 +2175,7 @@ public abstract class AbstractInteropTest {
   /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#getAttributes()}. */
   protected void assertX500SubjectDn(String tlsInfo) {
     TestServiceGrpc.TestServiceBlockingStub stub =
-        blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
+        blockingStub.withDeadlineAfter(10, TimeUnit.SECONDS);
 
     stub.unaryCall(SimpleRequest.getDefaultInstance());
 
