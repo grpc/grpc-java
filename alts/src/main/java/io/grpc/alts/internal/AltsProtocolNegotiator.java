@@ -428,7 +428,7 @@ public final class AltsProtocolNegotiator {
 
   @VisibleForTesting
   static int getAltsMaxConcurrentHandshakes(String altsMaxConcurrentHandshakes) {
-  if (altsMaxConcurrentHandshakes == null) {
+    if (altsMaxConcurrentHandshakes == null) {
       return DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES;
     }
     try {
