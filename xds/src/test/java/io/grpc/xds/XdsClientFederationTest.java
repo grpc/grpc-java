@@ -23,8 +23,6 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.util.concurrent.SettableFuture;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Filter.NamedFilterConfig;
@@ -147,7 +145,7 @@ public class XdsClientFederationTest {
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterLocalityStats(entry.getKey(), "clusterName", "edsServiceName",
           Locality.create("", "", ""));
-      waitForSyncContext(entry.getValue().syncContext);
+      waitForSyncContext(xdsClient);
       assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
@@ -176,7 +174,7 @@ public class XdsClientFederationTest {
     // corresponding LRS client should be started
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
-      waitForSyncContext(entry.getValue().syncContext);
+      waitForSyncContext(xdsClient);
       assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
@@ -210,16 +208,11 @@ public class XdsClientFederationTest {
   }
 
   // Waits for all SynchronizationContext tasks to finish, assuming no new ones get added.
-  private static void waitForSyncContext(SynchronizationContext syncContext)
+  private static void waitForSyncContext(XdsClient xdsClient)
       throws InterruptedException, ExecutionException {
-    final SettableFuture<Boolean> done = SettableFuture.create();
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        done.set(true);
-      }
-    });
-    done.get();
+    // We use this method just to have a task added to the sync context queue and wait for it to
+    // finish.
+    xdsClient.getSubscribedResourcesMetadataSnapshot().get();
   }
 
   private Map<String, ?> defaultBootstrapOverride() {
