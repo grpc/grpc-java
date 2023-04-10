@@ -302,9 +302,12 @@ final class LbPolicyConfiguration {
           new Runnable() {
             @Override
             public void run() {
-              lb.handleResolvedAddresses(
-                  childLbResolvedAddressFactory.create(lbConfig.getConfig()));
-              lb.requestConnection();
+              if (lb.acceptResolvedAddresses(
+                  childLbResolvedAddressFactory.create(lbConfig.getConfig()))) {
+                lb.requestConnection();
+              } else {
+                helper.refreshNameResolution();
+              }
             }
           });
     }
