@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.errorprone.annotations.InlineMe;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -133,7 +132,7 @@ public abstract class LoadBalancer {
    *     its return value.
    */
   @Deprecated
-  @InlineMe(replacement = "acceptResolvedAddresses(resolvedAddresses)")
+  @SuppressWarnings("InlineMeSuggester")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
       // Note that the information about the addresses actually being accepted will be lost
@@ -398,6 +397,7 @@ public abstract class LoadBalancer {
    *     value.
    */
   @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return false;
   }
