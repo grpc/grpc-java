@@ -90,14 +90,14 @@ public final class MetricRecorder {
   /**
    * Update the QPS metrics data.
    */
-  public void setQps(double value) {
+  public void setQpsMetric(double value) {
     qps = value;
   }
 
   /**
    * Clear the QPS metrics data.
    */
-  public void clearQps() {
+  public void clearQpsMetric() {
     qps = 0;
   }
 
