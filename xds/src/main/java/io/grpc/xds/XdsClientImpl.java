@@ -98,7 +98,7 @@ final class XdsClientImpl extends XdsClient
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
       resourceSubscribers = new HashMap<>();
   private final Map<String, XdsResourceType<?>> subscribedResourceTypeUrls = new HashMap<>();
-  private final LoadStatsManager2 loadStatsManager;
+  private final Map<ServerInfo, LoadStatsManager2> loadStatsManagerMap = new HashMap<>();
   private final Map<ServerInfo, LoadReportClient> serverLrsClientMap = new HashMap<>();
   private final XdsChannelFactory xdsChannelFactory;
   private final Bootstrapper.BootstrapInfo bootstrapInfo;
@@ -107,7 +107,6 @@ final class XdsClientImpl extends XdsClient
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final TimeProvider timeProvider;
-  private boolean reportingLoad;
   private final TlsContextManager tlsContextManager;
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -126,7 +125,6 @@ final class XdsClientImpl extends XdsClient
     this.bootstrapInfo = bootstrapInfo;
     this.context = context;
     this.timeService = timeService;
-    loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.stopwatchSupplier = stopwatchSupplier;
     this.timeProvider = timeProvider;
@@ -156,6 +154,8 @@ final class XdsClientImpl extends XdsClient
         backoffPolicyProvider,
         stopwatchSupplier,
         this);
+    LoadStatsManager2 loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
+    loadStatsManagerMap.put(serverInfo, loadStatsManager);
     LoadReportClient lrsClient = new LoadReportClient(
         loadStatsManager, xdsChannel.channel(), context, bootstrapInfo.node(), syncContext,
         timeService, backoffPolicyProvider, stopwatchSupplier);
@@ -221,10 +221,8 @@ final class XdsClientImpl extends XdsClient
             for (ControlPlaneClient xdsChannel : serverChannelMap.values()) {
               xdsChannel.shutdown();
             }
-            if (reportingLoad) {
-              for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
-                lrsClient.stopLoadReporting();
-              }
+            for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
+              lrsClient.stopLoadReporting();
             }
             cleanUpResourceTimers();
           }
@@ -345,15 +343,13 @@ final class XdsClientImpl extends XdsClient
   @Override
   ClusterDropStats addClusterDropStats(
       final ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName) {
+    LoadStatsManager2 loadStatsManager = loadStatsManagerMap.get(serverInfo);
     ClusterDropStats dropCounter =
         loadStatsManager.getClusterDropStats(clusterName, edsServiceName);
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        if (!reportingLoad) {
-          serverLrsClientMap.get(serverInfo).startLoadReporting();
-          reportingLoad = true;
-        }
+        serverLrsClientMap.get(serverInfo).startLoadReporting();
       }
     });
     return dropCounter;
@@ -363,15 +359,13 @@ final class XdsClientImpl extends XdsClient
   ClusterLocalityStats addClusterLocalityStats(
       final ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
+    LoadStatsManager2 loadStatsManager = loadStatsManagerMap.get(serverInfo);
     ClusterLocalityStats loadCounter =
         loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        if (!reportingLoad) {
-          serverLrsClientMap.get(serverInfo).startLoadReporting();
-          reportingLoad = true;
-        }
+        serverLrsClientMap.get(serverInfo).startLoadReporting();
       }
     });
     return loadCounter;
@@ -380,6 +374,12 @@ final class XdsClientImpl extends XdsClient
   @Override
   Bootstrapper.BootstrapInfo getBootstrapInfo() {
     return bootstrapInfo;
+  }
+
+  @VisibleForTesting
+  @Override
+  Map<ServerInfo, LoadReportClient> getServerLrsClientMap() {
+    return ImmutableMap.copyOf(serverLrsClientMap);
   }
 
   @Override

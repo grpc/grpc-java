@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.net.UrlEscapers;
@@ -340,6 +341,15 @@ abstract class XdsClient {
   ClusterLocalityStats addClusterLocalityStats(
       ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns a map of control plane server info objects to the LoadReportClients that are
+   * responsible for sending load reports to the control plane servers.
+   */
+  @VisibleForTesting
+  Map<ServerInfo, LoadReportClient> getServerLrsClientMap() {
     throw new UnsupportedOperationException();
   }
 

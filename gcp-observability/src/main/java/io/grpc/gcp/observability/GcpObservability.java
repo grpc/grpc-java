@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.ClientInterceptor;
-import io.grpc.ExperimentalApi;
 import io.grpc.InternalGlobalInterceptors;
 import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
 import io.grpc.ServerInterceptor;
@@ -64,7 +63,6 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /** The main class for gRPC Google Cloud Platform Observability features. */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class GcpObservability implements AutoCloseable {
 
   private static final Logger logger = Logger.getLogger(GcpObservability.class.getName());
@@ -90,12 +88,10 @@ public final class GcpObservability implements AutoCloseable {
    */
   public static synchronized GcpObservability grpcInit() throws IOException {
     if (instance == null) {
-      GlobalLocationTags globalLocationTags = new GlobalLocationTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       TraceLoggingHelper traceLoggingHelper = new TraceLoggingHelper(
           observabilityConfig.getProjectId());
-      Sink sink = new GcpLogSink(observabilityConfig.getProjectId(),
-          globalLocationTags.getLocationTags(), observabilityConfig,
+      Sink sink = new GcpLogSink(observabilityConfig.getProjectId(), observabilityConfig,
           SERVICES_TO_EXCLUDE, traceLoggingHelper);
       LogHelper helper = new LogHelper(sink);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.getInstance(observabilityConfig);

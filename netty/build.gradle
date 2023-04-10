@@ -80,10 +80,6 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/netty/Internal*'
 }
 
-project.sourceSets {
-    main { java { srcDir "${projectDir}/third_party/netty/java" } }
-}
-
 tasks.named("test").configure {
     // Allow testing Jetty ALPN in TlsTest
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
