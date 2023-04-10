@@ -65,8 +65,8 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for utilization.
-   * If RPC has already finished, this method is no-op.
+   * Records a call metric measurement for utilization in the range [0, 1]. Values outside the valid
+   * range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -74,7 +74,7 @@ public final class CallMetricRecorder {
    * @since 1.23.0
    */
   public CallMetricRecorder recordUtilizationMetric(String name, double value) {
-    if (disabled) {
+    if (disabled || !MetricRecorderHelper.isUtilizationValid(value)) {
       return this;
     }
     if (utilizationMetrics.get() == null) {
@@ -126,8 +126,8 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for CPU utilization.
-   * If RPC has already finished, this method is no-op.
+   * Records a call metric measurement for CPU utilization in the range [0, 1]. Values outside the
+   * valid range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -135,7 +135,7 @@ public final class CallMetricRecorder {
    * @since 1.47.0
    */
   public CallMetricRecorder recordCpuUtilizationMetric(double value) {
-    if (disabled) {
+    if (disabled || !MetricRecorderHelper.isUtilizationValid(value)) {
       return this;
     }
     cpuUtilizationMetric = value;
@@ -143,8 +143,8 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for memory utilization.
-   * If RPC has already finished, this method is no-op.
+   * Records a call metric measurement for memory utilization in the range [0, 1]. Values outside
+   * the valid range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -152,7 +152,7 @@ public final class CallMetricRecorder {
    * @since 1.47.0
    */
   public CallMetricRecorder recordMemoryUtilizationMetric(double value) {
-    if (disabled) {
+    if (disabled || !MetricRecorderHelper.isUtilizationValid(value)) {
       return this;
     }
     memoryUtilizationMetric = value;
@@ -160,8 +160,8 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for qps.
-   * If RPC has already finished, this method is no-op.
+   * Records a call metric measurement for qps in the range [0, inf). Values outside the valid range
+   * are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -169,7 +169,7 @@ public final class CallMetricRecorder {
    * @since 1.54.0
    */
   public CallMetricRecorder recordQpsMetric(double value) {
-    if (disabled) {
+    if (disabled || !MetricRecorderHelper.isQpsValid(value)) {
       return this;
     }
     qps = value;

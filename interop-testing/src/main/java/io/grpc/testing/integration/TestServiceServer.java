@@ -164,7 +164,7 @@ public class TestServiceServer {
             ServerInterceptors.intercept(
                 new TestServiceImpl(executor, metricRecorder), TestServiceImpl.interceptors()))
         .addService(orcaOobService)
-        .intercept(OrcaMetricReportingServerInterceptor.getInstance())
+        .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
         .build()
         .start();
   }
