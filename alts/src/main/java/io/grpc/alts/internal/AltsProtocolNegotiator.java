@@ -54,6 +54,7 @@ import javax.annotation.Nullable;
 // TODO(carl-mastrangelo): rename this AltsProtocolNegotiators.
 public final class AltsProtocolNegotiator {
   private static final Logger logger = Logger.getLogger(AltsProtocolNegotiator.class.getName());
+
   static final String ALTS_MAX_CONCURRENT_HANDSHAKES_ENV_VARIABLE =
       "GRPC_ALTS_MAX_CONCURRENT_HANDSHAKES";
   @VisibleForTesting static final int DEFAULT_ALTS_MAX_CONCURRENT_HANDSHAKES = 32;
