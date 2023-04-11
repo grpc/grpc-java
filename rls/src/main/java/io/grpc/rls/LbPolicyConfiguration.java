@@ -302,12 +302,11 @@ final class LbPolicyConfiguration {
           new Runnable() {
             @Override
             public void run() {
-              if (lb.acceptResolvedAddresses(
+              if (!lb.acceptResolvedAddresses(
                   childLbResolvedAddressFactory.create(lbConfig.getConfig()))) {
-                lb.requestConnection();
-              } else {
                 helper.refreshNameResolution();
               }
+              lb.requestConnection();
             }
           });
     }
