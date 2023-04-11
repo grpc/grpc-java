@@ -40,6 +40,18 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
+   * Name resolution is completed and the connection starts getting established. This method is only
+   * invoked on the streams that encounter such delay.
+   *
+   * </p>gRPC buffers the client call if the remote address and configurations, e.g. timeouts and
+   * retry policy, are not ready. Asynchronously gRPC internally does the name resolution to get
+   * this information. The streams that are processed immediately on ready transports by the time
+   * the RPC comes do not go through the pending process, thus this callback will not be invoked.
+   */
+  public void createPendingStream() {
+  }
+
+  /**
    * Headers has been sent to the socket.
    */
   public void outboundHeaders() {
