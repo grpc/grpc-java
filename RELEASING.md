@@ -104,8 +104,6 @@ Tagging the Release
    # Bump documented gRPC versions.
    # Also update protoc version to match protobuf version in gradle/libs.versions.toml.
    $ ${EDITOR:-nano -w} README.md
-   $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
-   $ ${EDITOR:-nano -w} cronet/README.md
    
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
