@@ -63,7 +63,7 @@ public class CustomBackendMetricsServer {
         // Enable OOB custom backend metrics reporting.
         .addService(orcaOobService)
         // Enable per-query custom backend metrics reporting.
-        .intercept(OrcaMetricReportingServerInterceptor.getInstance())
+        .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
         .build()
         .start();
     logger.info("Server started, listening on " + port);

@@ -38,6 +38,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.services.CallMetricRecorder;
 import io.grpc.services.InternalCallMetricRecorder;
+import io.grpc.services.MetricRecorder;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -73,6 +74,8 @@ public class OrcaMetricReportingServerInterceptorTest {
   private final Map<String, Double> applicationCostMetrics = new HashMap<>();
   private double cpuUtilizationMetrics = 0;
   private double memoryUtilizationMetrics = 0;
+  private double qpsMetrics = 0;
+  private MetricRecorder metricRecorder;
 
   private final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
 
@@ -95,6 +98,7 @@ public class OrcaMetricReportingServerInterceptorTest {
             }
             CallMetricRecorder.getCurrent().recordCpuUtilizationMetric(cpuUtilizationMetrics);
             CallMetricRecorder.getCurrent().recordMemoryUtilizationMetric(memoryUtilizationMetrics);
+            CallMetricRecorder.getCurrent().recordQpsMetric(qpsMetrics);
             SimpleResponse response =
                 SimpleResponse.newBuilder().setResponseMessage("Simple response").build();
             responseObserver.onNext(response);
@@ -102,7 +106,9 @@ public class OrcaMetricReportingServerInterceptorTest {
           }
         };
 
-    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor();
+    metricRecorder = MetricRecorder.newInstance();
+    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor(
+        metricRecorder);
     String serverName = InProcessServerBuilder.generateName();
     grpcCleanupRule.register(
         InProcessServerBuilder
@@ -149,7 +155,8 @@ public class OrcaMetricReportingServerInterceptorTest {
           }
         };
 
-    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor();
+    ServerInterceptor metricReportingServerInterceptor =
+        OrcaMetricReportingServerInterceptor.getInstance();
     String serverName = InProcessServerBuilder.generateName();
     grpcCleanupRule.register(
         InProcessServerBuilder
@@ -177,7 +184,7 @@ public class OrcaMetricReportingServerInterceptorTest {
   }
 
   @Test
-  public void responseTrailersContainAllReportedMetrics() {
+  public void responseTrailersContainAllReportedMetricsFromCallMetricRecorder() {
     applicationCostMetrics.put("cost1", 1231.4543);
     applicationCostMetrics.put("cost2", 0.1367);
     applicationCostMetrics.put("cost3", 7614.145);
@@ -186,6 +193,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     applicationUtilizationMetrics.put("util3", 0.5342);
     cpuUtilizationMetrics = 0.3465;
     memoryUtilizationMetrics = 0.764;
+    qpsMetrics = 3.1415926535;
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =
@@ -196,6 +204,54 @@ public class OrcaMetricReportingServerInterceptorTest {
         .containsExactly("cost1", 1231.4543, "cost2", 0.1367, "cost3", 7614.145);
     assertThat(report.getCpuUtilization()).isEqualTo(0.3465);
     assertThat(report.getMemUtilization()).isEqualTo(0.764);
+    assertThat(report.getRpsFractional()).isEqualTo(3.1415926535);
+  }
+
+  @Test
+  public void responseTrailersContainMergedMetricsFromCallMetricRecorderAndMetricRecorder() {
+    applicationUtilizationMetrics.put("util1", 0.1482);
+    applicationUtilizationMetrics.put("util2", 0.4036);
+    applicationUtilizationMetrics.put("util3", 0.5742);
+    cpuUtilizationMetrics = 0.3465;
+    memoryUtilizationMetrics = 0.967;
+    metricRecorder.setMemoryUtilizationMetric(0.764);
+    metricRecorder.setQpsMetric(1.618);
+    metricRecorder.putUtilizationMetric("serverUtil1", 0.7467);
+    metricRecorder.putUtilizationMetric("serverUtil2", 0.2233);
+    metricRecorder.putUtilizationMetric("util1", 0.01);
+    metricRecorder.putUtilizationMetric("util3", 0.99);
+
+    ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
+    Metadata receivedTrailers = trailersCapture.get();
+    OrcaLoadReport report =
+        receivedTrailers.get(OrcaMetricReportingServerInterceptor.ORCA_ENDPOINT_LOAD_METRICS_KEY);
+
+    assertThat(report.getUtilizationMap())
+        .containsExactly("util1", 0.1482, "util2", 0.4036, "util3", 0.5742, "serverUtil1", 0.7467,
+            "serverUtil2", 0.2233);
+    assertThat(report.getRequestCostMap()).isEmpty();
+    assertThat(report.getCpuUtilization()).isEqualTo(0.3465);
+    assertThat(report.getMemUtilization()).isEqualTo(0.967);
+    assertThat(report.getRpsFractional()).isEqualTo(1.618);
+  }
+
+  @Test
+  public void responseTrailersContainMergedMetricsFromCallMetricRecorderAndMetricRecorderNoMap() {
+    qpsMetrics = 5142.77;
+    metricRecorder.setCpuUtilizationMetric(0.314159);
+    metricRecorder.setMemoryUtilizationMetric(0.764);
+    metricRecorder.setQpsMetric(1.618);
+
+    ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
+    Metadata receivedTrailers = trailersCapture.get();
+    OrcaLoadReport report =
+        receivedTrailers.get(OrcaMetricReportingServerInterceptor.ORCA_ENDPOINT_LOAD_METRICS_KEY);
+
+    assertThat(report.getUtilizationMap()).isEmpty();
+    assertThat(report.getRequestCostMap()).isEmpty();
+    assertThat(report.getCpuUtilization()).isEqualTo(0.314159);
+    assertThat(report.getMemUtilization()).isEqualTo(0.764);
+    assertThat(report.getRpsFractional()).isEqualTo(5142.77);
   }
 
   private static final class TrailersCapturingClientInterceptor implements ClientInterceptor {

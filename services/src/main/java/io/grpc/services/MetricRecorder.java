@@ -39,14 +39,18 @@ public final class MetricRecorder {
   private MetricRecorder() {}
 
   /**
-   * Update the metrics value corresponding to the specified key.
+   * Update the metrics value in the range [0, 1] corresponding to the specified key. Values outside
+   * the valid range are ignored.
    */
   public void putUtilizationMetric(String key, double value) {
+    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+      return;
+    }
     metricsData.put(key, value);
   }
 
   /**
-   * Replace the whole metrics data using the specified map.
+   * Replace the whole metrics data using the specified map. No range validation.
    */
   public void setAllUtilizationMetrics(Map<String, Double> metrics) {
     metricsData = new ConcurrentHashMap<>(metrics);
@@ -60,9 +64,13 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the CPU utilization metrics data.
+   * Update the CPU utilization metrics data in the range [0, 1]. Values outside the valid range are
+   * ignored.
    */
   public void setCpuUtilizationMetric(double value) {
+    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+      return;
+    }
     cpuUtilization = value;
   }
 
@@ -74,9 +82,13 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the memory utilization metrics data.
+   * Update the memory utilization metrics data in the range [0, 1]. Values outside the valid range
+   * are ignored.
    */
   public void setMemoryUtilizationMetric(double value) {
+    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+      return;
+    }
     memoryUtilization = value;
   }
 
@@ -88,9 +100,12 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the QPS metrics data.
+   * Update the QPS metrics data in the range [0, inf). Values outside the valid range are ignored.
    */
   public void setQpsMetric(double value) {
+    if (!MetricRecorderHelper.isQpsValid(value)) {
+      return;
+    }
     qps = value;
   }
 

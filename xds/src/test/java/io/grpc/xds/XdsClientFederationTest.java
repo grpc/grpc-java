@@ -33,6 +33,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -125,7 +126,7 @@ public class XdsClientFederationTest {
    * starts {@link LoadReportClient}s to do that.
    */
   @Test
-  public void lrsClientsStartedForLocalityStats() throws InterruptedException {
+  public void lrsClientsStartedForLocalityStats() throws InterruptedException, ExecutionException {
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
@@ -144,16 +145,18 @@ public class XdsClientFederationTest {
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterLocalityStats(entry.getKey(), "clusterName", "edsServiceName",
           Locality.create("", "", ""));
+      waitForSyncContext(xdsClient);
       assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
+
 
   /**
    * Assures that when an {@link XdsClient} is asked to add cluster locality stats it appropriately
    * starts {@link LoadReportClient}s to do that.
    */
   @Test
-  public void lrsClientsStartedForDropStats() throws InterruptedException {
+  public void lrsClientsStartedForDropStats() throws InterruptedException, ExecutionException {
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
@@ -171,6 +174,7 @@ public class XdsClientFederationTest {
     // corresponding LRS client should be started
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
+      waitForSyncContext(xdsClient);
       assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
@@ -201,6 +205,14 @@ public class XdsClientFederationTest {
       loadStatManagers.add(entry.getValue().loadStatsManager);
     }
     assertThat(loadStatManagers).containsNoDuplicates();
+  }
+
+  // Waits for all SynchronizationContext tasks to finish, assuming no new ones get added.
+  private static void waitForSyncContext(XdsClient xdsClient)
+      throws InterruptedException, ExecutionException {
+    // We use this method just to have a task added to the sync context queue and wait for it to
+    // finish.
+    xdsClient.getSubscribedResourcesMetadataSnapshot().get();
   }
 
   private Map<String, ?> defaultBootstrapOverride() {

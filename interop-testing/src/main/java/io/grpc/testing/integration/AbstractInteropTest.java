@@ -1777,7 +1777,7 @@ public abstract class AbstractInteropTest {
     final TestOrcaReport answer2 = TestOrcaReport.newBuilder()
         .setCpuUtilization(0.29309)
         .setMemoryUtilization(0.2)
-        .putUtilization("util", 100.2039)
+        .putUtilization("util", 0.2039)
         .build();
 
     final int retryLimit = 5;
@@ -2175,7 +2175,7 @@ public abstract class AbstractInteropTest {
   /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#getAttributes()}. */
   protected void assertX500SubjectDn(String tlsInfo) {
     TestServiceGrpc.TestServiceBlockingStub stub =
-        blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
+        blockingStub.withDeadlineAfter(10, TimeUnit.SECONDS);
 
     stub.unaryCall(SimpleRequest.getDefaultInstance());
 

@@ -73,6 +73,7 @@ public final class BindServiceFlagsTest {
                 .setAutoCreate(true)
                 .setAdjustWithActivity(true)
                 .setAboveClient(true)
+                .setAllowActivityStarts(true)
                 .setAllowOomManagement(true)
                 .setImportant(true)
                 .setIncludeCapabilities(true)
@@ -90,6 +91,8 @@ public final class BindServiceFlagsTest {
                 | Context.BIND_INCLUDE_CAPABILITIES
                 | Context.BIND_NOT_FOREGROUND
                 | Context.BIND_NOT_PERCEPTIBLE
-                | Context.BIND_WAIVE_PRIORITY);
+                | Context.BIND_WAIVE_PRIORITY
+                // TODO(b/274061424): Use Context.BIND_ALLOW_ACTIVITY_STARTS when U is final.
+                | 0x200);
   }
 }

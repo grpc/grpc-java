@@ -150,7 +150,7 @@ public class OrcaServiceImplTest {
     call.halfClose();
     call.request(1);
     OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2)
-            .setRpsFractional(1.9).build();
+        .setRpsFractional(1.9).build();
     verify(listener).onMessage(eq(expect));
     reset(listener);
     defaultTestService.removeUtilizationMetric("buffer0");
@@ -215,12 +215,12 @@ public class OrcaServiceImplTest {
   public void testMultipleClients() {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
-    defaultTestService.putUtilizationMetric("omg", 100);
+    defaultTestService.putUtilizationMetric("omg", 1.00);
     call.start(listener, new Metadata());
     call.sendMessage(OrcaLoadReportRequest.newBuilder().build());
     call.halfClose();
     call.request(1);
-    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("omg", 100).build();
+    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("omg", 1.00).build();
     verify(listener).onMessage(eq(expect));
     defaultTestService.setMemoryUtilizationMetric(0.5);
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call2 = channel.newCall(
@@ -272,6 +272,16 @@ public class OrcaServiceImplTest {
     assertThat(reports.next()).isEqualTo(goldenReport);
     defaultTestService.removeUtilizationMetric("util-not-exist");
     defaultTestService.removeUtilizationMetric("queue-not-exist");
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    assertThat(reports.next()).isEqualTo(goldenReport);
+
+    defaultTestService.setCpuUtilizationMetric(-0.001);
+    defaultTestService.setCpuUtilizationMetric(1.001);
+    defaultTestService.setMemoryUtilizationMetric(-0.001);
+    defaultTestService.setMemoryUtilizationMetric(1.001);
+    defaultTestService.setQpsMetric(-0.001);
+    defaultTestService.putUtilizationMetric("util-out-of-range", -0.001);
+    defaultTestService.putUtilizationMetric("util-out-of-range", 1.001);
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
     assertThat(reports.next()).isEqualTo(goldenReport);
 
