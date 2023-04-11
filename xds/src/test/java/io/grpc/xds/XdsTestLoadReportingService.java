@@ -40,10 +40,12 @@ final class XdsTestLoadReportingService extends
 
       @Override
       public void onError(Throwable t) {
+        responseObserver.onError(t);
       }
 
       @Override
       public void onCompleted() {
+        responseObserver.onCompleted();
       }
     };
   }
