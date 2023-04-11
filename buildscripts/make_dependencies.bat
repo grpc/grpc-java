@@ -1,4 +1,4 @@
-set PROTOBUF_VER=21.7
+set PROTOBUF_VER=22.2
 set CMAKE_NAME=cmake-3.3.2-win32-x86
 
 if not exist "protobuf-%PROTOBUF_VER%\build\Release\" (

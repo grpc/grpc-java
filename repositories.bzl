@@ -143,6 +143,15 @@ def grpc_java_repositories():
                 "https://github.com/envoyproxy/data-plane-api/archive/b1d2e441133c00bfe8412dfd6e93ea85e66da9bb.tar.gz",
             ],
         )
+    if not native.existing_rule("com_google_googletest"):
+        http_archive(
+            name = "com_google_googletest",
+            sha256 = "730215d76eace9dd49bf74ce044e8daa065d175f1ac891cc1d6bb184ef94e565",
+            strip_prefix = "googletest-f53219cdcb7b084ef57414efea92ee5b71989558",
+            urls = [
+                "https://github.com/google/googletest/archive/f53219cdcb7b084ef57414efea92ee5b71989558.tar.gz",
+            ],
+        )
 
 def com_google_protobuf():
     # proto_library rules implicitly depend on @com_google_protobuf//:protoc,
@@ -150,18 +159,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "c72840a5081484c4ac20789ea5bb5d5de6bc7c477ad76e7109fda2bc4e630fe6",
-        strip_prefix = "protobuf-3.21.7",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.21.7.zip"],
+        sha256 = "bf1f92aebd619651220711e97b3d560cdc2484718cd56d95161bfb2fadb8628e",
+        strip_prefix = "protobuf-22.2",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v22.2/protobuf-22.2.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "c72840a5081484c4ac20789ea5bb5d5de6bc7c477ad76e7109fda2bc4e630fe6",
-        strip_prefix = "protobuf-3.21.7",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.21.7.zip"],
+        sha256 = "bf1f92aebd619651220711e97b3d560cdc2484718cd56d95161bfb2fadb8628e",
+        strip_prefix = "protobuf-22.2",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v22.2/protobuf-22.2.zip"],
     )
 
 def io_grpc_grpc_proto():

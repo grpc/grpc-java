@@ -28,6 +28,8 @@ load("@io_grpc_grpc_java//:repositories.bzl", "grpc_java_repositories")
 
 grpc_java_repositories()
 
+# Protobuf now requires C++14 or higher, which requires Bazel configuration
+# outside the WORKSPACE. See .bazelrc in this directory.
 load("@com_google_protobuf//:protobuf_deps.bzl", "PROTOBUF_MAVEN_ARTIFACTS")
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 

@@ -3,7 +3,7 @@
 # Build protoc
 set -evux -o pipefail
 
-PROTOBUF_VERSION=21.7
+PROTOBUF_VERSION=22.2
 
 # ARCH is x86_64 bit unless otherwise specified.
 ARCH="${ARCH:-x86_64}"

@@ -37,7 +37,8 @@ dependencies {
             libraries.opencensus.exporter.trace.stackdriver,
             project(':grpc-xds'), // Align grpc versions
             project(':grpc-services'), // Align grpc versions
-            ('com.google.protobuf:protobuf-java:3.21.12'),
+	    libraries.protobuf.java,
+	    libraries.protobuf.java.util, // Use our newer version
             ('com.google.api.grpc:proto-google-common-protos:2.14.2'),
             ('com.google.auth:google-auth-library-oauth2-http:1.16.0'),
             ('io.opencensus:opencensus-api:0.31.1'),
