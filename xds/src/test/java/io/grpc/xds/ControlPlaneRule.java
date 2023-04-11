@@ -83,6 +83,7 @@ public class ControlPlaneRule extends TestWatcher {
   private String serverHostName;
   private Server server;
   private XdsTestControlPlaneService controlPlaneService;
+  private XdsTestLoadReportingService loadReportingService;
   private XdsNameResolverProvider nameResolverProvider;
 
   public ControlPlaneRule() {
@@ -112,8 +113,10 @@ public class ControlPlaneRule extends TestWatcher {
     // Start the control plane server.
     try {
       controlPlaneService = new XdsTestControlPlaneService();
+      loadReportingService = new XdsTestLoadReportingService();
       NettyServerBuilder controlPlaneServerBuilder = NettyServerBuilder.forPort(0)
-          .addService(controlPlaneService);
+          .addService(controlPlaneService)
+          .addService(loadReportingService);
       server = controlPlaneServerBuilder.build().start();
     } catch (Exception e) {
       throw new AssertionError("unable to start the control plane server", e);
