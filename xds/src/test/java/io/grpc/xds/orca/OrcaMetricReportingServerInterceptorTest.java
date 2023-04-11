@@ -215,7 +215,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     cpuUtilizationMetrics = 0.3465;
     memoryUtilizationMetrics = 0.967;
     metricRecorder.setMemoryUtilizationMetric(0.764);
-    metricRecorder.setQps(1.618);
+    metricRecorder.setQpsMetric(1.618);
     metricRecorder.putUtilizationMetric("serverUtil1", 0.7467);
     metricRecorder.putUtilizationMetric("serverUtil2", 0.2233);
     metricRecorder.putUtilizationMetric("util1", 0.01);
@@ -240,7 +240,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     qpsMetrics = 5142.77;
     metricRecorder.setCpuUtilizationMetric(0.314159);
     metricRecorder.setMemoryUtilizationMetric(0.764);
-    metricRecorder.setQps(1.618);
+    metricRecorder.setQpsMetric(1.618);
 
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();

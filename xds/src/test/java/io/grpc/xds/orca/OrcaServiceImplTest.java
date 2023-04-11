@@ -143,7 +143,7 @@ public class OrcaServiceImplTest {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
     defaultTestService.putUtilizationMetric("buffer", 0.2);
-    defaultTestService.setQps(1.9);
+    defaultTestService.setQpsMetric(1.9);
     call.start(listener, new Metadata());
     call.sendMessage(OrcaLoadReportRequest.newBuilder()
         .setReportInterval(Duration.newBuilder().setSeconds(0).setNanos(500).build()).build());
@@ -154,7 +154,7 @@ public class OrcaServiceImplTest {
     verify(listener).onMessage(eq(expect));
     reset(listener);
     defaultTestService.removeUtilizationMetric("buffer0");
-    defaultTestService.clearQps();
+    defaultTestService.clearQpsMetric();
     assertThat(fakeClock.forwardTime(500, TimeUnit.NANOSECONDS)).isEqualTo(0);
     verifyNoInteractions(listener);
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(1);
@@ -255,14 +255,14 @@ public class OrcaServiceImplTest {
     defaultTestService.setMemoryUtilizationMetric(goldenReport.getMemUtilization());
     defaultTestService.setAllUtilizationMetrics(firstUtilization);
     defaultTestService.putUtilizationMetric("queue", 1.0);
-    defaultTestService.setQps(1239.01);
+    defaultTestService.setQpsMetric(1239.01);
     Iterator<OrcaLoadReport> reports = OpenRcaServiceGrpc.newBlockingStub(channel)
         .streamCoreMetrics(OrcaLoadReportRequest.newBuilder().build());
     assertThat(reports.next()).isEqualTo(goldenReport);
 
     defaultTestService.clearCpuUtilizationMetric();
     defaultTestService.clearMemoryUtilizationMetric();
-    defaultTestService.clearQps();
+    defaultTestService.clearQpsMetric();
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
     goldenReport = OrcaLoadReport.newBuilder()
         .putAllUtilization(firstUtilization)
@@ -279,7 +279,7 @@ public class OrcaServiceImplTest {
     defaultTestService.setCpuUtilizationMetric(1.001);
     defaultTestService.setMemoryUtilizationMetric(-0.001);
     defaultTestService.setMemoryUtilizationMetric(1.001);
-    defaultTestService.setQps(-0.001);
+    defaultTestService.setQpsMetric(-0.001);
     defaultTestService.putUtilizationMetric("util-out-of-range", -0.001);
     defaultTestService.putUtilizationMetric("util-out-of-range", 1.001);
     fakeClock.forwardTime(1, TimeUnit.SECONDS);

@@ -102,7 +102,7 @@ public final class MetricRecorder {
   /**
    * Update the QPS metrics data in the range [0, inf). Values outside the valid range are ignored.
    */
-  public void setQps(double value) {
+  public void setQpsMetric(double value) {
     if (!MetricRecorderHelper.isQpsValid(value)) {
       return;
     }
@@ -112,7 +112,7 @@ public final class MetricRecorder {
   /**
    * Clear the QPS metrics data.
    */
-  public void clearQps() {
+  public void clearQpsMetric() {
     qps = 0;
   }
 
