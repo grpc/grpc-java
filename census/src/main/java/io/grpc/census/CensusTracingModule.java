@@ -324,7 +324,6 @@ final class CensusTracingModule {
     @Override
     public void createPendingStream() {
       isPendingStream = true;
-      span.addAnnotation("Delayed name resolution complete");
     }
 
     @Override

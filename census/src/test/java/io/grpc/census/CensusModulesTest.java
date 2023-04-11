@@ -768,7 +768,6 @@ public class CensusModulesTest {
         .putAttribute("previous-rpc-attempts", AttributeValue.longAttributeValue(0));
     inOrder.verify(spyAttemptSpan)
         .putAttribute("transparent-retry", AttributeValue.booleanAttributeValue(false));
-    inOrder.verify(spyAttemptSpan).addAnnotation("Delayed name resolution complete");
     inOrder.verify(spyAttemptSpan).addAnnotation("Delayed LB pick complete");
     inOrder.verify(spyAttemptSpan, times(2)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
