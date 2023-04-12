@@ -27,6 +27,11 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
 @ThreadSafe
 public abstract class ClientStreamTracer extends StreamTracer {
+  /**
+   * The call was delayed due to waiting for name resolution result.
+   */
+  public static final CallOptions.Key<Boolean> isResolutionDelay =
+      CallOptions.Key.createWithDefault("Name resolution delay", false);
 
   /**
    * The stream is being created on a ready transport.

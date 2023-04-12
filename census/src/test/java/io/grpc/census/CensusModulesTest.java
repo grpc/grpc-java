@@ -18,6 +18,7 @@ package io.grpc.census;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.ClientStreamTracer.isResolutionDelay;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRIES_PER_CALL;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRY_DELAY_PER_CALL;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.TRANSPARENT_RETRIES_PER_CALL;
@@ -132,7 +133,8 @@ public class CensusModulesTest {
   private static final CallOptions CALL_OPTIONS =
       CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      ClientStreamTracer.StreamInfo.newBuilder().build();
+      ClientStreamTracer.StreamInfo.newBuilder()
+          .setCallOptions(CallOptions.DEFAULT.withOption(isResolutionDelay, true)).build();
 
   private static class StringInputStream extends InputStream {
     final String string;
@@ -768,6 +770,7 @@ public class CensusModulesTest {
         .putAttribute("previous-rpc-attempts", AttributeValue.longAttributeValue(0));
     inOrder.verify(spyAttemptSpan)
         .putAttribute("transparent-retry", AttributeValue.booleanAttributeValue(false));
+    inOrder.verify(spyClientSpan).addAnnotation("Delayed name resolution complete");
     inOrder.verify(spyAttemptSpan).addAnnotation("Delayed LB pick complete");
     inOrder.verify(spyAttemptSpan, times(2)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
