@@ -4,21 +4,14 @@
 set -evux -o pipefail
 
 PROTOBUF_VERSION=22.2
+ABSL_VERSION=20230125.2
 
 # ARCH is x86_64 bit unless otherwise specified.
 ARCH="${ARCH:-x86_64}"
 DOWNLOAD_DIR=/tmp/source
 INSTALL_DIR="/tmp/protobuf-cache/$PROTOBUF_VERSION/$(uname -s)-$ARCH"
 mkdir -p $DOWNLOAD_DIR
-
-# Start with a sane default
-NUM_CPU=4
-if [[ $(uname) == 'Linux' ]]; then
-    NUM_CPU=$(nproc)
-fi
-if [[ $(uname) == 'Darwin' ]]; then
-    NUM_CPU=$(sysctl -n hw.ncpu)
-fi
+cd "$DOWNLOAD_DIR"
 
 # Make protoc
 # Can't check for presence of directory as cache auto-creates it.
@@ -26,12 +19,21 @@ if [ -f ${INSTALL_DIR}/bin/protoc ]; then
   echo "Not building protobuf. Already built"
 # TODO(ejona): swap to `brew install --devel protobuf` once it is up-to-date
 else
-  if [[ ! -d "$DOWNLOAD_DIR"/protobuf-"${PROTOBUF_VERSION}" ]]; then
-    curl -Ls https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-all-${PROTOBUF_VERSION}.tar.gz | tar xz -C $DOWNLOAD_DIR
+  if [[ ! -d "protobuf-${PROTOBUF_VERSION}" ]]; then
+    curl -Ls "https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.gz" | tar xz
+    curl -Ls "https://github.com/abseil/abseil-cpp/archive/refs/tags/${ABSL_VERSION}.tar.gz" | tar xz
+    rmdir "protobuf-$PROTOBUF_VERSION/third_party/abseil-cpp"
+    mv "abseil-cpp-$ABSL_VERSION" "protobuf-$PROTOBUF_VERSION/third_party/abseil-cpp"
   fi
-  pushd $DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}
+  # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
+  rm -rf "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}/build"
+  mkdir "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}/build"
+  pushd "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}/build"
   # install here so we don't need sudo
-  if [[ "$ARCH" == x86* ]]; then
+  if [[ "$ARCH" == x86_64 ]]; then
+    cmake .. -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
+  elif [[ "$ARCH" == x86_32* ]]; then
     ./configure CFLAGS=-m${ARCH#*_} CXXFLAGS=-m${ARCH#*_} --disable-shared \
       --prefix="$INSTALL_DIR"
   elif [[ "$ARCH" == aarch* ]]; then
@@ -43,10 +45,8 @@ else
   elif [[ "$ARCH" == loongarch* ]]; then
     ./configure --disable-shared --host=loongarch64-unknown-linux-gnu --prefix="$INSTALL_DIR"
   fi
-  # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
-  make clean
-  make V=0 -j$NUM_CPU
-  make install
+  cmake --build . -j
+  cmake --install .
   popd
 fi
 
