@@ -8,7 +8,7 @@ guava = "31.1-android"
 netty = '4.1.87.Final'
 nettytcnative = '2.0.56.Final'
 opencensus = "0.31.0"
-protobuf = "3.21.7"
+protobuf = "3.22.3"
 
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"
@@ -36,6 +36,7 @@ gson = "com.google.code.gson:gson:2.9.0"
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
 guava-testlib = { module = "com.google.guava:guava-testlib", version.ref = "guava" }
+guava-jre = "com.google.guava:guava:31.1-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.1.12"
 javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
 jetty-alpn-agent = "org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.10"

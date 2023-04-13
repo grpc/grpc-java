@@ -19,7 +19,7 @@ dependencies {
             project(':grpc-stub'),
             libraries.protobuf.java,
             libraries.conscrypt,
-            libraries.guava,
+            libraries.guava.jre, // JRE required by protobuf-java-util from grpclb
             libraries.google.auth.oauth2Http
     def nettyDependency = implementation project(':grpc-netty')
     compileOnly libraries.javax.annotation

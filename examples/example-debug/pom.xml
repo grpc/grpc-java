@@ -13,7 +13,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <grpc.version>1.55.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protoc.version>3.21.7</protoc.version>
+    <protoc.version>3.22.3</protoc.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
@@ -54,6 +54,11 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-netty-shaded</artifactId>
       <scope>runtime</scope>
+    </dependency>
+    <dependency> <!-- prevent downgrade of version in protobuf-java-util from grpc-services -->
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>31.1-jre</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>

@@ -11,7 +11,8 @@ description = "gRPC: Authorization"
 
 dependencies {
     implementation project(':grpc-protobuf'),
-            project(':grpc-core')
+            project(':grpc-core'),
+            libraries.guava.jre // JRE required by transitive protobuf-java-util
 
     annotationProcessor libraries.auto.value
     compileOnly libraries.javax.annotation
