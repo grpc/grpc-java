@@ -30,8 +30,9 @@ public abstract class ClientStreamTracer extends StreamTracer {
   /**
    * The call was delayed due to waiting for name resolution result.
    */
-  public static final CallOptions.Key<Boolean> isResolutionDelay =
-      CallOptions.Key.createWithDefault("Name resolution delay", false);
+  public static final CallOptions.Key<Boolean> NAME_RESOLUTION_DELAYED =
+      CallOptions.Key.createWithDefault("io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED",
+          false);
 
   /**
    * The stream is being created on a ready transport.

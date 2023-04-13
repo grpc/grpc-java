@@ -17,7 +17,7 @@
 package io.grpc.census;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.ClientStreamTracer.isResolutionDelay;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.census.internal.ObservabilityCensusConstants.CLIENT_TRACE_SPAN_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -270,7 +270,7 @@ final class CensusTracingModule {
           "previous-rpc-attempts", AttributeValue.longAttributeValue(info.getPreviousAttempts()));
       attemptSpan.putAttribute(
           "transparent-retry", AttributeValue.booleanAttributeValue(info.isTransparentRetry()));
-      if (info.getCallOptions().getOption(isResolutionDelay)) {
+      if (info.getCallOptions().getOption(NAME_RESOLUTION_DELAYED)) {
         span.addAnnotation("Delayed name resolution complete");
       }
       return new ClientTracer(attemptSpan, span, tracingHeader, isSampledToLocalTracing);

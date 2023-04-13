@@ -19,7 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.ClientStreamTracer.isResolutionDelay;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
@@ -1086,7 +1086,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         ClientCall<ReqT, RespT> realCall;
         Context previous = context.attach();
         try {
-          CallOptions delayResolutionOption = callOptions.withOption(isResolutionDelay, true);
+          CallOptions delayResolutionOption = callOptions.withOption(NAME_RESOLUTION_DELAYED, true);
           realCall = newClientCall(method, delayResolutionOption);
         } finally {
           context.detach(previous);

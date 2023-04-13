@@ -18,7 +18,7 @@ package io.grpc.census;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.ClientStreamTracer.isResolutionDelay;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRIES_PER_CALL;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRY_DELAY_PER_CALL;
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.TRANSPARENT_RETRIES_PER_CALL;
@@ -134,7 +134,7 @@ public class CensusModulesTest {
       CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder()
-          .setCallOptions(CallOptions.DEFAULT.withOption(isResolutionDelay, true)).build();
+          .setCallOptions(CallOptions.DEFAULT.withOption(NAME_RESOLUTION_DELAYED, true)).build();
 
   private static class StringInputStream extends InputStream {
     final String string;

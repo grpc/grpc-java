@@ -19,7 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.ClientStreamTracer.isResolutionDelay;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -1113,7 +1113,7 @@ public class ManagedChannelImplTest {
         same(method), any(Metadata.class), callOptionsCaptor.capture(),
         tracersCaptor.capture());
     assertThat(Arrays.asList(tracersCaptor.getValue()).contains(tracer)).isTrue();
-    assertThat(callOptionsCaptor.getValue().getOption(isResolutionDelay)).isTrue();
+    assertThat(callOptionsCaptor.getValue().getOption(NAME_RESOLUTION_DELAYED)).isTrue();
   }
 
   @Test
