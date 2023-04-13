@@ -58,8 +58,9 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Test Reports (JRE ${{ matrix.jre }})
-        path: ./*/build/reports/tests/**
-        path: ./*/*/build/reports/tests/**
+        path: |
+          ./*/build/reports/tests/**
+          ./*/*/build/reports/tests/**
         retention-days: 14
     - name: Check for modified codegen
       run: test -z "$(git status --porcelain)" || (git status && echo Error Working directory is not clean. Forget to commit generated files? && false)
