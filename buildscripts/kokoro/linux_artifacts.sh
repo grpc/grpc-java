@@ -11,7 +11,7 @@ readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 trap spongify_logs EXIT
 
 "$GRPC_JAVA_DIR"/buildscripts/build_docker.sh
-"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-x86 /grpc-java/buildscripts/build_artifacts_in_docker.sh
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-x86 scl enable devtoolset-7 /grpc-java/buildscripts/build_artifacts_in_docker.sh
 
 # grpc-android, grpc-cronet and grpc-binder require the Android SDK, so build outside of Docker and
 # use --include-build for its grpc-core dependency
