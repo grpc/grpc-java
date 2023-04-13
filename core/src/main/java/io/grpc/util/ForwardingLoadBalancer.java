@@ -35,6 +35,11 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    return delegate().acceptResolvedAddresses(resolvedAddresses);
+  }
+
+  @Override
   public void handleNameResolutionError(Status error) {
     delegate().handleNameResolutionError(error);
   }
