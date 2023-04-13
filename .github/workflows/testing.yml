@@ -72,3 +72,22 @@ jobs:
       run: ./gradlew :grpc-all:coveralls -PskipAndroid=true -x compileJava
     - name: Codecov
       uses: codecov/codecov-action@v3
+
+  bazel:
+    runs-on: ubuntu-latest
+    env:
+      USE_BAZEL_VERSION: 5.0.0
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Bazel cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/bazel/*/cache
+          ~/.cache/bazelisk/downloads
+        key: ${{ runner.os }}-bazel-${{ env.USE_BAZEL_VERSION }}-${{ hashFiles('WORKSPACE', 'repositories.bzl') }}
+
+    - name: Run bazel build
+      run: bazelisk build //...
