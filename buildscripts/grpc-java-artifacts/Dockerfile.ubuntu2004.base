@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
@@ -7,8 +7,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
         build-essential \
         ca-certificates \
         curl \
-        g++-aarch64-linux-gnu \
-        g++-powerpc64le-linux-gnu \
+        g++-s390x-linux-gnu \
         openjdk-8-jdk \
         && \
     rm -rf /var/lib/apt/lists/*
