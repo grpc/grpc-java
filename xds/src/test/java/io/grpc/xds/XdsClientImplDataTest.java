@@ -198,7 +198,7 @@ public class XdsClientImplDataTest {
                     .setCluster("cluster-foo"))
             .build();
     StructOrError<Route> struct = XdsRouteConfigureResource.parseRoute(
-        proto, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
+        proto, filterRegistry, ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct())
         .isEqualTo(
@@ -221,7 +221,7 @@ public class XdsClientImplDataTest {
             .setNonForwardingAction(NonForwardingAction.getDefaultInstance())
             .build();
     StructOrError<Route> struct = XdsRouteConfigureResource.parseRoute(
-        proto, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
+        proto, filterRegistry, ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct())
         .isEqualTo(
             Route.forNonForwardingAction(
@@ -240,7 +240,7 @@ public class XdsClientImplDataTest {
             .setRedirect(RedirectAction.getDefaultInstance())
             .build();
     res = XdsRouteConfigureResource.parseRoute(
-        redirectRoute, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
+        redirectRoute, filterRegistry, ImmutableMap.of(), ImmutableSet.of());
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unknown action type: REDIRECT");
@@ -252,7 +252,7 @@ public class XdsClientImplDataTest {
             .setDirectResponse(DirectResponseAction.getDefaultInstance())
             .build();
     res = XdsRouteConfigureResource.parseRoute(
-        directResponseRoute, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
+        directResponseRoute, filterRegistry, ImmutableMap.of(), ImmutableSet.of());
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unknown action type: DIRECT_RESPONSE");
@@ -264,7 +264,7 @@ public class XdsClientImplDataTest {
             .setFilterAction(FilterAction.getDefaultInstance())
             .build();
     res = XdsRouteConfigureResource.parseRoute(
-        filterRoute, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of());
+        filterRoute, filterRegistry, ImmutableMap.of(), ImmutableSet.of());
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unknown action type: FILTER_ACTION");
@@ -286,7 +286,7 @@ public class XdsClientImplDataTest {
                     .setCluster("cluster-foo"))
             .build();
     assertThat(XdsRouteConfigureResource.parseRoute(
-            proto, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of()))
+            proto, filterRegistry, ImmutableMap.of(), ImmutableSet.of()))
         .isNull();
   }
 
@@ -303,7 +303,7 @@ public class XdsClientImplDataTest {
                     .setClusterHeader("cluster header"))  // cluster_header action not supported
             .build();
     assertThat(XdsRouteConfigureResource.parseRoute(
-            proto, filterRegistry, false, ImmutableMap.of(), ImmutableSet.of()))
+            proto, filterRegistry, ImmutableMap.of(), ImmutableSet.of()))
         .isNull();
   }
 
@@ -512,7 +512,7 @@ public class XdsClientImplDataTest {
             .setCluster("cluster-foo")
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
           ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
@@ -536,7 +536,7 @@ public class XdsClientImplDataTest {
                         .setWeight(UInt32Value.newBuilder().setValue(70))))
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
           ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isNull();
@@ -562,7 +562,7 @@ public class XdsClientImplDataTest {
                         .setWeight(UInt32Value.newBuilder().setValue(0))))
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
             ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isEqualTo("Sum of cluster weights should be above 0.");
   }
@@ -578,7 +578,7 @@ public class XdsClientImplDataTest {
                     .setMaxStreamDuration(Durations.fromMillis(20L)))
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
             ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().timeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
@@ -593,7 +593,7 @@ public class XdsClientImplDataTest {
                     .setMaxStreamDuration(Durations.fromSeconds(5L)))
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
            ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().timeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
@@ -605,7 +605,7 @@ public class XdsClientImplDataTest {
             .setCluster("cluster-foo")
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
           ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().timeoutNano()).isNull();
   }
@@ -627,7 +627,7 @@ public class XdsClientImplDataTest {
             .setRetryPolicy(builder.build())
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
           ImmutableMap.of(), ImmutableSet.of());
     RouteAction.RetryPolicy retryPolicy = struct.getStruct().retryPolicy();
     assertThat(retryPolicy.maxAttempts()).isEqualTo(4);
@@ -651,7 +651,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder.build())
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy()).isNotNull();
     assertThat(struct.getStruct().retryPolicy().retryableStatusCodes()).isEmpty();
@@ -664,7 +664,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail()).isEqualTo("No base_interval specified in retry_backoff");
 
@@ -674,7 +674,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     retryPolicy = struct.getStruct().retryPolicy();
     assertThat(retryPolicy.maxBackoff()).isEqualTo(Durations.fromMillis(500 * 10));
@@ -685,7 +685,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail())
         .isEqualTo("base_interval in retry_backoff must be positive");
@@ -698,7 +698,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail())
         .isEqualTo("max_interval in retry_backoff cannot be less than base_interval");
@@ -711,7 +711,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getErrorDetail())
         .isEqualTo("max_interval in retry_backoff cannot be less than base_interval");
@@ -724,7 +724,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy().initialBackoff())
         .isEqualTo(Durations.fromMillis(1));
@@ -740,7 +740,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     retryPolicy = struct.getStruct().retryPolicy();
     assertThat(retryPolicy.initialBackoff()).isEqualTo(Durations.fromMillis(25));
@@ -759,7 +759,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
         .containsExactly(Code.CANCELLED);
@@ -777,7 +777,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
         .containsExactly(Code.CANCELLED);
@@ -795,7 +795,7 @@ public class XdsClientImplDataTest {
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)
         .build();
-    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+    struct = XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
         ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
         .containsExactly(Code.CANCELLED);
@@ -834,7 +834,7 @@ public class XdsClientImplDataTest {
                         QueryParameter.newBuilder().setName("param"))) // unsupported
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
             ImmutableMap.of(), ImmutableSet.of());
     List<HashPolicy> policies = struct.getStruct().hashPolicies();
     assertThat(policies).hasSize(2);
@@ -854,7 +854,7 @@ public class XdsClientImplDataTest {
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
             ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct).isNull();
   }
@@ -867,7 +867,7 @@ public class XdsClientImplDataTest {
             .setClusterSpecifierPlugin(CLUSTER_SPECIFIER_PLUGIN.name())
             .build();
     StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry, false,
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
             ImmutableMap.of(), ImmutableSet.of());
     assertThat(struct).isNull();
   }
@@ -880,7 +880,7 @@ public class XdsClientImplDataTest {
             .setWeight(UInt32Value.newBuilder().setValue(30))
             .build();
     ClusterWeight clusterWeight =
-        XdsRouteConfigureResource.parseClusterWeight(proto, filterRegistry, false).getStruct();
+        XdsRouteConfigureResource.parseClusterWeight(proto, filterRegistry).getStruct();
     assertThat(clusterWeight.name()).isEqualTo("cluster-foo");
     assertThat(clusterWeight.weight()).isEqualTo(30);
   }

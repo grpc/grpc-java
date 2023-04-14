@@ -510,7 +510,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     // Parse inlined RouteConfiguration or RDS.
     if (proto.hasRouteConfig()) {
       List<VirtualHost> virtualHosts = extractVirtualHosts(
-          proto.getRouteConfig(), filterRegistry, true);
+          proto.getRouteConfig(), filterRegistry);
       return io.grpc.xds.HttpConnectionManager.forVirtualHosts(
           maxStreamDuration, virtualHosts, filterConfigs);
     }
