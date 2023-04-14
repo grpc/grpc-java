@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -1069,6 +1070,50 @@ public class ManagedChannelImplTest {
 
     // Exception thrown from balancer is caught by ChannelExecutor, making channel enter panic mode.
     verifyPanicMode(ex);
+  }
+
+  @Test
+  public void delayedNameResolution() {
+    ClientStream mockStream = mock(ClientStream.class);
+    final ClientStreamTracer tracer = new ClientStreamTracer() {};
+    ClientStreamTracer.Factory factory = new ClientStreamTracer.Factory() {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        return tracer;
+      }
+    };
+    FakeNameResolverFactory nsFactory = new FakeNameResolverFactory.Builder(expectedUri)
+        .setResolvedAtStart(false).build();
+    channelBuilder.nameResolverFactory(nsFactory);
+    createChannel();
+
+    CallOptions callOptions = CallOptions.DEFAULT.withStreamTracerFactory(factory);
+    ClientCall<String, Integer> call = channel.newCall(method, callOptions);
+    call.start(mockCallListener, new Metadata());
+
+    nsFactory.allResolved();
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    MockClientTransportInfo transportInfo = transports.poll();
+    transportInfo.listener.transportReady();
+    ClientTransport mockTransport = transportInfo.transport;
+    when(mockTransport.newStream(
+        any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class),
+        ArgumentMatchers.<ClientStreamTracer[]>any()))
+        .thenReturn(mockStream);
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
+        PickResult.withSubchannel(subchannel));
+
+    updateBalancingStateSafely(helper, READY, mockPicker);
+    assertEquals(2, executor.runDueTasks());
+
+    verify(mockPicker).pickSubchannel(any(PickSubchannelArgs.class));
+    verify(mockTransport).newStream(
+        same(method), any(Metadata.class), callOptionsCaptor.capture(),
+        tracersCaptor.capture());
+    assertThat(Arrays.asList(tracersCaptor.getValue()).contains(tracer)).isTrue();
+    assertThat(callOptionsCaptor.getValue().getOption(NAME_RESOLUTION_DELAYED)).isTrue();
   }
 
   @Test
