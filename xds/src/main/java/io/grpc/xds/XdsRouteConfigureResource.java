@@ -119,7 +119,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
     return processRouteConfiguration((RouteConfiguration) unpackedMessage,
-        args.filterRegistry, enableFaultInjection);
+        args.filterRegistry, true);
   }
 
   private static RdsUpdate processRouteConfiguration(
@@ -424,7 +424,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
       }
     }
     RetryPolicy retryPolicy = null;
-    if (enableRetry && proto.hasRetryPolicy()) {
+    if (proto.hasRetryPolicy()) {
       StructOrError<RetryPolicy> retryPolicyOrError = parseRetryPolicy(proto.getRetryPolicy());
       if (retryPolicyOrError != null) {
         if (retryPolicyOrError.getErrorDetail() != null) {

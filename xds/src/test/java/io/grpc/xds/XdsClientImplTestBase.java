@@ -283,8 +283,6 @@ public abstract class XdsClientImplTestBase {
   private ManagedChannel channelForCustomAuthority;
   private ManagedChannel channelForEmptyAuthority;
   private XdsClientImpl xdsClient;
-  private boolean originalEnableFaultInjection;
-  private boolean originalEnableRbac;
   private boolean originalEnableLeastRequest;
   private boolean originalEnableFederation;
   private Server xdsServer;
@@ -301,10 +299,6 @@ public abstract class XdsClientImplTestBase {
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);
 
     // Start the server and the client.
-    originalEnableFaultInjection = XdsResourceType.enableFaultInjection;
-    XdsResourceType.enableFaultInjection = true;
-    originalEnableRbac = XdsResourceType.enableRbac;
-    assertThat(originalEnableRbac).isTrue();
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     XdsResourceType.enableLeastRequest = true;
     originalEnableFederation = BootstrapperImpl.enableFederation;
@@ -380,8 +374,6 @@ public abstract class XdsClientImplTestBase {
 
   @After
   public void tearDown() {
-    XdsResourceType.enableFaultInjection = originalEnableFaultInjection;
-    XdsResourceType.enableRbac = originalEnableRbac;
     XdsResourceType.enableLeastRequest = originalEnableLeastRequest;
     BootstrapperImpl.enableFederation = originalEnableFederation;
     xdsClient.shutdown();
@@ -2255,8 +2247,6 @@ public abstract class XdsClientImplTestBase {
   @SuppressWarnings("deprecation")
   public void cdsResponseWithOutlierDetection() {
     Assume.assumeTrue(useProtocolV3());
-    XdsClusterResource.enableOutlierDetection = true;
-
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
 
@@ -2321,53 +2311,12 @@ public abstract class XdsClientImplTestBase {
   }
 
   /**
-   * CDS response containing OutlierDetection for a cluster, but support has not been enabled.
-   */
-  @Test
-  @SuppressWarnings("deprecation")
-  public void cdsResponseWithOutlierDetection_supportDisabled() {
-    Assume.assumeTrue(useProtocolV3());
-    XdsClusterResource.enableOutlierDetection = false;
-
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
-        cdsResourceWatcher);
-
-    OutlierDetection outlierDetectionXds = OutlierDetection.newBuilder()
-        .setInterval(Durations.fromNanos(100)).build();
-
-    // Management server sends back CDS response with UpstreamTlsContext.
-    Any clusterEds =
-        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
-            null, null, true,
-            mf.buildUpstreamTlsContext("cert-instance-name", "cert1"),
-            "envoy.transport_sockets.tls", null, outlierDetectionXds));
-    List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
-            "dns-service-bar.googleapis.com", 443, "round_robin", null, null,false, null, null)),
-        clusterEds,
-        Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, null,
-            false, null, "envoy.transport_sockets.tls", null, outlierDetectionXds)));
-    call.sendResponse(CDS, clusters, VERSION_1, "0000");
-
-    // Client sent an ACK CDS request.
-    call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-
-    assertThat(cdsUpdate.outlierDetection()).isNull();
-
-    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
-    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
-  }
-
-  /**
    * CDS response containing OutlierDetection for a cluster.
    */
   @Test
   @SuppressWarnings("deprecation")
   public void cdsResponseWithInvalidOutlierDetectionNacks() {
     Assume.assumeTrue(useProtocolV3());
-    XdsClusterResource.enableOutlierDetection = true;
 
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
