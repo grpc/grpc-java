@@ -20,6 +20,7 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.ForwardingTestUtil;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.ResolvedAddresses;
 import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -43,6 +44,7 @@ public class ForwardingLoadBalancerTest {
         LoadBalancer.class,
         mockDelegate,
         new TestBalancer(),
-        Arrays.asList());
+        Arrays.asList(
+            LoadBalancer.class.getMethod("acceptResolvedAddresses", ResolvedAddresses.class)));
   }
 }
