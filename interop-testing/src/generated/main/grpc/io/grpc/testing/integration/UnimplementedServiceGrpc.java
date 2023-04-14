@@ -65,6 +65,21 @@ public final class UnimplementedServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static UnimplementedServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<UnimplementedServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<UnimplementedServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public UnimplementedServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new UnimplementedServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return UnimplementedServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static UnimplementedServiceBlockingStub newBlockingStub(
@@ -162,6 +177,37 @@ public final class UnimplementedServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service UnimplementedService.
+   * <pre>
+   * A simple service NOT implemented at servers so clients can test for
+   * that case.
+   * </pre>
+   */
+  public static final class UnimplementedServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingV2Stub> {
+    private UnimplementedServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected UnimplementedServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new UnimplementedServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * A call that no server should implement
+     * </pre>
+     */
+    public io.grpc.testing.integration.EmptyProtos.Empty unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getUnimplementedCallMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.

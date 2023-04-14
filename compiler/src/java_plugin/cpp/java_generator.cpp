@@ -355,13 +355,15 @@ enum StubType {
   BLOCKING_CLIENT_IMPL = 5,
   FUTURE_CLIENT_IMPL = 6,
   ABSTRACT_CLASS = 7,
-  NONE = 8,
+  BLOCKING_V2_CLIENT_IMPL = 8,
+  NONE = 999,
 };
 
 enum CallType {
   ASYNC_CALL = 0,
   BLOCKING_CALL = 1,
-  FUTURE_CALL = 2
+  FUTURE_CALL = 2,
+  BLOCKING_V2_CALL = 3,
 };
 
 // TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
@@ -410,6 +412,9 @@ static void GrpcWriteServiceDocComment(Printer* printer,
       printer->Print(vars, " * A stub to allow clients to do asynchronous rpc calls to service $service$.\n");
       break;
     case BLOCKING_CLIENT_IMPL:
+      printer->Print(vars, " * A stub to allow clients to do llimited synchronous rpc calls to service $service$.\n");
+      break;
+    case BLOCKING_V2_CLIENT_IMPL:
       printer->Print(vars, " * A stub to allow clients to do synchronous rpc calls to service $service$.\n");
       break;
     case FUTURE_CLIENT_IMPL:
@@ -555,6 +560,9 @@ static void PrintStubFactory(
     case BLOCKING_CLIENT_IMPL:
       stub_type_name = "Blocking";
       break;
+    case BLOCKING_V2_CLIENT_IMPL:
+      stub_type_name = "BlockingV2";
+      break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot generate StubFactory for StubType: " << type;
   }
@@ -595,6 +603,11 @@ static void PrintStub(
     case BLOCKING_CLIENT_IMPL:
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
+      stub_base_class_name = "AbstractBlockingStub";
+      break;
+    case BLOCKING_V2_CLIENT_IMPL:
+      call_type = BLOCKING_V2_CALL;
+      stub_name += "BlockingV2Stub";
       stub_base_class_name = "AbstractBlockingStub";
       break;
     case FUTURE_CLIENT_IMPL:
@@ -679,7 +692,6 @@ static void PrintStub(
 
     // Method signature
     p->Print("\n");
-    // TODO(nmittler): Replace with WriteMethodDocComment once included by the protobuf distro.
     GrpcWriteMethodDocComment(p, method);
 
     if (method->options().deprecated()) {
@@ -695,7 +707,12 @@ static void PrintStub(
       case BLOCKING_CALL:
         GRPC_CODEGEN_CHECK(!client_streaming)
             << "Blocking client interface with client streaming is unavailable";
-        if (server_streaming) {
+        if (client_streaming && server_streaming) {
+          p->Print(
+              *vars,
+              "$BlockingClientCall$<$input_type$, $output_type$>\n"
+               "    $lower_method_name$()");
+        } else if (server_streaming) {
           // Server streaming
           p->Print(
               *vars,
@@ -708,6 +725,26 @@ static void PrintStub(
               "$output_type$ $lower_method_name$($input_type$ request)");
         }
         break;
+      case BLOCKING_V2_CALL:
+        if (client_streaming) { // Both Bidi and Client Streaming
+          p->Print(
+              *vars,
+              "$BlockingClientCall$<$input_type$, $output_type$>\n"
+               "    $lower_method_name$()");
+        } else if (server_streaming) {
+          // Server streaming
+          p->Print(
+              *vars,
+              "$BlockingClientCall$<?, $output_type$>\n"
+              "    $lower_method_name$($input_type$ request) throws java.lang.InterruptedException,\n"
+              "        io.grpc.StatusException");
+       } else {
+          // Simple RPC
+          p->Print(
+              *vars,
+              "$output_type$ $lower_method_name$($input_type$ request)");
+       }
+       break;
       case ASYNC_CALL:
         if (client_streaming) {
           // Bidirectional streaming or client streaming
@@ -753,21 +790,46 @@ static void PrintStub(
             "$method_method_name$(), responseObserver);\n");
       }
     } else if (!interface) {
-      switch (call_type) {
+        switch (call_type) {
         case BLOCKING_CALL:
           GRPC_CODEGEN_CHECK(!client_streaming)
-              << "Blocking client streaming interface is not available";
-          if (server_streaming) {
-            (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingServerStreamingCall";
-            (*vars)["params"] = "request";
-          } else {
-            (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingUnaryCall";
-            (*vars)["params"] = "request";
+              << "Blocking client and bidi streaming interface are not available";
+            if (server_streaming) {
+              (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingServerStreamingCall";
+              (*vars)["params"] = "request";
+            } else {
+              (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingUnaryCall";
+              (*vars)["params"] = "request";
+            }
+            p->Print(
+                *vars,
+                "return $calls_method$(\n"
+                "    getChannel(), $method_method_name$(), getCallOptions(), $params$);\n");
+          break;
+        case BLOCKING_V2_CALL:
+          if (client_streaming) { // client and bidi streaming
+                if (server_streaming) {
+                    (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingBidiStreamingCall";
+                 } else {
+                   (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingClientStreamingCall";
+                 }
+           p->Print(
+                *vars,
+                "return $calls_method$(\n"
+                "    getChannel(), $method_method_name$(), getCallOptions());\n");
+          } else { // server streaming and unary
+               (*vars)["params"] = "request";
+               if (server_streaming) {
+                   (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall";
+                } else {
+                  (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingUnaryCall";
+                }
+
+            p->Print(
+                *vars,
+                "return $calls_method$(\n"
+                "    getChannel(), $method_method_name$(), getCallOptions(), $params$);\n");
           }
-          p->Print(
-              *vars,
-              "return $calls_method$(\n"
-              "    getChannel(), $method_method_name$(), getCallOptions(), $params$);\n");
           break;
         case ASYNC_CALL:
           if (server_streaming) {
@@ -804,7 +866,7 @@ static void PrintStub(
               "return $calls_method$(\n"
               "    getChannel().newCall($method_method_name$(), getCallOptions()), request);\n");
           break;
-      }
+        }
     } else {
       GRPC_CODEGEN_FAIL << "Do not create Stub interfaces";
     }
@@ -1174,6 +1236,21 @@ static void PrintService(const ServiceDescriptor* service,
   p->Print("}\n\n");
 
   // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
+  GrpcWriteDocComment(p, " Creates a new blocking-style stub that supports all types of calls "
+                         "on the service");
+  p->Print(
+      *vars,
+      "public static $service_name$BlockingV2Stub newBlockingV2Stub(\n"
+      "    $Channel$ channel) {\n");
+  p->Indent();
+  PrintStubFactory(service, vars, p, BLOCKING_V2_CLIENT_IMPL);
+  p->Print(
+      *vars,
+      "return $service_name$BlockingV2Stub.newStub(factory, channel);\n");
+  p->Outdent();
+  p->Print("}\n\n");
+
+  // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
   GrpcWriteDocComment(p, " Creates a new blocking-style stub that supports unary and streaming "
                          "output calls on the service");
   p->Print(
@@ -1206,6 +1283,7 @@ static void PrintService(const ServiceDescriptor* service,
   PrintStub(service, vars, p, ASYNC_INTERFACE);
   PrintAbstractClassStub(service, vars, p);
   PrintStub(service, vars, p, ASYNC_CLIENT_IMPL);
+  PrintStub(service, vars, p, BLOCKING_V2_CLIENT_IMPL);
   PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL);
   PrintStub(service, vars, p, FUTURE_CLIENT_IMPL);
 
@@ -1257,6 +1335,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["RpcMethod"] = "io.grpc.stub.annotations.RpcMethod";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
+  vars["BlockingClientCall"] = "io.grpc.stub.BlockingClientCall";
   vars["Iterator"] = "java.util.Iterator";
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =

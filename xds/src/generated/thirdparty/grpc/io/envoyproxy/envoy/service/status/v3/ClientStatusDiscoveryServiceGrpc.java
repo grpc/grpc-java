@@ -97,6 +97,21 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ClientStatusDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ClientStatusDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ClientStatusDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public ClientStatusDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ClientStatusDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ClientStatusDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ClientStatusDiscoveryServiceBlockingStub newBlockingStub(
@@ -206,6 +221,43 @@ public final class ClientStatusDiscoveryServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service ClientStatusDiscoveryService.
+   * <pre>
+   * CSDS is Client Status Discovery Service. It can be used to get the status of
+   * an xDS-compliant client from the management server's point of view. It can
+   * also be used to get the current xDS states directly from the client.
+   * </pre>
+   */
+  public static final class ClientStatusDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ClientStatusDiscoveryServiceBlockingV2Stub> {
+    private ClientStatusDiscoveryServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ClientStatusDiscoveryServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ClientStatusDiscoveryServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.status.v3.ClientStatusRequest, io.envoyproxy.envoy.service.status.v3.ClientStatusResponse>
+        streamClientStatus() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getStreamClientStatusMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.envoyproxy.envoy.service.status.v3.ClientStatusResponse fetchClientStatus(io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getFetchClientStatusMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can

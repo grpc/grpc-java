@@ -154,6 +154,21 @@ public final class WorkerServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static WorkerServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<WorkerServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<WorkerServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public WorkerServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new WorkerServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return WorkerServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static WorkerServiceBlockingStub newBlockingStub(
@@ -322,6 +337,75 @@ public final class WorkerServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service WorkerService.
+   */
+  public static final class WorkerServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingV2Stub> {
+    private WorkerServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected WorkerServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new WorkerServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Start server with specified workload.
+     * First request sent specifies the ServerConfig followed by ServerStatus
+     * response. After that, a "Mark" can be sent anytime to request the latest
+     * stats. Closing the stream will initiate shutdown of the test server
+     * and once the shutdown has finished, the OK status is sent to terminate
+     * this RPC.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Control.ServerArgs, io.grpc.benchmarks.proto.Control.ServerStatus>
+        runServer() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getRunServerMethod(), getCallOptions());
+    }
+
+    /**
+     * <pre>
+     * Start client with specified workload.
+     * First request sent specifies the ClientConfig followed by ClientStatus
+     * response. After that, a "Mark" can be sent anytime to request the latest
+     * stats. Closing the stream will initiate shutdown of the test client
+     * and once the shutdown has finished, the OK status is sent to terminate
+     * this RPC.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Control.ClientArgs, io.grpc.benchmarks.proto.Control.ClientStatus>
+        runClient() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getRunClientMethod(), getCallOptions());
+    }
+
+    /**
+     * <pre>
+     * Just return the core count - unary call
+     * </pre>
+     */
+    public io.grpc.benchmarks.proto.Control.CoreResponse coreCount(io.grpc.benchmarks.proto.Control.CoreRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getCoreCountMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Quit this worker
+     * </pre>
+     */
+    public io.grpc.benchmarks.proto.Control.Void quitWorker(io.grpc.benchmarks.proto.Control.Void request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getQuitWorkerMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service WorkerService.
    */
   public static final class WorkerServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub> {

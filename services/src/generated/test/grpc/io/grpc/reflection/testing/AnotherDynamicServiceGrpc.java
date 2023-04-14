@@ -64,6 +64,21 @@ public final class AnotherDynamicServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static AnotherDynamicServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<AnotherDynamicServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AnotherDynamicServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public AnotherDynamicServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AnotherDynamicServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return AnotherDynamicServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static AnotherDynamicServiceBlockingStub newBlockingStub(
@@ -158,6 +173,36 @@ public final class AnotherDynamicServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service AnotherDynamicService.
+   * <pre>
+   * AnotherDynamicService
+   * </pre>
+   */
+  public static final class AnotherDynamicServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<AnotherDynamicServiceBlockingV2Stub> {
+    private AnotherDynamicServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected AnotherDynamicServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new AnotherDynamicServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * A method
+     * </pre>
+     */
+    public io.grpc.reflection.testing.DynamicReply method(io.grpc.reflection.testing.DynamicRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getMethodMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service AnotherDynamicService.
    * <pre>
    * AnotherDynamicService
    * </pre>

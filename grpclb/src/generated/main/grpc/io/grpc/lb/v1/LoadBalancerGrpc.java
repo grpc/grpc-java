@@ -61,6 +61,21 @@ public final class LoadBalancerGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static LoadBalancerBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadBalancerBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadBalancerBlockingV2Stub>() {
+        @java.lang.Override
+        public LoadBalancerBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadBalancerBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return LoadBalancerBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static LoadBalancerBlockingStub newBlockingStub(
@@ -146,6 +161,34 @@ public final class LoadBalancerGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service LoadBalancer.
+   */
+  public static final class LoadBalancerBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingV2Stub> {
+    private LoadBalancerBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected LoadBalancerBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new LoadBalancerBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Bidirectional rpc to get a list of servers.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.lb.v1.LoadBalanceRequest, io.grpc.lb.v1.LoadBalanceResponse>
+        balanceLoad() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getBalanceLoadMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service LoadBalancer.
    */
   public static final class LoadBalancerBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {

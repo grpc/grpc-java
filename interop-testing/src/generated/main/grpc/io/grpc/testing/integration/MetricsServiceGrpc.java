@@ -92,6 +92,21 @@ public final class MetricsServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static MetricsServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public MetricsServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return MetricsServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static MetricsServiceBlockingStub newBlockingStub(
@@ -200,6 +215,46 @@ public final class MetricsServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service MetricsService.
+   */
+  public static final class MetricsServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingV2Stub> {
+    private MetricsServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected MetricsServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new MetricsServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Returns the values of all the gauges that are currently being maintained by
+     * the service
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.integration.Metrics.GaugeResponse>
+        getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request) throws java.lang.InterruptedException,
+            io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getGetAllGaugesMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Returns the value of one gauge
+     * </pre>
+     */
+    public io.grpc.testing.integration.Metrics.GaugeResponse getGauge(io.grpc.testing.integration.Metrics.GaugeRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetGaugeMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service MetricsService.
    */
   public static final class MetricsServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {

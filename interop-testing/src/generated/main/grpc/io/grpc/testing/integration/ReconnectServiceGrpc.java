@@ -95,6 +95,21 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ReconnectServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public ReconnectServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReconnectServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ReconnectServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ReconnectServiceBlockingStub newBlockingStub(
@@ -198,6 +213,40 @@ public final class ReconnectServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service ReconnectService.
+   * <pre>
+   * A service used to control reconnect server.
+   * </pre>
+   */
+  public static final class ReconnectServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingV2Stub> {
+    private ReconnectServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ReconnectServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ReconnectServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.testing.integration.EmptyProtos.Empty start(io.grpc.testing.integration.Messages.ReconnectParams request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getStartMethod(), getCallOptions(), request);
+    }
+
+    /**
+     */
+    public io.grpc.testing.integration.Messages.ReconnectInfo stop(io.grpc.testing.integration.EmptyProtos.Empty request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getStopMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service ReconnectService.
    * <pre>
    * A service used to control reconnect server.
    * </pre>
