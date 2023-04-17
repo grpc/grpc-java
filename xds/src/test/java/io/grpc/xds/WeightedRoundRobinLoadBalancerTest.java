@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.protobuf.Duration;
@@ -512,6 +513,53 @@ public class WeightedRoundRobinLoadBalancerTest {
             .isAtMost(0.001);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5))
             .isAtMost(0.001);
+  }
+
+  @Test
+  public void rrFallback() {
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+    verify(helper, times(3)).createSubchannel(
+        any(CreateSubchannelArgs.class));
+    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel1 = it.next();
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel2  = it.next();
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+    verify(helper, times(2)).updateBalancingState(
+        eq(ConnectivityState.READY), pickerCaptor.capture());
+    WeightedRoundRobinPicker weightedPicker = pickerCaptor.getAllValues().get(1);
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(weightedPicker.rrMode).isTrue();
+
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    Map<WrrSubchannel, Integer> qpsByChannel = ImmutableMap.of(weightedSubchannel1, 2,
+        weightedSubchannel2, 1);
+    Map<Subchannel, Integer> pickCount = new HashMap<>();
+
+    for (int i = 0; i < 1000; i++) {
+      PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
+      pickCount.put(pickResult.getSubchannel(),
+          pickCount.getOrDefault(pickResult.getSubchannel(), 0) + 1);
+      assertThat(pickResult.getStreamTracerFactory()).isNotNull();
+      WrrSubchannel subchannel = (WrrSubchannel)pickResult.getSubchannel();
+      subchannel.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+          0.1, 0.1, qpsByChannel.get(subchannel), new HashMap<>(), new HashMap<>()));
+      fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
+    }
+    assertThat(weightedPicker.rrMode).isFalse();
+    assertThat(pickCount.size()).isEqualTo(2);
+    System.out.println(pickCount.get(weightedSubchannel1));
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
+        .isAtMost(0.1);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
+        .isAtMost(0.1);
   }
 
   @Test
