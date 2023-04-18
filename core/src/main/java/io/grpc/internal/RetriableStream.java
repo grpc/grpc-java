@@ -949,12 +949,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             if (commit) {
               commitAndRun(newSubstream);
             }
-          } else {
-            if (retryPolicy == null || retryPolicy.maxAttempts == 1) {
-              // optimization for early commit
-              commitAndRun(newSubstream);
-            }
           }
+
           callExecutor.execute(new Runnable() {
             @Override
             public void run() {
