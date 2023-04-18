@@ -63,230 +63,50 @@ sourceSets {
 
 startScripts.enabled = false
 
-task routeGuideServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.routeguide.RouteGuideServer'
-    applicationName = 'route-guide-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+// Creates start scripts for a class name and adds it to the distribution. The
+// base class name is used to name the task and scripts. For example, passed
+// the class io.grpc.examples.helloworld.HelloWorldClient, it creates the task
+// helloWorldClient with script name hello-world-client.
+def createStartScripts(String mainClassName) {
+    String bareName = mainClassName.substring(mainClassName.lastIndexOf('.') + 1);
+    String taskName = bareName.uncapitalize();
+    def newTask = tasks.register(taskName, CreateStartScripts) {
+        mainClass = mainClassName
+        applicationName = taskName.replaceAll('([A-Z])') { '-' + it[0].uncapitalize() }
+        outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+        classpath = startScripts.classpath
+    }
+    applicationDistribution.into('bin') {
+        from(newTask)
+        fileMode = 0755
+    }
 }
 
-task routeGuideClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.routeguide.RouteGuideClient'
-    applicationName = 'route-guide-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task helloWorldServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.helloworld.HelloWorldServer'
-    applicationName = 'hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task helloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.helloworld.HelloWorldClient'
-    applicationName = 'hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task retryingHelloWorldServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.retrying.RetryingHelloWorldServer'
-    applicationName = 'retrying-hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task retryingHelloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.retrying.RetryingHelloWorldClient'
-    applicationName = 'retrying-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task hedgingHelloWorldServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.hedging.HedgingHelloWorldServer'
-    applicationName = 'hedging-hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task hedgingHelloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.hedging.HedgingHelloWorldClient'
-    applicationName = 'hedging-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task compressingHelloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
-    applicationName = 'compressing-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task manualFlowControlClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.manualflowcontrol.ManualFlowControlClient'
-    applicationName = 'manual-flow-control-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task manualFlowControlServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.manualflowcontrol.ManualFlowControlServer'
-    applicationName = 'manual-flow-control-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task waitForReadyClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.waitforready.WaitForReadyClient'
-    applicationName = 'wait-for-ready-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task loadBalanceServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.loadbalance.LoadBalanceServer'
-    applicationName = 'load-balance-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task loadBalanceClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.loadbalance.LoadBalanceClient'
-    applicationName = 'load-balance-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task customLoadBalanceClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.customloadbalance.CustomLoadBalanceClient'
-    applicationName = 'custom-load-balance-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task nameResolveServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.nameresolve.NameResolveServer'
-    applicationName = 'name-resolve-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task nameResolveClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.nameresolve.NameResolveClient'
-    applicationName = 'name-resolve-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task deadlineServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.deadline.DeadlineServer'
-    applicationName = 'deadline-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task keepAliveServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.keepalive.KeepAliveServer'
-    applicationName = 'keep-alive-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task deadlineClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.deadline.DeadlineClient'
-    applicationName = 'deadline-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task keepAliveClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.keepalive.KeepAliveClient'
-    applicationName = 'keep-alive-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task cancellationClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.cancellation.CancellationClient'
-    applicationName = 'cancellation-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task cancellationServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.cancellation.CancellationServer'
-    applicationName = 'cancellation-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task healthServiceServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.healthservice.HealthServiceServer'
-    applicationName = 'health-service-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task healthServiceClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.healthservice.HealthServiceClient'
-    applicationName = 'health-service-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task multiplexingServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.multiplex.MultiplexingServer'
-    applicationName = 'multiplexing-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task sharingClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.multiplex.SharingClient'
-    applicationName = 'sharing-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task errorDetails(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.errordetails.ErrorDetailsExample'
-    applicationName = 'error-details'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-applicationDistribution.into('bin') {
-    from(routeGuideServer)
-    from(routeGuideClient)
-    from(helloWorldServer)
-    from(helloWorldClient)
-    from(hedgingHelloWorldClient)
-    from(hedgingHelloWorldServer)
-    from(retryingHelloWorldClient)
-    from(retryingHelloWorldServer)
-    from(compressingHelloWorldClient)
-    from(manualFlowControlClient)
-    from(manualFlowControlServer)
-    from(waitForReadyClient)
-    from(loadBalanceServer)
-    from(loadBalanceClient)
-    from(customLoadBalanceClient)
-    from(nameResolveServer)
-    from(nameResolveClient)
-    from(deadlineServer)
-    from(deadlineClient)
-    from(keepAliveServer)
-    from(keepAliveClient)
-    from(healthServiceServer)
-    from(healthServiceClient)
-    from(cancellationClient)
-    from(cancellationServer)
-    from(multiplexingServer)
-    from(sharingClient)
-    from(errorDetails)
-    fileMode = 0755
-}
+createStartScripts('io.grpc.examples.cancellation.CancellationClient')
+createStartScripts('io.grpc.examples.cancellation.CancellationServer')
+createStartScripts('io.grpc.examples.customloadbalance.CustomLoadBalanceClient')
+createStartScripts('io.grpc.examples.deadline.DeadlineClient')
+createStartScripts('io.grpc.examples.deadline.DeadlineServer')
+createStartScripts('io.grpc.examples.errordetails.ErrorDetailsExample')
+createStartScripts('io.grpc.examples.experimental.CompressingHelloWorldClient')
+createStartScripts('io.grpc.examples.healthservice.HealthServiceClient')
+createStartScripts('io.grpc.examples.healthservice.HealthServiceServer')
+createStartScripts('io.grpc.examples.hedging.HedgingHelloWorldClient')
+createStartScripts('io.grpc.examples.hedging.HedgingHelloWorldServer')
+createStartScripts('io.grpc.examples.helloworld.HelloWorldClient')
+createStartScripts('io.grpc.examples.helloworld.HelloWorldServer')
+createStartScripts('io.grpc.examples.keepalive.KeepAliveClient')
+createStartScripts('io.grpc.examples.keepalive.KeepAliveServer')
+createStartScripts('io.grpc.examples.loadbalance.LoadBalanceClient')
+createStartScripts('io.grpc.examples.loadbalance.LoadBalanceServer')
+createStartScripts('io.grpc.examples.manualflowcontrol.ManualFlowControlClient')
+createStartScripts('io.grpc.examples.manualflowcontrol.ManualFlowControlServer')
+createStartScripts('io.grpc.examples.multiplex.MultiplexingServer')
+createStartScripts('io.grpc.examples.multiplex.SharingClient')
+createStartScripts('io.grpc.examples.nameresolve.NameResolveClient')
+createStartScripts('io.grpc.examples.nameresolve.NameResolveServer')
+createStartScripts('io.grpc.examples.retrying.RetryingHelloWorldClient')
+createStartScripts('io.grpc.examples.retrying.RetryingHelloWorldServer')
+createStartScripts('io.grpc.examples.routeguide.RouteGuideClient')
+createStartScripts('io.grpc.examples.routeguide.RouteGuideServer')
+createStartScripts('io.grpc.examples.waitforready.WaitForReadyClient')
