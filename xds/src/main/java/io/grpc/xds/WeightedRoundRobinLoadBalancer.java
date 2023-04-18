@@ -235,8 +235,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   final class WeightedRoundRobinPicker extends ReadyPicker {
     private final List<Subchannel> list;
     private volatile EdfScheduler scheduler;
-    @VisibleForTesting
-    volatile boolean rrMode;
 
     WeightedRoundRobinPicker(List<Subchannel> list) {
       super(checkNotNull(list, "list"), random.nextInt(list.size()));
@@ -247,12 +245,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      Subchannel subchannel;
-      if (rrMode) {
-        subchannel = super.pickSubchannel(args).getSubchannel();
-      } else {
-        subchannel = list.get(scheduler.pick());
-      }
+      Subchannel subchannel = list.get(scheduler.pick());
       if (!config.enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
@@ -272,25 +265,26 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
           weightedChannelCount++;
         }
       }
-      if (weightedChannelCount < 2) {
-        rrMode = true;
-        return;
-      }
       EdfScheduler scheduler = new EdfScheduler(list.size(), random);
-      avgWeight /= 1.0 * weightedChannelCount;
+      if (weightedChannelCount >= 2) {
+        avgWeight /= 1.0 * weightedChannelCount;
+      }
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
-        double newWeight = subchannel.getWeight();
-        scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
+        if (weightedChannelCount >= 2) {
+          double newWeight = subchannel.getWeight();
+          scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
+        } else {
+          scheduler.add(i, 1); // fall back to round_robin
+        }
       }
       this.scheduler = scheduler;
-      rrMode = false;
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(WeightedRoundRobinPicker.class)
-          .add("list", list).add("rrMode", rrMode).toString();
+          .add("list", list).toString();
     }
 
     @VisibleForTesting

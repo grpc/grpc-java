@@ -535,14 +535,25 @@ public class WeightedRoundRobinLoadBalancerTest {
         eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker = pickerCaptor.getAllValues().get(1);
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
-    assertThat(weightedPicker.rrMode).isTrue();
-
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     Map<WrrSubchannel, Integer> qpsByChannel = ImmutableMap.of(weightedSubchannel1, 2,
         weightedSubchannel2, 1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
-
+    for (int i = 0; i < 1000; i++) {
+      PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
+      pickCount.put(pickResult.getSubchannel(),
+          pickCount.getOrDefault(pickResult.getSubchannel(), 0) + 1);
+      assertThat(pickResult.getStreamTracerFactory()).isNotNull();
+      WrrSubchannel subchannel = (WrrSubchannel)pickResult.getSubchannel();
+      subchannel.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+          0.1, 0.1, qpsByChannel.get(subchannel), new HashMap<>(), new HashMap<>()));
+    }
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 1.0 / 2))
+        .isAtMost(0.1);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 2))
+        .isAtMost(0.1);
+    pickCount.clear();
     for (int i = 0; i < 1000; i++) {
       PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
       pickCount.put(pickResult.getSubchannel(),
@@ -553,9 +564,7 @@ public class WeightedRoundRobinLoadBalancerTest {
           0.1, 0.1, qpsByChannel.get(subchannel), new HashMap<>(), new HashMap<>()));
       fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
     }
-    assertThat(weightedPicker.rrMode).isFalse();
     assertThat(pickCount.size()).isEqualTo(2);
-    System.out.println(pickCount.get(weightedSubchannel1));
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
         .isAtMost(0.1);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
@@ -632,7 +641,6 @@ public class WeightedRoundRobinLoadBalancerTest {
             0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
             0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    assertThat(weightedPicker.toString()).contains("rrMode=true");
     CyclicBarrier barrier = new CyclicBarrier(2);
     Map<Subchannel, AtomicInteger> pickCount = new ConcurrentHashMap<>();
     pickCount.put(weightedSubchannel1, new AtomicInteger(0));
