@@ -24,6 +24,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
+import io.perfmark.TaskCloseable;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -119,8 +120,7 @@ class WriteQueue {
    * called in the event loop
    */
   private void flush() {
-    PerfMark.startTask("WriteQueue.periodicFlush");
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("WriteQueue.periodicFlush")) {
       QueuedCommand cmd;
       int i = 0;
       boolean flushedOnce = false;
@@ -131,26 +131,19 @@ class WriteQueue {
           // Flush each chunk so we are releasing buffers periodically. In theory this loop
           // might never end as new events are continuously added to the queue, if we never
           // flushed in that case we would be guaranteed to OOM.
-          PerfMark.startTask("WriteQueue.flush0");
-          try {
+          try (TaskCloseable ignore2 = PerfMark.traceTask("WriteQueue.flush0")) {
             channel.flush();
-          } finally {
-            PerfMark.stopTask("WriteQueue.flush0");
           }
           flushedOnce = true;
         }
       }
       // Must flush at least once, even if there were no writes.
       if (i != 0 || !flushedOnce) {
-        PerfMark.startTask("WriteQueue.flush1");
-        try {
+        try (TaskCloseable ignore2 = PerfMark.traceTask("WriteQueue.flush1")) {
           channel.flush();
-        } finally {
-          PerfMark.stopTask("WriteQueue.flush1");
         }
       }
     } finally {
-      PerfMark.stopTask("WriteQueue.periodicFlush");
       // Mark the write as done, if the queue is non-empty after marking trigger a new write.
       scheduled.set(false);
       if (!queue.isEmpty()) {
