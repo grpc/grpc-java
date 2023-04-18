@@ -107,6 +107,8 @@ public final class GrpcProxy<ReqT, RespT> implements ServerCallHandler<ReqT, Res
           if (clientCall.isReady()) {
             clientCallListener.serverCall.request(1);
           } else {
+            // The outgoing call is not ready for more requests. Stop requesting additional data and
+            // wait for it to catch up.
             needToRequest = true;
           }
         }
@@ -116,6 +118,8 @@ public final class GrpcProxy<ReqT, RespT> implements ServerCallHandler<ReqT, Res
         clientCallListener.onServerReady();
       }
 
+      // Called from ResponseProxy, which is a different thread than the ServerCall.Listener
+      // callbacks.
       synchronized void onClientReady() {
         if (needToRequest) {
           clientCallListener.serverCall.request(1);
@@ -147,6 +151,8 @@ public final class GrpcProxy<ReqT, RespT> implements ServerCallHandler<ReqT, Res
           if (serverCall.isReady()) {
             serverCallListener.clientCall.request(1);
           } else {
+            // The incoming call is not ready for more responses. Stop requesting additional data
+            // and wait for it to catch up.
             needToRequest = true;
           }
         }
@@ -156,6 +162,8 @@ public final class GrpcProxy<ReqT, RespT> implements ServerCallHandler<ReqT, Res
         serverCallListener.onClientReady();
       }
 
+      // Called from RequestProxy, which is a different thread than the ClientCall.Listener
+      // callbacks.
       synchronized void onServerReady() {
         if (needToRequest) {
           serverCallListener.clientCall.request(1);
