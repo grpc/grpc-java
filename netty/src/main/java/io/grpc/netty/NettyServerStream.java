@@ -36,6 +36,7 @@ import io.netty.handler.codec.http2.Http2Stream;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -94,15 +95,12 @@ class NettyServerStream extends AbstractServerStream {
   private class Sink implements AbstractServerStream.Sink {
     @Override
     public void writeHeaders(Metadata headers) {
-      PerfMark.startTask("NettyServerStream$Sink.writeHeaders");
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeHeaders")) {
         writeQueue.enqueue(
             SendResponseHeadersCommand.createHeaders(
                 transportState(),
                 Utils.convertServerHeaders(headers)),
             true);
-      } finally {
-        PerfMark.stopTask("NettyServerStream$Sink.writeHeaders");
       }
     }
 
@@ -128,34 +126,25 @@ class NettyServerStream extends AbstractServerStream {
 
     @Override
     public void writeFrame(WritableBuffer frame, boolean flush, final int numMessages) {
-      PerfMark.startTask("NettyServerStream$Sink.writeFrame");
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeFrame")) {
         writeFrameInternal(frame, flush, numMessages);
-      } finally {
-        PerfMark.stopTask("NettyServerStream$Sink.writeFrame");
       }
     }
 
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
-      PerfMark.startTask("NettyServerStream$Sink.writeTrailers");
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeTrailers")) {
         Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
         writeQueue.enqueue(
             SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status),
             true);
-      } finally {
-        PerfMark.stopTask("NettyServerStream$Sink.writeTrailers");
       }
     }
 
     @Override
     public void cancel(Status status) {
-      PerfMark.startTask("NettyServerStream$Sink.cancel");
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.cancel")) {
         writeQueue.enqueue(new CancelServerStreamCommand(transportState(), status), true);
-      } finally {
-        PerfMark.startTask("NettyServerStream$Sink.cancel");
       }
     }
   }
@@ -192,12 +181,11 @@ class NettyServerStream extends AbstractServerStream {
         eventLoop.execute(new Runnable() {
           @Override
           public void run() {
-            PerfMark.startTask("NettyServerStream$TransportState.runOnTransportThread", tag);
-            PerfMark.linkIn(link);
-            try {
+            try (TaskCloseable ignore =
+                     PerfMark.traceTask("NettyServerStream$TransportState.runOnTransportThread")) {
+              PerfMark.attachTag(tag);
+              PerfMark.linkIn(link);
               r.run();
-            } finally {
-              PerfMark.stopTask("NettyServerStream$TransportState.runOnTransportThread", tag);
             }
           }
         });

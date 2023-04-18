@@ -58,6 +58,7 @@ import io.grpc.Status;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -461,11 +462,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     @Override
     public void streamCreated(ServerStream stream, String methodName, Metadata headers) {
       Tag tag = PerfMark.createTag(methodName, stream.streamId());
-      PerfMark.startTask("ServerTransportListener.streamCreated", tag);
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerTransportListener.streamCreated")) {
+        PerfMark.attachTag(tag);
         streamCreatedInternal(stream, methodName, headers, tag);
-      } finally {
-        PerfMark.stopTask("ServerTransportListener.streamCreated", tag);
       }
     }
 
@@ -523,12 +522,11 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         @Override
         public void runInContext() {
-          PerfMark.startTask("ServerTransportListener$MethodLookup.startCall", tag);
-          PerfMark.linkIn(link);
-          try {
+          try (TaskCloseable ignore =
+                   PerfMark.traceTask("ServerTransportListener$MethodLookup.startCall")) {
+            PerfMark.attachTag(tag);
+            PerfMark.linkIn(link);
             runInternal();
-          } finally {
-            PerfMark.stopTask("ServerTransportListener$MethodLookup.startCall", tag);
           }
         }
 
@@ -598,12 +596,11 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         @Override
         public void runInContext() {
-          PerfMark.startTask("ServerTransportListener$HandleServerCall.startCall", tag);
-          PerfMark.linkIn(link);
-          try {
+          try (TaskCloseable ignore =
+                   PerfMark.traceTask("ServerTransportListener$HandleServerCall.startCall")) {
+            PerfMark.linkIn(link);
+            PerfMark.attachTag(tag);
             runInternal();
-          } finally {
-            PerfMark.stopTask("ServerTransportListener$HandleServerCall.startCall", tag);
           }
         }
 
@@ -818,76 +815,65 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     @Override
     public void messagesAvailable(final MessageProducer producer) {
-      PerfMark.startTask("ServerStreamListener.messagesAvailable", tag);
-      final Link link = PerfMark.linkOut();
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.messagesAvailable")) {
+        PerfMark.attachTag(tag);
+        final Link link = PerfMark.linkOut();
+        final class MessagesAvailable extends ContextRunnable {
 
-      final class MessagesAvailable extends ContextRunnable {
+          MessagesAvailable() {
+            super(context);
+          }
 
-        MessagesAvailable() {
-          super(context);
-        }
-
-        @Override
-        public void runInContext() {
-          PerfMark.startTask("ServerCallListener(app).messagesAvailable", tag);
-          PerfMark.linkIn(link);
-          try {
-            getListener().messagesAvailable(producer);
-          } catch (Throwable t) {
-            internalClose(t);
-            throw t;
-          } finally {
-            PerfMark.stopTask("ServerCallListener(app).messagesAvailable", tag);
+          @Override
+          public void runInContext() {
+            try (TaskCloseable ignore =
+                     PerfMark.traceTask("ServerCallListener(app).messagesAvailable")) {
+              PerfMark.attachTag(tag);
+              PerfMark.linkIn(link);
+              getListener().messagesAvailable(producer);
+            } catch (Throwable t) {
+              internalClose(t);
+              throw t;
+            }
           }
         }
-      }
 
-      try {
         callExecutor.execute(new MessagesAvailable());
-      } finally {
-        PerfMark.stopTask("ServerStreamListener.messagesAvailable", tag);
       }
     }
 
     @Override
     public void halfClosed() {
-      PerfMark.startTask("ServerStreamListener.halfClosed", tag);
-      final Link link = PerfMark.linkOut();
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.halfClosed")) {
+        PerfMark.attachTag(tag);
+        final Link link = PerfMark.linkOut();
+        final class HalfClosed extends ContextRunnable {
+          HalfClosed() {
+            super(context);
+          }
 
-      final class HalfClosed extends ContextRunnable {
-        HalfClosed() {
-          super(context);
-        }
-
-        @Override
-        public void runInContext() {
-          PerfMark.startTask("ServerCallListener(app).halfClosed", tag);
-          PerfMark.linkIn(link);
-          try {
-            getListener().halfClosed();
-          } catch (Throwable t) {
-            internalClose(t);
-            throw t;
-          } finally {
-            PerfMark.stopTask("ServerCallListener(app).halfClosed", tag);
+          @Override
+          public void runInContext() {
+            try (TaskCloseable ignore = PerfMark.traceTask("ServerCallListener(app).halfClosed")) {
+              PerfMark.attachTag(tag);
+              PerfMark.linkIn(link);
+              getListener().halfClosed();
+            } catch (Throwable t) {
+              internalClose(t);
+              throw t;
+            }
           }
         }
-      }
 
-      try {
         callExecutor.execute(new HalfClosed());
-      } finally {
-        PerfMark.stopTask("ServerStreamListener.halfClosed", tag);
       }
     }
 
     @Override
     public void closed(final Status status) {
-      PerfMark.startTask("ServerStreamListener.closed", tag);
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.closed")) {
+        PerfMark.attachTag(tag);
         closedInternal(status);
-      } finally {
-        PerfMark.stopTask("ServerStreamListener.closed", tag);
       }
     }
 
@@ -917,12 +903,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         @Override
         public void runInContext() {
-          PerfMark.startTask("ServerCallListener(app).closed", tag);
-          PerfMark.linkIn(link);
-          try {
+          try (TaskCloseable ignore = PerfMark.traceTask("ServerCallListener(app).closed")) {
+            PerfMark.attachTag(tag);
+            PerfMark.linkIn(link);
             getListener().closed(status);
-          } finally {
-            PerfMark.stopTask("ServerCallListener(app).closed", tag);
           }
         }
       }
@@ -932,32 +916,29 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     @Override
     public void onReady() {
-      PerfMark.startTask("ServerStreamListener.onReady", tag);
-      final Link link = PerfMark.linkOut();
-      final class OnReady extends ContextRunnable {
-        OnReady() {
-          super(context);
-        }
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.onReady")) {
+        PerfMark.attachTag(tag);
+        final Link link = PerfMark.linkOut();
 
-        @Override
-        public void runInContext() {
-          PerfMark.startTask("ServerCallListener(app).onReady", tag);
-          PerfMark.linkIn(link);
-          try {
-            getListener().onReady();
-          } catch (Throwable t) {
-            internalClose(t);
-            throw t;
-          } finally {
-            PerfMark.stopTask("ServerCallListener(app).onReady", tag);
+        final class OnReady extends ContextRunnable {
+          OnReady() {
+            super(context);
+          }
+
+          @Override
+          public void runInContext() {
+            try (TaskCloseable ignore = PerfMark.traceTask("ServerCallListener(app).onReady")) {
+              PerfMark.attachTag(tag);
+              PerfMark.linkIn(link);
+              getListener().onReady();
+            } catch (Throwable t) {
+              internalClose(t);
+              throw t;
+            }
           }
         }
-      }
 
-      try {
         callExecutor.execute(new OnReady());
-      } finally {
-        PerfMark.stopTask("ServerStreamListener.onReady", tag);
       }
     }
   }

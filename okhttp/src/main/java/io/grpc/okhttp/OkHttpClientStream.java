@@ -35,6 +35,7 @@ import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.Header;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import java.util.List;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
@@ -139,55 +140,46 @@ class OkHttpClientStream extends AbstractClientStream {
   class Sink implements AbstractClientStream.Sink {
     @Override
     public void writeHeaders(Metadata metadata, byte[] payload) {
-      PerfMark.startTask("OkHttpClientStream$Sink.writeHeaders");
-      String defaultPath = "/" + method.getFullMethodName();
-      if (payload != null) {
-        useGet = true;
-        defaultPath += "?" + BaseEncoding.base64().encode(payload);
-      }
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("OkHttpClientStream$Sink.writeHeaders")) {
+        String defaultPath = "/" + method.getFullMethodName();
+        if (payload != null) {
+          useGet = true;
+          defaultPath += "?" + BaseEncoding.base64().encode(payload);
+        }
         synchronized (state.lock) {
           state.streamReady(metadata, defaultPath);
         }
-      } finally {
-        PerfMark.stopTask("OkHttpClientStream$Sink.writeHeaders");
       }
     }
 
     @Override
     public void writeFrame(
         WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages) {
-      PerfMark.startTask("OkHttpClientStream$Sink.writeFrame");
-      Buffer buffer;
-      if (frame == null) {
-        buffer = EMPTY_BUFFER;
-      } else {
-        buffer = ((OkHttpWritableBuffer) frame).buffer();
-        int size = (int) buffer.size();
-        if (size > 0) {
-          onSendingBytes(size);
+      try (TaskCloseable ignore = PerfMark.traceTask("OkHttpClientStream$Sink.writeFrame")) {
+        Buffer buffer;
+        if (frame == null) {
+          buffer = EMPTY_BUFFER;
+        } else {
+          buffer = ((OkHttpWritableBuffer) frame).buffer();
+          int size = (int) buffer.size();
+          if (size > 0) {
+            onSendingBytes(size);
+          }
         }
-      }
 
-      try {
         synchronized (state.lock) {
           state.sendBuffer(buffer, endOfStream, flush);
           getTransportTracer().reportMessageSent(numMessages);
         }
-      } finally {
-        PerfMark.stopTask("OkHttpClientStream$Sink.writeFrame");
       }
     }
 
     @Override
     public void cancel(Status reason) {
-      PerfMark.startTask("OkHttpClientStream$Sink.cancel");
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("OkHttpClientStream$Sink.cancel")) {
         synchronized (state.lock) {
           state.cancel(reason, true, null);
         }
-      } finally {
-        PerfMark.stopTask("OkHttpClientStream$Sink.cancel");
       }
     }
   }

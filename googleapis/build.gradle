@@ -12,7 +12,7 @@ dependencies {
     implementation project(':grpc-alts'),
                    project(':grpc-core'),
                    project(':grpc-xds'),
-                   libraries.guava
+                   libraries.guava.jre // JRE required by transitive protobuf-java-util
     testImplementation project(':grpc-core').sourceSets.test.output
 
     signature libraries.signature.java

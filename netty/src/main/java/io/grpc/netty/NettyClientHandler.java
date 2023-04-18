@@ -79,6 +79,7 @@ import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -592,13 +593,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     Http2Headers headers = command.headers();
     stream.setId(streamId);
 
-    PerfMark.startTask("NettyClientHandler.createStream", stream.tag());
-    PerfMark.linkIn(command.getLink());
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("NettyClientHandler.createStream")) {
+      PerfMark.linkIn(command.getLink());
+      PerfMark.attachTag(stream.tag());
       createStreamTraced(
           streamId, stream, headers, command.isGet(), command.shouldBeCountedForInUse(), promise);
-    } finally {
-      PerfMark.stopTask("NettyClientHandler.createStream", stream.tag());
     }
   }
 
@@ -670,9 +669,9 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void cancelStream(ChannelHandlerContext ctx, CancelClientStreamCommand cmd,
       ChannelPromise promise) {
     NettyClientStream.TransportState stream = cmd.stream();
-    PerfMark.startTask("NettyClientHandler.cancelStream", stream.tag());
-    PerfMark.linkIn(cmd.getLink());
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("NettyClientHandler.cancelStream")) {
+      PerfMark.attachTag(stream.tag());
+      PerfMark.linkIn(cmd.getLink());
       Status reason = cmd.reason();
       if (reason != null) {
         stream.transportReportStatus(reason, true, new Metadata());
@@ -682,8 +681,6 @@ class NettyClientHandler extends AbstractNettyHandler {
       } else {
         promise.setSuccess();
       }
-    } finally {
-      PerfMark.stopTask("NettyClientHandler.cancelStream", stream.tag());
     }
   }
 
@@ -692,25 +689,20 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
       ChannelPromise promise) {
-    PerfMark.startTask("NettyClientHandler.sendGrpcFrame", cmd.stream().tag());
-    PerfMark.linkIn(cmd.getLink());
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("NettyClientHandler.sendGrpcFrame")) {
+      PerfMark.attachTag(cmd.stream().tag());
+      PerfMark.linkIn(cmd.getLink());
       // Call the base class to write the HTTP/2 DATA frame.
       // Note: no need to flush since this is handled by the outbound flow controller.
       encoder().writeData(ctx, cmd.stream().id(), cmd.content(), 0, cmd.endStream(), promise);
-    } finally {
-      PerfMark.stopTask("NettyClientHandler.sendGrpcFrame", cmd.stream().tag());
     }
   }
 
   private void sendPingFrame(ChannelHandlerContext ctx, SendPingCommand msg,
       ChannelPromise promise) {
-    PerfMark.startTask("NettyClientHandler.sendPingFrame");
-    PerfMark.linkIn(msg.getLink());
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("NettyClientHandler.sendPingFrame")) {
+      PerfMark.linkIn(msg.getLink());
       sendPingFrameTraced(ctx, msg, promise);
-    } finally {
-      PerfMark.stopTask("NettyClientHandler.sendPingFrame");
     }
   }
 
@@ -788,17 +780,15 @@ class NettyClientHandler extends AbstractNettyHandler {
       public boolean visit(Http2Stream stream) throws Http2Exception {
         NettyClientStream.TransportState clientStream = clientStream(stream);
         Tag tag = clientStream != null ? clientStream.tag() : PerfMark.createTag();
-        PerfMark.startTask("NettyClientHandler.forcefulClose", tag);
-        PerfMark.linkIn(msg.getLink());
-        try {
+        try (TaskCloseable ignore = PerfMark.traceTask("NettyClientHandler.forcefulClose")) {
+          PerfMark.linkIn(msg.getLink());
+          PerfMark.attachTag(tag);
           if (clientStream != null) {
             clientStream.transportReportStatus(msg.getStatus(), true, new Metadata());
             resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.newPromise());
           }
           stream.close();
           return true;
-        } finally {
-          PerfMark.stopTask("NettyClientHandler.forcefulClose", tag);
         }
       }
     });
