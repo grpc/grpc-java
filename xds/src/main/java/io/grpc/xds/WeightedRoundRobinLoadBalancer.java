@@ -266,17 +266,15 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         }
       }
       EdfScheduler scheduler = new EdfScheduler(list.size(), random);
-      if (weightedChannelCount >= 2) {
+      if (weightedChannelCount >= 1) {
         avgWeight /= 1.0 * weightedChannelCount;
+      } else {
+        avgWeight = 1;
       }
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
-        if (weightedChannelCount >= 2) {
-          double newWeight = subchannel.getWeight();
-          scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
-        } else {
-          scheduler.add(i, 1); // fall back to round_robin
-        }
+        double newWeight = subchannel.getWeight();
+        scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
       }
       this.scheduler = scheduler;
     }
