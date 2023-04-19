@@ -932,22 +932,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             return;
           }
           if (isHedging) {
-            boolean commit = false;
             synchronized (lock) {
               // Although this operation is not done atomically with
               // noMoreTransparentRetry.compareAndSet(false, true), it does not change the size() of
               // activeHedges, so neither does it affect the commitment decision of other threads,
               // nor do the commitment decision making threads affect itself.
               state = state.replaceActiveHedge(substream, newSubstream);
-
-              // optimization for early commit
-              if (!hasPotentialHedging(state)
-                  && state.activeHedges.size() == 1) {
-                commit = true;
-              }
-            }
-            if (commit) {
-              commitAndRun(newSubstream);
             }
           }
 
