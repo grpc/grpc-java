@@ -420,7 +420,7 @@ ChannelCredentials creds = GoogleDefaultChannelCredentials.create();
 // Create a channel to the service
 ManagedChannel channel = Grpc.newChannelBuilder("dns:///pubsub.googleapis.com", creds)
     .build();
-// Create a stub
+// Create a stub and send an RPC
 PublisherGrpc.PublisherBlockingStub publisherStub = PublisherGrpc.newBlockingStub(channel);
 publisherStub.publish(someMessage);
 ```
