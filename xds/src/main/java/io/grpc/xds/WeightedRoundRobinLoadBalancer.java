@@ -46,6 +46,8 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A {@link LoadBalancer} that provides weighted-round-robin load-balancing over
@@ -54,6 +56,8 @@ import java.util.concurrent.TimeUnit;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
 final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
+  private static final Logger log = Logger.getLogger(
+      WeightedRoundRobinLoadBalancer.class.getName());
   private volatile WeightedRoundRobinLoadBalancerConfig config;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
@@ -76,6 +80,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.updateWeightTask = new UpdateWeightTask();
     this.random = random;
+    log.log(Level.FINE, "weighted_round_robin LB created");
   }
 
   @VisibleForTesting
@@ -230,7 +235,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   final class WeightedRoundRobinPicker extends ReadyPicker {
     private final List<Subchannel> list;
     private volatile EdfScheduler scheduler;
-    private volatile boolean rrMode;
 
     WeightedRoundRobinPicker(List<Subchannel> list) {
       super(checkNotNull(list, "list"), random.nextInt(list.size()));
@@ -241,16 +245,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      if (rrMode) {
-        return super.pickSubchannel(args);
-      }
-      int pickIndex = scheduler.pick();
-      WrrSubchannel subchannel = (WrrSubchannel) list.get(pickIndex);
+      Subchannel subchannel = list.get(scheduler.pick());
       if (!config.enableOobLoadReport) {
-        return PickResult.withSubchannel(
-           subchannel,
-           OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
-               subchannel.perRpcListener));
+        return PickResult.withSubchannel(subchannel,
+            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
+                ((WrrSubchannel)subchannel).perRpcListener));
       } else {
         return PickResult.withSubchannel(subchannel);
       }
@@ -266,25 +265,24 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
           weightedChannelCount++;
         }
       }
-      if (weightedChannelCount < 2) {
-        rrMode = true;
-        return;
-      }
       EdfScheduler scheduler = new EdfScheduler(list.size(), random);
-      avgWeight /= 1.0 * weightedChannelCount;
+      if (weightedChannelCount >= 1) {
+        avgWeight /= 1.0 * weightedChannelCount;
+      } else {
+        avgWeight = 1;
+      }
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
         double newWeight = subchannel.getWeight();
         scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
       }
       this.scheduler = scheduler;
-      rrMode = false;
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(WeightedRoundRobinPicker.class)
-          .add("list", list).add("rrMode", rrMode).toString();
+          .add("list", list).toString();
     }
 
     @VisibleForTesting
