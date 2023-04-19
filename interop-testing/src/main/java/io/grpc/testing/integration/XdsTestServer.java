@@ -176,14 +176,6 @@ public final class XdsTestServer {
     }
     health = new HealthStatusManager();
     if (secureMode) {
-      server =
-          XdsServerBuilder.forPort(
-                  port, XdsServerCredentials.create(InsecureServerCredentials.create()))
-              .addService(
-                  ServerInterceptors.intercept(
-                      new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
-              .build();
-      server.start();
       maintenanceServer =
           NettyServerBuilder.forPort(maintenancePort)
               .addService(new XdsUpdateHealthServiceImpl(health))
@@ -192,6 +184,14 @@ public final class XdsTestServer {
               .addServices(AdminInterface.getStandardServices())
               .build();
       maintenanceServer.start();
+      server =
+          XdsServerBuilder.forPort(
+                  port, XdsServerCredentials.create(InsecureServerCredentials.create()))
+              .addService(
+                  ServerInterceptors.intercept(
+                      new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
+              .build();
+      server.start();
     } else {
       server =
           NettyServerBuilder.forPort(port)
