@@ -299,9 +299,9 @@ public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, Re
     if (sslSession == null) {
         return next.startCall(call, headers);
     }
-    // This interceptor can provide a centralized policy to processing the
-    // client's certificate. Avoid exposing the low-level details (like
-    // SSLSession) and instead provide a higher-level concept.
+    // This interceptor can provide a centralized policy to process the client's
+    // certificate. Avoid exposing low-level details (like SSLSession) and
+    // instead provide a higher-level concept like "authenticated user."
     MySecurityInfo info = process(sslSession);
     return Contexts.interceptCall(
         Context.current().withValue(SECURITY_INFO, info), call, headers, next);
