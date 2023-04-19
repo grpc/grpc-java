@@ -65,6 +65,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -501,6 +502,50 @@ public class ClientCallsTest {
     });
     listener.get().onMessage("message");
     assertThat(requests).isEmpty();
+  }
+
+  @Test
+  public void checkForNullInAsyncUnaryCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncUnaryCall(call, Integer.valueOf(1), null);
+      Assert.fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertSame("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInBidiCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncBidiStreamingCall(call, null);
+      Assert.fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertSame("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInClientStreamCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncClientStreamingCall(call, null);
+      Assert.fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertSame("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInServerStreamCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncServerStreamingCall(call, Integer.valueOf(1), null);
+      Assert.fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertSame("responseObserver", e.getMessage());
+    }
   }
 
   @Test
