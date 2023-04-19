@@ -83,6 +83,7 @@ dependencies {
 
     implementation (project(':grpc-services')) {
         exclude group: 'com.google.protobuf'
+        exclude group: 'com.google.guava'
     }
 
     compileOnly libraries.javax.annotation
