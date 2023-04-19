@@ -1966,7 +1966,7 @@ public class RetriableStreamTest {
   }
 
   @Test
-  public void noRetry_transparentRetry_earlyCommit() {
+  public void noRetry_transparentRetry_noEarlyCommit() {
     ClientStream mockStream1 = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
     InOrder inOrder = inOrder(retriableStreamRecorder, mockStream1, mockStream2);
@@ -1994,7 +1994,7 @@ public class RetriableStreamTest {
     inOrder.verify(retriableStreamRecorder).newSubstream(0);
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
-    inOrder.verify(retriableStreamRecorder).postCommit();
+    verify(retriableStreamRecorder, never()).postCommit();
     inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
     inOrder.verify(mockStream2).isReady();
     inOrder.verifyNoMoreInteractions();
