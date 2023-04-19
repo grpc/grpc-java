@@ -92,7 +92,7 @@ public final class FileWatcherAuthorizationServerInterceptor implements ServerIn
             try {
               updateInternalInterceptor();
             } catch (Exception e) {
-              logger.log(Level.WARNING, "Authorization Policy file reload failed: ", e);
+              logger.log(Level.WARNING, "Authorization Policy file reload failed", e);
             }
           }
         }, period, period, unit);
