@@ -217,7 +217,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.55.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.56.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
