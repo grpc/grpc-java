@@ -92,11 +92,11 @@ class LoadBalancerConfigFactory {
    * @throws ResourceInvalidException If the {@link Cluster} has an invalid LB configuration.
    */
   static ImmutableMap<String, ?> newConfig(Cluster cluster, boolean enableLeastRequest,
-      boolean enableCustomLbConfig, boolean enableWrr)
+      boolean enableWrr)
       throws ResourceInvalidException {
     // The new load_balancing_policy will always be used if it is set, but for backward
     // compatibility we will fall back to using the old lb_policy field if the new field is not set.
-    if (cluster.hasLoadBalancingPolicy() && enableCustomLbConfig) {
+    if (cluster.hasLoadBalancingPolicy()) {
       try {
         return LoadBalancingPolicyConverter.convertToServiceConfig(cluster.getLoadBalancingPolicy(),
             0, enableWrr);
