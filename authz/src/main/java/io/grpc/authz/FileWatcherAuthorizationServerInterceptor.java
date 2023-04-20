@@ -38,6 +38,7 @@ import java.util.logging.Logger;
  * The class will get <a href="https://github.com/grpc/proposal/blob/master/A43-grpc-authorization-api.md#user-facing-authorization-policy">
  * gRPC Authorization policy</a> from a JSON file during initialization.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9746")
 public final class FileWatcherAuthorizationServerInterceptor implements ServerInterceptor {
   private static final Logger logger = 
       Logger.getLogger(FileWatcherAuthorizationServerInterceptor.class.getName());
