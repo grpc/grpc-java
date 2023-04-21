@@ -420,9 +420,10 @@ public abstract class BinderTransport
     } catch (RuntimeException e) {
       synchronized (this) {
         // This unhandled exception may have put us in an inconsistent state. Force terminate the
-        // whole transport to alert our peer to the problem and so that clients can retry with a
-        // fresh transport on both sides.
-        logger.log(Level.SEVERE, "Terminating transport for uncaught Exception", e);
+        // whole transport so our peer knows something is wrong and so that clients who retry will
+        // enjoy a fresh transport instance on both sides.
+        logger.log(Level.SEVERE,
+            "Terminating transport for uncaught Exception in transaction " + code, e);
         shutdownInternal(Status.INTERNAL.withCause(e), true);
         return false;
       }

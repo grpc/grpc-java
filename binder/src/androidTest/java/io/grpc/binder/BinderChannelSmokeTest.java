@@ -77,6 +77,8 @@ public final class BinderChannelSmokeTest {
   private static final int SLIGHTLY_MORE_THAN_ONE_BLOCK = 16 * 1024 + 100;
   private static final String MSG = "Some text which will be repeated many many times";
   private static final String SERVER_TARGET_URI = "fake://server";
+  private static final Metadata.Key<PoisonParcelable> POISON_KEY = ParcelableUtils.metadataKey(
+      "poison-bin", PoisonParcelable.CREATOR);
 
   final MethodDescriptor<String, String> method =
       MethodDescriptor.newBuilder(StringMarshaller.INSTANCE, StringMarshaller.INSTANCE)
@@ -100,7 +102,7 @@ public final class BinderChannelSmokeTest {
   ManagedChannel channel;
   AtomicReference<Metadata> headersCapture = new AtomicReference<>();
   AtomicReference<PeerUid> clientUidCapture = new AtomicReference<>();
-  BadParcelable parcelableForResponseHeaders;
+  PoisonParcelable parcelableForResponseHeaders;
 
   @Before
   public void setUp() throws Exception {
@@ -233,10 +235,10 @@ public final class BinderChannelSmokeTest {
 
   @Test
   public void testUncaughtServerException() throws Exception {
-    // Use a poison parcelable to cause an unexpected Exception in the server's transaction handler.
-    BadParcelable bad = new BadParcelable();
+    // Use a poison parcelable to cause an unexpected Exception in the server's onTransact().
+    PoisonParcelable bad = new PoisonParcelable();
     Metadata extraHeadersToSend = new Metadata();
-    extraHeadersToSend.put(BAD_KEY, bad);
+    extraHeadersToSend.put(POISON_KEY, bad);
     ClientCall<String, String> call =
         ClientInterceptors.intercept(channel,
                 MetadataUtils.newAttachHeadersInterceptor(extraHeadersToSend))
@@ -245,6 +247,7 @@ public final class BinderChannelSmokeTest {
       ClientCalls.blockingUnaryCall(call, "hello");
       Assert.fail();
     } catch (StatusRuntimeException e) {
+      // We don't care how *our* RPC failed, but make sure we didn't have to rely on the deadline.
       assertThat(e.getStatus().getCode()).isNotEqualTo(Code.DEADLINE_EXCEEDED);
       assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
     }
@@ -252,22 +255,19 @@ public final class BinderChannelSmokeTest {
 
   @Test
   public void testUncaughtClientException() throws Exception {
-    // Use a poison parcelable to cause an unexpected Exception in the client's transaction handler.
-    parcelableForResponseHeaders = new BadParcelable();
+    // Use a poison parcelable to cause an unexpected Exception in the client's onTransact().
+    parcelableForResponseHeaders = new PoisonParcelable();
     ClientCall<String, String> call = channel
             .newCall(method, CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS));
     try {
       ClientCalls.blockingUnaryCall(call, "hello");
       Assert.fail();
     } catch (StatusRuntimeException e) {
+      // We don't care *how* our RPC failed, but make sure we didn't have to rely on the deadline.
       assertThat(e.getStatus().getCode()).isNotEqualTo(Code.DEADLINE_EXCEEDED);
       assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
     }
   }
-
-  private static final Metadata.Key<BadParcelable> BAD_KEY = ParcelableUtils.metadataKey(
-      "bad-bin", BadParcelable.CREATOR);
-
 
   private static String createLargeString(int size) {
     StringBuilder sb = new StringBuilder();
@@ -301,7 +301,6 @@ public final class BinderChannelSmokeTest {
   }
 
   private static class QueueingStreamObserver<V> implements StreamObserver<V> {
-
     private final ArrayList<V> elements = new ArrayList<>();
     private final SettableFuture<Iterable<V>> result = SettableFuture.create();
 
@@ -326,7 +325,6 @@ public final class BinderChannelSmokeTest {
   }
 
   private static class ForwardingStreamObserver<V> implements StreamObserver<V> {
-
     private final StreamObserver<V> delegate;
 
     ForwardingStreamObserver(StreamObserver<V> delegate) {
@@ -357,7 +355,7 @@ public final class BinderChannelSmokeTest {
         @Override
         public void sendHeaders(Metadata headers) {
           if (parcelableForResponseHeaders != null) {
-            headers.put(BAD_KEY, parcelableForResponseHeaders);
+            headers.put(POISON_KEY, parcelableForResponseHeaders);
           }
           super.sendHeaders(headers);
         }
@@ -365,17 +363,17 @@ public final class BinderChannelSmokeTest {
     }
   }
 
-  static class BadParcelable implements Parcelable {
+  static class PoisonParcelable implements Parcelable {
 
-    public static final Creator<BadParcelable> CREATOR = new Parcelable.Creator<BadParcelable>() {
+    public static final Creator<PoisonParcelable> CREATOR = new Parcelable.Creator<PoisonParcelable>() {
       @Override
-      public BadParcelable createFromParcel(Parcel parcel) {
+      public PoisonParcelable createFromParcel(Parcel parcel) {
         throw new RuntimeException("ouch");
       }
 
       @Override
-      public BadParcelable[] newArray(int n) {
-        return new BadParcelable[n];
+      public PoisonParcelable[] newArray(int n) {
+        return new PoisonParcelable[n];
       }
     };
 
