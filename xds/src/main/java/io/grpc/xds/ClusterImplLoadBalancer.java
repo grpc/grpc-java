@@ -89,8 +89,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private ClusterDropStats dropStats;
   private ClusterImplLbHelper childLbHelper;
   private GracefulSwitchLoadBalancer childSwitchLb;
-  @Nullable String childPolicy;
-
 
   ClusterImplLoadBalancer(Helper helper) {
     this(helper, ThreadSafeRandomImpl.instance);
