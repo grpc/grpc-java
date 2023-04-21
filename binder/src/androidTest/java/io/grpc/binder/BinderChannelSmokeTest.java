@@ -22,6 +22,8 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import android.content.Context;
+import android.os.Parcel;
+import android.os.Parcelable;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.io.ByteStreams;
@@ -29,16 +31,26 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptors;
+import io.grpc.ConnectivityState;
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolverRegistry;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
+import io.grpc.Status.Code;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.FakeNameResolverProvider;
 import io.grpc.stub.ClientCalls;
+import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TestUtils;
@@ -49,6 +61,7 @@ import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -87,6 +100,7 @@ public final class BinderChannelSmokeTest {
   ManagedChannel channel;
   AtomicReference<Metadata> headersCapture = new AtomicReference<>();
   AtomicReference<PeerUid> clientUidCapture = new AtomicReference<>();
+  BadParcelable parcelableForResponseHeaders;
 
   @Before
   public void setUp() throws Exception {
@@ -116,6 +130,7 @@ public final class BinderChannelSmokeTest {
                 .addMethod(singleLargeResultMethod, singleLargeResultCallHandler)
                 .addMethod(bidiMethod, bidiCallHandler)
                 .build(),
+            new AddParcelableServerInterceptor(),
             TestUtils.recordRequestHeadersInterceptor(headersCapture),
             PeerUids.newPeerIdentifyingServerInterceptor());
 
@@ -124,13 +139,20 @@ public final class BinderChannelSmokeTest {
     NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverProvider);
     HostServices.configureService(serverAddress,
         HostServices.serviceParamsBuilder()
-          .setServerFactory((service, receiver) ->
-              BinderServerBuilder.forAddress(serverAddress, receiver)
-                .addService(serviceDef)
-                .build())
-          .build());
+            .setServerFactory((service, receiver) ->
+                BinderServerBuilder.forAddress(serverAddress, receiver)
+                    .inboundParcelablePolicy(InboundParcelablePolicy.newBuilder()
+                        .setAcceptParcelableMetadataValues(true)
+                        .build())
+                    .addService(serviceDef)
+                    .build())
+            .build());
 
-    channel = BinderChannelBuilder.forAddress(serverAddress, appContext).build();
+    channel = BinderChannelBuilder.forAddress(serverAddress, appContext)
+        .inboundParcelablePolicy(InboundParcelablePolicy.newBuilder()
+            .setAcceptParcelableMetadataValues(true)
+            .build())
+        .build();
   }
 
   @After
@@ -209,6 +231,44 @@ public final class BinderChannelSmokeTest {
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
   }
 
+  @Test
+  public void testUncaughtServerException() throws Exception {
+    // Use a poison parcelable to cause an unexpected Exception in the server's transaction handler.
+    BadParcelable bad = new BadParcelable();
+    Metadata extraHeadersToSend = new Metadata();
+    extraHeadersToSend.put(BAD_KEY, bad);
+    ClientCall<String, String> call =
+        ClientInterceptors.intercept(channel,
+                MetadataUtils.newAttachHeadersInterceptor(extraHeadersToSend))
+            .newCall(method, CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS));
+    try {
+      ClientCalls.blockingUnaryCall(call, "hello");
+      Assert.fail();
+    } catch (StatusRuntimeException e) {
+      assertThat(e.getStatus().getCode()).isNotEqualTo(Code.DEADLINE_EXCEEDED);
+      assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
+    }
+  }
+
+  @Test
+  public void testUncaughtClientException() throws Exception {
+    // Use a poison parcelable to cause an unexpected Exception in the client's transaction handler.
+    parcelableForResponseHeaders = new BadParcelable();
+    ClientCall<String, String> call = channel
+            .newCall(method, CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS));
+    try {
+      ClientCalls.blockingUnaryCall(call, "hello");
+      Assert.fail();
+    } catch (StatusRuntimeException e) {
+      assertThat(e.getStatus().getCode()).isNotEqualTo(Code.DEADLINE_EXCEEDED);
+      assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
+    }
+  }
+
+  private static final Metadata.Key<BadParcelable> BAD_KEY = ParcelableUtils.metadataKey(
+      "bad-bin", BadParcelable.CREATOR);
+
+
   private static String createLargeString(int size) {
     StringBuilder sb = new StringBuilder();
     while (sb.length() < size) {
@@ -241,6 +301,7 @@ public final class BinderChannelSmokeTest {
   }
 
   private static class QueueingStreamObserver<V> implements StreamObserver<V> {
+
     private final ArrayList<V> elements = new ArrayList<>();
     private final SettableFuture<Iterable<V>> result = SettableFuture.create();
 
@@ -265,6 +326,7 @@ public final class BinderChannelSmokeTest {
   }
 
   private static class ForwardingStreamObserver<V> implements StreamObserver<V> {
+
     private final StreamObserver<V> delegate;
 
     ForwardingStreamObserver(StreamObserver<V> delegate) {
@@ -284,6 +346,46 @@ public final class BinderChannelSmokeTest {
     @Override
     public void onCompleted() {
       delegate.onCompleted();
+    }
+  }
+
+  class AddParcelableServerInterceptor implements ServerInterceptor {
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+        Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
+        @Override
+        public void sendHeaders(Metadata headers) {
+          if (parcelableForResponseHeaders != null) {
+            headers.put(BAD_KEY, parcelableForResponseHeaders);
+          }
+          super.sendHeaders(headers);
+        }
+      }, headers);
+    }
+  }
+
+  static class BadParcelable implements Parcelable {
+
+    public static final Creator<BadParcelable> CREATOR = new Parcelable.Creator<BadParcelable>() {
+      @Override
+      public BadParcelable createFromParcel(Parcel parcel) {
+        throw new RuntimeException("ouch");
+      }
+
+      @Override
+      public BadParcelable[] newArray(int n) {
+        return new BadParcelable[n];
+      }
+    };
+
+    @Override
+    public int describeContents() {
+      return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel parcel, int flags) {
     }
   }
 }

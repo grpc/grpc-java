@@ -415,6 +415,20 @@ public abstract class BinderTransport
 
   @Override
   public final boolean handleTransaction(int code, Parcel parcel) {
+    try {
+      return handleTransactionInternal(code, parcel);
+    } catch (RuntimeException e) {
+      synchronized (this) {
+        // This unhandled exception may have put us in an inconsistent state. Force terminate the
+        // whole transport so that clients can retry with a fresh instance on both sides.
+        logger.log(Level.SEVERE, "Unhandled Exception", e);
+        shutdownInternal(Status.INTERNAL.withCause(e), true);
+        return false;
+      }
+    }
+  }
+
+  private boolean handleTransactionInternal(int code, Parcel parcel) {
     if (code < FIRST_CALL_ID) {
       synchronized (this) {
         switch (code) {
