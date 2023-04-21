@@ -35,6 +35,7 @@ import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
@@ -87,7 +88,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private CallCounterProvider callCounterProvider;
   private ClusterDropStats dropStats;
   private ClusterImplLbHelper childLbHelper;
-  private LoadBalancer childLb;
+  private GracefulSwitchLoadBalancer childSwitchLb;
+  @Nullable String childPolicy;
+
 
   ClusterImplLoadBalancer(Helper helper) {
     this(helper, ThreadSafeRandomImpl.instance);
@@ -120,7 +123,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       childLbHelper = new ClusterImplLbHelper(
           callCounterProvider.getOrCreate(config.cluster, config.edsServiceName),
           config.lrsServerInfo);
-      childLb = config.childPolicy.getProvider().newLoadBalancer(childLbHelper);
+      childSwitchLb = new GracefulSwitchLoadBalancer(childLbHelper);
       // Assume load report server does not change throughout cluster lifetime.
       if (config.lrsServerInfo != null) {
         dropStats = xdsClient.addClusterDropStats(config.lrsServerInfo, cluster, edsServiceName);
@@ -129,7 +132,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
-    childLb.handleResolvedAddresses(
+
+    if (!config.childPolicy.getProvider().getPolicyName().equals(childPolicy)) {
+      childSwitchLb.switchTo(config.childPolicy.getProvider());
+    }
+
+    childSwitchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
@@ -139,8 +147,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    if (childLb != null) {
-      childLb.handleNameResolutionError(error);
+    if (childSwitchLb != null) {
+      childSwitchLb.handleNameResolutionError(error);
     } else {
       helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new ErrorPicker(error));
     }
@@ -151,8 +159,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (dropStats != null) {
       dropStats.release();
     }
-    if (childLb != null) {
-      childLb.shutdown();
+    if (childSwitchLb != null) {
+      childSwitchLb.shutdown();
       if (childLbHelper != null) {
         childLbHelper.updateSslContextProviderSupplier(null);
         childLbHelper = null;
