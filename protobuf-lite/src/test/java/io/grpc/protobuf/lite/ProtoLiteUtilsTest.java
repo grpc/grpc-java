@@ -38,7 +38,6 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.testing.protobuf.SimpleRecursiveMessage;
-import io.grpc.testing.protobuf.SimpleRecursiveMessage.Builder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
