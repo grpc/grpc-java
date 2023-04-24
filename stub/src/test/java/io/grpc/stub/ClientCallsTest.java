@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -156,8 +155,8 @@ public class ClientCallsTest {
       ClientCalls.blockingUnaryCall(call, req);
       fail("Should fail");
     } catch (StatusRuntimeException e) {
-      assertSame(status, e.getStatus());
-      assertSame(trailers, e.getTrailers());
+      assertEquals(status, e.getStatus());
+      assertEquals(trailers, e.getTrailers());
     }
   }
 
@@ -364,7 +363,7 @@ public class ClientCallsTest {
       Status status = Status.fromThrowable(e);
       assertEquals(Status.INTERNAL, status);
       Metadata metadata = Status.trailersFromThrowable(e);
-      assertSame(trailers, metadata);
+      assertEquals(trailers, metadata);
     }
   }
 
@@ -511,7 +510,7 @@ public class ClientCallsTest {
       ClientCalls.asyncUnaryCall(call, Integer.valueOf(1), null);
       Assert.fail("Should have gotten an exception for the null responseObserver");
     } catch (NullPointerException e) {
-      assertSame("responseObserver", e.getMessage());
+      assertEquals("responseObserver", e.getMessage());
     }
   }
 
@@ -522,7 +521,7 @@ public class ClientCallsTest {
       ClientCalls.asyncBidiStreamingCall(call, null);
       Assert.fail("Should have gotten an exception for the null responseObserver");
     } catch (NullPointerException e) {
-      assertSame("responseObserver", e.getMessage());
+      assertEquals("responseObserver", e.getMessage());
     }
   }
 
@@ -533,7 +532,7 @@ public class ClientCallsTest {
       ClientCalls.asyncClientStreamingCall(call, null);
       Assert.fail("Should have gotten an exception for the null responseObserver");
     } catch (NullPointerException e) {
-      assertSame("responseObserver", e.getMessage());
+      assertEquals("responseObserver", e.getMessage());
     }
   }
 
@@ -544,7 +543,7 @@ public class ClientCallsTest {
       ClientCalls.asyncServerStreamingCall(call, Integer.valueOf(1), null);
       Assert.fail("Should have gotten an exception for the null responseObserver");
     } catch (NullPointerException e) {
-      assertSame("responseObserver", e.getMessage());
+      assertEquals("responseObserver", e.getMessage());
     }
   }
 
@@ -838,7 +837,7 @@ public class ClientCallsTest {
       Status status = Status.fromThrowable(e);
       assertEquals(Status.INTERNAL, status);
       Metadata metadata = Status.trailersFromThrowable(e);
-      assertSame(trailers, metadata);
+      assertEquals(trailers, metadata);
     }
   }
 
