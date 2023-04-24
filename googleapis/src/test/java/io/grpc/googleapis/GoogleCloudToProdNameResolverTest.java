@@ -159,6 +159,7 @@ public class GoogleCloudToProdNameResolverTest {
   public void hasProvidedBootstrapDelegateToDns() {
     GoogleCloudToProdNameResolver.isOnGcp = true;
     GoogleCloudToProdNameResolver.xdsBootstrapProvided = true;
+    GoogleCloudToProdNameResolver.enableFederation = false;
     createResolver();
     resolver.start(mockListener);
     assertThat(delegatedResolver.keySet()).containsExactly("dns");

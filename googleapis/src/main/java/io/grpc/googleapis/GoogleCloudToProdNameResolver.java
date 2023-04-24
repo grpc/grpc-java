@@ -66,8 +66,8 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           || System.getProperty("io.grpc.xds.bootstrapConfig") != null;
   @VisibleForTesting
   static boolean enableFederation =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
-          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
+          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
 
   private static final String serverUriOverride =
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
