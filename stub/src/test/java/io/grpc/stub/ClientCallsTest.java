@@ -65,7 +65,6 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -509,7 +508,7 @@ public class ClientCallsTest {
     NoopClientCall<Integer, String> call = new NoopClientCall<>();
     try {
       ClientCalls.asyncUnaryCall(call, Integer.valueOf(1), null);
-      Assert.fail("Should have gotten an exception for the null responseObserver");
+      fail("Should have gotten an exception for the null responseObserver");
     } catch (NullPointerException e) {
       assertEquals("responseObserver", e.getMessage());
     }
@@ -520,7 +519,7 @@ public class ClientCallsTest {
     NoopClientCall<Integer, String> call = new NoopClientCall<>();
     try {
       ClientCalls.asyncBidiStreamingCall(call, null);
-      Assert.fail("Should have gotten an exception for the null responseObserver");
+      fail("Should have gotten an exception for the null responseObserver");
     } catch (NullPointerException e) {
       assertEquals("responseObserver", e.getMessage());
     }
@@ -531,7 +530,7 @@ public class ClientCallsTest {
     NoopClientCall<Integer, String> call = new NoopClientCall<>();
     try {
       ClientCalls.asyncClientStreamingCall(call, null);
-      Assert.fail("Should have gotten an exception for the null responseObserver");
+      fail("Should have gotten an exception for the null responseObserver");
     } catch (NullPointerException e) {
       assertEquals("responseObserver", e.getMessage());
     }
@@ -542,7 +541,7 @@ public class ClientCallsTest {
     NoopClientCall<Integer, String> call = new NoopClientCall<>();
     try {
       ClientCalls.asyncServerStreamingCall(call, Integer.valueOf(1), null);
-      Assert.fail("Should have gotten an exception for the null responseObserver");
+      fail("Should have gotten an exception for the null responseObserver");
     } catch (NullPointerException e) {
       assertEquals("responseObserver", e.getMessage());
     }
