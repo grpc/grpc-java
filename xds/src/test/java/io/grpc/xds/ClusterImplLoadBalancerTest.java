@@ -165,6 +165,41 @@ public class ClusterImplLoadBalancerTest {
         .isSameInstanceAs(xdsClientPool);
   }
 
+  /**
+   * If the control plane switches from using the legacy lb_policy field in the xDS Cluster proto
+   * to the newer load_balancing_policy then the child policy can switch from weighted_target to
+   * xds_wrr_locality (this could happen the opposite way as well). This test assures that this
+   * results in the child LB changing if this were to happen. If this is not done correctly the new
+   * configuration would be given to the old LB implementation which would cause a channel panic.
+   */
+  @Test
+  public void handleResolvedAddresses_childPolicyChanges() {
+    FakeLoadBalancerProvider weightedTargetProvider =
+        new FakeLoadBalancerProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);
+    Object weightedTargetConfig = new Object();
+    ClusterImplConfig configWithWeightedTarget = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
+        LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWeightedTarget);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);
+    assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
+
+    FakeLoadBalancerProvider wrrLocalityProvider =
+        new FakeLoadBalancerProvider(XdsLbPolicies.WRR_LOCALITY_POLICY_NAME);
+    Object wrrLocalityConfig = new Object();
+    ClusterImplConfig configWithWrrLocality = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
+        LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(wrrLocalityProvider, wrrLocalityConfig), null);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWrrLocality);
+    childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.WRR_LOCALITY_POLICY_NAME);
+    assertThat(childBalancer.config).isSameInstanceAs(wrrLocalityConfig);
+  }
+
   @Test
   public void nameResolutionError_beforeChildPolicyInstantiated_returnErrorPickerToUpstream() {
     loadBalancer.handleNameResolutionError(Status.UNIMPLEMENTED.withDescription("not found"));
