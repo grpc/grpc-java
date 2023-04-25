@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -155,8 +156,8 @@ public class ClientCallsTest {
       ClientCalls.blockingUnaryCall(call, req);
       fail("Should fail");
     } catch (StatusRuntimeException e) {
-      assertEquals(status, e.getStatus());
-      assertEquals(trailers, e.getTrailers());
+      assertSame(status, e.getStatus());
+      assertSame(trailers, e.getTrailers());
     }
   }
 
@@ -363,7 +364,7 @@ public class ClientCallsTest {
       Status status = Status.fromThrowable(e);
       assertEquals(Status.INTERNAL, status);
       Metadata metadata = Status.trailersFromThrowable(e);
-      assertEquals(trailers, metadata);
+      assertSame(trailers, metadata);
     }
   }
 
@@ -837,7 +838,7 @@ public class ClientCallsTest {
       Status status = Status.fromThrowable(e);
       assertEquals(Status.INTERNAL, status);
       Metadata metadata = Status.trailersFromThrowable(e);
-      assertEquals(trailers, metadata);
+      assertSame(trailers, metadata);
     }
   }
 
