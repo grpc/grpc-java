@@ -175,7 +175,7 @@ public class XdsClientImplDataTest {
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     assertThat(originalEnableLeastRequest).isFalse();
     originalEnableWrr = XdsResourceType.enableWrr;
-    assertThat(originalEnableWrr).isFalse();
+    assertThat(originalEnableWrr).isTrue();
   }
 
   @After
@@ -1993,8 +1993,6 @@ public class XdsClientImplDataTest {
 
   @Test
   public void parseCluster_WrrLbPolicy_defaultLbConfig() throws ResourceInvalidException {
-    XdsResourceType.enableWrr = true;
-
     LoadBalancingPolicy wrrConfig =
         LoadBalancingPolicy.newBuilder().addPolicies(
                 LoadBalancingPolicy.Policy.newBuilder()
