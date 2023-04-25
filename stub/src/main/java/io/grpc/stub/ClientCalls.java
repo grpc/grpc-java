@@ -73,6 +73,7 @@ public final class ClientCalls {
    */
   public static <ReqT, RespT> void asyncUnaryCall(
       ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver) {
+    checkNotNull(responseObserver, "responseObserver");
     asyncUnaryRequestCall(call, req, responseObserver, false);
   }
 
@@ -86,6 +87,7 @@ public final class ClientCalls {
    */
   public static <ReqT, RespT> void asyncServerStreamingCall(
       ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver) {
+    checkNotNull(responseObserver, "responseObserver");
     asyncUnaryRequestCall(call, req, responseObserver, true);
   }
 
@@ -102,6 +104,7 @@ public final class ClientCalls {
   public static <ReqT, RespT> StreamObserver<ReqT> asyncClientStreamingCall(
       ClientCall<ReqT, RespT> call,
       StreamObserver<RespT> responseObserver) {
+    checkNotNull(responseObserver, "responseObserver");
     return asyncStreamingRequestCall(call, responseObserver, false);
   }
 
@@ -116,6 +119,7 @@ public final class ClientCalls {
    */
   public static <ReqT, RespT> StreamObserver<ReqT> asyncBidiStreamingCall(
       ClientCall<ReqT, RespT> call, StreamObserver<RespT> responseObserver) {
+    checkNotNull(responseObserver, "responseObserver");
     return asyncStreamingRequestCall(call, responseObserver, true);
   }
 

@@ -504,6 +504,50 @@ public class ClientCallsTest {
   }
 
   @Test
+  public void checkForNullInAsyncUnaryCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncUnaryCall(call, Integer.valueOf(1), null);
+      fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertEquals("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInBidiCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncBidiStreamingCall(call, null);
+      fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertEquals("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInClientStreamCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncClientStreamingCall(call, null);
+      fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertEquals("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInServerStreamCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncServerStreamingCall(call, Integer.valueOf(1), null);
+      fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertEquals("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
   public void callStreamObserverPropagatesFlowControlRequestsToCall()
       throws Exception {
     ClientResponseObserver<Integer, String> responseObserver =
