@@ -72,7 +72,7 @@ public class CallMetricRecorderTest {
     recorder.recordUtilizationMetric("util1", 1.001);
 
     MetricReport dump = recorder.finalizeAndDump2();
-    Truth.assertThat(dump.getCpuUtilization()).isEqualTo(0);
+    Truth.assertThat(dump.getCpuUtilization()).isEqualTo(1.001);
     Truth.assertThat(dump.getMemoryUtilization()).isEqualTo(0);
     Truth.assertThat(dump.getQps()).isEqualTo(0);
     Truth.assertThat(dump.getUtilizationMetrics()).isEmpty();

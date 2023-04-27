@@ -245,7 +245,7 @@ public class OrcaServiceImplTest {
   public void testApis() throws Exception {
     ImmutableMap<String, Double> firstUtilization = ImmutableMap.of("util", 0.1);
     OrcaLoadReport goldenReport = OrcaLoadReport.newBuilder()
-        .setCpuUtilization(random.nextDouble())
+        .setCpuUtilization(random.nextDouble() * 10)
         .setMemUtilization(random.nextDouble())
         .putAllUtilization(firstUtilization)
         .putUtilization("queue", 1.0)
@@ -276,7 +276,6 @@ public class OrcaServiceImplTest {
     assertThat(reports.next()).isEqualTo(goldenReport);
 
     defaultTestService.setCpuUtilizationMetric(-0.001);
-    defaultTestService.setCpuUtilizationMetric(1.001);
     defaultTestService.setMemoryUtilizationMetric(-0.001);
     defaultTestService.setMemoryUtilizationMetric(1.001);
     defaultTestService.setQpsMetric(-0.001);

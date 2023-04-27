@@ -135,7 +135,7 @@ public final class CallMetricRecorder {
    * @since 1.47.0
    */
   public CallMetricRecorder recordCpuUtilizationMetric(double value) {
-    if (disabled || !MetricRecorderHelper.isUtilizationValid(value)) {
+    if (disabled || !MetricRecorderHelper.isCpuUtilizationValid(value)) {
       return this;
     }
     cpuUtilizationMetric = value;
