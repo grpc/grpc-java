@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private Subchannel subchannel;
+  private ConnectivityState currentState = IDLE;
 
   PickFirstLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -69,7 +70,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-      helper.updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
+      updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
@@ -86,20 +87,34 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     }
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
     // for time being.
-    helper.updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    ConnectivityState currentState = stateInfo.getState();
-    if (currentState == SHUTDOWN) {
+    ConnectivityState newState = stateInfo.getState();
+    if (newState == SHUTDOWN) {
       return;
     }
-    if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
+    if (newState == TRANSIENT_FAILURE || newState == IDLE) {
       helper.refreshNameResolution();
     }
 
+    // If we are transitioning from a TRANSIENT_FAILURE to CONNECTING or IDLE we ignore this state
+    // transition and still keep the LB in TRANSIENT_FAILURE state. This is referred to as "sticky
+    // transient failure". Only a subchannel state change to READY will get the LB out of
+    // TRANSIENT_FAILURE. If the state is IDLE we additionally request a new connection so that we
+    // keep retrying for a connection.
+    if (currentState == TRANSIENT_FAILURE) {
+      if (newState == CONNECTING) {
+        return;
+      } else if (newState == IDLE) {
+        requestConnection();
+        return;
+      }
+    }
+
     SubchannelPicker picker;
-    switch (currentState) {
+    switch (newState) {
       case IDLE:
         picker = new RequestConnectionPicker(subchannel);
         break;
@@ -115,9 +130,15 @@ final class PickFirstLoadBalancer extends LoadBalancer {
         picker = new Picker(PickResult.withError(stateInfo.getStatus()));
         break;
       default:
-        throw new IllegalArgumentException("Unsupported state:" + currentState);
+        throw new IllegalArgumentException("Unsupported state:" + newState);
     }
-    helper.updateBalancingState(currentState, picker);
+
+    updateBalancingState(newState, picker);
+  }
+
+  private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
+    currentState = state;
+    helper.updateBalancingState(state, picker);
   }
 
   @Override

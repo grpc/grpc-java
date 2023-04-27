@@ -260,16 +260,16 @@ public class PickFirstLoadBalancerTest {
     reset(mockHelper);
     when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
 
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).refreshNameResolution();
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+
     Status error = Status.UNAVAILABLE.withDescription("boom!");
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
     inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
-
-    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
-    inOrder.verify(mockHelper).refreshNameResolution();
-    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
-    assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -277,6 +277,43 @@ public class PickFirstLoadBalancerTest {
 
     verify(mockHelper, atLeast(0)).getSynchronizationContext();  // Don't care
     verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void pickAfterResolutionAfterTransientValue() throws Exception {
+    InOrder inOrder = inOrder(mockHelper);
+
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    CreateSubchannelArgs args = createArgsCaptor.getValue();
+    assertThat(args.getAddresses()).isEqualTo(servers);
+    verify(mockSubchannel).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockSubchannel).requestConnection();
+    reset(mockHelper);
+    when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
+
+    // An error has happened.
+    Status error = Status.UNAVAILABLE.withDescription("boom!");
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).refreshNameResolution();
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+
+    // But a subsequent IDLE update should be ignored and the LB state not updated. Additionally,
+    // a request for a new connection should be made keep the subchannel trying to connect.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).refreshNameResolution();
+    verifyNoMoreInteractions(mockHelper);
+    assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+    verify(mockSubchannel, times(2)).requestConnection();
+
+    // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verifyNoMoreInteractions(mockHelper);
+    assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
   }
 
   @Test
