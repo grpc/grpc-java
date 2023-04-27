@@ -63,7 +63,7 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
   private Metadata lastHeaders;
   private Map<String, List<String>> lastMetadata;
 
-  private Boolean requiresSpecificExecutor;
+  private final boolean requiresSpecificExecutor;
 
   public GoogleAuthLibraryCallCredentials(Credentials creds) {
     this(creds, jwtHelper);
@@ -85,6 +85,13 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
     }
     this.requirePrivacy = requirePrivacy;
     this.creds = creds;
+
+    // Cache the value so we only need to try to load the class once
+    if (APP_ENGINE_CREDENTIALS_CLASS == null) {
+      requiresSpecificExecutor = false;
+    } else {
+      requiresSpecificExecutor = APP_ENGINE_CREDENTIALS_CLASS.isInstance(creds);
+    }
   }
 
   @Override
@@ -377,15 +384,6 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
    */
   @Override
   public boolean isSpecificExecutorRequired() {
-    // Cache the value so we only need to try to load the class once
-    if (requiresSpecificExecutor == null) {
-      if (APP_ENGINE_CREDENTIALS_CLASS == null) {
-        requiresSpecificExecutor = Boolean.FALSE;
-      } else {
-        requiresSpecificExecutor = APP_ENGINE_CREDENTIALS_CLASS.isInstance(creds);
-      }
-    }
-
     return requiresSpecificExecutor;
   }
 
