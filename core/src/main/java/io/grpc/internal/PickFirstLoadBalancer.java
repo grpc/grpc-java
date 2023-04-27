@@ -70,7 +70,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-      updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
+      helper.updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
@@ -87,7 +87,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     }
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
     // for time being.
-    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    helper.updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
@@ -133,12 +133,8 @@ final class PickFirstLoadBalancer extends LoadBalancer {
         throw new IllegalArgumentException("Unsupported state:" + newState);
     }
 
-    updateBalancingState(newState, picker);
-  }
-
-  private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
-    currentState = state;
-    helper.updateBalancingState(state, picker);
+    currentState = newState;
+    helper.updateBalancingState(newState, picker);
   }
 
   @Override
