@@ -3567,11 +3567,10 @@ public abstract class XdsClientImplTestBase {
     // Setup xdsClient to fail on stream creation
     XdsClientImpl client = createXdsClient("some.garbage");
     client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
-    fakeClock.forwardTime(20, TimeUnit.SECONDS);
-
     verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
-    fakeClock.forwardTime(50, TimeUnit.SECONDS); // Trigger rpcRetry if appropriate
-    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    assertThat(fakeClock.numPendingTasks()).isEqualTo(1); //retry
+    assertThat(fakeClock.getPendingTasks().iterator().next().toString().contains("RpcRetryTask"))
+        .isTrue();
     client.shutdown();
   }
 
