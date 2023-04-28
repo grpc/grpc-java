@@ -52,6 +52,7 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.net.SocketAddress;
 import java.util.List;
 import org.junit.After;
@@ -126,6 +127,49 @@ public class PickFirstLoadBalancerTest {
   public void pickAfterResolved() throws Exception {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+
+    verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    CreateSubchannelArgs args = createArgsCaptor.getValue();
+    assertThat(args.getAddresses()).isEqualTo(servers);
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockSubchannel).requestConnection();
+
+    // Calling pickSubchannel() twice gave the same result
+    assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
+        pickerCaptor.getValue().pickSubchannel(mockArgs));
+
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffle() throws Exception {
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
+            .setLoadBalancingPolicyConfig(new PickFirstLoadBalancerConfig(true, 123L)).build());
+
+    verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    CreateSubchannelArgs args = createArgsCaptor.getValue();
+    // We should still see the same set of addresses.
+    assertThat(args.getAddresses()).containsExactlyElementsIn(servers);
+    // Because we use a fixed seed, the addresses should always be shuffled in this order.
+    assertThat(args.getAddresses().get(0)).isEqualTo(servers.get(1));
+    assertThat(args.getAddresses().get(1)).isEqualTo(servers.get(0));
+    assertThat(args.getAddresses().get(2)).isEqualTo(servers.get(2));
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockSubchannel).requestConnection();
+
+    // Calling pickSubchannel() twice gave the same result
+    assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
+        pickerCaptor.getValue().pickSubchannel(mockArgs));
+
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void pickAfterResolved_noShuffle() throws Exception {
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
+            .setLoadBalancingPolicyConfig(new PickFirstLoadBalancerConfig(false)).build());
 
     verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     CreateSubchannelArgs args = createArgsCaptor.getValue();

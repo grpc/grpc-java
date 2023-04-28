@@ -28,8 +28,12 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 
 /**
  * A {@link LoadBalancer} that provides no load-balancing over the addresses from the {@link
@@ -53,6 +57,18 @@ final class PickFirstLoadBalancer extends LoadBalancer {
           "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
               + ", attrs=" + resolvedAddresses.getAttributes()));
       return false;
+    }
+
+    // We can optionally be configured to shuffle the address list. This can help better distribute
+    // the load.
+    if (resolvedAddresses.getLoadBalancingPolicyConfig() instanceof PickFirstLoadBalancerConfig) {
+      PickFirstLoadBalancerConfig config
+          = (PickFirstLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+      if (config.shuffleAddressList != null && config.shuffleAddressList) {
+        servers = new ArrayList<EquivalentAddressGroup>(servers);
+        Collections.shuffle(servers,
+            config.randomSeed != null ? new Random(config.randomSeed) : new Random());
+      }
     }
 
     if (subchannel == null) {
@@ -197,6 +213,24 @@ final class PickFirstLoadBalancer extends LoadBalancer {
           });
       }
       return PickResult.withNoResult();
+    }
+  }
+
+  public static final class PickFirstLoadBalancerConfig {
+
+    @Nullable
+    public final Boolean shuffleAddressList;
+
+    // For testing purposes only, not meant to be parsed from a real config.
+    @Nullable final Long randomSeed;
+
+    public PickFirstLoadBalancerConfig(@Nullable Boolean shuffleAddressList) {
+      this(shuffleAddressList, null);
+    }
+
+    PickFirstLoadBalancerConfig(@Nullable Boolean shuffleAddressList, @Nullable Long randomSeed) {
+      this.shuffleAddressList = shuffleAddressList;
+      this.randomSeed = randomSeed;
     }
   }
 }
