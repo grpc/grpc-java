@@ -64,11 +64,11 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the CPU utilization metrics data in the range [0, 1]. Values outside the valid range are
-   * ignored.
+   * Update the CPU utilization metrics data in the range [0, inf). Values outside the valid range
+   * are ignored.
    */
   public void setCpuUtilizationMetric(double value) {
-    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+    if (!MetricRecorderHelper.isCpuUtilizationValid(value)) {
       return;
     }
     cpuUtilization = value;
