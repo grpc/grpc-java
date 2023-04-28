@@ -22,7 +22,9 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Strings;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -44,6 +46,10 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private Subchannel subchannel;
   private ConnectivityState currentState = IDLE;
+  @VisibleForTesting
+  static boolean enablePickFirstConfig =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG"))
+          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG"));
 
   PickFirstLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -61,7 +67,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
     // We can optionally be configured to shuffle the address list. This can help better distribute
     // the load.
-    if (resolvedAddresses.getLoadBalancingPolicyConfig() != null) {
+    if (enablePickFirstConfig && resolvedAddresses.getLoadBalancingPolicyConfig() != null) {
       PickFirstLoadBalancerConfig config
           = (PickFirstLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       if (config.shuffleAddressList != null && config.shuffleAddressList) {

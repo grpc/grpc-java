@@ -121,6 +121,7 @@ public class PickFirstLoadBalancerTest {
   @After
   public void tearDown() throws Exception {
     verifyNoMoreInteractions(mockArgs);
+    PickFirstLoadBalancer.enablePickFirstConfig = false;
   }
 
   @Test
@@ -143,6 +144,7 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void pickAfterResolved_shuffle() throws Exception {
+    PickFirstLoadBalancer.enablePickFirstConfig = true;
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
             .setLoadBalancingPolicyConfig(new PickFirstLoadBalancerConfig(true, 123L)).build());
