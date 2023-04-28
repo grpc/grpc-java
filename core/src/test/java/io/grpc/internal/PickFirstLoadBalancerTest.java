@@ -52,6 +52,7 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.net.SocketAddress;
 import java.util.List;
 import org.junit.After;
@@ -130,6 +131,28 @@ public class PickFirstLoadBalancerTest {
     verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     CreateSubchannelArgs args = createArgsCaptor.getValue();
     assertThat(args.getAddresses()).isEqualTo(servers);
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockSubchannel).requestConnection();
+
+    // Calling pickSubchannel() twice gave the same result
+    assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
+        pickerCaptor.getValue().pickSubchannel(mockArgs));
+
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffle() throws Exception {
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
+            .setLoadBalancingPolicyConfig(new PickFirstLoadBalancerConfig(true)).build());
+
+    verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    CreateSubchannelArgs args = createArgsCaptor.getValue();
+    // We should still see the same set of addresses.
+    assertThat(args.getAddresses()).containsExactlyElementsIn(servers);
+    // If the two lists are equal they have maintained order, we don't want that.
+    assertThat(args.getAddresses()).isNotEqualTo(servers);
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel).requestConnection();
 
