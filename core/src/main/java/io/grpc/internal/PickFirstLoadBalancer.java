@@ -31,6 +31,7 @@ import io.grpc.Status;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -65,7 +66,8 @@ final class PickFirstLoadBalancer extends LoadBalancer {
           = (PickFirstLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       if (config.shuffleAddressList != null && config.shuffleAddressList) {
         servers = new ArrayList<EquivalentAddressGroup>(servers);
-        Collections.shuffle(servers);
+        Collections.shuffle(servers,
+            config.randomSeed != null ? new Random(config.randomSeed) : new Random());
       }
     }
 
@@ -219,8 +221,16 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     @Nullable
     public final Boolean shuffleAddressList;
 
+    // For testing purposes only, not meant to be parsed from a real config.
+    @Nullable final Long randomSeed;
+
     public PickFirstLoadBalancerConfig(@Nullable Boolean shuffleAddressList) {
+      this(shuffleAddressList, null);
+    }
+
+    PickFirstLoadBalancerConfig(@Nullable Boolean shuffleAddressList, @Nullable Long randomSeed) {
       this.shuffleAddressList = shuffleAddressList;
+      this.randomSeed = randomSeed;
     }
   }
 }
