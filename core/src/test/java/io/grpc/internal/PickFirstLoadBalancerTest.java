@@ -121,7 +121,6 @@ public class PickFirstLoadBalancerTest {
   @After
   public void tearDown() throws Exception {
     verifyNoMoreInteractions(mockArgs);
-    PickFirstLoadBalancer.enablePickFirstConfig = false;
   }
 
   @Test
@@ -144,7 +143,6 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void pickAfterResolved_shuffle() throws Exception {
-    PickFirstLoadBalancer.enablePickFirstConfig = true;
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
             .setLoadBalancingPolicyConfig(new PickFirstLoadBalancerConfig(true, 123L)).build());
@@ -157,6 +155,25 @@ public class PickFirstLoadBalancerTest {
     assertThat(args.getAddresses().get(0)).isEqualTo(servers.get(1));
     assertThat(args.getAddresses().get(1)).isEqualTo(servers.get(0));
     assertThat(args.getAddresses().get(2)).isEqualTo(servers.get(2));
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockSubchannel).requestConnection();
+
+    // Calling pickSubchannel() twice gave the same result
+    assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
+        pickerCaptor.getValue().pickSubchannel(mockArgs));
+
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void pickAfterResolved_noShuffle() throws Exception {
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
+            .setLoadBalancingPolicyConfig(new PickFirstLoadBalancerConfig(false)).build());
+
+    verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    CreateSubchannelArgs args = createArgsCaptor.getValue();
+    assertThat(args.getAddresses()).isEqualTo(servers);
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel).requestConnection();
 
