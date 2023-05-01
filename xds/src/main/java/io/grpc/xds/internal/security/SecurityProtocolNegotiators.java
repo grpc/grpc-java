@@ -180,7 +180,6 @@ public final class SecurityProtocolNegotiators {
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
-    private volatile boolean handlerRemoved;
 
     ClientSdsHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
@@ -210,7 +209,7 @@ public final class SecurityProtocolNegotiators {
 
             @Override
             public void updateSslContext(SslContext sslContext) {
-              if (handlerRemoved) {
+              if (ctx.isRemoved()) {
                 return;
               }
               logger.log(
@@ -232,12 +231,6 @@ public final class SecurityProtocolNegotiators {
             }
           }
       );
-    }
-
-    @Override
-    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-      handlerRemoved = true;
-      super.handlerRemoved(ctx);
     }
 
     @Override
