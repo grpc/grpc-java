@@ -49,15 +49,12 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/**
- * Unit tests for {@link ProtoLiteUtils}.
- */
+/** Unit tests for {@link ProtoLiteUtils}. */
 @RunWith(JUnit4.class)
 public class ProtoLiteUtilsTest {
 
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
+  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());
   private Type proto = Type.newBuilder().setName("name").build();
@@ -91,7 +88,7 @@ public class ProtoLiteUtilsTest {
 
   @Test
   public void parseInvalid() {
-    InputStream is = new ByteArrayInputStream(new byte[]{-127});
+    InputStream is = new ByteArrayInputStream(new byte[] {-127});
     try {
       marshaller.parse(is);
       fail("Expected exception");
@@ -208,7 +205,7 @@ public class ProtoLiteUtilsTest {
     Metadata.BinaryMarshaller<Type> metadataMarshaller =
         ProtoLiteUtils.metadataMarshaller(Type.getDefaultInstance());
     try {
-      metadataMarshaller.parseBytes(new byte[]{-127});
+      metadataMarshaller.parseBytes(new byte[] {-127});
       fail("Expected exception");
     } catch (IllegalArgumentException ex) {
       assertNotNull(((InvalidProtocolBufferException) ex.getCause()).getUnfinishedMessage());

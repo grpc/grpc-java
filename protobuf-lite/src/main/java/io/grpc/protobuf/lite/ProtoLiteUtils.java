@@ -107,9 +107,7 @@ public final class ProtoLiteUtils {
     return new MetadataMarshaller<>(defaultInstance);
   }
 
-  /**
-   * Copies the data from input stream to output stream.
-   */
+  /** Copies the data from input stream to output stream. */
   static long copy(InputStream from, OutputStream to) throws IOException {
     // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
     checkNotNull(from, "inputStream cannot be null!");
