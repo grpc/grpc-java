@@ -135,8 +135,7 @@ public class ProtoLiteUtilsTest {
     assertEquals(proto.getSerializedSize(), is.available());
     is.read();
     assertEquals(proto.getSerializedSize() - 1, is.available());
-    while (is.read() != -1) {
-    }
+    while (is.read() != -1) {}
     assertEquals(-1, is.read());
     assertEquals(0, is.available());
   }
