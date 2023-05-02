@@ -81,7 +81,20 @@ public final class ProtoLiteUtils {
    */
   public static <T extends MessageLite> Marshaller<T> marshaller(T defaultInstance) {
     // TODO(ejona): consider changing return type to PrototypeMarshaller (assuming ABI safe)
-    return new MessageMarshaller<>(defaultInstance);
+    return new MessageMarshaller<>(defaultInstance, -1);
+  }
+
+  /**
+   * Creates a {@link Marshaller} for protos of the same type as {@code defaultInstance} and a
+   * custom limit for the recursion depth. Any negative number will leave the limit to its default
+   * value as defined by the protobuf library.
+   *
+   * @since 1.56.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10108")
+  public static <T extends MessageLite> Marshaller<T> marshallerWithRecursionLimit(
+      T defaultInstance, int recursionLimit) {
+    return new MessageMarshaller<>(defaultInstance, recursionLimit);
   }
 
   /**
@@ -117,17 +130,19 @@ public final class ProtoLiteUtils {
 
   private static final class MessageMarshaller<T extends MessageLite>
       implements PrototypeMarshaller<T> {
+
     private static final ThreadLocal<Reference<byte[]>> bufs = new ThreadLocal<>();
 
     private final Parser<T> parser;
     private final T defaultInstance;
+    private final int recursionLimit;
 
     @SuppressWarnings("unchecked")
-    MessageMarshaller(T defaultInstance) {
-      this.defaultInstance = defaultInstance;
-      parser = (Parser<T>) defaultInstance.getParserForType();
+    MessageMarshaller(T defaultInstance, int recursionLimit) {
+      this.defaultInstance = checkNotNull(defaultInstance, "defaultInstance cannot be null");
+      this.parser = (Parser<T>) defaultInstance.getParserForType();
+      this.recursionLimit = recursionLimit;
     }
-
 
     @SuppressWarnings("unchecked")
     @Override
@@ -210,6 +225,10 @@ public final class ProtoLiteUtils {
       // Pre-create the CodedInputStream so that we can remove the size limit restriction
       // when parsing.
       cis.setSizeLimit(Integer.MAX_VALUE);
+
+      if (recursionLimit >= 0) {
+        cis.setRecursionLimit(recursionLimit);
+      }
 
       try {
         return parseFrom(cis);
