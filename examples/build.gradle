@@ -82,6 +82,8 @@ def createStartScripts(String mainClassName) {
     }
 }
 
+createStartScripts('io.grpc.examples.advanced.HelloJsonClient')
+createStartScripts('io.grpc.examples.advanced.HelloJsonServer')
 createStartScripts('io.grpc.examples.cancellation.CancellationClient')
 createStartScripts('io.grpc.examples.cancellation.CancellationServer')
 createStartScripts('io.grpc.examples.customloadbalance.CustomLoadBalanceClient')
