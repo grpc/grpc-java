@@ -187,7 +187,7 @@ public class GoogleCloudToProdNameResolverTest {
     assertThat(server).containsExactly(
         "server_uri", "directpath-pa.googleapis.com",
         "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
-        "server_features", ImmutableList.of("xds_v3"));
+        "server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
     Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
     assertThat(authorities).containsExactly(
         "traffic-director-c2p.xds.googleapis.com",
@@ -217,7 +217,7 @@ public class GoogleCloudToProdNameResolverTest {
     assertThat(server).containsExactly(
         "server_uri", "directpath-pa.googleapis.com",
         "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
-        "server_features", ImmutableList.of("xds_v3"));
+        "server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
     Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
     assertThat(authorities).containsExactly(
         "traffic-director-c2p.xds.googleapis.com",
