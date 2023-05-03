@@ -209,6 +209,9 @@ public final class SecurityProtocolNegotiators {
 
             @Override
             public void updateSslContext(SslContext sslContext) {
+              if (ctx.isRemoved()) {
+                return;
+              }
               logger.log(
                   Level.FINEST,
                   "ClientSdsHandler.updateSslContext authority={0}, ctx.name={1}",
