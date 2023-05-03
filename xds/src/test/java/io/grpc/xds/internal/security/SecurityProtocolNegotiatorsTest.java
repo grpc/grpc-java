@@ -405,6 +405,36 @@ public class SecurityProtocolNegotiatorsTest {
     CommonCertProviderTestUtils.register0();
   }
 
+  @Test
+  public void clientSdsProtocolNegotiatorNewHandler_handleHandlerRemoved() {
+    FakeClock executor = new FakeClock();
+    CommonCertProviderTestUtils.register(executor);
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+            CA_PEM_FILE, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
+
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext,
+            new TlsContextManagerImpl(bootstrapInfoForClient));
+    SecurityProtocolNegotiators.ClientSdsHandler clientSdsHandler =
+        new SecurityProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
+
+    pipeline.addLast(clientSdsHandler);
+    channelHandlerCtx = pipeline.context(clientSdsHandler);
+
+    // kick off protocol negotiation.
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+
+    executor.runDueTasks();
+    pipeline.remove(clientSdsHandler);
+    channel.runPendingTasks();
+    channel.checkException();
+    CommonCertProviderTestUtils.register0();
+  }
+
   private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
 
     FakeGrpcHttp2ConnectionHandler(
