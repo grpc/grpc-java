@@ -81,7 +81,8 @@ public class TomcatTransportTest extends AbstractTransportTest {
         ServerTransportListener serverTransportListener =
             listener.transportCreated(new ServerTransportImpl(scheduler));
         ServletAdapter adapter =
-            new ServletAdapter(serverTransportListener, streamTracerFactories, Integer.MAX_VALUE);
+            new ServletAdapter(serverTransportListener, streamTracerFactories, Integer.MAX_VALUE,
+                true);
         GrpcServlet grpcServlet = new GrpcServlet(adapter);
 
         tomcatServer = new Tomcat();
@@ -254,21 +255,6 @@ public class TomcatTransportTest extends AbstractTransportTest {
   @Ignore("assertNull(serverStatus.getCause()) isn't true")
   @Test
   public void clientCancel() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_noServerHeaders() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_serverFailure() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_serverFailure_withClientCancelOnListenerClosed() {}
 
   @Override
   @Ignore("regression since bumping grpc v1.46 to v1.53")

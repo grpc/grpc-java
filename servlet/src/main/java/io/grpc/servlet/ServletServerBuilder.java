@@ -72,6 +72,7 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
   private boolean internalCaller;
   private boolean usingCustomScheduler;
   private InternalServerImpl internalServer;
+  private boolean forceTrailers;
 
   public ServletServerBuilder() {
     serverImplBuilder = new ServerImplBuilder(this::buildTransportServers);
@@ -98,7 +99,8 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
    * Creates a {@link ServletAdapter}.
    */
   public ServletAdapter buildServletAdapter() {
-    return new ServletAdapter(buildAndStart(), streamTracerFactories, maxInboundMessageSize);
+    return new ServletAdapter(buildAndStart(), streamTracerFactories, maxInboundMessageSize,
+        forceTrailers);
   }
 
   /**
@@ -180,6 +182,19 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
   public ServletServerBuilder maxInboundMessageSize(int bytes) {
     checkArgument(bytes >= 0, "bytes must be >= 0");
     maxInboundMessageSize = bytes;
+    return this;
+  }
+
+  /**
+   * Some servlet containers don't support sending trailers only (Tomcat).
+   * They send an empty data frame with an end_stream flag.
+   * This is not supported by gRPC as is expects end_stream flag in trailer or trailer-only frame
+   * To avoid this empty data frame, force the servlet container to either
+   *   - send a header frame, an empty data frame and a trailer frame with end_stream (Tomcat)
+   *   - send a header frame and a trailer frame with end_stream (Jetty, Undertow)
+   */
+  public ServletServerBuilder forceTrailers(boolean forceTrailers) {
+    this.forceTrailers = forceTrailers;
     return this;
   }
 

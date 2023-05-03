@@ -64,6 +64,7 @@ final class ServletServerStream extends AbstractServerStream {
   private final String authority;
   private final InternalLogId logId;
   private final AsyncServletOutputStreamWriter writer;
+  private final boolean forceTrailers;
 
   ServletServerStream(
       AsyncContext asyncCtx,
@@ -71,7 +72,8 @@ final class ServletServerStream extends AbstractServerStream {
       int maxInboundMessageSize,
       Attributes attributes,
       String authority,
-      InternalLogId logId) throws IOException {
+      InternalLogId logId,
+      boolean forceTrailers) throws IOException {
     super(ByteArrayWritableBuffer::new, statsTraceCtx);
     transportState =
         new ServletTransportState(maxInboundMessageSize, statsTraceCtx, new TransportTracer());
@@ -82,6 +84,7 @@ final class ServletServerStream extends AbstractServerStream {
     this.resp = (HttpServletResponse) asyncCtx.getResponse();
     this.writer = new AsyncServletOutputStreamWriter(
         asyncCtx, transportState, logId);
+    this.forceTrailers = forceTrailers;
     resp.getOutputStream().setWriteListener(new GrpcWriteListener());
   }
 
@@ -276,18 +279,28 @@ final class ServletServerStream extends AbstractServerStream {
             new Object[] {logId, trailers, headersSent, status});
       }
       if (!headersSent) {
-        writeHeadersToServletResponse(trailers);
-      } else {
-        byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(trailers);
-        for (int i = 0; i < serializedHeaders.length; i += 2) {
-          String key = new String(serializedHeaders[i], StandardCharsets.US_ASCII);
-          String newValue = new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII);
-          trailerSupplier.get().computeIfPresent(key, (k, v) -> v + "," + newValue);
-          trailerSupplier.get().putIfAbsent(key, newValue);
+        if (forceTrailers) {
+          writeHeadersToServletResponse(new Metadata());
+          resp.setTrailerFields(trailerSupplier);
+          serializeTrailers(trailers);
+        } else {
+          writeHeadersToServletResponse(trailers);
         }
+      } else {
+        serializeTrailers(trailers);
       }
 
       writer.complete();
+    }
+
+    private void serializeTrailers(Metadata trailers) {
+      byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(trailers);
+      for (int i = 0; i < serializedHeaders.length; i += 2) {
+        String key = new String(serializedHeaders[i], StandardCharsets.US_ASCII);
+        String newValue = new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII);
+        trailerSupplier.get().computeIfPresent(key, (k, v) -> v + "," + newValue);
+        trailerSupplier.get().putIfAbsent(key, newValue);
+      }
     }
 
     @Override
