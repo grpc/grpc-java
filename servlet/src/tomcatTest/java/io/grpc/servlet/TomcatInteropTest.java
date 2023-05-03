@@ -16,12 +16,17 @@
 
 package io.grpc.servlet;
 
+import io.grpc.ForwardingServerCallListener;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
-import java.io.File;
+import io.grpc.testing.integration.Messages;
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
@@ -32,6 +37,8 @@ import org.junit.AfterClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.io.File;
+
 /**
  * Interop test for Tomcat server and Netty client.
  */
@@ -41,6 +48,7 @@ public class TomcatInteropTest extends AbstractInteropTest {
   private static final String MYAPP = "/grpc.testing.TestService";
   private int port;
   private Tomcat server;
+  private MutableServerInterceptorHolder mutableServerInterceptorHolder;
 
   @After
   @Override
@@ -60,7 +68,11 @@ public class TomcatInteropTest extends AbstractInteropTest {
 
   @Override
   protected ServerBuilder<?> getServerBuilder() {
-    return new ServletServerBuilder().maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    mutableServerInterceptorHolder = new MutableServerInterceptorHolder();
+    return new ServletServerBuilder()
+            .forceTrailers(true)
+            .intercept(mutableServerInterceptorHolder)
+            .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
   }
 
   @Override
@@ -113,27 +125,31 @@ public class TomcatInteropTest extends AbstractInteropTest {
   @Test
   public void gracefulShutdown() {}
 
-  // FIXME
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
   @Test
-  public void specialStatusMessage() {}
+  public void forceTrailerTest() {
+    mutableServerInterceptorHolder.delegate = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(next.startCall(call, headers)) {
+          @Override
+          public void onReady() {
+            throw new RuntimeException("onReady");
+          }
+        };
+      }
+    };
 
-  // FIXME
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void unimplementedMethod() {}
+    blockingStub.unaryCall(Messages.SimpleRequest.getDefaultInstance());
+  }
 
-  // FIXME
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void statusCodeAndMessage() {}
-
-  // FIXME
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void emptyStream() {}
+  private static class MutableServerInterceptorHolder implements ServerInterceptor {
+    volatile ServerInterceptor delegate;
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      if (delegate != null) {
+        return delegate.interceptCall(call, headers, next);
+      }
+      return next.startCall(call, headers);
+    }
+  }
 }

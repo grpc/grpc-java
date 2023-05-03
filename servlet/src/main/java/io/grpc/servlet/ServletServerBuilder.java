@@ -33,6 +33,7 @@ import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
@@ -46,6 +47,7 @@ import io.grpc.internal.SharedResourceHolder;
 import java.io.File;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -72,6 +74,8 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
   private boolean internalCaller;
   private boolean usingCustomScheduler;
   private InternalServerImpl internalServer;
+  private final List<ServerInterceptor> interceptors = new ArrayList<>();
+  private boolean forceTrailers;
 
   public ServletServerBuilder() {
     serverImplBuilder = new ServerImplBuilder(this::buildTransportServers);
@@ -102,6 +106,10 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
   }
 
   private ServerTransportListener buildAndStart() {
+    interceptors.forEach(serverImplBuilder::intercept);
+    if (forceTrailers) {
+      serverImplBuilder.intercept(new ForceTrailersServerInterceptor());
+    }
     Server server;
     try {
       internalCaller = true;
@@ -173,6 +181,23 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
   public ServletServerBuilder maxInboundMessageSize(int bytes) {
     checkArgument(bytes >= 0, "bytes must be >= 0");
     maxInboundMessageSize = bytes;
+    return this;
+  }
+
+  /**
+   * Controls trailer behavior to make servlet containers respect the gRPC http2 semantic.
+   * @param forceTrailers when true, adds {@link ForceTrailersServerInterceptor}
+   *                      at the end of the interceptor list
+   * @return this
+   */
+  public ServletServerBuilder forceTrailers(boolean forceTrailers) {
+    this.forceTrailers = forceTrailers;
+    return this;
+  }
+
+  @Override
+  public ServletServerBuilder intercept(ServerInterceptor interceptor) {
+    interceptors.add(checkNotNull(interceptor, "interceptor"));
     return this;
   }
 
