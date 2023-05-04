@@ -32,11 +32,11 @@ dependencies {
 }
 
 tasks.named("jar").configure {
-    classifier = 'original'
+    archiveClassifier = 'original'
 }
 
 tasks.named("shadowJar").configure {
-    classifier = null
+    archiveClassifier = null
     dependencies {
         exclude(dependency {true})
     }
