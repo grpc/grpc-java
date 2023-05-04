@@ -29,27 +29,42 @@ dependencies {
     //  in gradle/libs.versions instead
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
-            project(':grpc-alts'),
             project(':grpc-census'),
-            ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}"),
-            libraries.opencensus.contrib.grpc.metrics,
-            libraries.opencensus.exporter.stats.stackdriver,
-            libraries.opencensus.exporter.trace.stackdriver,
-            project(':grpc-xds'), // Align grpc versions
+            libraries.opencensus.contrib.grpc.metrics
+    // Avoid gradle using project dependencies without configuration: shadow
+    implementation ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}") {
+        exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-netty-shaded'
+        exclude group: 'io.grpc', module: 'grpc-xds'
+    }
+    implementation (libraries.opencensus.exporter.stats.stackdriver) {
+        exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-netty-shaded'
+        exclude group: 'io.grpc', module: 'grpc-xds'
+    }
+    implementation (libraries.opencensus.exporter.trace.stackdriver) {
+        exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-netty-shaded'
+        exclude group: 'io.grpc', module: 'grpc-xds'
+    }
+
+    runtimeOnly libraries.opencensus.impl,
+            project(path: ':grpc-netty-shaded', configuration: 'shadow'),
+            project(path: ':grpc-xds', configuration: 'shadow'),
+            project(path: ':grpc-alts', configuration: 'shadow'),
+            project(':grpc-auth'), // Align grpc versions
+            project(':grpc-core'), // Align grpc versions
+            project(':grpc-grpclb'), // Align grpc versions
             project(':grpc-services'), // Align grpc versions
-            libraries.protobuf.java,
             libraries.protobuf.java.util, // Use our newer version
             ('com.google.api.grpc:proto-google-common-protos:2.14.2'),
             ('com.google.auth:google-auth-library-oauth2-http:1.16.0'),
             ('io.opencensus:opencensus-api:0.31.1'),
             ('com.google.guava:guava:31.1-jre')
 
-    runtimeOnly libraries.opencensus.impl
-
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-testing-proto'),
-            project(':grpc-netty-shaded')
+            project(':grpc-testing-proto')
     testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
