@@ -234,6 +234,7 @@ public final class BinderChannelSmokeTest {
   }
 
   @Test
+  @SuppressWarnings("GrpcUseClientCallBasedBlockingMethods") //TODO(zivy): fix error prone
   public void testUncaughtServerException() throws Exception {
     // Use a poison parcelable to cause an unexpected Exception in the server's onTransact().
     PoisonParcelable bad = new PoisonParcelable();
@@ -254,6 +255,7 @@ public final class BinderChannelSmokeTest {
   }
 
   @Test
+  @SuppressWarnings("GrpcUseClientCallBasedBlockingMethods") //TODO(zivy): fix error prone
   public void testUncaughtClientException() throws Exception {
     // Use a poison parcelable to cause an unexpected Exception in the client's onTransact().
     parcelableForResponseHeaders = new PoisonParcelable();
