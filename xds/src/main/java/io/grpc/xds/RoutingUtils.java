@@ -165,7 +165,8 @@ final class RoutingUtils {
     } else if (pathMatcher.prefix() != null) {
       return pathMatcher.caseSensitive()
           ? fullMethodName.startsWith(pathMatcher.prefix())
-          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
+          : fullMethodName.toLowerCase(Locale.US).startsWith(
+              pathMatcher.prefix().toLowerCase(Locale.US));
     }
     return pathMatcher.regEx().matches(fullMethodName);
   }
