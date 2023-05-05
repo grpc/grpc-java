@@ -234,18 +234,17 @@ public final class BinderChannelSmokeTest {
   }
 
   @Test
-  @SuppressWarnings("GrpcUseClientCallBasedBlockingMethods") //TODO(zivy): fix error prone
   public void testUncaughtServerException() throws Exception {
     // Use a poison parcelable to cause an unexpected Exception in the server's onTransact().
     PoisonParcelable bad = new PoisonParcelable();
     Metadata extraHeadersToSend = new Metadata();
     extraHeadersToSend.put(POISON_KEY, bad);
-    ClientCall<String, String> call =
+    Channel interceptedChannel =
         ClientInterceptors.intercept(channel,
-                MetadataUtils.newAttachHeadersInterceptor(extraHeadersToSend))
-            .newCall(method, CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS));
+                MetadataUtils.newAttachHeadersInterceptor(extraHeadersToSend));
+    CallOptions callOptions = CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS);
     try {
-      ClientCalls.blockingUnaryCall(call, "hello");
+      ClientCalls.blockingUnaryCall(interceptedChannel, method, callOptions, "hello");
       Assert.fail();
     } catch (StatusRuntimeException e) {
       // We don't care how *our* RPC failed, but make sure we didn't have to rely on the deadline.
@@ -255,14 +254,12 @@ public final class BinderChannelSmokeTest {
   }
 
   @Test
-  @SuppressWarnings("GrpcUseClientCallBasedBlockingMethods") //TODO(zivy): fix error prone
   public void testUncaughtClientException() throws Exception {
     // Use a poison parcelable to cause an unexpected Exception in the client's onTransact().
     parcelableForResponseHeaders = new PoisonParcelable();
-    ClientCall<String, String> call = channel
-            .newCall(method, CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS));
+    CallOptions callOptions = CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS);
     try {
-      ClientCalls.blockingUnaryCall(call, "hello");
+      ClientCalls.blockingUnaryCall(channel, method, callOptions, "hello");
       Assert.fail();
     } catch (StatusRuntimeException e) {
       // We don't care *how* our RPC failed, but make sure we didn't have to rely on the deadline.
