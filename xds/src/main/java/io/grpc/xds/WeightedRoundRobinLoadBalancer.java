@@ -58,7 +58,7 @@ import java.util.logging.Logger;
 final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private static final Logger log = Logger.getLogger(
       WeightedRoundRobinLoadBalancer.class.getName());
-  private volatile WeightedRoundRobinLoadBalancerConfig config;
+  private WeightedRoundRobinLoadBalancerConfig config;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private ScheduledHandle weightUpdateTimer;
@@ -110,7 +110,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   @Override
   public RoundRobinPicker createReadyPicker(List<Subchannel> activeList) {
-    return new WeightedRoundRobinPicker(activeList);
+    return new WeightedRoundRobinPicker(activeList, config.enableOobLoadReport);
   }
 
   private final class UpdateWeightTask implements Runnable {
@@ -234,19 +234,21 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @VisibleForTesting
   final class WeightedRoundRobinPicker extends ReadyPicker {
     private final List<Subchannel> list;
+    private final boolean enableOobLoadReport;
     private volatile EdfScheduler scheduler;
 
-    WeightedRoundRobinPicker(List<Subchannel> list) {
+    WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport) {
       super(checkNotNull(list, "list"), random.nextInt(list.size()));
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
+      this.enableOobLoadReport = enableOobLoadReport;
       updateWeight();
     }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       Subchannel subchannel = list.get(scheduler.pick());
-      if (!config.enableOobLoadReport) {
+      if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                 ((WrrSubchannel)subchannel).perRpcListener));
@@ -282,6 +284,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(WeightedRoundRobinPicker.class)
+          .add("enableOobLoadReport", enableOobLoadReport)
           .add("list", list).toString();
     }
 
@@ -296,9 +299,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         return false;
       }
       WeightedRoundRobinPicker other = (WeightedRoundRobinPicker) picker;
+      if (other == this) {
+        return true;
+      }
       // the lists cannot contain duplicate subchannels
-      return other == this
-          || (list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list));
+      return enableOobLoadReport == other.enableOobLoadReport
+          && list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list);
     }
   }
 
