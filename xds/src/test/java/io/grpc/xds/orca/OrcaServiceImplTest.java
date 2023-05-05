@@ -19,6 +19,7 @@ package io.grpc.xds.orca;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -115,7 +116,6 @@ public class OrcaServiceImplTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void testReportingLifeCycle_serverShutdown() {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
@@ -128,7 +128,7 @@ public class OrcaServiceImplTest {
     OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
     assertThat(((OrcaServiceImpl)orcaServiceImpl).clientCount.get()).isEqualTo(1);
     verify(listener).onMessage(eq(expect));
-    reset(listener);
+    verify(listener, never()).onClose(any(), any());
     oobServer.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
     assertThat(((OrcaServiceImpl)orcaServiceImpl).clientCount.get()).isEqualTo(0);
