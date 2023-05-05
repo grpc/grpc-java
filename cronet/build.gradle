@@ -2,7 +2,6 @@ plugins {
     id "maven-publish"
 
     id "com.android.library"
-    id "digital.wup.android-maven-publish"
 }
 
 description = "gRPC: Cronet Android"
@@ -35,6 +34,12 @@ android {
     }
     testOptions { unitTests { includeAndroidResources = true } }
     lintOptions { disable 'InvalidPackage' }
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 dependencies {
@@ -83,10 +88,9 @@ task sourcesJar(type: Jar) {
 publishing {
     publications {
         maven {
-            from components.android
-
-            artifact javadocJar
-            artifact sourcesJar
+            afterEvaluate {
+                from components.release
+            }
         }
     }
 }
