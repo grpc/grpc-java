@@ -89,13 +89,9 @@ subprojects {
                         all().each { task ->
                             String variantOrSourceSet = isAndroid ? task.variant.name : task.sourceSet.name
                             def syncTask = project.tasks.register("syncGeneratedSources${variantOrSourceSet}", Sync) {
-                                from "$buildDir/generated/source/proto/${variantOrSourceSet}/grpc"
-                                into "$generatedSourcePath/${variantOrSourceSet}/grpc"
-                                String source = GUtil.toCamelCase(variantOrSourceSet)
-                                if (source == "Main") {
-                                    source = ""
-                                }
-                                dependsOn "generate${source}Proto"
+                                from task
+                                into "$generatedSourcePath/$variantOrSourceSet"
+                                include "grpc/"
                             }
                             syncGeneratedSources.configure {
                                 dependsOn syncTask
