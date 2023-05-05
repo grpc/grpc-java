@@ -232,13 +232,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @VisibleForTesting
-  final class WeightedRoundRobinPicker extends ReadyPicker {
+  final class WeightedRoundRobinPicker extends RoundRobinPicker {
     private final List<Subchannel> list;
     private final boolean enableOobLoadReport;
     private volatile EdfScheduler scheduler;
 
     WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport) {
-      super(checkNotNull(list, "list"), random.nextInt(list.size()));
+      checkNotNull(list, "list");
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
       this.enableOobLoadReport = enableOobLoadReport;
