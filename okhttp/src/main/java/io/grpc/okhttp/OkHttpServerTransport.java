@@ -458,7 +458,7 @@ final class OkHttpServerTransport implements ServerTransport,
     // utf8() string is cached in ByteString, so we prefer it when the contents are ASCII. This
     // provides benefit if the header was reused via HPACK.
     for (int i = 0; i < value.size(); i++) {
-      if (value.getByte(i) >= 0x80) {
+      if (value.getByte(i) < 0) {
         return value.string(GrpcUtil.US_ASCII);
       }
     }
