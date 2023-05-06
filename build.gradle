@@ -164,7 +164,7 @@ subprojects {
 
     checkstyle {
         configDirectory = file("$rootDir/buildscripts")
-        toolVersion = libs.versions.checkstyle.get()
+        toolVersion = libs.checkstyle.get().version
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
@@ -258,7 +258,7 @@ subprojects {
         plugins.withId("ru.vyarus.animalsniffer") {
 	    // Only available after java plugin has loaded
             animalsniffer {
-                toolVersion = libs.versions.animalsniffer.get()
+                toolVersion = libs.animalsniffer.asProvider().get().version
             }
         }
     }
