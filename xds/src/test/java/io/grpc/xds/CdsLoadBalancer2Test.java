@@ -66,19 +66,22 @@ import java.util.Map;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link CdsLoadBalancer2}.
  */
 @RunWith(JUnit4.class)
 public class CdsLoadBalancer2Test {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "backend-service-1.googleapis.com";
@@ -125,8 +128,6 @@ public class CdsLoadBalancer2Test {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));

@@ -73,17 +73,21 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link ClusterImplLoadBalancer}.
  */
 @RunWith(JUnit4.class)
 public class ClusterImplLoadBalancerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final String AUTHORITY = "api.google.com";
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
@@ -135,7 +139,6 @@ public class ClusterImplLoadBalancerTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom);
   }
 

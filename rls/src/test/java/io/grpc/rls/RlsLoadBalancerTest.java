@@ -87,7 +87,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -123,8 +122,6 @@ public class RlsLoadBalancerTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     fakeSearchMethod =
         MethodDescriptor.newBuilder()
             .setFullMethodName("com.google/Search")

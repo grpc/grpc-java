@@ -121,7 +121,8 @@ import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link XdsClientImpl}.
@@ -196,6 +197,8 @@ public abstract class XdsClientImplTestBase {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private final FakeClock fakeClock = new FakeClock();
   protected final BlockingDeque<DiscoveryRpcCall> resourceDiscoveryCalls =
@@ -292,8 +295,6 @@ public abstract class XdsClientImplTestBase {
 
   @Before
   public void setUp() throws IOException {
-    // Init mocks.
-    MockitoAnnotations.initMocks(this);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);

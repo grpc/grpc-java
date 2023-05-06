@@ -52,17 +52,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Integration test for various forms of cancellation and deadline propagation.
  */
 @RunWith(JUnit4.class)
 public class CascadingTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock
   TestServiceGrpc.TestServiceImplBase service;
@@ -77,7 +80,6 @@ public class CascadingTest {
 
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     // Use a cached thread pool as we need a thread for each blocked call
     otherWork = Executors.newCachedThreadPool();
     channel = InProcessChannelBuilder.forName("channel").executor(otherWork).build();

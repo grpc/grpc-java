@@ -42,17 +42,20 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.Executor;
 import org.chromium.net.BidirectionalStream;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P)
 public final class CronetClientTransportTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final String AUTHORITY = "test.example.com";
   private static final Attributes.Key<String> EAG_ATTR_KEY =
@@ -72,8 +75,6 @@ public final class CronetClientTransportTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     transport =
         new CronetClientTransport(
             streamFactory,
