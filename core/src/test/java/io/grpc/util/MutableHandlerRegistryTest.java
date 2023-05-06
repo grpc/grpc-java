@@ -33,16 +33,20 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link MutableHandlerRegistry}. */
 @RunWith(JUnit4.class)
 public class MutableHandlerRegistryTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private MutableHandlerRegistry registry = new MutableHandlerRegistry();
 
   @Mock
@@ -68,7 +72,6 @@ public class MutableHandlerRegistryTest {
 
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     MethodDescriptor<String, Integer> flowMethod = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodType.UNKNOWN)
         .setFullMethodName("basic/flow")

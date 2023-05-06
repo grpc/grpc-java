@@ -89,7 +89,8 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link OrcaOobUtil} class.
@@ -107,6 +108,7 @@ public class OrcaOobUtilTest {
   private static final OrcaReportingConfig LONG_INTERVAL_CONFIG =
       OrcaReportingConfig.newBuilder().setReportInterval(1232L, TimeUnit.MILLISECONDS).build();
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @SuppressWarnings({"rawtypes", "unchecked"})
   private final List<EquivalentAddressGroup>[] eagLists = new List[NUM_SUBCHANNELS];
@@ -181,8 +183,6 @@ public class OrcaOobUtilTest {
 
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
-
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       orcaServiceImps[i] = new OpenRcaServiceImp();
       cleanupRule.register(

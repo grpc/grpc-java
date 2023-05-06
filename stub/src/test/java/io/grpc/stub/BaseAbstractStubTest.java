@@ -27,21 +27,18 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Standard unit tests for AbstractStub and its subclasses. */
 abstract class BaseAbstractStubTest<T extends AbstractStub<T>> {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock
   Channel channel;
-
-  @Before
-  public void setup() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   T create(Channel channel) {
     return create(channel, CallOptions.DEFAULT);

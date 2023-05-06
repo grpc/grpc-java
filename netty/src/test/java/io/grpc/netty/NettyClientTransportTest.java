@@ -106,18 +106,21 @@ import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link NettyClientTransport}.
  */
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final SslContext SSL_CONTEXT = createSslContext();
 
   @Mock
@@ -140,11 +143,6 @@ public class NettyClientTransportTest {
   private InetSocketAddress address;
   private String authority;
   private NettyServer server;
-
-  @Before
-  public void setup() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   @After
   public void teardown() throws Exception {

@@ -60,7 +60,8 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link FileWatcherCertificateProvider}. */
 @RunWith(JUnit4.class)
@@ -78,6 +79,7 @@ public class FileWatcherCertificateProviderTest {
   private final FakeTimeProvider timeProvider = new FakeTimeProvider();
 
   @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private String certFile;
   private String keyFile;
@@ -87,8 +89,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Before
   public void setUp() throws IOException {
-    MockitoAnnotations.initMocks(this);
-
     DistributorWatcher watcher = new DistributorWatcher();
     watcher.addWatcher(mockWatcher);
 

@@ -41,7 +41,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for xDS control plane federation scenarios.
@@ -62,14 +63,14 @@ public class XdsClientFederationTest {
   public ControlPlaneRule directpathPa = new ControlPlaneRule().setServerHostName(
       "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
 
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private boolean originalFederationStatus;
 
   @Before
   public void setUp() throws XdsInitializationException {
-    MockitoAnnotations.initMocks(this);
-
     originalFederationStatus = BootstrapperImpl.enableFederation;
     BootstrapperImpl.enableFederation = true;
 

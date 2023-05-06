@@ -34,20 +34,22 @@ import io.grpc.Metadata;
 import io.grpc.services.MetricReport;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaReportingTracerFactory;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link OrcaPerRequestUtil} class.
  */
 @RunWith(JUnit4.class)
 public class OrcaPerRequestUtilTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder().build();
@@ -56,11 +58,6 @@ public class OrcaPerRequestUtilTest {
   private OrcaPerRequestReportListener orcaListener1;
   @Mock
   private OrcaPerRequestReportListener orcaListener2;
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   /**
    * Tests a single load balance policy's listener receive per-request ORCA reports upon call

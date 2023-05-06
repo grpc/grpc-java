@@ -60,12 +60,15 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class ServerCallImplTest {
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   @Mock private ServerStream stream;
   @Mock private ServerCall.Listener<Long> callListener;
 
@@ -93,7 +96,6 @@ public class ServerCallImplTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     context = Context.ROOT.withCancellation();
     call = new ServerCallImpl<>(stream, UNARY_METHOD, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),

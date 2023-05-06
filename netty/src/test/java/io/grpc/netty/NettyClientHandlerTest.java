@@ -107,8 +107,9 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -133,6 +134,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
   @Rule
   public TestName testNameRule = new TestName();
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   @Mock
   private ManagedClientTransport.Listener listener;
   @Mock
@@ -169,8 +172,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
    */
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
-
     doAnswer(
           new Answer<Void>() {
             @Override
