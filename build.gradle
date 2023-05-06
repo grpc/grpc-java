@@ -355,21 +355,6 @@ subprojects {
                                 organizationUrl = "https://www.google.com"
                             }
                         }
-
-                        withXml {
-                            if (!(project.name in
-                            [
-                                "grpc-stub",
-                                "grpc-protobuf",
-                                "grpc-protobuf-lite",
-                            ])) {
-                                asNode().dependencies.'*'.findAll() { dep ->
-                                    dep.artifactId.text() in ['grpc-api', 'grpc-core']
-                                }.each() { core ->
-                                    core.version*.value = "[" + core.version.text() + "]"
-                                }
-                            }
-                        }
                     }
                 }
             }

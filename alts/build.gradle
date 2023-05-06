@@ -95,8 +95,7 @@ publishing {
                     def dependencyNode = dependenciesNode.appendNode('dependency')
                     dependencyNode.appendNode('groupId', dep.group)
                     dependencyNode.appendNode('artifactId', dep.name)
-                    def version = (dep.name == 'grpc-netty-shaded') ? '[' + dep.version + ']' : dep.version
-                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('version', dep.version)
                     dependencyNode.appendNode('scope', 'compile')
                 }
                 asNode().dependencies[0].replaceNode(dependenciesNode)

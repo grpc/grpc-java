@@ -17,20 +17,3 @@ dependencies {
 
     signature libraries.signature.java
 }
-
-publishing {
-    publications {
-        maven(MavenPublication) {
-            pom {
-                withXml {
-                    // Since internal APIs are used, pin the version.
-                    asNode().dependencies.'*'.findAll() { dep ->
-                        dep.artifactId.text() in ['grpc-alts', 'grpc-xds']
-                    }.each() { core ->
-                        core.version*.value = "[" + core.version.text() + "]"
-                    }
-                }
-            }
-        }
-    }
-}
