@@ -31,14 +31,12 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.security.KeyStore;
-import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -94,29 +92,6 @@ public class TestUtils {
     } catch (UnknownHostException e) {
       throw new RuntimeException(e);
     }
-  }
-
-  /**
-   * Returns the ciphers preferred to use during tests. They may be chosen because they are widely
-   * available or because they are fast. There is no requirement that they provide confidentiality
-   * or integrity.
-   */
-  public static List<String> preferredTestCiphers() {
-    String[] ciphers;
-    try {
-      ciphers = SSLContext.getDefault().getDefaultSSLParameters().getCipherSuites();
-    } catch (NoSuchAlgorithmException ex) {
-      throw new RuntimeException(ex);
-    }
-    List<String> ciphersMinusGcm = new ArrayList<>();
-    for (String cipher : ciphers) {
-      // The GCM implementation in Java is _very_ slow (~1 MB/s)
-      if (cipher.contains("_GCM_")) {
-        continue;
-      }
-      ciphersMinusGcm.add(cipher);
-    }
-    return Collections.unmodifiableList(ciphersMinusGcm);
   }
 
   /**

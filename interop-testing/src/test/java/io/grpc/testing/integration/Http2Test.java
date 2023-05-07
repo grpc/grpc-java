@@ -41,7 +41,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -52,13 +51,6 @@ import org.junit.runners.Parameterized.Parameters;
  */
 @RunWith(Parameterized.class)
 public class Http2Test extends AbstractInteropTest {
-  @BeforeClass
-  public static void loadConscrypt() throws Exception {
-    // Load conscrypt if it is available. Either Conscrypt or Jetty ALPN needs to be available for
-    // OkHttp to negotiate.
-    TestUtils.installConscryptIfAvailable();
-  }
-
   enum Transport {
     NETTY, OKHTTP;
   }

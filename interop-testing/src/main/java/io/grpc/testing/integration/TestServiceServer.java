@@ -26,7 +26,6 @@ import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
@@ -39,8 +38,6 @@ import java.util.concurrent.TimeUnit;
 public class TestServiceServer {
   /** The main application allowing this server to be launched from the command line. */
   public static void main(String[] args) throws Exception {
-    // Let Netty use Conscrypt if it is available.
-    TestUtils.installConscryptIfAvailable();
     final TestServiceServer server = new TestServiceServer();
     server.parseArgs(args);
     if (server.useTls) {

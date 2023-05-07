@@ -33,7 +33,6 @@ import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
@@ -59,8 +58,6 @@ public class TestServiceClient {
    * The main application allowing this client to be launched from the command line.
    */
   public static void main(String[] args) throws Exception {
-    // Let Netty or OkHttp use Conscrypt if it is available.
-    TestUtils.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
     customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
