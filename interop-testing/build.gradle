@@ -13,10 +13,6 @@ configurations {
     alpnagent
 }
 
-evaluationDependsOn(project(':grpc-core').path)
-evaluationDependsOn(project(':grpc-context').path)
-evaluationDependsOn(project(':grpc-api').path)
-
 dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
@@ -49,9 +45,9 @@ dependencies {
             libraries.netty.tcnative.classes,
             project(':grpc-grpclb'),
             project(':grpc-rls')
-    testImplementation project(':grpc-context').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
-            project(':grpc-core').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-context')),
+            testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-core')),
             libraries.mockito.core,
             libraries.okhttp
     alpnagent libraries.jetty.alpn.agent

@@ -6,6 +6,7 @@ buildscript {
 
 plugins {
     id "java-library"
+    id "java-test-fixtures"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -19,9 +20,6 @@ import com.google.common.primitives.Bytes;
 
 description = 'gRPC: Core'
 
-evaluationDependsOn(project(':grpc-context').path)
-evaluationDependsOn(project(':grpc-api').path)
-
 dependencies {
     api project(':grpc-api')
     implementation libraries.gson,
@@ -30,8 +28,13 @@ dependencies {
             libraries.errorprone.annotations,
             libraries.guava,
             libraries.perfmark.api
-    testImplementation project(':grpc-context').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
+    testFixturesApi libraries.junit
+    testFixturesImplementation libraries.guava,
+            libraries.mockito.core,
+            libraries.truth,
+            project(':grpc-testing')
+    testImplementation testFixtures(project(':grpc-context')),
+            testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
             project(':grpc-grpclb')
     testImplementation (libraries.guava.testlib) {
@@ -60,6 +63,9 @@ animalsniffer {
         sourceSets.test
     ]
 }
+
+components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
+components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 

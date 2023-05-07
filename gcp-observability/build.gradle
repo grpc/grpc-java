@@ -62,7 +62,7 @@ dependencies {
             ('io.opencensus:opencensus-api:0.31.1'),
             ('com.google.guava:guava:31.1-jre')
 
-    testImplementation project(':grpc-context').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-context')),
             project(':grpc-testing'),
             project(':grpc-testing-proto')
     testImplementation (libraries.guava.testlib) {

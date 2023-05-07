@@ -19,7 +19,7 @@ dependencies {
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
-            project(':grpc-core').sourceSets.test.output  // for FakeClock
+            testFixtures(project(':grpc-core'))
     testImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }

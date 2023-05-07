@@ -9,8 +9,6 @@ plugins {
 
 description = "gRPC: ALTS"
 
-evaluationDependsOn(project(':grpc-core').path)
-
 dependencies {
     api project(':grpc-core')
     implementation project(':grpc-auth'),
@@ -28,7 +26,7 @@ dependencies {
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
     testImplementation project(':grpc-testing'),
-            project(':grpc-core').sourceSets.test.output,
+            testFixtures(project(':grpc-core')),
             project(':grpc-testing-proto'),
             libraries.guava,
             libraries.junit,

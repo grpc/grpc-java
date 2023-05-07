@@ -13,7 +13,7 @@ dependencies {
                    project(':grpc-core'),
                    project(path: ':grpc-xds', configuration: 'shadow'),
                    libraries.guava.jre // JRE required by transitive protobuf-java-util
-    testImplementation project(':grpc-core').sourceSets.test.output
+    testImplementation testFixtures(project(':grpc-core'))
 
     signature libraries.signature.java
 }
