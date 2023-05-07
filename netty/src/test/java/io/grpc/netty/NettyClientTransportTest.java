@@ -86,7 +86,6 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -301,7 +300,6 @@ public class NettyClientTransportTest {
     InputStream serverKey = TlsTesting.loadCert("server1.key");
     // Don't trust ca.pem, so that client auth fails
     SslContext sslContext = GrpcSslContexts.forServer(serverCert, serverKey)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .clientAuth(ClientAuth.REQUIRE)
         .build();
     negotiator = ProtocolNegotiators.serverTls(sslContext);
@@ -312,7 +310,6 @@ public class NettyClientTransportTest {
     InputStream clientKey = TlsTesting.loadCert("client.key");
     SslContext clientContext = GrpcSslContexts.forClient()
         .trustManager(caCert)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext);
@@ -694,7 +691,6 @@ public class NettyClientTransportTest {
     InputStream serverCert = TlsTesting.loadCert("server1.pem");
     InputStream serverKey = TlsTesting.loadCert("server1.key");
     SslContext sslContext = GrpcSslContexts.forServer(serverCert, serverKey)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .clientAuth(ClientAuth.NONE)
         .build();
     negotiator = ProtocolNegotiators.serverTls(sslContext, serverExecutorPool);
@@ -707,7 +703,6 @@ public class NettyClientTransportTest {
     InputStream clientKey = TlsTesting.loadCert("client.key");
     SslContext clientContext = GrpcSslContexts.forClient()
         .trustManager(caCert)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool);
@@ -733,8 +728,7 @@ public class NettyClientTransportTest {
 
   private ProtocolNegotiator newNegotiator() throws IOException {
     InputStream caCert = TlsTesting.loadCert("ca.pem");
-    SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
+    SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert).build();
     return ProtocolNegotiators.tls(clientContext);
   }
 
@@ -804,8 +798,7 @@ public class NettyClientTransportTest {
     try {
       InputStream serverCert = TlsTesting.loadCert("server1.pem");
       InputStream key = TlsTesting.loadCert("server1.key");
-      return GrpcSslContexts.forServer(serverCert, key)
-          .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
+      return GrpcSslContexts.forServer(serverCert, key).build();
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
