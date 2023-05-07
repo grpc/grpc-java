@@ -78,7 +78,7 @@ import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
-import io.grpc.internal.testing.SingleMessageProducer;
+import io.grpc.internal.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
 import io.perfmark.PerfMark;
