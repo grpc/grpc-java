@@ -28,6 +28,7 @@ import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.services.MetricRecorder;
+import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
 import java.util.concurrent.Executors;
@@ -151,7 +152,7 @@ public class TestServiceServer {
       }
     } else if (useTls) {
       serverCreds = TlsServerCredentials.create(
-          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+          TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"));
     } else {
       serverCreds = InsecureServerCredentials.create();
     }

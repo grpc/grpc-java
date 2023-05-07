@@ -18,6 +18,7 @@ package io.grpc.internal.testing;
 
 import com.google.common.base.Throwables;
 import io.grpc.internal.ConscryptLoader;
+import io.grpc.testing.TlsTesting;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -125,8 +126,7 @@ public class TestUtils {
    * @param name  name of a file in src/main/resources/certs.
    */
   public static File loadCert(String name) throws IOException {
-    InputStream
-        in = new BufferedInputStream(TestUtils.class.getResourceAsStream("/certs/" + name));
+    InputStream in = new BufferedInputStream(TlsTesting.loadCert(name));
     File tmpFile = File.createTempFile(name, "");
     tmpFile.deleteOnExit();
 
@@ -154,7 +154,7 @@ public class TestUtils {
       throws CertificateException, IOException {
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
-    InputStream in = TestUtils.class.getResourceAsStream("/certs/" + fileName);
+    InputStream in = TlsTesting.loadCert(fileName);
     try {
       return (X509Certificate) cf.generateCertificate(in);
     } finally {

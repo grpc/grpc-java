@@ -36,6 +36,7 @@ import io.grpc.okhttp.InternalOkHttpServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpServerBuilder;
 import io.grpc.stub.MetadataUtils;
+import io.grpc.testing.TlsTesting;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -87,7 +88,7 @@ public class Http2Test extends AbstractInteropTest {
     ServerCredentials serverCreds;
     try {
       serverCreds = TlsServerCredentials.create(
-          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+          TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"));
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
@@ -115,7 +116,7 @@ public class Http2Test extends AbstractInteropTest {
     ChannelCredentials channelCreds;
     try {
       channelCreds = TlsChannelCredentials.newBuilder()
-          .trustManager(TestUtils.loadCert("ca.pem"))
+          .trustManager(TlsTesting.loadCert("ca.pem"))
           .build();
     } catch (Exception ex) {
       throw new RuntimeException(ex);

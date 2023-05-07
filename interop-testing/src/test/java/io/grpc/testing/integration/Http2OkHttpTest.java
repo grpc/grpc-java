@@ -37,6 +37,7 @@ import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.TlsTesting;
 import io.grpc.testing.integration.EmptyProtos.Empty;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -68,7 +69,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     // Starts the server with HTTPS.
     try {
       ServerCredentials serverCreds = TlsServerCredentials.create(
-          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+          TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"));
       NettyServerBuilder builder = NettyServerBuilder.forPort(0, serverCreds)
           .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
@@ -86,7 +87,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     ChannelCredentials channelCreds;
     try {
       channelCreds = TlsChannelCredentials.newBuilder()
-          .trustManager(TestUtils.loadCert("ca.pem"))
+          .trustManager(TlsTesting.loadCert("ca.pem"))
           .build();
     } catch (IOException ex) {
       throw new RuntimeException(ex);

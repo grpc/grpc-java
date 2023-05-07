@@ -39,6 +39,7 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.testing.TlsTesting;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
@@ -537,7 +538,7 @@ public class TestServiceClient {
         } else {
           try {
             channelCredentials = TlsChannelCredentials.newBuilder()
-                .trustManager(TestUtils.loadCert("ca.pem"))
+                .trustManager(TlsTesting.loadCert("ca.pem"))
                 .build();
           } catch (Exception ex) {
             throw new RuntimeException(ex);

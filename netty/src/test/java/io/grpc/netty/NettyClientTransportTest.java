@@ -68,6 +68,7 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
+import io.grpc.testing.TlsTesting;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelDuplexHandler;
@@ -88,7 +89,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -297,8 +297,8 @@ public class NettyClientTransportTest {
 
   @Test
   public void tlsNegotiationFailurePropagatesToStatus() throws Exception {
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File serverKey = TestUtils.loadCert("server1.key");
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream serverKey = TlsTesting.loadCert("server1.key");
     // Don't trust ca.pem, so that client auth fails
     SslContext sslContext = GrpcSslContexts.forServer(serverCert, serverKey)
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
@@ -307,9 +307,9 @@ public class NettyClientTransportTest {
     negotiator = ProtocolNegotiators.serverTls(sslContext);
     startServer();
 
-    File caCert = TestUtils.loadCert("ca.pem");
-    File clientCert = TestUtils.loadCert("client.pem");
-    File clientKey = TestUtils.loadCert("client.key");
+    InputStream caCert = TlsTesting.loadCert("ca.pem");
+    InputStream clientCert = TlsTesting.loadCert("client.pem");
+    InputStream clientKey = TlsTesting.loadCert("client.key");
     SslContext clientContext = GrpcSslContexts.forClient()
         .trustManager(caCert)
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
@@ -691,8 +691,8 @@ public class NettyClientTransportTest {
     assertEquals(false, serverExecutorPool.isInUse());
     assertEquals(false, clientExecutorPool.isInUse());
 
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File serverKey = TestUtils.loadCert("server1.key");
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream serverKey = TlsTesting.loadCert("server1.key");
     SslContext sslContext = GrpcSslContexts.forServer(serverCert, serverKey)
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .clientAuth(ClientAuth.NONE)
@@ -702,9 +702,9 @@ public class NettyClientTransportTest {
     // after starting the server, the Executor in the server pool should be used
     assertEquals(true, serverExecutorPool.isInUse());
 
-    File caCert = TestUtils.loadCert("ca.pem");
-    File clientCert = TestUtils.loadCert("client.pem");
-    File clientKey = TestUtils.loadCert("client.key");
+    InputStream caCert = TlsTesting.loadCert("ca.pem");
+    InputStream clientCert = TlsTesting.loadCert("client.pem");
+    InputStream clientKey = TlsTesting.loadCert("client.key");
     SslContext clientContext = GrpcSslContexts.forClient()
         .trustManager(caCert)
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
@@ -732,7 +732,7 @@ public class NettyClientTransportTest {
   }
 
   private ProtocolNegotiator newNegotiator() throws IOException {
-    File caCert = TestUtils.loadCert("ca.pem");
+    InputStream caCert = TlsTesting.loadCert("ca.pem");
     SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert)
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
     return ProtocolNegotiators.tls(clientContext);
@@ -802,8 +802,8 @@ public class NettyClientTransportTest {
 
   private static SslContext createSslContext() {
     try {
-      File serverCert = TestUtils.loadCert("server1.pem");
-      File key = TestUtils.loadCert("server1.key");
+      InputStream serverCert = TlsTesting.loadCert("server1.pem");
+      InputStream key = TlsTesting.loadCert("server1.key");
       return GrpcSslContexts.forServer(serverCert, key)
           .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
     } catch (IOException ex) {
