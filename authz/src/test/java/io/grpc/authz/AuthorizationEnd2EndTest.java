@@ -35,8 +35,8 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.TlsServerCredentials.ClientAuth;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.TlsTesting;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
@@ -343,11 +343,6 @@ public class AuthorizationEnd2EndTest {
   @Test
   public void staticAuthzAllowsRpcWithPrincipalsFieldOnMtlsAuthenticatedConnectionTest() 
         throws Exception {
-    File caCertFile = TestUtils.loadCert(CA_PEM_FILE);
-    File serverKey0File = TestUtils.loadCert(SERVER_0_KEY_FILE);
-    File serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
-    File clientKey0File = TestUtils.loadCert(CLIENT_0_KEY_FILE);
-    File clientCert0File = TestUtils.loadCert(CLIENT_0_PEM_FILE);
     String policy = "{"
         + " \"name\" : \"authz\" ,"
         + " \"allow_rules\": ["
@@ -361,14 +356,14 @@ public class AuthorizationEnd2EndTest {
         + "}";
     AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
-        .keyManager(serverCert0File, serverKey0File)
-        .trustManager(caCertFile)
+        .keyManager(TlsTesting.loadCert(SERVER_0_PEM_FILE), TlsTesting.loadCert(SERVER_0_KEY_FILE))
+        .trustManager(TlsTesting.loadCert(CA_PEM_FILE))
         .clientAuth(ClientAuth.REQUIRE)
         .build();
     initServerWithAuthzInterceptor(interceptor, serverCredentials);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
-        .keyManager(clientCert0File, clientKey0File)
-        .trustManager(caCertFile)
+        .keyManager(TlsTesting.loadCert(CLIENT_0_PEM_FILE), TlsTesting.loadCert(CLIENT_0_KEY_FILE))
+        .trustManager(TlsTesting.loadCert(CA_PEM_FILE))
         .build();
     getStub(channelCredentials).unaryRpc(SimpleRequest.getDefaultInstance());
   }
@@ -376,9 +371,6 @@ public class AuthorizationEnd2EndTest {
   @Test
   public void staticAuthzAllowsRpcWithPrincipalsFieldOnTlsAuthenticatedConnectionTest() 
         throws Exception {
-    File caCertFile = TestUtils.loadCert(CA_PEM_FILE);
-    File serverKey0File = TestUtils.loadCert(SERVER_0_KEY_FILE);
-    File serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
     String policy = "{"
         + " \"name\" : \"authz\" ,"
         + " \"allow_rules\": ["
@@ -392,13 +384,13 @@ public class AuthorizationEnd2EndTest {
         + "}";
     AuthorizationServerInterceptor interceptor = createStaticAuthorizationInterceptor(policy);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
-        .keyManager(serverCert0File, serverKey0File)
-        .trustManager(caCertFile)
+        .keyManager(TlsTesting.loadCert(SERVER_0_PEM_FILE), TlsTesting.loadCert(SERVER_0_KEY_FILE))
+        .trustManager(TlsTesting.loadCert(CA_PEM_FILE))
         .clientAuth(ClientAuth.OPTIONAL)
         .build();
     initServerWithAuthzInterceptor(interceptor, serverCredentials);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
-        .trustManager(caCertFile)
+        .trustManager(TlsTesting.loadCert(CA_PEM_FILE))
         .build();
     getStub(channelCredentials).unaryRpc(SimpleRequest.getDefaultInstance());
   }

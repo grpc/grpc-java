@@ -29,10 +29,10 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.TlsTesting;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -188,13 +188,9 @@ public class ConcurrencyTest {
    * Creates and starts a new {@link TestServiceImpl} server.
    */
   private Server newServer() throws IOException {
-    File serverCertChainFile = TestUtils.loadCert("server1.pem");
-    File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
-    File serverTrustedCaCerts = TestUtils.loadCert("ca.pem");
-
     ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
-        .keyManager(serverCertChainFile, serverPrivateKeyFile)
-        .trustManager(serverTrustedCaCerts)
+        .keyManager(TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"))
+        .trustManager(TlsTesting.loadCert("ca.pem"))
         .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
         .build();
 
@@ -205,13 +201,9 @@ public class ConcurrencyTest {
   }
 
   private ManagedChannel newClientChannel() throws IOException {
-    File clientCertChainFile = TestUtils.loadCert("client.pem");
-    File clientPrivateKeyFile = TestUtils.loadCert("client.key");
-    File clientTrustedCaCerts = TestUtils.loadCert("ca.pem");
-
     ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
-        .keyManager(clientCertChainFile, clientPrivateKeyFile)
-        .trustManager(clientTrustedCaCerts)
+        .keyManager(TlsTesting.loadCert("client.pem"), TlsTesting.loadCert("client.key"))
+        .trustManager(TlsTesting.loadCert("ca.pem"))
         .build();
 
     return Grpc.newChannelBuilder("localhost:" + server.getPort(), channelCreds)
