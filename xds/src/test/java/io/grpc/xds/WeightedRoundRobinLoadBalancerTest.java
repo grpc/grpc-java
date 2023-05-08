@@ -95,6 +95,8 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   @Captor
   private ArgumentCaptor<WeightedRoundRobinPicker> pickerCaptor;
+  @Captor
+  private ArgumentCaptor<WeightedRoundRobinPicker> pickerCaptor2;
 
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
 
@@ -255,12 +257,16 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNotNull(); // verify per-request listener
     assertThat(oobCalls.isEmpty()).isTrue();
+
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setEnableOobLoadReport(true)
             .setOobReportingPeriodNanos(20_030_000_000L)
             .build();
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
+    verify(helper, times(3)).updateBalancingState(
+            eq(ConnectivityState.READY), pickerCaptor2.capture());
+    weightedPicker = pickerCaptor2.getAllValues().get(2);
     pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNull();

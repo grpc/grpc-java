@@ -9,9 +9,9 @@ description = 'gRPC: googleapis'
 
 dependencies {
     api project(':grpc-api')
-    implementation project(':grpc-alts'),
+    implementation project(path: ':grpc-alts', configuration: 'shadow'),
                    project(':grpc-core'),
-                   project(':grpc-xds'),
+                   project(path: ':grpc-xds', configuration: 'shadow'),
                    libraries.guava.jre // JRE required by transitive protobuf-java-util
     testImplementation project(':grpc-core').sourceSets.test.output
 

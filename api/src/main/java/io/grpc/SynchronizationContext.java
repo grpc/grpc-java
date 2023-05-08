@@ -57,7 +57,6 @@ import javax.annotation.concurrent.ThreadSafe;
  * @since 1.17.0
  */
 @ThreadSafe
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4984")
 public final class SynchronizationContext implements Executor {
   private final UncaughtExceptionHandler uncaughtExceptionHandler;
 

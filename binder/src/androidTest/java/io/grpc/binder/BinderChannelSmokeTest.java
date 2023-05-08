@@ -31,6 +31,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
+import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptors;
 import io.grpc.ConnectivityState;
@@ -239,12 +240,12 @@ public final class BinderChannelSmokeTest {
     PoisonParcelable bad = new PoisonParcelable();
     Metadata extraHeadersToSend = new Metadata();
     extraHeadersToSend.put(POISON_KEY, bad);
-    ClientCall<String, String> call =
+    Channel interceptedChannel =
         ClientInterceptors.intercept(channel,
-                MetadataUtils.newAttachHeadersInterceptor(extraHeadersToSend))
-            .newCall(method, CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS));
+                MetadataUtils.newAttachHeadersInterceptor(extraHeadersToSend));
+    CallOptions callOptions = CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS);
     try {
-      ClientCalls.blockingUnaryCall(call, "hello");
+      ClientCalls.blockingUnaryCall(interceptedChannel, method, callOptions, "hello");
       Assert.fail();
     } catch (StatusRuntimeException e) {
       // We don't care how *our* RPC failed, but make sure we didn't have to rely on the deadline.
@@ -257,10 +258,9 @@ public final class BinderChannelSmokeTest {
   public void testUncaughtClientException() throws Exception {
     // Use a poison parcelable to cause an unexpected Exception in the client's onTransact().
     parcelableForResponseHeaders = new PoisonParcelable();
-    ClientCall<String, String> call = channel
-            .newCall(method, CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS));
+    CallOptions callOptions = CallOptions.DEFAULT.withDeadlineAfter(5, SECONDS);
     try {
-      ClientCalls.blockingUnaryCall(call, "hello");
+      ClientCalls.blockingUnaryCall(channel, method, callOptions, "hello");
       Assert.fail();
     } catch (StatusRuntimeException e) {
       // We don't care *how* our RPC failed, but make sure we didn't have to rely on the deadline.

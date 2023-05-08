@@ -18,7 +18,7 @@
 set -e
 BRANCH=main
 # import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=8affda4b71b05c9b272dbd031b7810418fb26211
+VERSION=4a0b099ff8621ebf362516f730de522efbafcece
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
