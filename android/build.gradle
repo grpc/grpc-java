@@ -2,7 +2,6 @@ plugins {
     id "maven-publish"
 
     id "com.android.library"
-    id "digital.wup.android-maven-publish"
 }
 
 description = 'gRPC: Android'
@@ -23,6 +22,12 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     lintOptions { abortOnError true }
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 repositories {
@@ -73,10 +78,9 @@ tasks.register("sourcesJar", Jar) {
 publishing {
     publications {
         maven {
-            from components.android
-
-            artifact javadocJar
-            artifact sourcesJar
+            afterEvaluate {
+                from components.release
+            }
         }
     }
 }
