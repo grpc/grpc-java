@@ -183,25 +183,19 @@ protobuf {
         grpc { path = javaPluginPath }
     }
     generateProtoTasks {
-        all().each { task ->
-            task.configure {
-                dependsOn 'java_pluginExecutable'
-                inputs.file javaPluginPath
-            }
+        all().configureEach {
+            dependsOn 'java_pluginExecutable'
+            inputs.file javaPluginPath
         }
-        ofSourceSet('test').each { task ->
-            task.configure {
-                plugins { grpc {} }
-            }
+        ofSourceSet('test').configureEach {
+            plugins { grpc {} }
         }
-        ofSourceSet('testLite').each { task ->
-            task.configure {
-                builtins {
-                    java { option 'lite' }
-                }
-                plugins {
-                    grpc { option 'lite' }
-                }
+        ofSourceSet('testLite').configureEach {
+            builtins {
+                java { option 'lite' }
+            }
+            plugins {
+                grpc { option 'lite' }
             }
         }
     }
