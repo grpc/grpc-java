@@ -99,7 +99,7 @@ Tagging the Release
    ```bash
    $ git checkout v$MAJOR.$MINOR.x
    $ git pull upstream v$MAJOR.$MINOR.x
-   $ git checkout -b release
+   $ git checkout -b release-v$MAJOR.$MINOR.$PATCH
    
    # Bump documented gRPC versions.
    # Also update protoc version to match protobuf version in gradle/libs.versions.toml.
@@ -135,7 +135,7 @@ Tagging the Release
 
    ```bash
    $ git checkout v$MAJOR.$MINOR.x
-   $ git merge --ff-only release
+   $ git merge --ff-only release-v$MAJOR.$MINOR.$PATCH
    $ git push upstream v$MAJOR.$MINOR.x
    $ git push upstream v$MAJOR.$MINOR.$PATCH
    ```
