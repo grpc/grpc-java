@@ -18,7 +18,7 @@
 set -e
 BRANCH=main
 # import VERSION from one of the google internal CLs
-VERSION=06c439db220b89134a8a49bad41994560d6537c6
+VERSION=32f1caf87195bf3390061c29f18987e51ca56a88
 GIT_REPO="https://github.com/cncf/xds.git"
 GIT_BASE_DIR=xds
 SOURCE_PROTO_BASE_DIR=xds
