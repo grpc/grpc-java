@@ -24,6 +24,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import java.util.Map;
@@ -62,6 +63,16 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
+    try {
+      return parseLoadBalancingPolicyConfigInternal(rawConfig);
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.UNAVAILABLE.withCause(e).withDescription(
+              "Failed parsing configuration for " + getPolicyName()));
+    }
+  }
+
+  private ConfigOrError parseLoadBalancingPolicyConfigInternal(Map<String, ?> rawConfig) {
     Long blackoutPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "blackoutPeriod");
     Long weightExpirationPeriodNanos =
             JsonUtil.getStringAsDuration(rawConfig, "weightExpirationPeriod");
