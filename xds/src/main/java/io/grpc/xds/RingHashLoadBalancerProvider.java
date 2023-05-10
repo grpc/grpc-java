@@ -68,6 +68,17 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
+    try {
+      return parseLoadBalancingPolicyConfigInternal(rawLoadBalancingPolicyConfig);
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.UNAVAILABLE.withCause(e).withDescription(
+              "Failed parsing configuration for " + getPolicyName()));
+    }
+  }
+
+  private ConfigOrError parseLoadBalancingPolicyConfigInternal(
+      Map<String, ?> rawLoadBalancingPolicyConfig) {
     Long minRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "minRingSize");
     Long maxRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "maxRingSize");
     long maxRingSizeCap = RingHashOptions.getRingSizeCap();

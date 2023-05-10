@@ -22,6 +22,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.util.Map;
 
@@ -62,9 +63,15 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   public ConfigOrError parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
     if (enablePickFirstConfig) {
-      return ConfigOrError.fromConfig(
-          new PickFirstLoadBalancerConfig(JsonUtil.getBoolean(rawLoadBalancingPolicyConfig,
-              SHUFFLE_ADDRESS_LIST_KEY)));
+      try {
+        return ConfigOrError.fromConfig(
+            new PickFirstLoadBalancerConfig(JsonUtil.getBoolean(rawLoadBalancingPolicyConfig,
+                SHUFFLE_ADDRESS_LIST_KEY)));
+      } catch (RuntimeException e) {
+        return ConfigOrError.fromError(
+            Status.UNAVAILABLE.withCause(e).withDescription(
+                "Failed parsing configuration for " + getPolicyName()));
+      }
     } else {
       return ConfigOrError.fromConfig(NO_CONFIG);
     }
