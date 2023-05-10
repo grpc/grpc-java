@@ -2037,7 +2037,7 @@ public class XdsClientImplDataTest {
     assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
             JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("weighted_round_robin_experimental");
+    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("weighted_round_robin");
     WeightedRoundRobinLoadBalancerConfig result = (WeightedRoundRobinLoadBalancerConfig)
         new WeightedRoundRobinLoadBalancerProvider().parseLoadBalancingPolicyConfig(
         childConfigs.get(0).getRawConfigValue()).getConfig();
