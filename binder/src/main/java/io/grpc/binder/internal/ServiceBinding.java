@@ -75,8 +75,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   // they're only modified in the main thread. The constructor contains a synchronized block
   // to ensure there's a write barrier when these fields are first written.
 
-  @Nullable private Context sourceContext; // Only null in the unbound state.
-
   private State reportedState; // Only used on the main thread.
 
   @AnyThread
@@ -94,7 +92,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       this.bindFlags = bindFlags;
       this.observer = observer;
       this.channelCredentials = channelCredentials;
-      this.sourceContext = channelCredentials.getSourceContext();
       this.mainThreadExecutor = mainThreadExecutor;
       this.targetUserHandle = targetUserHandle;
       state = State.NOT_BINDING;
@@ -128,8 +125,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     if (state == State.NOT_BINDING) {
       state = State.BINDING;
       Status bindResult =
-          bindInternal(
-              sourceContext, channelCredentials, bindIntent, this, bindFlags, targetUserHandle);
+          bindInternal(channelCredentials, bindIntent, this, bindFlags, targetUserHandle);
       if (!bindResult.isOk()) {
         handleBindServiceFailure(channelCredentials.getSourceContext(), this);
         state = State.UNBOUND;
@@ -139,12 +135,12 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   private static Status bindInternal(
-      Context context,
       BinderChannelCredentials channelCredentials,
       Intent bindIntent,
       ServiceConnection conn,
       int flags,
       @Nullable UserHandle targetUserHandle) {
+    Context context = channelCredentials.getSourceContext();
     String methodName = "bindService";
     try {
       if (targetUserHandle == null) {
@@ -214,7 +210,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     Context unbindFrom = null;
     synchronized (this) {
       if (state == State.BINDING || state == State.BOUND) {
-        unbindFrom = sourceContext;
+        unbindFrom = channelCredentials.getSourceContext();
       }
       state = State.UNBOUND;
     }
@@ -226,7 +222,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   @MainThread
   private void clearReferences() {
-    sourceContext = null;
+    channelCredentials.clearReferences();
   }
 
   @Override
@@ -266,6 +262,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   @VisibleForTesting
   synchronized boolean isSourceContextCleared() {
-    return sourceContext == null;
+    return channelCredentials.getSourceContext() == null;
   }
 }

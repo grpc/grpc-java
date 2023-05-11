@@ -364,13 +364,13 @@ public final class BinderChannelBuilder
           channelCredentials,
           (AndroidComponentAddress) addr,
           bindServiceFlags,
+          targetUserHandle,
           mainThreadExecutor,
           scheduledExecutorPool,
           offloadExecutorPool,
           securityPolicy,
           inboundParcelablePolicy,
-          options.getEagAttributes(),
-          targetUserHandle);
+          options.getEagAttributes());
     }
 
     @Override

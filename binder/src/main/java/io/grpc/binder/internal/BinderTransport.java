@@ -572,13 +572,13 @@ public abstract class BinderTransport
         BinderChannelCredentials channelCredentials,
         AndroidComponentAddress targetAddress,
         BindServiceFlags bindServiceFlags,
+        @Nullable UserHandle targetUserHandle,
         Executor mainThreadExecutor,
         ObjectPool<ScheduledExecutorService> executorServicePool,
         ObjectPool<? extends Executor> offloadExecutorPool,
         SecurityPolicy securityPolicy,
         InboundParcelablePolicy inboundParcelablePolicy,
-        Attributes eagAttrs,
-        @Nullable UserHandle targetUserHandle) {
+        Attributes eagAttrs) {
       super(
           executorServicePool,
           buildClientAttributes(

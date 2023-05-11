@@ -3,6 +3,7 @@ package io.grpc.binder;
 
 import android.content.ComponentName;
 import android.content.Context;
+import androidx.annotation.MainThread;
 import io.grpc.ChannelCredentials;
 import io.grpc.ExperimentalApi;
 import javax.annotation.Nullable;
@@ -34,7 +35,9 @@ public final class BinderChannelCredentials extends ChannelCredentials {
     return new BinderChannelCredentials(sourceContext, devicePolicyAdminComponentName);
   }
 
-  private final Context sourceContext;
+  // The sourceContext field is intentionally not guarded, since (aside from the constructor),
+  // it is only modified in the main thread.
+  @Nullable private Context sourceContext;  // Only null in the unbound state.
   @Nullable private final ComponentName devicePolicyAdminComponentName;
 
   private BinderChannelCredentials(
@@ -48,6 +51,7 @@ public final class BinderChannelCredentials extends ChannelCredentials {
     return this;
   }
 
+  @Nullable
   public Context getSourceContext() {
     return sourceContext;
   }
@@ -55,5 +59,10 @@ public final class BinderChannelCredentials extends ChannelCredentials {
   @Nullable
   public ComponentName getDevicePolicyAdminComponentName() {
     return devicePolicyAdminComponentName;
+  }
+
+  @MainThread
+  public void clearReferences() {
+    sourceContext = null;
   }
 }
