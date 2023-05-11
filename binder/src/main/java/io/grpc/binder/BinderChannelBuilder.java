@@ -72,7 +72,36 @@ public final class BinderChannelBuilder
   public static BinderChannelBuilder forAddress(
       AndroidComponentAddress directAddress, Context sourceContext) {
     return new BinderChannelBuilder(
-        checkNotNull(directAddress, "directAddress"), null, sourceContext);
+        checkNotNull(directAddress, "directAddress"),
+        null,
+        sourceContext,
+        BinderChannelCredentials.forDefault(sourceContext));
+  }
+
+  /**
+   * Creates a channel builder that will bind to a remote Android service with provided
+   * BinderChannelCredentials.
+   *
+   * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
+   * after 30 minutes without use by default but can be configured via {@link
+   * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
+   * ManagedChannel#enterIdle()}.
+   *
+   * <p>You the caller are responsible for managing the lifecycle of any channels built by the
+   * resulting builder. They will not be shut down automatically.
+   *
+   * @param directAddress the {@link AndroidComponentAddress} referencing the service to bind to.
+   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
+   * @param channelCredentials the arbitrary binder specific channel credentials to be used to
+   *     establish a binder connection.
+   * @return a new builder
+   */
+  public static BinderChannelBuilder forAddress(
+      AndroidComponentAddress directAddress,
+      Context sourceContext,
+      BinderChannelCredentials channelCredentials) {
+    return new BinderChannelBuilder(
+        checkNotNull(directAddress, "directAddress"), null, sourceContext, channelCredentials);
   }
 
   /**
@@ -93,7 +122,36 @@ public final class BinderChannelBuilder
    * @return a new builder
    */
   public static BinderChannelBuilder forTarget(String target, Context sourceContext) {
-    return new BinderChannelBuilder(null, checkNotNull(target, "target"), sourceContext);
+    return new BinderChannelBuilder(
+        null,
+        checkNotNull(target, "target"),
+        sourceContext,
+        BinderChannelCredentials.forDefault(sourceContext));
+  }
+
+  /**
+   * Creates a channel builder that will bind to a remote Android service, via a string target name
+   * which will be resolved.
+   *
+   * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
+   * after 30 minutes without use by default but can be configured via {@link
+   * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
+   * ManagedChannel#enterIdle()}.
+   *
+   * <p>You the caller are responsible for managing the lifecycle of any channels built by the
+   * resulting builder. They will not be shut down automatically.
+   *
+   * @param target A target uri which should resolve into an {@link AndroidComponentAddress}
+   *     referencing the service to bind to.
+   * @param channelCredentials the arbitrary binder specific channel credentials to be used to
+   *     establish a binder connection.
+   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
+   * @return a new builder
+   */
+  public static BinderChannelBuilder forTarget(
+      String target, Context sourceContext, BinderChannelCredentials channelCredentials) {
+    return new BinderChannelBuilder(
+        null, checkNotNull(target, "target"), sourceContext, channelCredentials);
   }
 
   /**
@@ -115,6 +173,7 @@ public final class BinderChannelBuilder
   }
 
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
+  private final BinderChannelCredentials channelCredentials;
 
   private Executor mainThreadExecutor;
   private ObjectPool<ScheduledExecutorService> schedulerPool =
@@ -122,18 +181,20 @@ public final class BinderChannelBuilder
   private SecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private BindServiceFlags bindServiceFlags;
-  private UserHandle userHandle;
+  @Nullable private UserHandle userHandle;
   private boolean strictLifecycleManagement;
 
   private BinderChannelBuilder(
       @Nullable AndroidComponentAddress directAddress,
       @Nullable String target,
-      Context sourceContext) {
+      Context sourceContext,
+      BinderChannelCredentials channelCredentials) {
     mainThreadExecutor =
         ContextCompat.getMainExecutor(checkNotNull(sourceContext, "sourceContext"));
     securityPolicy = SecurityPolicies.internalOnly();
     inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     bindServiceFlags = BindServiceFlags.DEFAULTS;
+    this.channelCredentials = channelCredentials;
 
     final class BinderChannelTransportFactoryBuilder
         implements ClientTransportFactoryBuilder {
@@ -146,7 +207,9 @@ public final class BinderChannelBuilder
             managedChannelImplBuilder.getOffloadExecutorPool(),
             securityPolicy,
             bindServiceFlags,
-            inboundParcelablePolicy);
+            inboundParcelablePolicy,
+            channelCredentials,
+            targetUserHandle);
       }
     }
 
@@ -218,6 +281,22 @@ public final class BinderChannelBuilder
     return this;
   }
 
+/**
+   * Provides the target {@UserHandle} of the remote Android service.
+   *
+   * <p>When targetUserHandle is set, Context.bindServiceAsUser will used and additional Android
+   * permissions will be required. If your usage does not require cross-user communications, please
+   * do not set this field. It is the caller's responsibility to make sure that it holds the
+   * corresponding permissions.
+   *
+   * @param targetUserHandle the target user to bind into.
+   * @return this
+   */
+  public BinderChannelBuilder bindForUser(UserHandle targetUserHandle) {
+    this.targetUserHandle = targetUserHandle;
+    return this;
+  }
+
   /** Sets the policy for inbound parcelable objects. */
   public BinderChannelBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
@@ -265,7 +344,9 @@ public final class BinderChannelBuilder
         ObjectPool<? extends Executor> offloadExecutorPool,
         SecurityPolicy securityPolicy,
         BindServiceFlags bindServiceFlags,
-        InboundParcelablePolicy inboundParcelablePolicy) {
+        InboundParcelablePolicy inboundParcelablePolicy,
+        BinderChannelCredentials channelCredentials,
+        @Nullable UserHandle targetUserHandle) {
       this.sourceContext = sourceContext;
       this.mainThreadExecutor = mainThreadExecutor;
       this.scheduledExecutorPool = scheduledExecutorPool;
@@ -273,6 +354,8 @@ public final class BinderChannelBuilder
       this.securityPolicy = securityPolicy;
       this.bindServiceFlags = bindServiceFlags;
       this.inboundParcelablePolicy = inboundParcelablePolicy;
+      this.channelCredentials = channelCredentials;
+      this.targetUserHandle = targetUserHandle;
 
       executorService = scheduledExecutorPool.getObject();
       offloadExecutor = offloadExecutorPool.getObject();
@@ -293,7 +376,9 @@ public final class BinderChannelBuilder
           offloadExecutorPool,
           securityPolicy,
           inboundParcelablePolicy,
-          options.getEagAttributes());
+          options.getEagAttributes(),
+          channelCredentials,
+          targetUserHandle);
     }
 
     @Override
