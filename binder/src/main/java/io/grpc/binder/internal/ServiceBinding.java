@@ -80,6 +80,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   private final Intent bindIntent;
   private final int bindFlags;
+  private final BinderChannelCredentials channelCredentials;
   private final Observer observer;
   private final Executor mainThreadExecutor;
   @Nullable private final UserHandle targetUserHandle;
@@ -91,16 +92,17 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   // they're only modified in the main thread. The constructor contains a synchronized block
   // to ensure there's a write barrier when these fields are first written.
 
-  @Nullable private BinderChannelCredentials channelCredentials;  // Only null in the unbound state.
+  @Nullable private Context sourceContext; // Only null in the unbound state.
 
   private State reportedState; // Only used on the main thread.
 
   @AnyThread
   ServiceBinding(
       Executor mainThreadExecutor,
-      BinderChannelCredentials channelCredentials,
+      Context sourceContext,
       Intent bindIntent,
       int bindFlags,
+      BinderChannelCredentials channelCredentials,
       @Nullable UserHandle targetUserHandle,
       Observer observer) {
     // We need to synchronize here ensure other threads see all
@@ -109,8 +111,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       this.bindIntent = bindIntent;
       this.bindFlags = bindFlags;
       this.observer = observer;
-      this.channelCredentials = channelCredentials;
+      this.sourceContext = sourceContext;
       this.mainThreadExecutor = mainThreadExecutor;
+      this.channelCredentials = channelCredentials;
       this.targetUserHandle = targetUserHandle;
       state = State.NOT_BINDING;
       reportedState = State.NOT_BINDING;
@@ -143,9 +146,15 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     if (state == State.NOT_BINDING) {
       state = State.BINDING;
       Status bindResult =
-          bindInternal(channelCredentials, bindIntent, this, bindFlags, targetUserHandle);
+          bindInternal(
+            sourceContext,
+            bindIntent,
+            this,
+            bindFlags,
+            channelCredentials,
+            targetUserHandle);
       if (!bindResult.isOk()) {
-        handleBindServiceFailure(channelCredentials.getSourceContext(), this);
+        handleBindServiceFailure(sourceContext, this);
         state = State.UNBOUND;
         mainThreadExecutor.execute(() -> notifyUnbound(bindResult));
       }
@@ -153,12 +162,12 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   private static Status bindInternal(
-      BinderChannelCredentials channelCredentials,
+      Context context,
       Intent bindIntent,
       ServiceConnection conn,
       int flags,
+      BinderChannelCredentials channelCredentials,
       @Nullable UserHandle targetUserHandle) {
-    Context context = channelCredentials.getSourceContext();
     BindMethodType bindMethodType = BindMethodType.BIND_SERVICE;
     try {
       if (targetUserHandle == null) {
@@ -231,7 +240,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     Context unbindFrom = null;
     synchronized (this) {
       if (state == State.BINDING || state == State.BOUND) {
-        unbindFrom = channelCredentials.getSourceContext();
+        unbindFrom = sourceContext;
       }
       state = State.UNBOUND;
     }
@@ -243,7 +252,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   @MainThread
   private void clearReferences() {
-    channelCredentials = null;
+    sourceContext = null;
   }
 
   @Override
@@ -283,6 +292,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   @VisibleForTesting
   synchronized boolean isSourceContextCleared() {
-    return channelCredentials == null;
+    return sourceContext == null;
   }
 }

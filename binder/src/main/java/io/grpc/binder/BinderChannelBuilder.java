@@ -74,7 +74,8 @@ public final class BinderChannelBuilder
     return new BinderChannelBuilder(
         checkNotNull(directAddress, "directAddress"),
         null,
-        BinderChannelCredentials.forDefault(sourceContext));
+        sourceContext,
+        BinderChannelCredentials.forDefault());
   }
 
   /**
@@ -90,16 +91,17 @@ public final class BinderChannelBuilder
    * resulting builder. They will not be shut down automatically.
    *
    * @param directAddress the {@link AndroidComponentAddress} referencing the service to bind to.
+   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
    * @param channelCredentials the arbitrary binder specific channel credentials to be used to
-   *     establish a binder connection including the context to bind from (e.g. The current
-   *     Activity or Application).
+   *     establish a binder connection.
    * @return a new builder
    */
   public static BinderChannelBuilder forAddress(
       AndroidComponentAddress directAddress,
+      Context sourceContext,
       BinderChannelCredentials channelCredentials) {
     return new BinderChannelBuilder(
-        checkNotNull(directAddress, "directAddress"), null, channelCredentials);
+        checkNotNull(directAddress, "directAddress"), null, sourceContext, channelCredentials);
   }
 
   /**
@@ -123,7 +125,8 @@ public final class BinderChannelBuilder
     return new BinderChannelBuilder(
         null,
         checkNotNull(target, "target"),
-        BinderChannelCredentials.forDefault(sourceContext));
+        sourceContext,
+        BinderChannelCredentials.forDefault());
   }
 
   /**
@@ -140,15 +143,15 @@ public final class BinderChannelBuilder
    *
    * @param target A target uri which should resolve into an {@link AndroidComponentAddress}
    *     referencing the service to bind to.
+   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
    * @param channelCredentials the arbitrary binder specific channel credentials to be used to
-   *     establish a binder connection including the context to bind from (e.g. The current
-   *     Activity or Application).
+   *     establish a binder connection.
    * @return a new builder
    */
   public static BinderChannelBuilder forTarget(
-      String target, BinderChannelCredentials channelCredentials) {
+      String target, Context sourceContext, BinderChannelCredentials channelCredentials) {
     return new BinderChannelBuilder(
-        null, checkNotNull(target, "target"), channelCredentials);
+        null, checkNotNull(target, "target"), sourceContext, channelCredentials);
   }
 
   /**
@@ -183,10 +186,10 @@ public final class BinderChannelBuilder
   private BinderChannelBuilder(
       @Nullable AndroidComponentAddress directAddress,
       @Nullable String target,
+      Context sourceContext,
       BinderChannelCredentials channelCredentials) {
     mainThreadExecutor =
-        ContextCompat.getMainExecutor(
-            checkNotNull(channelCredentials.getSourceContext(), "sourceContext"));
+        ContextCompat.getMainExecutor(checkNotNull(sourceContext, "sourceContext"));
     securityPolicy = SecurityPolicies.internalOnly();
     inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     bindServiceFlags = BindServiceFlags.DEFAULTS;
@@ -196,13 +199,14 @@ public final class BinderChannelBuilder
       @Override
       public ClientTransportFactory buildClientTransportFactory() {
         return new TransportFactory(
-            channelCredentials,
+            sourceContext,
             mainThreadExecutor,
             schedulerPool,
             managedChannelImplBuilder.getOffloadExecutorPool(),
             securityPolicy,
             bindServiceFlags,
             inboundParcelablePolicy,
+            channelCredentials,
             targetUserHandle);
       }
     }
@@ -319,13 +323,14 @@ public final class BinderChannelBuilder
 
   /** Creates new binder transports. */
   private static final class TransportFactory implements ClientTransportFactory {
-    private final BinderChannelCredentials channelCredentials;
+    private final Context sourceContext;
     private final Executor mainThreadExecutor;
     private final ObjectPool<ScheduledExecutorService> scheduledExecutorPool;
     private final ObjectPool<? extends Executor> offloadExecutorPool;
     private final SecurityPolicy securityPolicy;
     private final InboundParcelablePolicy inboundParcelablePolicy;
     private final BindServiceFlags bindServiceFlags;
+    private final BinderChannelCredentials channelCredentials;
     @Nullable private final UserHandle targetUserHandle;
 
     private ScheduledExecutorService executorService;
@@ -333,21 +338,23 @@ public final class BinderChannelBuilder
     private boolean closed;
 
     TransportFactory(
-        BinderChannelCredentials channelCredentials,
+        Context sourceContext,
         Executor mainThreadExecutor,
         ObjectPool<ScheduledExecutorService> scheduledExecutorPool,
         ObjectPool<? extends Executor> offloadExecutorPool,
         SecurityPolicy securityPolicy,
         BindServiceFlags bindServiceFlags,
         InboundParcelablePolicy inboundParcelablePolicy,
+        BinderChannelCredentials channelCredentials,
         @Nullable UserHandle targetUserHandle) {
-      this.channelCredentials = channelCredentials;
+      this.sourceContext = sourceContext;
       this.mainThreadExecutor = mainThreadExecutor;
       this.scheduledExecutorPool = scheduledExecutorPool;
       this.offloadExecutorPool = offloadExecutorPool;
       this.securityPolicy = securityPolicy;
       this.bindServiceFlags = bindServiceFlags;
       this.inboundParcelablePolicy = inboundParcelablePolicy;
+      this.channelCredentials = channelCredentials;
       this.targetUserHandle = targetUserHandle;
 
       executorService = scheduledExecutorPool.getObject();
@@ -361,9 +368,10 @@ public final class BinderChannelBuilder
         throw new IllegalStateException("The transport factory is closed.");
       }
       return new BinderTransport.BinderClientTransport(
-          channelCredentials,
+          sourceContext,
           (AndroidComponentAddress) addr,
           bindServiceFlags,
+          channelCredentials,
           targetUserHandle,
           mainThreadExecutor,
           scheduledExecutorPool,

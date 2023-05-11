@@ -569,9 +569,10 @@ public abstract class BinderTransport
     private int latestCallId = FIRST_CALL_ID;
 
     public BinderClientTransport(
-        BinderChannelCredentials channelCredentials,
+        Context sourceContext,
         AndroidComponentAddress targetAddress,
         BindServiceFlags bindServiceFlags,
+        BinderChannelCredentials channelCredentials,
         @Nullable UserHandle targetUserHandle,
         Executor mainThreadExecutor,
         ObjectPool<ScheduledExecutorService> executorServicePool,
@@ -581,9 +582,8 @@ public abstract class BinderTransport
         Attributes eagAttrs) {
       super(
           executorServicePool,
-          buildClientAttributes(
-              eagAttrs, channelCredentials.getSourceContext(), targetAddress, inboundParcelablePolicy),
-          buildLogId(channelCredentials.getSourceContext(), targetAddress));
+          buildClientAttributes(eagAttrs, sourceContext, targetAddress, inboundParcelablePolicy),
+          buildLogId(sourceContext, targetAddress));
       this.offloadExecutorPool = offloadExecutorPool;
       this.securityPolicy = securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
@@ -593,9 +593,10 @@ public abstract class BinderTransport
       serviceBinding =
           new ServiceBinding(
               mainThreadExecutor,
-              channelCredentials,
+              sourceContext,
               targetAddress.asBindIntent(),
               bindServiceFlags.toInteger(),
+              channelCredentials,
               targetUserHandle,
               this);
     }

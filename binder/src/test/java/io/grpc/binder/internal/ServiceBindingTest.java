@@ -291,7 +291,7 @@ public final class ServiceBindingTest {
             .setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0))
             .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
             .setChannelCredentials(
-                BinderChannelCredentials.forDevicePolicyAdmin(appContext, adminComponent))
+                BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();
     shadowOf(getMainLooper()).idle();
 
@@ -365,14 +365,15 @@ public final class ServiceBindingTest {
   }
 
   private static class ServiceBindingBuilder {
+    private Context sourceContext;
     private Observer observer;
     private Intent bindIntent = new Intent();
     private int bindServiceFlags;
     @Nullable private UserHandle targetUserHandle = null;
-    private BinderChannelCredentials channelCredentials;
+    private BinderChannelCredentials channelCredentials = BinderChannelCredentials.forDefault();
 
     public ServiceBindingBuilder setSourceContext(Context sourceContext) {
-      this.channelCredentials = BinderChannelCredentials.forDefault(sourceContext);
+      this.sourceContext = sourceContext;      
       return this;
     }
 
@@ -409,10 +410,11 @@ public final class ServiceBindingTest {
 
     public ServiceBinding build() {
       return new ServiceBinding(
-          ContextCompat.getMainExecutor(channelCredentials.getSourceContext()),
-          channelCredentials,
+          ContextCompat.getMainExecutor(sourceContext),
+          sourceContext,
           bindIntent,
           bindServiceFlags,
+          channelCredentials,
           targetUserHandle,
           observer);
     }

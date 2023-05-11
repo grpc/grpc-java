@@ -15,7 +15,7 @@ public class BinderChannelCredentialsTest {
 
   @Test
   public void defaultBinderChannelCredentials() {
-    BinderChannelCredentials channelCredentials = BinderChannelCredentials.forDefault(appContext);
+    BinderChannelCredentials channelCredentials = BinderChannelCredentials.forDefault();
     assertThat(channelCredentials.getDevicePolicyAdminComponentName()).isNull();
   }
   
@@ -24,7 +24,7 @@ public class BinderChannelCredentialsTest {
     String deviceAdminClassName = "DevicePolicyAdmin";
     BinderChannelCredentials channelCredentials =
         BinderChannelCredentials.forDevicePolicyAdmin(
-            appContext, new ComponentName(appContext, deviceAdminClassName));
+            new ComponentName(appContext, deviceAdminClassName));
     assertThat(channelCredentials.getDevicePolicyAdminComponentName()).isNotNull();
     assertThat(channelCredentials.getDevicePolicyAdminComponentName().getClassName())
         .isEqualTo(deviceAdminClassName);
