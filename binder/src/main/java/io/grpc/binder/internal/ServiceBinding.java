@@ -61,6 +61,23 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     UNBOUND,
   }
 
+  // Type of the method used when binding the service.
+  private enum BindMethodType {
+    BIND_SERVICE("bindService"),
+    BIND_SERVICE_AS_USER("bindServiceAsUser"),
+    DEVICE_POLICY_BIND_SEVICE_ADMIN("DevicePolicyManager.bindDeviceAdminServiceAsUser");
+
+    private final String methodName;
+
+    BindMethodType(String methodName) {
+      this.methodName = methodName;
+    }
+
+    public String methodName() {
+      return methodName;
+    }
+  }
+
   private final Intent bindIntent;
   private final int bindFlags;
   private final Observer observer;
@@ -142,48 +159,51 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       int flags,
       @Nullable UserHandle targetUserHandle) {
     Context context = channelCredentials.getSourceContext();
-    String methodName = "bindService";
+    BindMethodType bindMethodType = BindMethodType.BIND_SERVICE;
     try {
       if (targetUserHandle == null) {
         checkState(
             channelCredentials.getDevicePolicyAdminComponentName() == null,
             "BindingChannelCredentials is expected to have null devicePolicyAdmin when"
                 + " targetUserHandle is not set");
-        if (!context.bindService(bindIntent, conn, flags)) {
-          return Status.UNIMPLEMENTED.withDescription(
-              "bindService(" + bindIntent + ") returned false");
-        }
       } else {
         if (channelCredentials.getDevicePolicyAdminComponentName() != null) {
-          methodName = "DevicePolicyManager.bindDeviceAdminServiceAsUser";
+          bindMethodType = BindMethodType.DEVICE_POLICY_BIND_SEVICE_ADMIN;
+        } else {
+          bindMethodType = BindMethodType.BIND_SERVICE_AS_USER;
+        }
+      }
+      boolean bindResult = false;
+      switch (bindMethodType) {
+        case BIND_SERVICE: 
+          bindResult = context.bindService(bindIntent, conn, flags);
+          break;
+        case BIND_SERVICE_AS_USER:
+          bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
+          break;
+        case DEVICE_POLICY_BIND_SEVICE_ADMIN:
           DevicePolicyManager devicePolicyManager =
               (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
-          if (!devicePolicyManager.bindDeviceAdminServiceAsUser(
-              channelCredentials.getDevicePolicyAdminComponentName(),
-              bindIntent,
-              conn,
-              flags,
-              targetUserHandle)) {
-            return Status.UNIMPLEMENTED.withDescription(
-                "DevicePolicyManager.bindDeviceAdminServiceAsUser("
-                    + bindIntent
-                    + ") returned false");
-          }
-        } else {
-          methodName = "bindServiceAsUser";
-          if (!context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle)) {
-            return Status.UNIMPLEMENTED.withDescription(
-                "bindServiceAsUser(" + bindIntent + ") returned false");
-          }
-        }
+          bindResult = devicePolicyManager.bindDeviceAdminServiceAsUser(
+            channelCredentials.getDevicePolicyAdminComponentName(),
+            bindIntent,
+            conn,
+            flags,
+            targetUserHandle);
+          break;
+      }
+      if (!bindResult) {
+        return Status.UNIMPLEMENTED.withDescription(
+              bindMethodType.methodName() + "(" + bindIntent + ") returned false");
       }
       return Status.OK;
     } catch (SecurityException e) {
       return Status.PERMISSION_DENIED
           .withCause(e)
-          .withDescription("SecurityException from " + methodName);
+          .withDescription("SecurityException from " + bindMethodType.methodName());
     } catch (RuntimeException e) {
-      return Status.INTERNAL.withCause(e).withDescription("RuntimeException from " + methodName);
+      return Status.INTERNAL.withCause(e).withDescription(
+        "RuntimeException from " + bindMethodType.methodName());
     }
   }
 
