@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import android.content.Context;
+import android.os.UserHandle;
 import androidx.core.content.ContextCompat;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
@@ -121,6 +122,7 @@ public final class BinderChannelBuilder
   private SecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private BindServiceFlags bindServiceFlags;
+  private UserHandle userHandle;
   private boolean strictLifecycleManagement;
 
   private BinderChannelBuilder(
