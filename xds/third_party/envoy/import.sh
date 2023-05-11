@@ -18,7 +18,7 @@
 set -e
 BRANCH=main
 # import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=4a0b099ff8621ebf362516f730de522efbafcece
+VERSION=0478eba2a495027bf6ac8e787c42e2f5b9eb553b
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
@@ -134,6 +134,7 @@ envoy/extensions/filters/network/http_connection_manager/v3/http_connection_mana
 envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3/client_side_weighted_round_robin.proto
 envoy/extensions/load_balancing_policies/common/v3/common.proto
 envoy/extensions/load_balancing_policies/least_request/v3/least_request.proto
+envoy/extensions/load_balancing_policies/pick_first/v3/pick_first.proto
 envoy/extensions/load_balancing_policies/ring_hash/v3/ring_hash.proto
 envoy/extensions/load_balancing_policies/round_robin/v3/round_robin.proto
 envoy/extensions/load_balancing_policies/wrr_locality/v3/wrr_locality.proto
