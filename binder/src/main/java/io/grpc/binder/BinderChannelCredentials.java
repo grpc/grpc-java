@@ -48,6 +48,10 @@ public final class BinderChannelCredentials extends ChannelCredentials {
     return this;
   }
 
+  public Context getSourceContext() {
+    return sourceContext;
+  }
+
   @Nullable
   public ComponentName getDevicePolicyAdminComponentName() {
     return devicePolicyAdminComponentName;

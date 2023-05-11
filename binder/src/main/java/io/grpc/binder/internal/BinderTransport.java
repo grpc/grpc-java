@@ -569,31 +569,7 @@ public abstract class BinderTransport
     private int latestCallId = FIRST_CALL_ID;
 
     public BinderClientTransport(
-        Context sourceContext,
-        AndroidComponentAddress targetAddress,
-        BindServiceFlags bindServiceFlags,
-        Executor mainThreadExecutor,
-        ObjectPool<ScheduledExecutorService> executorServicePool,
-        ObjectPool<? extends Executor> offloadExecutorPool,
-        SecurityPolicy securityPolicy,
-        InboundParcelablePolicy inboundParcelablePolicy,
-        Attributes eagAttrs) {
-      this(
-          sourceContext,
-          targetAddress,
-          bindServiceFlags,
-          mainThreadExecutor,
-          executorServicePool,
-          offloadExecutorPool,
-          securityPolicy,
-          inboundParcelablePolicy,
-          eagAttrs,
-          BinderChannelCredentials.forDefault(sourceContext),
-          null);
-    }
-
-    public BinderClientTransport(
-        Context sourceContext,
+        BinderChannelCredentials channelCredentials,
         AndroidComponentAddress targetAddress,
         BindServiceFlags bindServiceFlags,
         Executor mainThreadExecutor,
@@ -602,12 +578,12 @@ public abstract class BinderTransport
         SecurityPolicy securityPolicy,
         InboundParcelablePolicy inboundParcelablePolicy,
         Attributes eagAttrs,
-        BinderChannelCredentials channelCredentials,
         @Nullable UserHandle targetUserHandle) {
       super(
           executorServicePool,
-          buildClientAttributes(eagAttrs, sourceContext, targetAddress, inboundParcelablePolicy),
-          buildLogId(sourceContext, targetAddress));
+          buildClientAttributes(
+              eagAttrs, channelCredentials.getSourceContext(), targetAddress, inboundParcelablePolicy),
+          buildLogId(channelCredentials.getSourceContext(), targetAddress));
       this.offloadExecutorPool = offloadExecutorPool;
       this.securityPolicy = securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
@@ -617,10 +593,9 @@ public abstract class BinderTransport
       serviceBinding =
           new ServiceBinding(
               mainThreadExecutor,
-              sourceContext,
+              channelCredentials,
               targetAddress.asBindIntent(),
               bindServiceFlags.toInteger(),
-              channelCredentials,
               targetUserHandle,
               this);
     }

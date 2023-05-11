@@ -82,10 +82,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   @AnyThread
   ServiceBinding(
       Executor mainThreadExecutor,
-      Context sourceContext,
+      BinderChannelCredentials channelCredentials,
       Intent bindIntent,
       int bindFlags,
-      BinderChannelCredentials channelCredentials,
       @Nullable UserHandle targetUserHandle,
       Observer observer) {
     // We need to synchronize here ensure other threads see all
@@ -94,9 +93,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       this.bindIntent = bindIntent;
       this.bindFlags = bindFlags;
       this.observer = observer;
-      this.sourceContext = sourceContext;
-      this.mainThreadExecutor = mainThreadExecutor;
       this.channelCredentials = channelCredentials;
+      this.sourceContext = channelCredentials.getSourceContext();
+      this.mainThreadExecutor = mainThreadExecutor;
       this.targetUserHandle = targetUserHandle;
       state = State.NOT_BINDING;
       reportedState = State.NOT_BINDING;
@@ -130,9 +129,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       state = State.BINDING;
       Status bindResult =
           bindInternal(
-              sourceContext, bindIntent, this, bindFlags, channelCredentials, targetUserHandle);
+              sourceContext, channelCredentials, bindIntent, this, bindFlags, targetUserHandle);
       if (!bindResult.isOk()) {
-        handleBindServiceFailure(sourceContext, this);
+        handleBindServiceFailure(channelCredentials.getSourceContext(), this);
         state = State.UNBOUND;
         mainThreadExecutor.execute(() -> notifyUnbound(bindResult));
       }
@@ -141,10 +140,10 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   private static Status bindInternal(
       Context context,
+      BinderChannelCredentials channelCredentials,
       Intent bindIntent,
       ServiceConnection conn,
       int flags,
-      BinderChannelCredentials channelCredentials,
       @Nullable UserHandle targetUserHandle) {
     String methodName = "bindService";
     try {
@@ -161,7 +160,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
         if (channelCredentials.getDevicePolicyAdminComponentName() != null) {
           methodName = "DevicePolicyManager.bindDeviceAdminServiceAsUser";
           DevicePolicyManager devicePolicyManager =
-              context.getSystemService(DevicePolicyManager.class);
+              (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
           if (!devicePolicyManager.bindDeviceAdminServiceAsUser(
               channelCredentials.getDevicePolicyAdminComponentName(),
               bindIntent,

@@ -29,12 +29,16 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.os.IBinder;
+import android.os.Parcel;
+import android.os.UserHandle;
 import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.internal.Bindable.Observer;
+import java.util.Arrays;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -260,9 +264,10 @@ public final class ServiceBindingTest {
   }
 
   @Test
+  @Config(sdk = 30)
   public void testBindWithTargetUserHandle() throws Exception {
     binding =
-        newBuilder().setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0)).build();
+        newBuilder().setTargetUserHandle(generateUserHandle(/* userId= */ 0)).build();
     shadowOf(getMainLooper()).idle();
 
     binding.bind();
@@ -276,6 +281,7 @@ public final class ServiceBindingTest {
   }
 
   @Test
+  @Config(sdk = 30)
   public void testBindWithDeviceAdmin() throws Exception {
     String deviceAdminClassName = "DevicePolicyAdmin";
     ComponentName adminComponent = new ComponentName(appContext, deviceAdminClassName);
@@ -283,6 +289,7 @@ public final class ServiceBindingTest {
     binding =
         newBuilder()
             .setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0))
+            .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
             .setChannelCredentials(
                 BinderChannelCredentials.forDevicePolicyAdmin(appContext, adminComponent))
             .build();
@@ -316,6 +323,20 @@ public final class ServiceBindingTest {
     devicePolicyManager.setDeviceOwner(admin);
     devicePolicyManager.setBindDeviceAdminTargetUsers(
         Arrays.asList(UserHandle.getUserHandleForUid(userId)));
+        shadowOf((DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE));
+    devicePolicyManager.setDeviceOwner(admin);
+    devicePolicyManager.setBindDeviceAdminTargetUsers(
+        Arrays.asList(generateUserHandle(userId)));
+  }
+
+  /** Generate UserHandles the hard way. */
+  private static UserHandle generateUserHandle(int userId) {
+    Parcel userParcel = Parcel.obtain();
+    userParcel.writeInt(userId);
+    userParcel.setDataPosition(0);
+    UserHandle userHandle = new UserHandle(userParcel);
+    userParcel.recycle();
+    return userHandle;
   }
 
   private class TestObserver implements Bindable.Observer {
@@ -344,7 +365,6 @@ public final class ServiceBindingTest {
   }
 
   private static class ServiceBindingBuilder {
-    private Context sourceContext;
     private Observer observer;
     private Intent bindIntent = new Intent();
     private int bindServiceFlags;
@@ -390,8 +410,8 @@ public final class ServiceBindingTest {
 
     public ServiceBinding build() {
       return new ServiceBinding(
-          ContextCompat.getMainExecutor(sourceContext),
-          sourceContext,
+          ContextCompat.getMainExecutor(channelCredentials.getSourceContext()),
+          channelCredentials,
           bindIntent,
           bindServiceFlags,
           channelCredentials,
