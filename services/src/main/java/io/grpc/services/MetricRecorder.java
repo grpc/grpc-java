@@ -31,6 +31,7 @@ public final class MetricRecorder {
   private volatile double cpuUtilization;
   private volatile double memoryUtilization;
   private volatile double qps;
+  private volatile double eps;
 
   public static MetricRecorder newInstance() {
     return new MetricRecorder();
@@ -103,7 +104,7 @@ public final class MetricRecorder {
    * Update the QPS metrics data in the range [0, inf). Values outside the valid range are ignored.
    */
   public void setQpsMetric(double value) {
-    if (!MetricRecorderHelper.isQpsValid(value)) {
+    if (!MetricRecorderHelper.isRateValid(value)) {
       return;
     }
     qps = value;
@@ -116,8 +117,25 @@ public final class MetricRecorder {
     qps = 0;
   }
 
+  /**
+   * Update the EPS metrics data in the range [0, inf). Values outside the valid range are ignored.
+   */
+  public void setEpsMetric(double value) {
+    if (!MetricRecorderHelper.isRateValid(value)) {
+      return;
+    }
+    this.eps = value;
+  }
+
+  /**
+   * Clear the EPS metrics data.
+   */
+  public void clearEpsMetric() {
+    eps = 0;
+  }
+
   MetricReport getMetricReport() {
-    return new MetricReport(cpuUtilization, memoryUtilization, qps,
+    return new MetricReport(cpuUtilization, memoryUtilization, qps, eps,
         Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
   }
 }

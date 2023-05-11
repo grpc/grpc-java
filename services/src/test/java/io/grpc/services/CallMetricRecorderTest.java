@@ -47,6 +47,7 @@ public class CallMetricRecorderTest {
     recorder.recordCpuUtilizationMetric(0.1928);
     recorder.recordMemoryUtilizationMetric(0.474);
     recorder.recordQpsMetric(2522.54);
+    recorder.recordEpsMetric(1.618);
 
     MetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.getUtilizationMetrics())
@@ -56,12 +57,15 @@ public class CallMetricRecorderTest {
     Truth.assertThat(dump.getCpuUtilization()).isEqualTo(0.1928);
     Truth.assertThat(dump.getMemoryUtilization()).isEqualTo(0.474);
     Truth.assertThat(dump.getQps()).isEqualTo(2522.54);
+    Truth.assertThat(dump.getEps()).isEqualTo(1.618);
   }
 
   @Test
   public void noMetricsRecordedAfterSnapshot() {
     Map<String, Double> initDump = recorder.finalizeAndDump();
     recorder.recordUtilizationMetric("cost", 0.154353423);
+    recorder.recordQpsMetric(3.14159);
+    recorder.recordEpsMetric(1.618);
     assertThat(recorder.finalizeAndDump()).isEqualTo(initDump);
   }
 
@@ -84,12 +88,14 @@ public class CallMetricRecorderTest {
     recorder.recordCpuUtilizationMetric(-0.001);
     recorder.recordMemoryUtilizationMetric(-0.001);
     recorder.recordQpsMetric(-0.001);
+    recorder.recordEpsMetric(-0.001);
     recorder.recordUtilizationMetric("util1", -0.001);
 
     MetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.getCpuUtilization()).isEqualTo(0);
     Truth.assertThat(dump.getMemoryUtilization()).isEqualTo(0);
     Truth.assertThat(dump.getQps()).isEqualTo(0);
+    Truth.assertThat(dump.getEps()).isEqualTo(0);
     Truth.assertThat(dump.getUtilizationMetrics()).isEmpty();
     Truth.assertThat(dump.getRequestCostMetrics()).isEmpty();
   }
@@ -108,6 +114,8 @@ public class CallMetricRecorderTest {
     recorder.recordUtilizationMetric("util1", 0.843233);
     recorder.recordQpsMetric(1928.3);
     recorder.recordQpsMetric(100.8);
+    recorder.recordEpsMetric(3.14159);
+    recorder.recordEpsMetric(1.618);
 
     MetricReport dump = recorder.finalizeAndDump2();
     Truth.assertThat(dump.getRequestCostMetrics())
@@ -117,6 +125,7 @@ public class CallMetricRecorderTest {
         .containsExactly("util1", 0.843233);
     Truth.assertThat(dump.getCpuUtilization()).isEqualTo(0);
     Truth.assertThat(dump.getQps()).isEqualTo(100.8);
+    Truth.assertThat(dump.getEps()).isEqualTo(1.618);
   }
 
   @Test

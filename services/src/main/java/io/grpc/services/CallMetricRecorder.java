@@ -44,6 +44,7 @@ public final class CallMetricRecorder {
   private double cpuUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
   private double qps = 0;
+  private double eps = 0;
   private volatile boolean disabled;
 
   /**
@@ -160,8 +161,8 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for qps in the range [0, inf). Values outside the valid range
-   * are ignored. If RPC has already finished, this method is no-op.
+   * Records a call metric measurement for queries per second (qps) in the range [0, inf). Values
+   * outside the valid range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
    *
@@ -169,13 +170,28 @@ public final class CallMetricRecorder {
    * @since 1.54.0
    */
   public CallMetricRecorder recordQpsMetric(double value) {
-    if (disabled || !MetricRecorderHelper.isQpsValid(value)) {
+    if (disabled || !MetricRecorderHelper.isRateValid(value)) {
       return this;
     }
     qps = value;
     return this;
   }
 
+  /**
+   * Records a call metric measurement for errors per second (eps) in the range [0, inf). Values
+   * outside the valid range are ignored. If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   */
+  public CallMetricRecorder recordEpsMetric(double value) {
+    if (disabled || !MetricRecorderHelper.isRateValid(value)) {
+      return this;
+    }
+    eps = value;
+    return this;
+  }
 
   /**
    * Returns all request cost metric values. No more metric values will be recorded after this
@@ -205,7 +221,7 @@ public final class CallMetricRecorder {
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    return new MetricReport(cpuUtilizationMetric, memoryUtilizationMetric, qps,
+    return new MetricReport(cpuUtilizationMetric, memoryUtilizationMetric, qps, eps,
         Collections.unmodifiableMap(savedRequestCostMetrics),
         Collections.unmodifiableMap(savedUtilizationMetrics)
     );

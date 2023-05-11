@@ -75,6 +75,7 @@ public class OrcaMetricReportingServerInterceptorTest {
   private double cpuUtilizationMetrics = 0;
   private double memoryUtilizationMetrics = 0;
   private double qpsMetrics = 0;
+  private double epsMetrics = 0;
   private MetricRecorder metricRecorder;
 
   private final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
@@ -99,6 +100,7 @@ public class OrcaMetricReportingServerInterceptorTest {
             CallMetricRecorder.getCurrent().recordCpuUtilizationMetric(cpuUtilizationMetrics);
             CallMetricRecorder.getCurrent().recordMemoryUtilizationMetric(memoryUtilizationMetrics);
             CallMetricRecorder.getCurrent().recordQpsMetric(qpsMetrics);
+            CallMetricRecorder.getCurrent().recordEpsMetric(epsMetrics);
             SimpleResponse response =
                 SimpleResponse.newBuilder().setResponseMessage("Simple response").build();
             responseObserver.onNext(response);
@@ -194,6 +196,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     cpuUtilizationMetrics = 0.3465;
     memoryUtilizationMetrics = 0.764;
     qpsMetrics = 3.1415926535;
+    epsMetrics = 1.618;
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =
@@ -205,6 +208,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     assertThat(report.getCpuUtilization()).isEqualTo(0.3465);
     assertThat(report.getMemUtilization()).isEqualTo(0.764);
     assertThat(report.getRpsFractional()).isEqualTo(3.1415926535);
+    assertThat(report.getEps()).isEqualTo(1.618);
   }
 
   @Test
@@ -216,6 +220,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     memoryUtilizationMetrics = 0.967;
     metricRecorder.setMemoryUtilizationMetric(0.764);
     metricRecorder.setQpsMetric(1.618);
+    metricRecorder.setEpsMetric(3.14159);
     metricRecorder.putUtilizationMetric("serverUtil1", 0.7467);
     metricRecorder.putUtilizationMetric("serverUtil2", 0.2233);
     metricRecorder.putUtilizationMetric("util1", 0.01);
@@ -233,14 +238,17 @@ public class OrcaMetricReportingServerInterceptorTest {
     assertThat(report.getCpuUtilization()).isEqualTo(0.3465);
     assertThat(report.getMemUtilization()).isEqualTo(0.967);
     assertThat(report.getRpsFractional()).isEqualTo(1.618);
+    assertThat(report.getEps()).isEqualTo(3.14159);
   }
 
   @Test
   public void responseTrailersContainMergedMetricsFromCallMetricRecorderAndMetricRecorderNoMap() {
     qpsMetrics = 5142.77;
+    epsMetrics = 2233.88;
     metricRecorder.setCpuUtilizationMetric(0.314159);
     metricRecorder.setMemoryUtilizationMetric(0.764);
     metricRecorder.setQpsMetric(1.618);
+    metricRecorder.setEpsMetric(3.14159);
 
     ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
@@ -252,6 +260,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     assertThat(report.getCpuUtilization()).isEqualTo(0.314159);
     assertThat(report.getMemUtilization()).isEqualTo(0.764);
     assertThat(report.getRpsFractional()).isEqualTo(5142.77);
+    assertThat(report.getEps()).isEqualTo(2233.88);
   }
 
   private static final class TrailersCapturingClientInterceptor implements ClientInterceptor {
