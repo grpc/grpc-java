@@ -24,6 +24,7 @@ import static org.robolectric.Shadows.shadowOf;
 import static org.robolectric.annotation.LooperMode.Mode.PAUSED;
 
 import android.app.Application;
+import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -32,6 +33,7 @@ import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.internal.Bindable.Observer;
 import org.junit.Before;
 import org.junit.Rule;
@@ -44,6 +46,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowApplication;
+import org.robolectric.shadows.ShadowDevicePolicyManager;
 
 @LooperMode(PAUSED)
 @RunWith(RobolectricTestRunner.class)
@@ -256,6 +259,45 @@ public final class ServiceBindingTest {
     shadowOf(getMainLooper()).idle();
   }
 
+  @Test
+  public void testBindWithTargetUserHandle() throws Exception {
+    binding =
+        newBuilder().setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0)).build();
+    shadowOf(getMainLooper()).idle();
+
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(shadowApplication.getBoundServiceConnections()).isNotEmpty();
+    assertThat(observer.gotBoundEvent).isTrue();
+    assertThat(observer.binder).isSameInstanceAs(mockBinder);
+    assertThat(observer.gotUnboundEvent).isFalse();
+    assertThat(binding.isSourceContextCleared()).isFalse();
+  }
+
+  @Test
+  public void testBindWithDeviceAdmin() throws Exception {
+    String deviceAdminClassName = "DevicePolicyAdmin";
+    ComponentName adminComponent = new ComponentName(appContext, deviceAdminClassName);
+    allowBindDeviceAdminForUser(appContext, adminComponent, /* userId= */ 0);
+    binding =
+        newBuilder()
+            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0))
+            .setChannelCredentials(
+                BinderChannelCredentials.forDevicePolicyAdmin(appContext, adminComponent))
+            .build();
+    shadowOf(getMainLooper()).idle();
+
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(shadowApplication.getBoundServiceConnections()).isNotEmpty();
+    assertThat(observer.gotBoundEvent).isTrue();
+    assertThat(observer.binder).isSameInstanceAs(mockBinder);
+    assertThat(observer.gotUnboundEvent).isFalse();
+    assertThat(binding.isSourceContextCleared()).isFalse();
+  }
+
   private void assertNoLockHeld() {
     try {
       binding.wait(1);
@@ -266,6 +308,14 @@ public final class ServiceBindingTest {
       throw new AssertionError(
           "Interrupted exception when we shouldn't have been able to wait.", inte);
     }
+  }
+
+  private static void allowBindDeviceAdminForUser(Context context, ComponentName admin, int userId) {
+    ShadowDevicePolicyManager devicePolicyManager =
+        shadowOf(context.getSystemService(DevicePolicyManager.class));
+    devicePolicyManager.setDeviceOwner(admin);
+    devicePolicyManager.setBindDeviceAdminTargetUsers(
+        Arrays.asList(UserHandle.getUserHandleForUid(userId)));
   }
 
   private class TestObserver implements Bindable.Observer {
@@ -298,9 +348,12 @@ public final class ServiceBindingTest {
     private Observer observer;
     private Intent bindIntent = new Intent();
     private int bindServiceFlags;
+    @Nullable private UserHandle targetUserHandle = null;
+    private BinderChannelCredentials channelCredentials;
 
     public ServiceBindingBuilder setSourceContext(Context sourceContext) {
       this.sourceContext = sourceContext;
+      this.channelCredentials = BinderChannelCredentials.forDefault(sourceContext);
       return this;
     }
 
@@ -324,12 +377,25 @@ public final class ServiceBindingTest {
       return this;
     }
 
+    public ServiceBindingBuilder setTargetUserHandle(UserHandle targetUserHandle) {
+      this.targetUserHandle = targetUserHandle;
+      return this;
+    }
+
+    public ServiceBindingBuilder setChannelCredentials(
+        BinderChannelCredentials channelCredentials) {
+      this.channelCredentials = channelCredentials;
+      return this;
+    }
+
     public ServiceBinding build() {
       return new ServiceBinding(
           ContextCompat.getMainExecutor(sourceContext),
           sourceContext,
           bindIntent,
           bindServiceFlags,
+          channelCredentials,
+          targetUserHandle,
           observer);
     }
   }
