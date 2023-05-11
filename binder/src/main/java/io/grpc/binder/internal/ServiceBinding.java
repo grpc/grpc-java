@@ -65,7 +65,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   private final int bindFlags;
   private final Observer observer;
   private final Executor mainThreadExecutor;
-  private final BinderChannelCredentials channelCredentials;
   @Nullable private final UserHandle targetUserHandle;
 
   @GuardedBy("this")
@@ -74,6 +73,8 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   // The following fields are intentionally not guarded, since (aside from the constructor),
   // they're only modified in the main thread. The constructor contains a synchronized block
   // to ensure there's a write barrier when these fields are first written.
+
+  @Nullable private BinderChannelCredentials channelCredentials;  // Only null in the unbound state.
 
   private State reportedState; // Only used on the main thread.
 
@@ -222,7 +223,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   @MainThread
   private void clearReferences() {
-    channelCredentials.clearReferences();
+    channelCredentials = null;
   }
 
   @Override
@@ -262,6 +263,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   @VisibleForTesting
   synchronized boolean isSourceContextCleared() {
-    return channelCredentials.getSourceContext() == null;
+    return channelCredentials == null;
   }
 }
