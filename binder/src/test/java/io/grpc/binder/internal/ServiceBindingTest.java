@@ -372,7 +372,6 @@ public final class ServiceBindingTest {
     private BinderChannelCredentials channelCredentials;
 
     public ServiceBindingBuilder setSourceContext(Context sourceContext) {
-      this.sourceContext = sourceContext;
       this.channelCredentials = BinderChannelCredentials.forDefault(sourceContext);
       return this;
     }
@@ -414,7 +413,6 @@ public final class ServiceBindingTest {
           channelCredentials,
           bindIntent,
           bindServiceFlags,
-          channelCredentials,
           targetUserHandle,
           observer);
     }
