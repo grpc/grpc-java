@@ -43,6 +43,7 @@ public class JsonUtilTest {
     map.put("key_string_minus_infinity", "-Infinity");
     map.put("key_string_exponent", "2.998e8");
     map.put("key_string_minus_zero", "-0");
+    map.put("key_string_boolean", true);
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_number_1")).isEqualTo(1D);
     assertThat(JsonUtil.getNumberAsInteger(map, "key_number_1")).isEqualTo(1);
@@ -127,7 +128,7 @@ public class JsonUtilTest {
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
       assertThat(e).hasMessageThat().isEqualTo(
-          "value 'six' for key 'key_string_six' is not a float");
+          "string value 'six' for key 'key_string_six' cannot be parsed as a float");
     }
 
     assertThat(JsonUtil.getNumberAsFloat(map, "key_number_7")).isEqualTo(7F);
@@ -149,6 +150,14 @@ public class JsonUtilTest {
     assertThat(JsonUtil.getNumberAsInteger(map, "key_nonexistent")).isNull();
     assertThat(JsonUtil.getNumberAsLong(map, "key_nonexistent")).isNull();
     assertThat(JsonUtil.getNumberAsFloat(map, "key_nonexistent")).isNull();
+
+    try {
+      JsonUtil.getNumberAsFloat(map, "key_string_boolean");
+      fail("expecting to throw but did not");
+    } catch (RuntimeException e) {
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value true for key 'key_string_boolean' is not a float");
+    }
   }
 
   @Test

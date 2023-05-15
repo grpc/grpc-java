@@ -58,6 +58,7 @@ public class CallMetricRecorderTest {
     Truth.assertThat(dump.getMemoryUtilization()).isEqualTo(0.474);
     Truth.assertThat(dump.getQps()).isEqualTo(2522.54);
     Truth.assertThat(dump.getEps()).isEqualTo(1.618);
+    Truth.assertThat(dump.toString()).contains("eps=1.618");
   }
 
   @Test

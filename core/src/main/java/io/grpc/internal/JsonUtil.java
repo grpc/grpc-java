@@ -140,11 +140,11 @@ public class JsonUtil {
         return Float.parseFloat((String) value);
       } catch (NumberFormatException e) {
         throw new IllegalArgumentException(
-            String.format("value '%s' for key '%s' is not a float", value, key));
+            String.format("string value '%s' for key '%s' cannot be parsed as a float", value, key));
       }
     }
     throw new IllegalArgumentException(
-        String.format("value '%s' for key '%s' in '%s' is not a number", value, key, obj));
+        String.format("value %s for key '%s' is not a float", value, key));
   }
 
   /**
