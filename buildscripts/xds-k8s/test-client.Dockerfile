@@ -11,5 +11,12 @@ COPY grpc-interop-testing/ $APP_DIR/
 COPY logging*.properties $APP_DIR/
 ENV JAVA_OPTS="-Djava.util.logging.config.file=$APP_DIR/logging-json.properties"
 
+# Intentially after the app COPY to force the update on each build.
+# Update Ubuntu system packages:
+RUN apt-get update \
+    && apt-get -y upgrade \
+    && apt-get -y autoremove \
+    && rm -rf /var/lib/apt/lists/*
+
 # Client
 ENTRYPOINT ["bin/xds-test-client"]
