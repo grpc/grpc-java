@@ -122,6 +122,32 @@ public class JsonUtil {
   }
 
   /**
+   * Gets a number from an object for the given key.  If the key is not present, this returns null.
+   * If the value does not represent a float, throws an exception.
+   */
+  @Nullable
+  public static Float getNumberAsFloat(Map<String, ?> obj, String key) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
+      return null;
+    }
+    Object value = obj.get(key);
+    if (value instanceof Float) {
+      return (Float) value;
+    }
+    if (value instanceof String) {
+      try {
+        return Float.parseFloat((String) value);
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException(
+            String.format("value '%s' for key '%s' is not a float", value, key));
+      }
+    }
+    throw new IllegalArgumentException(
+        String.format("value '%s' for key '%s' in '%s' is not a number", value, key, obj));
+  }
+
+  /**
    * Gets a number from an object for the given key, casted to an integer.  If the key is not
    * present, this returns null.  If the value does not represent an integer, throws an exception.
    */

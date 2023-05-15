@@ -184,8 +184,14 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @VisibleForTesting
     void onLoadReport(MetricReport report) {
-      double newWeight = report.getCpuUtilization() == 0 ? 0 :
-              report.getQps() / report.getCpuUtilization();
+      double newWeight = 0;
+      if (report.getCpuUtilization() > 0 && report.getQps() > 0) {
+        double penalty = 0;
+        if (report.getEps() > 0 && config.errorUtilizationPenalty > 0) {
+          penalty = report.getEps() / report.getQps() * config.errorUtilizationPenalty;
+        }
+        newWeight = report.getQps() / (report.getCpuUtilization() + penalty);
+      }
       if (newWeight == 0) {
         return;
       }
@@ -419,6 +425,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     final boolean enableOobLoadReport;
     final long oobReportingPeriodNanos;
     final long weightUpdatePeriodNanos;
+    final float errorUtilizationPenalty;
 
     public static Builder newBuilder() {
       return new Builder();
@@ -428,12 +435,14 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
                                                  long weightExpirationPeriodNanos,
                                                  boolean enableOobLoadReport,
                                                  long oobReportingPeriodNanos,
-                                                 long weightUpdatePeriodNanos) {
+                                                 long weightUpdatePeriodNanos,
+                                                 float errorUtilizationPenalty) {
       this.blackoutPeriodNanos = blackoutPeriodNanos;
       this.weightExpirationPeriodNanos = weightExpirationPeriodNanos;
       this.enableOobLoadReport = enableOobLoadReport;
       this.oobReportingPeriodNanos = oobReportingPeriodNanos;
       this.weightUpdatePeriodNanos = weightUpdatePeriodNanos;
+      this.errorUtilizationPenalty = errorUtilizationPenalty;
     }
 
     static final class Builder {
@@ -442,6 +451,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       boolean enableOobLoadReport = false;
       long oobReportingPeriodNanos = 10_000_000_000L; // 10s
       long weightUpdatePeriodNanos = 1_000_000_000L; // 1s
+      float errorUtilizationPenalty = 1.0F;
 
       private Builder() {
 
@@ -472,10 +482,15 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         return this;
       }
 
+      Builder setErrorUtilizationPenalty(float errorUtilizationPenalty) {
+        this.errorUtilizationPenalty = errorUtilizationPenalty;
+        return this;
+      }
+
       WeightedRoundRobinLoadBalancerConfig build() {
         return new WeightedRoundRobinLoadBalancerConfig(blackoutPeriodNanos,
                 weightExpirationPeriodNanos, enableOobLoadReport, oobReportingPeriodNanos,
-                weightUpdatePeriodNanos);
+                weightUpdatePeriodNanos, errorUtilizationPenalty);
       }
     }
   }

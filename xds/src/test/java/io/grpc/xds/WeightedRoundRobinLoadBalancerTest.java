@@ -340,6 +340,23 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
+  public void pickByWeight_largeWeight_withEps_defaultErrorUtilizationPenalty() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.1, 0.1, 999, 13, new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.9, 0.1, 2, 1.8, new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0.1, 100, 3, new HashMap<>(), new HashMap<>());
+    double weight1 = 999 / (0.1 + 13 / 999F * weightedConfig.errorUtilizationPenalty);
+    double weight2 = 2 / (0.9 + 1.8 / 2F * weightedConfig.errorUtilizationPenalty);
+    double weight3 = 100 / (0.86 + 3 / 100F * weightedConfig.errorUtilizationPenalty);
+    double totalWeight = weight1 + weight2 + weight3;
+
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
+        weight3 / totalWeight);
+  }
+
+  @Test
   public void pickByWeight_normalWeight() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
             0.12, 0.1, 22, 0, new HashMap<>(), new HashMap<>());
@@ -351,6 +368,43 @@ public class WeightedRoundRobinLoadBalancerTest {
     pickByWeight(report1, report2, report3, 22 / 0.12 / totalWeight,
             40 / 0.28 / totalWeight, 100 / 0.86 / totalWeight
     );
+  }
+
+  @Test
+  public void pickByWeight_normalWeight_withEps_defaultErrorUtilizationPenalty() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.12, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.28, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>());
+    double weight1 = 22 / (0.12 + 19.7 / 22F * weightedConfig.errorUtilizationPenalty);
+    double weight2 = 40 / (0.28 + 0.998 / 40F * weightedConfig.errorUtilizationPenalty);
+    double weight3 = 100 / (0.86 + 3.14159 / 100F * weightedConfig.errorUtilizationPenalty);
+    double totalWeight = weight1 + weight2 + weight3;
+
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
+        weight3 / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_normalWeight_withEps_customErrorUtilizationPenalty() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
+        .setErrorUtilizationPenalty(1.75F).build();
+
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.12, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.28, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>());
+    double weight1 = 22 / (0.12 + 19.7 / 22F * weightedConfig.errorUtilizationPenalty);
+    double weight2 = 40 / (0.28 + 0.998 / 40F * weightedConfig.errorUtilizationPenalty);
+    double weight3 = 100 / (0.86 + 3.14159 / 100F * weightedConfig.errorUtilizationPenalty);
+    double totalWeight = weight1 + weight2 + weight3;
+
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
+        weight3 / totalWeight);
   }
 
   @Test
