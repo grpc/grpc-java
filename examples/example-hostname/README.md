@@ -24,7 +24,7 @@ runs the example.
 To run the hostname example, run:
 
 ```
-$ ./build/install/hostname/bin/hostname-server
+$ ./build/install/hostname-server/bin/hostname-server
 ```
 
 And in a different terminal window run the hello-world client:
