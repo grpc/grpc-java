@@ -1,5 +1,5 @@
 # Build runtime image.
-FROM eclipse-temurin:11.0.19_7-jdk-alpine
+FROM eclipse-temurin:11.0.19_7-jre
 
 ENV APP_DIR=/usr/src/app
 WORKDIR $APP_DIR
