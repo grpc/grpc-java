@@ -8,8 +8,6 @@ plugins {
 
 description = "gRPC: Testing"
 
-evaluationDependsOn(project(':grpc-core').path)
-
 dependencies {
     api project(':grpc-core'),
             project(':grpc-stub'),
@@ -24,7 +22,7 @@ dependencies {
     }
 
     testImplementation project(':grpc-testing-proto'),
-            project(':grpc-core').sourceSets.test.output
+            testFixtures(project(':grpc-core'))
 
     signature libraries.signature.java
     signature libraries.signature.android

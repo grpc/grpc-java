@@ -8,8 +8,6 @@ plugins {
 
 description = "gRPC: OkHttp"
 
-evaluationDependsOn(project(':grpc-core').path)
-
 dependencies {
     api project(':grpc-core')
     implementation libraries.okio,
@@ -18,8 +16,8 @@ dependencies {
     // Make okhttp dependencies compile only
     compileOnly libraries.okhttp
     // Tests depend on base class defined by core module.
-    testImplementation project(':grpc-core').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.netty.codec.http2,

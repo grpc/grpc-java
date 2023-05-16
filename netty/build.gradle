@@ -13,8 +13,6 @@ configurations {
     alpnagent
 }
 
-evaluationDependsOn(project(':grpc-core').path)
-
 dependencies {
     api project(':grpc-core'),
             libraries.netty.codec.http2
@@ -25,8 +23,8 @@ dependencies {
             libraries.netty.unix.common
 
     // Tests depend on base class defined by core module.
-    testImplementation project(':grpc-core').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.conscrypt,
