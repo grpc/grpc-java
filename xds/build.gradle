@@ -11,8 +11,6 @@ plugins {
 
 description = "gRPC: XDS plugin"
 
-evaluationDependsOn(project(':grpc-core').path)
-
 sourceSets {
     thirdparty {
         java {
@@ -57,7 +55,7 @@ dependencies {
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-rls')
-    testImplementation project(':grpc-core').sourceSets.test.output
+    testImplementation testFixtures(project(':grpc-core'))
 
     annotationProcessor libraries.auto.value
     // At runtime use the epoll included in grpc-netty-shaded

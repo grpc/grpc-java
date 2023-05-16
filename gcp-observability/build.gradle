@@ -61,7 +61,7 @@ dependencies {
             libraries.protobuf.java.util, // Use our newer version
             libraries.re2j // Use our newer version
 
-    testImplementation project(':grpc-context').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-context')),
             project(':grpc-testing'),
             project(':grpc-testing-proto')
     testImplementation (libraries.guava.testlib) {
