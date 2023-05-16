@@ -188,11 +188,9 @@ class LoadBalancerConfigFactory {
    * Builds a service config JSON object for the pick_first load balancer config based on the
    * given config values.
    */
-  private static ImmutableMap<String, ?> buildPickFirstConfig(Boolean shuffleAddressList) {
+  private static ImmutableMap<String, ?> buildPickFirstConfig(boolean shuffleAddressList) {
     ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
-    if (shuffleAddressList != null) {
-      configBuilder.put(SHUFFLE_ADDRESS_LIST_FIELD_NAME, shuffleAddressList);
-    }
+    configBuilder.put(SHUFFLE_ADDRESS_LIST_FIELD_NAME, shuffleAddressList);
     return ImmutableMap.of(PICK_FIRST_FIELD_NAME, configBuilder.buildOrThrow());
   }
 
