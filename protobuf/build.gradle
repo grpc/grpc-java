@@ -28,4 +28,4 @@ dependencies {
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
-javadoc.options.links 'https://developers.google.com/protocol-buffers/docs/reference/java/'
+javadoc.options.links 'https://protobuf.dev/reference/java/api-docs/'
