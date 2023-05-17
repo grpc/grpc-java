@@ -58,7 +58,7 @@
     <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
-      <version>2.9.0</version> <!-- prevent downgrade via protobuf-java-util -->
+      <version>2.10.1</version> <!-- prevent downgrade via protobuf-java-util -->
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>

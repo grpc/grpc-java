@@ -56,11 +56,10 @@ dependencies {
             project(':grpc-core'), // Align grpc versions
             project(':grpc-grpclb'), // Align grpc versions
             project(':grpc-services'), // Align grpc versions
+            libraries.animalsniffer.annotations, // Use our newer version
+            libraries.guava.jre, // Use our newer version
             libraries.protobuf.java.util, // Use our newer version
-            ('com.google.api.grpc:proto-google-common-protos:2.14.2'),
-            ('com.google.auth:google-auth-library-oauth2-http:1.16.0'),
-            ('io.opencensus:opencensus-api:0.31.1'),
-            ('com.google.guava:guava:31.1-jre')
+            libraries.re2j // Use our newer version
 
     testImplementation testFixtures(project(':grpc-context')),
             project(':grpc-testing'),

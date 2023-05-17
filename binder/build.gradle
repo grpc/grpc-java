@@ -7,14 +7,14 @@ description = 'gRPC BinderChannel'
 
 android {
     namespace 'io.grpc.binder'
-    compileSdkVersion 31
+    compileSdkVersion 33
     compileOptions {
         sourceCompatibility 1.8
         targetCompatibility 1.8
     }
     defaultConfig {
         minSdkVersion 19
-        targetSdkVersion 31
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
