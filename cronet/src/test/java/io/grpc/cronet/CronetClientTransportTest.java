@@ -68,10 +68,15 @@ public final class CronetClientTransportTest {
       new ClientStreamTracer[]{ new ClientStreamTracer() {} };
   private CronetClientTransport transport;
   @Mock private StreamBuilderFactory streamFactory;
-  @Mock private Executor executor;
   private MethodDescriptor<Void, Void> descriptor = TestMethodDescriptors.voidMethod();
   @Mock private ManagedClientTransport.Listener clientTransportListener;
   @Mock private BidirectionalStream.Builder builder;
+  private final Executor executor = new Executor() {
+      @Override
+      public void execute(Runnable r) {
+        r.run();
+      }
+    };
 
   @Before
   public void setUp() {
