@@ -98,7 +98,7 @@ public class TestServiceClient {
   private int soakMinTimeMsBetweenRpcs = 0;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
-  private String additionalMetadata;
+  private String additionalMetadata = "";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
