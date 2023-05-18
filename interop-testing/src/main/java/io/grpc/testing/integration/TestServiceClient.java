@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ChannelCredentials;
+import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
@@ -97,6 +98,7 @@ public class TestServiceClient {
   private int soakMinTimeMsBetweenRpcs = 0;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
+  private String additionalMetadata;
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
@@ -174,6 +176,8 @@ public class TestServiceClient {
         soakMinTimeMsBetweenRpcs = Integer.parseInt(value);
       } else if ("soak_overall_timeout_seconds".equals(key)) {
         soakOverallTimeoutSeconds = Integer.parseInt(value);
+      } else if ("additional_metadata".equals(key)) {
+        additionalMetadata = value;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -244,6 +248,10 @@ public class TestServiceClient {
           + "\n                              should stop and fail, if the desired number of "
           + "\n                              iterations have not yet completed. Default "
             + c.soakOverallTimeoutSeconds
+          + "\n --additional_metadata "
+          + "\n                              Additional metadata to send in each request, as a "
+          + "\n                              semicolon-separated list of key:value pairs. Default "
+            + c.additionalMetadata
       );
       System.exit(1);
     }
@@ -556,6 +564,8 @@ public class TestServiceClient {
           channelCredentials = InsecureChannelCredentials.create();
         }
       }
+      ClientInterceptor addMdInterceptor = maybeCreateAdditionalMetadataInterceptor(
+          additionalMetadata);
       if (useGeneric) {
         ManagedChannelBuilder<?> channelBuilder;
         if (serverPort == 0) {
@@ -570,6 +580,9 @@ public class TestServiceClient {
         if (serviceConfig != null) {
           channelBuilder.disableServiceConfigLookUp();
           channelBuilder.defaultServiceConfig(serviceConfig);
+        }
+        if (addMdInterceptor != null) {
+          channelBuilder.intercept(addMdInterceptor);
         }
         return channelBuilder;
       }
@@ -593,6 +606,9 @@ public class TestServiceClient {
           nettyBuilder.disableServiceConfigLookUp();
           nettyBuilder.defaultServiceConfig(serviceConfig);
         }
+        if (addMdInterceptor != null) {
+          channelBuilder.intercept(addMdInterceptor);
+        }
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
 
@@ -615,6 +631,9 @@ public class TestServiceClient {
       if (serviceConfig != null) {
         okBuilder.disableServiceConfigLookUp();
         okBuilder.defaultServiceConfig(serviceConfig);
+      }
+      if (addMdInterceptor != null) {
+        channelBuilder.intercept(addMdInterceptor);
       }
       return okBuilder.intercept(createCensusStatsClientInterceptor());
     }
