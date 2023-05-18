@@ -607,7 +607,7 @@ public class TestServiceClient {
           nettyBuilder.defaultServiceConfig(serviceConfig);
         }
         if (addMdInterceptor != null) {
-          channelBuilder.intercept(addMdInterceptor);
+          nettyBuilder.intercept(addMdInterceptor);
         }
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
@@ -633,7 +633,7 @@ public class TestServiceClient {
         okBuilder.defaultServiceConfig(serviceConfig);
       }
       if (addMdInterceptor != null) {
-        channelBuilder.intercept(addMdInterceptor);
+        okBuilder.intercept(addMdInterceptor);
       }
       return okBuilder.intercept(createCensusStatsClientInterceptor());
     }
