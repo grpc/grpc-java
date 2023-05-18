@@ -421,7 +421,9 @@ public abstract class AbstractInteropTest {
    * Otherwise, return a client interceptor which inserts the provided metadata.
    */
   @Nullable
-  protected final ClientInterceptor maybeCreateAdditionalMetadataInterceptor(String additionalMd) throws IllegalArgumentException {
+  protected final ClientInterceptor maybeCreateAdditionalMetadataInterceptor(
+      String additionalMd)
+      throws IllegalArgumentException {
     if (additionalMd.length() == 0) {
       return null;
     }
@@ -429,9 +431,11 @@ public abstract class AbstractInteropTest {
     while (additionalMd.length() > 0) {
       int i = additionalMd.indexOf(':');
       if (i < 0) {
-        throw new IllegalArgumentException("error parsing additional metadata string: no colon separte found");
+        throw new IllegalArgumentException(
+            "error parsing additional metadata string: no colon separte found");
       }
-      Metadata.Key<String> key = Metadata.Key.of(additionalMd.substring(0, i), Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key<String> key = Metadata.Key.of(
+          additionalMd.substring(0, i), Metadata.ASCII_STRING_MARSHALLER);
       additionalMd = additionalMd.substring(i + 1);
       i = additionalMd.indexOf(';');
       if (i < 0) {
