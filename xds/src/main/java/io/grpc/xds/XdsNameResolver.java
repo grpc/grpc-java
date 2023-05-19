@@ -160,7 +160,8 @@ final class XdsNameResolver extends NameResolver {
       authority = URLEncoder.encode(checkNotNull(name, "name"), "UTF-8");
     } catch (UnsupportedEncodingException e) {
       // If UTF-8 is unsupported fallback to non-encoded path.
-      logger.log(XdsLogLevel.ERROR, "Encoding of authority failed, falling back to non-encoded string");
+      logger.log(XdsLogLevel.ERROR,
+          "Encoding of authority failed, falling back to non-encoded string");
       authority = name;
     }
     // Verify the authority using encoding, but use non-decoded version for
