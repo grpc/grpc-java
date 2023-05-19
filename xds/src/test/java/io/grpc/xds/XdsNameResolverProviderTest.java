@@ -103,7 +103,7 @@ public class XdsNameResolverProviderTest {
 
   @Test
   public void validName_noAuthority() {
-    XdsNameResolver resolver = 
+    XdsNameResolver resolver =
         provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
