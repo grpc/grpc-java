@@ -101,6 +101,8 @@ final class XdsNameResolver extends NameResolver {
   static boolean enableTimeout =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"));
+  
+  private static String authorityEncoding = "UTF-8";
 
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -157,12 +159,10 @@ final class XdsNameResolver extends NameResolver {
     // The name might have multiple slashes so encode it before verifying.
     // If the encoding fails, fallback to the non-encoded string.
     try {
-      authority = URLEncoder.encode(checkNotNull(name, "name"), "UTF-8");
+      authority = URLEncoder.encode(checkNotNull(name, "name"), authorityEncoding);
     } catch (UnsupportedEncodingException e) {
-      // If UTF-8 is unsupported fallback to non-encoded path.
-      logger.log(XdsLogLevel.ERROR,
-          "Encoding of authority failed, falling back to non-encoded string");
-      authority = name;
+      // This should never happen since all JVMs must support UTF-8.
+      throw new RuntimeException(e);
     }
     // Verify the authority using encoding, but use non-decoded version for
     // serviceAuthority.
