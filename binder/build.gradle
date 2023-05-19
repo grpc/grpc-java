@@ -7,30 +7,14 @@ description = 'gRPC BinderChannel'
 
 android {
     namespace 'io.grpc.binder'
-    sourceSets {
-        test {
-            java {
-                srcDirs += "${projectDir}/../core/src/test/java/"
-                setIncludes(["io/grpc/internal/FakeClock.java",
-                             "io/grpc/binder/**"])
-            }
-        }
-        androidTest {
-            java {
-                srcDirs += "${projectDir}/../core/src/test/java/"
-                setIncludes(["io/grpc/internal/AbstractTransportTest.java",
-                             "io/grpc/binder/**"])
-            }
-        }
-    }
-    compileSdkVersion 31
+    compileSdkVersion 33
     compileOptions {
         sourceCompatibility 1.8
         targetCompatibility 1.8
     }
     defaultConfig {
         minSdkVersion 19
-        targetSdkVersion 31
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -72,6 +56,7 @@ dependencies {
     }
     testImplementation libraries.truth
     testImplementation project(':grpc-testing')
+    testImplementation testFixtures(project(':grpc-core'))
 
     androidTestAnnotationProcessor libraries.auto.value
     androidTestImplementation project(':grpc-testing')
@@ -88,6 +73,7 @@ dependencies {
     androidTestImplementation (libraries.guava.testlib) {
         exclude group: 'junit', module: 'junit'
     }
+    androidTestImplementation testFixtures(project(':grpc-core'))
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

@@ -77,11 +77,16 @@ public final class CronetClientStreamTest {
   private Metadata metadata = new Metadata();
   @Mock private StreamBuilderFactory factory;
   @Mock private ExperimentalBidirectionalStream cronetStream;
-  @Mock private Executor executor;
   @Mock private ClientStreamListener clientListener;
   @Mock private ExperimentalBidirectionalStream.Builder builder;
   private final Object lock = new Object();
   private final TransportTracer transportTracer = TransportTracer.getDefaultFactory().create();
+  private final Executor executor = new Executor() {
+      @Override
+      public void execute(Runnable r) {
+        r.run();
+      }
+    };
   CronetClientStream clientStream;
 
   private MethodDescriptor.Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();

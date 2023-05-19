@@ -210,6 +210,9 @@ Finally, document and publicize the release.
 2. Post a release announcement to [grpc-io](https://groups.google.com/forum/#!forum/grpc-io)
    (`grpc-io@googlegroups.com`). The title should be something that clearly identifies
    the release (e.g.`GRPC-Java <tag> Released`).
+   - Note that there may have been backports to the release branch since you
+     generated the release notes. Please verify that any backports are reflected
+     in the release notes before sending them out.
 
 Update Hosted Javadoc
 ---------------------

@@ -11,18 +11,17 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # )
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.9.0",
-    "com.google.auth:google-auth-library-credentials:0.22.0",
-    "com.google.auth:google-auth-library-oauth2-http:0.22.0",
-    "com.google.auto.value:auto-value-annotations:1.9",
-    "com.google.auto.value:auto-value:1.9",
+    "com.google.api.grpc:proto-google-common-protos:2.17.0",
+    "com.google.auth:google-auth-library-credentials:1.4.0",
+    "com.google.auth:google-auth-library-oauth2-http:1.4.0",
+    "com.google.auto.value:auto-value-annotations:1.10.1",
+    "com.google.auto.value:auto-value:1.10.1",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:2.9.0",
-    "com.google.errorprone:error_prone_annotations:2.9.0",
+    "com.google.code.gson:gson:2.10.1",
+    "com.google.errorprone:error_prone_annotations:2.18.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:31.0.1-android",
-    "com.google.j2objc:j2objc-annotations:1.3",
-    "com.google.re2j:re2j:1.6",
+    "com.google.guava:guava:31.1-android",
+    "com.google.re2j:re2j:1.7",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:1.17.5",
@@ -40,12 +39,12 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.87.Final",
     "io.netty:netty-transport-native-unix-common:4.1.87.Final",
     "io.netty:netty-transport:4.1.87.Final",
-    "io.opencensus:opencensus-api:0.24.0",
-    "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
-    "io.perfmark:perfmark-api:0.25.0",
-    "junit:junit:4.12",
+    "io.opencensus:opencensus-api:0.31.0",
+    "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
+    "io.perfmark:perfmark-api:0.26.0",
+    "junit:junit:4.13.2",
     "org.apache.tomcat:annotations-api:6.0.53",
-    "org.codehaus.mojo:animal-sniffer-annotations:1.21",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.23",
 ]
 
 # For use with maven_install's override_targets.
@@ -137,10 +136,10 @@ def grpc_java_repositories():
     if not native.existing_rule("envoy_api"):
         http_archive(
             name = "envoy_api",
-            sha256 = "74156c0d8738d0469f23047f0fd0f8846fdd0d59d7b55c76cd8cb9ebf2fa3a01",
-            strip_prefix = "data-plane-api-b1d2e441133c00bfe8412dfd6e93ea85e66da9bb",
+            sha256 = "b426904abf51ba21dd8947a05694bb3c861d6f5e436e4673e74d7d7bfb6d3188",
+            strip_prefix = "data-plane-api-268824e4eee3d7770a347a5dc5aaddc0b1b14e24",
             urls = [
-                "https://github.com/envoyproxy/data-plane-api/archive/b1d2e441133c00bfe8412dfd6e93ea85e66da9bb.tar.gz",
+                "https://github.com/envoyproxy/data-plane-api/archive/268824e4eee3d7770a347a5dc5aaddc0b1b14e24.tar.gz",
             ],
         )
 
