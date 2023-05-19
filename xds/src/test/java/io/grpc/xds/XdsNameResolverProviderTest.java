@@ -103,26 +103,26 @@ public class XdsNameResolverProviderTest {
 
   @Test
   public void validName_noAuthority() {
-    XdsNameResolver resolver = provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args);
+    XdsNameResolver resolver = 
+        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
 
   @Test
   public void validName_urlExtractedAuthorityInvalidWithoutEncoding() {
-    XdsNameResolver resolver = provider.newNameResolver(URI.create("xds:///1234/path/foo.googleapis.com:8080"),
-        args);
+    XdsNameResolver resolver = 
+        provider.newNameResolver(URI.create("xds:///1234/path/foo.googleapis.com:8080"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("1234/path/foo.googleapis.com:8080");
   }
 
   @Test
   public void validName_urlwithTargetAuthorityAndExtractedAuthorityInvalidWithoutEncoding() {
-    XdsNameResolver resolver = provider.newNameResolver(
-        URI.create("xds://trafficdirector.google.com/1234/path-to-service/foo.googleapis.com:8080"),
-        args);
+    XdsNameResolver resolver = provider.newNameResolver(URI.create(
+        "xds://trafficdirector.google.com/1234/path/foo.googleapis.com:8080"), args);
     assertThat(resolver).isNotNull();
-    assertThat(resolver.getServiceAuthority()).isEqualTo("1234/path-to-service/foo.googleapis.com:8080");
+    assertThat(resolver.getServiceAuthority()).isEqualTo("1234/path/foo.googleapis.com:8080");
   }
 
   @Test
