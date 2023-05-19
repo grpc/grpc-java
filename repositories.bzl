@@ -55,15 +55,15 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 #
 # If you have your own overrides as well, you can use:
 #     override_targets = dict(
-#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
-#         "your.target:artifact": "@//third_party/artifact",
+#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS.items() +
+#         { "your.target:artifact": "@//third_party/artifact", }.items()
 #     )
 #
 # To combine OVERRIDE_TARGETS from multiple libraries:
 #     override_targets = dict(
 #         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS.items() +
-#         OTHER_OVERRIDE_TARGETS.items(),
-#         "your.target:artifact": "@//third_party/artifact",
+#         OTHER_OVERRIDE_TARGETS.items() +
+#         { "your.target:artifact": "@//third_party/artifact", }.items()
 #     )
 IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "com.google.protobuf:protobuf-java": "@com_google_protobuf//:protobuf_java",
