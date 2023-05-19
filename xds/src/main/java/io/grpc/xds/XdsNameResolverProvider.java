@@ -23,9 +23,12 @@ import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.ObjectPool;
+
+
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
@@ -64,12 +67,12 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
    * and bootstrap.
    */
   public static XdsNameResolverProvider createForTest(String scheme,
-                                                      @Nullable Map<String, ?> bootstrapOverride) {
+      @Nullable Map<String, ?> bootstrapOverride) {
     return new XdsNameResolverProvider(scheme, bootstrapOverride);
   }
 
   @Override
-  public XdsNameResolver newNameResolver(URI targetUri, Args args) {
+  public XdsNameResolver newNameResolver(URI targetUri, Args args)  {
     if (scheme.equals(targetUri.getScheme())) {
       String targetPath = checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(

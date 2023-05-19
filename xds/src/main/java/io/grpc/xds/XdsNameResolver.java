@@ -66,6 +66,8 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -147,7 +149,25 @@ final class XdsNameResolver extends NameResolver {
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
-    serviceAuthority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
+
+    logId = InternalLogId.allocate("xds-resolver", name);
+    logger = XdsLogger.withLogId(logId);
+    String authority;
+
+    //  The name might have multiple slashes so encode it before verifying.
+    // If the encoding fails, fallback to the non-encoded string.
+    try {
+      authority = URLEncoder.encode(checkNotNull(name, "name"), "UTF-8");
+    } catch (UnsupportedEncodingException e) {
+      // If UTF-8 is unsupported fallback to non-encoded path.
+      logger.log(XdsLogLevel.ERROR, "Encoding of authority failed, falling back to non-encoded string");
+      authority = name;
+    }
+    // Verify the authority using encoding, but use non-decoded version for
+    // serviceAuthority.
+    GrpcUtil.checkAuthority(authority);
+    serviceAuthority = name;
+
     this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
@@ -158,8 +178,6 @@ final class XdsNameResolver extends NameResolver {
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
     randomChannelId = random.nextLong();
-    logId = InternalLogId.allocate("xds-resolver", name);
-    logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
   }
 

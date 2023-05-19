@@ -526,8 +526,8 @@ public final class GrpcUtil {
    */
   public static String checkAuthority(String authority) {
     URI uri = authorityToUri(authority);
-    checkArgument(uri.getHost() != null, "No host in authority '%s'", authority);
-    checkArgument(uri.getUserInfo() == null,
+    // Verify that the user Info is not provided.
+    checkArgument(uri.getAuthority().indexOf('@') == -1,
         "Userinfo must not be present on authority: '%s'", authority);
     return authority;
   }

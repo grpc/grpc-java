@@ -199,13 +199,6 @@ public class GrpcUtilTest {
     GrpcUtil.checkAuthority("[ : : 1]");
   }
 
-  @Test
-  public void checkAuthority_failsOnInvalidHost() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("No host in authority");
-
-    GrpcUtil.checkAuthority("bad_host");
-  }
 
   @Test
   public void checkAuthority_userInfoNotAllowed() {
