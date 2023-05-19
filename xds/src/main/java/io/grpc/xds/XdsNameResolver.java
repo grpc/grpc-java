@@ -154,7 +154,7 @@ final class XdsNameResolver extends NameResolver {
     logger = XdsLogger.withLogId(logId);
     String authority;
 
-    //  The name might have multiple slashes so encode it before verifying.
+    // The name might have multiple slashes so encode it before verifying.
     // If the encoding fails, fallback to the non-encoded string.
     try {
       authority = URLEncoder.encode(checkNotNull(name, "name"), "UTF-8");
