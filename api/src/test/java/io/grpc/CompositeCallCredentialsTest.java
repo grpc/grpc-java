@@ -109,7 +109,5 @@ public final class CompositeCallCredentialsTest {
         applier.fail(status);
       }
     }
-
-    @Override public void thisUsesUnstableApi() {}
   }
 }

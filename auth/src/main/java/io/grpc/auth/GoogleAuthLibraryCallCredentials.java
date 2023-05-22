@@ -95,9 +95,6 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
   }
 
   @Override
-  public void thisUsesUnstableApi() {}
-
-  @Override
   public void applyRequestMetadata(
       RequestInfo info, Executor appExecutor, final MetadataApplier applier) {
     SecurityLevel security = info.getSecurityLevel();
