@@ -60,6 +60,7 @@ public abstract class CallCredentials {
    * a no-op implementation. This method is marked deprecated to allow extenders time to remove the
    * method before it is removed here.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   @Deprecated
   public void thisUsesUnstableApi() {
   }
