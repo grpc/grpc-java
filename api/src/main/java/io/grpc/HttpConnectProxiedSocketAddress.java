@@ -28,7 +28,6 @@ import javax.annotation.Nullable;
 /**
  * An {@link ProxiedSocketAddress} for making a connection to an endpoint via an HTTP CONNECT proxy.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5279")
 public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress {
   private static final long serialVersionUID = 0L;
 
