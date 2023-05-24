@@ -205,6 +205,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(weightedPicker.getList().size()).isEqualTo(1);
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     assertThat(weightedPicker.getList().size()).isEqualTo(2);
+    String weightedPickerStr = weightedPicker.toString();
+    assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
+    assertThat(weightedPickerStr).contains("errorUtilizationPenalty=1.0");
+    assertThat(weightedPickerStr).contains("list=");
+
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
@@ -412,6 +417,23 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
         weight3 / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_avgWeight_zeroCpuUtilization_withEps_customErrorUtilizationPenalty() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
+        .setErrorUtilizationPenalty(1.75F).build();
+
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>());
+    double avgSubchannelPickRatio = 1.0 / 3;
+
+    pickByWeight(report1, report2, report3, avgSubchannelPickRatio, avgSubchannelPickRatio,
+        avgSubchannelPickRatio);
   }
 
   @Test
