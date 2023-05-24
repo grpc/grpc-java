@@ -207,9 +207,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(weightedPicker.getList().size()).isEqualTo(2);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
@@ -251,9 +253,11 @@ public class WeightedRoundRobinLoadBalancerTest {
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.9, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
@@ -307,9 +311,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
-    weightedSubchannel1.onLoadReport(r1);
-    weightedSubchannel2.onLoadReport(r2);
-    weightedSubchannel3.onLoadReport(r3);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r1);
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r2);
+    weightedSubchannel3.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r3);
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
@@ -449,9 +456,11 @@ public class WeightedRoundRobinLoadBalancerTest {
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
@@ -507,10 +516,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(weightedPicker.getList().size()).isEqualTo(2);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-        0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-        0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
         .getSubchannel()).isEqualTo(weightedSubchannel1);
@@ -522,10 +533,12 @@ public class WeightedRoundRobinLoadBalancerTest {
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-        0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-        0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
     assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
@@ -554,9 +567,11 @@ public class WeightedRoundRobinLoadBalancerTest {
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
@@ -616,8 +631,10 @@ public class WeightedRoundRobinLoadBalancerTest {
           pickCount.getOrDefault(pickResult.getSubchannel(), 0) + 1);
       assertThat(pickResult.getStreamTracerFactory()).isNotNull();
       WrrSubchannel subchannel = (WrrSubchannel)pickResult.getSubchannel();
-      subchannel.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-          0.1, 0.1, qpsByChannel.get(subchannel), 0, new HashMap<>(), new HashMap<>()));
+      subchannel.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+          InternalCallMetricRecorder.createMetricReport(
+              0.1, 0.1, qpsByChannel.get(subchannel), 0,
+              new HashMap<>(), new HashMap<>()));
     }
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 1.0 / 2))
         .isAtMost(0.1);
@@ -629,9 +646,11 @@ public class WeightedRoundRobinLoadBalancerTest {
       pickCount.put(pickResult.getSubchannel(),
           pickCount.getOrDefault(pickResult.getSubchannel(), 0) + 1);
       assertThat(pickResult.getStreamTracerFactory()).isNotNull();
-      WrrSubchannel subchannel = (WrrSubchannel)pickResult.getSubchannel();
-      subchannel.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-          0.1, 0.1, qpsByChannel.get(subchannel), 0, new HashMap<>(), new HashMap<>()));
+      WrrSubchannel subchannel = (WrrSubchannel) pickResult.getSubchannel();
+      subchannel.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+          InternalCallMetricRecorder.createMetricReport(
+              0.1, 0.1, qpsByChannel.get(subchannel), 0,
+              new HashMap<>(), new HashMap<>()));
       fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
     }
     assertThat(pickCount.size()).isEqualTo(2);
@@ -667,9 +686,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
@@ -709,9 +730,11 @@ public class WeightedRoundRobinLoadBalancerTest {
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.1, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
             0.2, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     CyclicBarrier barrier = new CyclicBarrier(2);
     Map<Subchannel, AtomicInteger> pickCount = new ConcurrentHashMap<>();
