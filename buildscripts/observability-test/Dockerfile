@@ -17,10 +17,17 @@
 # Stage 1: Build the interop test client and server
 #
 
-FROM openjdk:11.0.16-jdk-slim-bullseye AS build
+FROM eclipse-temurin:11-jdk AS build
 
 WORKDIR /grpc-java
 COPY . .
+
+# Intentionally after the app COPY to force the update on each build.
+# Update Ubuntu system packages:
+RUN apt-get update \
+    && apt-get -y upgrade \
+    && apt-get -y autoremove \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN ./gradlew :grpc-gcp-observability:interop:installDist -PskipCodegen=true -PskipAndroid=true
 
@@ -33,7 +40,7 @@ RUN ./gradlew :grpc-gcp-observability:interop:installDist -PskipCodegen=true -Ps
 #   with the given parameters.
 #
 
-FROM openjdk:11.0.16-jdk-slim-bullseye
+FROM eclipse-temurin:11-jre
 
 WORKDIR /grpc-java/
 COPY --from=build /grpc-java/gcp-observability/interop/build/install/interop/. .
