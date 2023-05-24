@@ -94,6 +94,10 @@ implementation 'io.grpc:grpc-stub:1.54.1'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
+For [Bazel](https://bazel.build), you can either
+[use Maven](https://github.com/bazelbuild/rules_jvm_external/blob/master/docs/bzlmod.md)
+(with the GAVs from above), or use `@io_grpc_grpc_java//api` et al (see below).
+
 [the JARs]:
 https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.54.1
 
@@ -206,6 +210,11 @@ protobuf {
 }
 
 ```
+
+For [Bazel](https://bazel.build), use the [`proto_library`](https://github.com/bazelbuild/rules_proto)
+and the [`java_proto_library`](https://bazel.build/reference/be/java#java_proto_library) (no `load()` required) 
+and `load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")` (from this project), as in
+[this example `BUILD.bazel`](https://github.com/grpc/grpc-java/blob/master/examples/BUILD.bazel).
 
 API Stability
 -------------
