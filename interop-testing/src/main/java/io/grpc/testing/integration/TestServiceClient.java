@@ -533,7 +533,6 @@ public class TestServiceClient {
     for (String pair : pairs) {
       String[] parts = pair.split(':', 2);
       if (parts.length != 2) {
-        throw new Blah();
         throw new IllegalArgumentException(
             "error parsing --additional_metadata string, expected k:v pairs separated by ;");
       }
