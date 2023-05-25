@@ -529,9 +529,9 @@ public class TestServiceClient {
       return null;
     }
     Metadata metadata = new Metadata();
-    String[] pairs = additionalMd.split(';', -1);
+    String[] pairs = additionalMd.split(";", -1);
     for (String pair : pairs) {
-      String[] parts = pair.split(':', 2);
+      String[] parts = pair.split(":", 2);
       if (parts.length != 2) {
         throw new IllegalArgumentException(
             "error parsing --additional_metadata string, expected k:v pairs separated by ;");
