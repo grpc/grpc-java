@@ -54,7 +54,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 
-// TODO (zivy@): move certain tests down to XdsServerWrapperTest, or up to XdsSdsClientServerTest.
+// TODO (zivy@): move certain tests down to XdsServerWrapperTest or to XdsSecurityClientServerTest
 /**
  * Unit tests for {@link XdsServerBuilder}.
  */
