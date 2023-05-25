@@ -528,28 +528,19 @@ public class TestServiceClient {
     if (additionalMd.length() == 0) {
       return null;
     }
-    Metadata m = new Metadata();
-    while (additionalMd.length() > 0) {
-      int i = additionalMd.indexOf(':');
-      if (i < 0) {
+    Metadata metadata = new Metadata();
+    String[] pairs = additionalMd.split(';', -1);
+    for (String pair : pairs) {
+      String[] parts = pair.split(':', 2);
+      if (parts.length != 2) {
+        throw new Blah();
         throw new IllegalArgumentException(
-            "error parsing additional metadata string: no colon separte found");
+            "error parsing --additional_metadata string, expected k:v pairs separated by ;");
       }
-      Metadata.Key<String> key = Metadata.Key.of(
-          additionalMd.substring(0, i), Metadata.ASCII_STRING_MARSHALLER);
-      additionalMd = additionalMd.substring(i + 1);
-      i = additionalMd.indexOf(';');
-      if (i < 0) {
-        m.put(key, additionalMd);
-        break;
-      }
-      m.put(key, additionalMd.substring(0, i));
-      if (i == additionalMd.length() - 1) {
-        break;
-      }
-      additionalMd = additionalMd.substring(i + 1);
+      Metadata.Key<String> key = Metadata.Key.of(parts[0], Metadata.ASCII_STRING_MARSHALLER);
+      metadata.put(key, parts[1]);
     }
-    return MetadataUtils.newAttachHeadersInterceptor(m);
+    return MetadataUtils.newAttachHeadersInterceptor(metadata);
   }
 
   private class Tester extends AbstractInteropTest {
