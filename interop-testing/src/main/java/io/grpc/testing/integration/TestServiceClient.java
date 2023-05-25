@@ -27,6 +27,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
 import io.grpc.ServerBuilder;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.alts.AltsChannelCredentials;
@@ -40,6 +41,7 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.stub.MetadataUtils;
 import io.grpc.testing.TlsTesting;
 import java.io.File;
 import java.io.FileInputStream;
@@ -512,6 +514,42 @@ public class TestServiceClient {
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);
     }
+  }
+
+  /* Parses input string as a semi-colon-separated list of colon-separated key/value pairs.
+   * Allow any character but semicolons in values.
+   * If the string is emtpy, return null.
+   * Otherwise, return a client interceptor which inserts the provided metadata.
+   */
+  @Nullable
+  private ClientInterceptor maybeCreateAdditionalMetadataInterceptor(
+      String additionalMd)
+      throws IllegalArgumentException {
+    if (additionalMd.length() == 0) {
+      return null;
+    }
+    Metadata m = new Metadata();
+    while (additionalMd.length() > 0) {
+      int i = additionalMd.indexOf(':');
+      if (i < 0) {
+        throw new IllegalArgumentException(
+            "error parsing additional metadata string: no colon separte found");
+      }
+      Metadata.Key<String> key = Metadata.Key.of(
+          additionalMd.substring(0, i), Metadata.ASCII_STRING_MARSHALLER);
+      additionalMd = additionalMd.substring(i + 1);
+      i = additionalMd.indexOf(';');
+      if (i < 0) {
+        m.put(key, additionalMd);
+        break;
+      }
+      m.put(key, additionalMd.substring(0, i));
+      if (i == additionalMd.length() - 1) {
+        break;
+      }
+      additionalMd = additionalMd.substring(i + 1);
+    }
+    return MetadataUtils.newAttachHeadersInterceptor(m);
   }
 
   private class Tester extends AbstractInteropTest {
