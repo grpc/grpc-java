@@ -22,13 +22,6 @@ FROM eclipse-temurin:11-jdk AS build
 WORKDIR /grpc-java
 COPY . .
 
-# Intentionally after the app COPY to force the update on each build.
-# Update Ubuntu system packages:
-RUN apt-get update \
-    && apt-get -y upgrade \
-    && apt-get -y autoremove \
-    && rm -rf /var/lib/apt/lists/*
-
 RUN ./gradlew :grpc-gcp-observability:interop:installDist -PskipCodegen=true -PskipAndroid=true
 
 
@@ -47,5 +40,12 @@ COPY --from=build /grpc-java/gcp-observability/interop/build/install/interop/. .
 
 WORKDIR /grpc-java/buildscripts/observability-test
 COPY --from=build /grpc-java/buildscripts/observability-test/run.sh .
+
+# Intentionally after the app COPY to force the update on each build.
+# Update Ubuntu system packages:
+RUN apt-get update \
+    && apt-get -y upgrade \
+    && apt-get -y autoremove \
+    && rm -rf /var/lib/apt/lists/*
 
 ENTRYPOINT ["/grpc-java/buildscripts/observability-test/run.sh"]
