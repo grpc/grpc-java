@@ -517,7 +517,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.19.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
   public T proxyDetector(ProxyDetector proxyDetector) {
     throw new UnsupportedOperationException();
   }
