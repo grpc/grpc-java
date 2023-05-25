@@ -129,7 +129,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     for (Subchannel subchannel : getSubchannels()) {
       WrrSubchannel weightedSubchannel = (WrrSubchannel) subchannel;
       if (config.enableOobLoadReport) {
-        OrcaOobUtil.setListener(weightedSubchannel, weightedSubchannel.oobListener,
+        OrcaOobUtil.setListener(weightedSubchannel,
+            weightedSubchannel.new OrcaReportListener(config.errorUtilizationPenalty),
                 OrcaOobUtil.OrcaReportingConfig.newBuilder()
                         .setReportInterval(config.oobReportingPeriodNanos, TimeUnit.NANOSECONDS)
                         .build());
@@ -173,8 +174,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @VisibleForTesting
   final class WrrSubchannel extends ForwardingSubchannel {
     private final Subchannel delegate;
-    private final OrcaOobReportListener oobListener = new OrcaReportListener(
-        config.errorUtilizationPenalty);
     private volatile long lastUpdated;
     private volatile long nonEmptySince;
     private volatile double weight;
