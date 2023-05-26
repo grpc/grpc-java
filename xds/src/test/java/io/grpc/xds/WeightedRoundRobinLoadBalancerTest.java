@@ -214,10 +214,10 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
             .getSubchannel()).isEqualTo(weightedSubchannel1);
@@ -260,10 +260,10 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
@@ -340,11 +340,11 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void pickByWeight_LargeWeight() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.1, 0, 0.1, 999, 0, new HashMap<>(), new HashMap<>());
+        0.1, 0, 0.1, 999, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.9, 0, 0.1, 2, 0, new HashMap<>(), new HashMap<>());
+        0.9, 0, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>());
+        0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double totalWeight = 999 / 0.1 + 2 / 0.9 + 100 / 0.86;
 
     pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, 2 / 0.9 / totalWeight,
@@ -354,11 +354,11 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void pickByWeight_largeWeight_useApplicationUtilization() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.44, 0.1, 0.1, 999, 0, new HashMap<>(), new HashMap<>());
+        0.44, 0.1, 0.1, 999, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.12, 0.9, 0.1, 2, 0, new HashMap<>(), new HashMap<>());
+        0.12, 0.9, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.33, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>());
+        0.33, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double totalWeight = 999 / 0.1 + 2 / 0.9 + 100 / 0.86;
 
     pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, 2 / 0.9 / totalWeight,
@@ -368,11 +368,11 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void pickByWeight_largeWeight_withEps_defaultErrorUtilizationPenalty() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.1, 0, 0.1, 999, 13, new HashMap<>(), new HashMap<>());
+        0.1, 0, 0.1, 999, 13, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.9, 0, 0.1, 2, 1.8, new HashMap<>(), new HashMap<>());
+        0.9, 0, 0.1, 2, 1.8, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 100, 3, new HashMap<>(), new HashMap<>());
+        0.86, 0, 0.1, 100, 3, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double weight1 = 999 / (0.1 + 13 / 999F * weightedConfig.errorUtilizationPenalty);
     double weight2 = 2 / (0.9 + 1.8 / 2F * weightedConfig.errorUtilizationPenalty);
     double weight3 = 100 / (0.86 + 3 / 100F * weightedConfig.errorUtilizationPenalty);
@@ -385,11 +385,11 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void pickByWeight_normalWeight() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.12, 0, 0.1, 22, 0, new HashMap<>(), new HashMap<>());
+        0.12, 0, 0.1, 22, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.28, 0, 0.1, 40, 0, new HashMap<>(), new HashMap<>());
+        0.28, 0, 0.1, 40, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>());
+        0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double totalWeight = 22 / 0.12 + 40 / 0.28 + 100 / 0.86;
     pickByWeight(report1, report2, report3, 22 / 0.12 / totalWeight,
             40 / 0.28 / totalWeight, 100 / 0.86 / totalWeight
@@ -399,11 +399,11 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void pickByWeight_normalWeight_useApplicationUtilization() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.72, 0.12, 0.1, 22, 0, new HashMap<>(), new HashMap<>());
+        0.72, 0.12, 0.1, 22, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.98, 0.28, 0.1, 40, 0, new HashMap<>(), new HashMap<>());
+        0.98, 0.28, 0.1, 40, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.99, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>());
+        0.99, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double totalWeight = 22 / 0.12 + 40 / 0.28 + 100 / 0.86;
     pickByWeight(report1, report2, report3, 22 / 0.12 / totalWeight,
         40 / 0.28 / totalWeight, 100 / 0.86 / totalWeight
@@ -413,11 +413,11 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void pickByWeight_normalWeight_withEps_defaultErrorUtilizationPenalty() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.12, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>());
+        0.12, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.28, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>());
+        0.28, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>());
+        0.86, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double weight1 = 22 / (0.12 + 19.7 / 22F * weightedConfig.errorUtilizationPenalty);
     double weight2 = 40 / (0.28 + 0.998 / 40F * weightedConfig.errorUtilizationPenalty);
     double weight3 = 100 / (0.86 + 3.14159 / 100F * weightedConfig.errorUtilizationPenalty);
@@ -433,11 +433,11 @@ public class WeightedRoundRobinLoadBalancerTest {
         .setErrorUtilizationPenalty(1.75F).build();
 
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.12, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>());
+        0.12, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.28, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>());
+        0.28, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>());
+        0.86, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double weight1 = 22 / (0.12 + 19.7 / 22F * weightedConfig.errorUtilizationPenalty);
     double weight2 = 40 / (0.28 + 0.998 / 40F * weightedConfig.errorUtilizationPenalty);
     double weight3 = 100 / (0.86 + 3.14159 / 100F * weightedConfig.errorUtilizationPenalty);
@@ -453,11 +453,11 @@ public class WeightedRoundRobinLoadBalancerTest {
         .setErrorUtilizationPenalty(1.75F).build();
 
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>());
+        0, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>());
+        0, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>());
+        0, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double avgSubchannelPickRatio = 1.0 / 3;
 
     pickByWeight(report1, report2, report3, avgSubchannelPickRatio, avgSubchannelPickRatio,
@@ -508,10 +508,10 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -568,10 +568,10 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
         .getSubchannel()).isEqualTo(weightedSubchannel1);
@@ -585,10 +585,10 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
     assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
@@ -619,10 +619,10 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -684,7 +684,7 @@ public class WeightedRoundRobinLoadBalancerTest {
       subchannel.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
           InternalCallMetricRecorder.createMetricReport(
               0.1, 0, 0.1, qpsByChannel.get(subchannel), 0,
-              new HashMap<>(), new HashMap<>()));
+              new HashMap<>(), new HashMap<>(), new HashMap<>()));
     }
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 1.0 / 2))
         .isAtMost(0.1);
@@ -700,7 +700,7 @@ public class WeightedRoundRobinLoadBalancerTest {
       subchannel.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
           InternalCallMetricRecorder.createMetricReport(
               0.1, 0, 0.1, qpsByChannel.get(subchannel), 0,
-              new HashMap<>(), new HashMap<>()));
+              new HashMap<>(), new HashMap<>(), new HashMap<>()));
       fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
     }
     assertThat(pickCount.size()).isEqualTo(2);
@@ -738,10 +738,10 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -782,10 +782,10 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
-            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     CyclicBarrier barrier = new CyclicBarrier(2);
     Map<Subchannel, AtomicInteger> pickCount = new ConcurrentHashMap<>();
     pickCount.put(weightedSubchannel1, new AtomicInteger(0));

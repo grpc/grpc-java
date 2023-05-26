@@ -35,10 +35,11 @@ public final class MetricReport {
   private double eps;
   private Map<String, Double> requestCostMetrics;
   private Map<String, Double> utilizationMetrics;
+  private Map<String, Double> namedMetrics;
 
   MetricReport(double cpuUtilization, double applicationUtilization, double memoryUtilization,
       double qps, double eps, Map<String, Double> requestCostMetrics,
-      Map<String, Double> utilizationMetrics) {
+      Map<String, Double> utilizationMetrics, Map<String, Double> namedMetrics) {
     this.cpuUtilization = cpuUtilization;
     this.applicationUtilization = applicationUtilization;
     this.memoryUtilization = memoryUtilization;
@@ -46,6 +47,7 @@ public final class MetricReport {
     this.eps = eps;
     this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
     this.utilizationMetrics = checkNotNull(utilizationMetrics, "utilizationMetrics");
+    this.namedMetrics = checkNotNull(namedMetrics, "namedMetrics");
   }
 
   public double getCpuUtilization() {
@@ -68,6 +70,10 @@ public final class MetricReport {
     return utilizationMetrics;
   }
 
+  public Map<String, Double> getNamedMetrics() {
+    return namedMetrics;
+  }
+
   public double getQps() {
     return qps;
   }
@@ -84,6 +90,7 @@ public final class MetricReport {
         .add("memoryUtilization", memoryUtilization)
         .add("requestCost", requestCostMetrics)
         .add("utilization", utilizationMetrics)
+        .add("named", namedMetrics)
         .add("qps", qps)
         .add("eps", eps)
         .toString();
