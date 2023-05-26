@@ -40,8 +40,10 @@ import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
@@ -248,6 +250,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @VisibleForTesting
   final class WeightedRoundRobinPicker extends RoundRobinPicker {
     private final List<Subchannel> list;
+    private final Map<Subchannel, OrcaPerRequestReportListener> subchannelToReportListenerMap =
+        new HashMap<>();
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
     private volatile EdfScheduler scheduler;
@@ -257,6 +261,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       checkNotNull(list, "list");
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
+      for (Subchannel subchannel : list) {
+        this.subchannelToReportListenerMap.put(subchannel,
+            ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty));
+      }
       this.enableOobLoadReport = enableOobLoadReport;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
       updateWeight();
@@ -268,7 +276,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
-                ((WrrSubchannel)subchannel).new OrcaReportListener(errorUtilizationPenalty)));
+                subchannelToReportListenerMap.getOrDefault(subchannel,
+                    ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty))));
       } else {
         return PickResult.withSubchannel(subchannel);
       }
