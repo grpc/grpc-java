@@ -79,6 +79,7 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
     Long oobReportingPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "oobReportingPeriod");
     Boolean enableOobLoadReport = JsonUtil.getBoolean(rawConfig, "enableOobLoadReport");
     Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
+    Float errorUtilizationPenalty = JsonUtil.getNumberAsFloat(rawConfig, "errorUtilizationPenalty");
 
     WeightedRoundRobinLoadBalancerConfig.Builder configBuilder =
             WeightedRoundRobinLoadBalancerConfig.newBuilder();
@@ -99,6 +100,9 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
       if (weightUpdatePeriodNanos < MIN_WEIGHT_UPDATE_PERIOD_NANOS) {
         configBuilder.setWeightUpdatePeriodNanos(MIN_WEIGHT_UPDATE_PERIOD_NANOS);
       }
+    }
+    if (errorUtilizationPenalty != null) {
+      configBuilder.setErrorUtilizationPenalty(errorUtilizationPenalty);
     }
     return ConfigOrError.fromConfig(configBuilder.build());
   }

@@ -46,8 +46,9 @@ public final class InternalCallMetricRecorder {
   }
 
   public static MetricReport createMetricReport(double cpuUtilization, double memoryUtilization,
-      double qps, Map<String, Double> requestCostMetrics, Map<String, Double> utilizationMetrics) {
-    return new MetricReport(cpuUtilization, memoryUtilization, qps, requestCostMetrics,
+      double qps, double eps, Map<String, Double> requestCostMetrics,
+      Map<String, Double> utilizationMetrics) {
+    return new MetricReport(cpuUtilization, memoryUtilization, qps, eps, requestCostMetrics,
         utilizationMetrics);
   }
 }

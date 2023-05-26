@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Duration;
+import com.google.protobuf.FloatValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.UInt64Value;
@@ -95,6 +96,8 @@ public class LoadBalancerConfigFactoryTest {
                           .setBlackoutPeriod(Duration.newBuilder().setSeconds(287).build())
                           .setEnableOobLoadReport(
                               BoolValue.newBuilder().setValue(true).build())
+                          .setErrorUtilizationPenalty(
+                              FloatValue.newBuilder().setValue(1.75F).build())
                           .build()))
                   .build())
               .build();
@@ -125,7 +128,8 @@ public class LoadBalancerConfigFactoryTest {
   private static final LbConfig VALID_WRR_CONFIG = new LbConfig("wrr_locality_experimental",
       ImmutableMap.of("childPolicy", ImmutableList.of(
       ImmutableMap.of("weighted_round_robin",
-      ImmutableMap.of("blackoutPeriod","287s", "enableOobLoadReport", true )))));
+      ImmutableMap.of("blackoutPeriod","287s", "enableOobLoadReport", true,
+          "errorUtilizationPenalty", 1.75F )))));
   private static final LbConfig VALID_RING_HASH_CONFIG = new LbConfig("ring_hash_experimental",
       ImmutableMap.of("minRingSize", (double) RING_HASH_MIN_RING_SIZE, "maxRingSize",
           (double) RING_HASH_MAX_RING_SIZE));

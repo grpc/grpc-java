@@ -117,6 +117,7 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         .setCpuUtilization(internalReport.getCpuUtilization())
         .setMemUtilization(internalReport.getMemoryUtilization())
         .setRpsFractional(internalReport.getQps())
+        .setEps(internalReport.getEps())
         .putAllUtilization(internalReport.getUtilizationMetrics())
         .putAllRequestCost(internalReport.getRequestCostMetrics());
   }
@@ -144,6 +145,10 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
     double rps = callMetricRecorderReport.getQps();
     if (isReportValueSet(rps)) {
       metricRecorderReportBuilder.setRpsFractional(rps);
+    }
+    double eps = callMetricRecorderReport.getEps();
+    if (isReportValueSet(eps)) {
+      metricRecorderReportBuilder.setEps(eps);
     }
   }
 
