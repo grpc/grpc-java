@@ -95,7 +95,7 @@ compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 For [Bazel](https://bazel.build), you can either
-[use Maven](https://github.com/bazelbuild/rules_jvm_external/blob/master/docs/bzlmod.md)
+[use Maven](https://github.com/bazelbuild/rules_jvm_external)
 (with the GAVs from above), or use `@io_grpc_grpc_java//api` et al (see below).
 
 [the JARs]:
