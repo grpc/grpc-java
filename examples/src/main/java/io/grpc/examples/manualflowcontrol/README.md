@@ -2,11 +2,10 @@ gRPC Manual Flow Control Example
 =====================
 Flow control is relevant for streaming RPC calls.
 
-By default, gRPC will handle
-dealing with flow control. However, for specific use cases,
-you may wish to take explicit control.
+By default, gRPC will handle dealing with flow control. However, for specific
+use cases, you may wish to take explicit control.
 
-The default, if you do not disable auto requests is for the gRPC framework to
+The default, if you do not disable auto requests, is for the gRPC framework to
 automatically request 1 message at startup and after each onNext call,
 request 1 more. With manual flow control, you explicitly do the request. Note
 that acknowledgements (which is what lets the server know that the receiver can
@@ -17,8 +16,8 @@ The most common use case for manual flow control is to avoid requiring your
 asynchronous onNext method to block when processing of the read message is being
 done somewhere else.
 
-A minor use case for manual flow control is when there are lots of small
-messages and you are using netty. To avoid switching back and forth between the
+Another, minor use case for manual flow control, is when there are lots of small
+messages and you are using Netty. To avoid switching back and forth between the
 application and network threads, you can specify a larger initial value (such
 as 5) so that the application thread can have values waiting for it rather than
 constantly having to block and wait for the network thread to provide the next
@@ -26,7 +25,7 @@ value.
 
 ### Outgoing Flow Control
 
-The underlying layer (such as netty) will make the write wait when there is no
+The underlying layer (such as Netty) will make the write wait when there is no
 space to write the next message. This causes the request stream to go into
 a not ready state and the outgoing onNext method invocation waits. You can
 explicitly check that the stream is ready for writing before calling onNext to
@@ -70,3 +69,8 @@ In your stub methods supporting streaming, add the following at the top
 
 When you are ready to begin processing the next value from the stream call
 `serverCallStreamObserver.request(1)`
+
+### Related documents
+Also see [gRPC Flow Control Users Guide][user guide]
+
+ [user guide]: https://grpc.io/docs/guides/flow-control
