@@ -34,12 +34,12 @@ import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.Status;
-import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.AdminInterface;
 import io.grpc.stub.StreamObserver;
@@ -242,7 +242,7 @@ public final class XdsTestClient {
 
   private void run() {
     statsServer =
-        NettyServerBuilder.forPort(statsPort)
+        Grpc.newServerBuilderForPort(statsPort, InsecureServerCredentials.create())
             .addService(new XdsStatsImpl())
             .addService(new ConfigureUpdateServiceImpl())
             .addService(ProtoReflectionService.newInstance())
