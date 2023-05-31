@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Iterables;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.Server;
@@ -28,7 +29,6 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
-import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.AdminInterface;
@@ -177,7 +177,7 @@ public final class XdsTestServer {
     health = new HealthStatusManager();
     if (secureMode) {
       maintenanceServer =
-          NettyServerBuilder.forPort(maintenancePort)
+          Grpc.newServerBuilderForPort(maintenancePort, InsecureServerCredentials.create())
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
               .addService(ProtoReflectionService.newInstance())
@@ -194,7 +194,7 @@ public final class XdsTestServer {
       server.start();
     } else {
       server =
-          NettyServerBuilder.forPort(port)
+          Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
               .addService(
                   ServerInterceptors.intercept(
                       new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
