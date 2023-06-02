@@ -195,12 +195,14 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Makes the client use TLS.
    *
+   * <p>It is recommended to use the {@link ChannelCredentials} API
+   * instead of this method.
+   *
    * @return this
    * @throws IllegalStateException if ChannelCredentials were provided when constructing the builder
    * @throws UnsupportedOperationException if transport security is not supported.
    * @since 1.9.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3713")
   public T useTransportSecurity() {
     throw new UnsupportedOperationException();
   }
