@@ -193,7 +193,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Makes the client use TLS.
+   * Makes the client use TLS. Note: this is enabled by default.
    *
    * <p>It is recommended to use the {@link ChannelCredentials} API
    * instead of this method.
