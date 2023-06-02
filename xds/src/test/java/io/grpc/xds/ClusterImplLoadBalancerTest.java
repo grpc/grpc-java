@@ -529,19 +529,7 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void endpointAddressesAttachedWithTlsConfig_disableSecurity() {
-    boolean originalEnableSecurity = ClusterImplLoadBalancer.enableSecurity;
-    ClusterImplLoadBalancer.enableSecurity = false;
-    subtest_endpointAddressesAttachedWithTlsConfig(false);
-    ClusterImplLoadBalancer.enableSecurity = originalEnableSecurity;
-  }
-
-  @Test
   public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
-    subtest_endpointAddressesAttachedWithTlsConfig(true);
-  }
-
-  private void subtest_endpointAddressesAttachedWithTlsConfig(boolean enableSecurity) {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
@@ -566,11 +554,7 @@ public class ClusterImplLoadBalancerTest {
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
-      } else {
-        assertThat(supplier).isNull();
-      }
+      assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
     }
 
     // Removes UpstreamTlsContext from the config.
@@ -597,20 +581,14 @@ public class ClusterImplLoadBalancerTest {
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.isShutdown()).isFalse();
-        assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
-      } else {
-        assertThat(supplier).isNull();
-      }
+      assertThat(supplier.isShutdown()).isFalse();
+      assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
     }
     loadBalancer.shutdown();
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
               eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.isShutdown()).isTrue();
-      }
+      assertThat(supplier.isShutdown()).isTrue();
     }
     loadBalancer = null;
   }
