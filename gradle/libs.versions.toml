@@ -2,7 +2,7 @@
 # Compatibility problem with internal version getting onto 1.5.3.
 # https://github.com/grpc/grpc-java/pull/9118
 googleauth = "1.4.0"
-guava = "31.1-android"
+guava = "32.0.0-android"
 netty = '4.1.87.Final'
 nettytcnative = '2.0.56.Final'
 opencensus = "0.31.1"
@@ -36,7 +36,7 @@ gson = "com.google.code.gson:gson:2.10.1"
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
 guava-testlib = { module = "com.google.guava:guava-testlib", version.ref = "guava" }
-guava-jre = "com.google.guava:guava:31.1-jre"
+guava-jre = "com.google.guava:guava:32.0.0-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.1.12"
 javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
 jetty-alpn-agent = "org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.10"
