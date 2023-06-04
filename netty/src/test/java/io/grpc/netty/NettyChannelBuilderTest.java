@@ -36,6 +36,8 @@ import io.netty.channel.local.LocalChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 import org.junit.Rule;
@@ -301,6 +303,23 @@ public class NettyChannelBuilderTest {
     builder.channelType(LocalChannel.class);
 
     builder.assertEventLoopAndChannelType();
+  }
+
+  @Test
+  public void scheduledExecutorService_usingDefault() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+    assertThat(transportFactory.getScheduledExecutorService()).isInstanceOf(EventLoopGroup.class);
+  }
+
+  @Test
+  public void scheduledExecutorService_usingCustom() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+    ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+    builder.scheduledExecutorService(executorService);
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+    assertThat(transportFactory.getScheduledExecutorService()).isSameInstanceAs(executorService);
   }
 
   @Test

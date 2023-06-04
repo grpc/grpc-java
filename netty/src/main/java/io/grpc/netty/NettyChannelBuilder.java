@@ -99,6 +99,7 @@ public final class NettyChannelBuilder extends
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
   private ChannelFactory<? extends Channel> channelFactory = DEFAULT_CHANNEL_FACTORY;
   private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
+  private ScheduledExecutorService scheduledExecutorService;
   private boolean autoFlowControl = DEFAULT_AUTO_FLOW_CONTROL;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
@@ -338,6 +339,24 @@ public final class NettyChannelBuilder extends
   }
 
   /**
+   * Provides a scheduled executor that will be used for scheduling tasks.
+   *
+   * <p>It's an optional parameter. If the user has not provided a scheduled executor when the
+   * channel is built, EventLoopGroup will be used instead.
+   *
+   * <p>The channel won't take ownership of the given executor. It's caller's responsibility to shut
+   * down the executor when it's desired.
+   *
+   * @return this
+   */
+  @CanIgnoreReturnValue
+  public NettyChannelBuilder scheduledExecutorService(
+      ScheduledExecutorService scheduledExecutorService) {
+    this.scheduledExecutorService = scheduledExecutorService;
+    return this;
+  }
+
+  /**
    * SSL/TLS context to use instead of the system default. It must have been configured with {@link
    * GrpcSslContexts}, but options could have been overridden.
    */
@@ -539,9 +558,9 @@ public final class NettyChannelBuilder extends
     ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator();
     return new NettyTransportFactory(
         negotiator, channelFactory, channelOptions,
-        eventLoopGroupPool, autoFlowControl, flowControlWindow, maxInboundMessageSize,
-        maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory, localSocketPicker, useGetForSafeMethods);
+        eventLoopGroupPool, scheduledExecutorService, autoFlowControl, flowControlWindow,
+        maxInboundMessageSize, maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos,
+        keepAliveWithoutCalls, transportTracerFactory, localSocketPicker, useGetForSafeMethods);
   }
 
   @VisibleForTesting
@@ -667,6 +686,7 @@ public final class NettyChannelBuilder extends
     private final Map<ChannelOption<?>, ?> channelOptions;
     private final ObjectPool<? extends EventLoopGroup> groupPool;
     private final EventLoopGroup group;
+    private final ScheduledExecutorService scheduledExecutorService;
     private final boolean autoFlowControl;
     private final int flowControlWindow;
     private final int maxMessageSize;
@@ -685,6 +705,7 @@ public final class NettyChannelBuilder extends
         ProtocolNegotiator protocolNegotiator,
         ChannelFactory<? extends Channel> channelFactory,
         Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
+        ScheduledExecutorService scheduledExecutorService,
         boolean autoFlowControl, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
@@ -694,6 +715,7 @@ public final class NettyChannelBuilder extends
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.groupPool = groupPool;
       this.group = groupPool.getObject();
+      this.scheduledExecutorService = scheduledExecutorService;
       this.autoFlowControl = autoFlowControl;
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
@@ -734,7 +756,7 @@ public final class NettyChannelBuilder extends
 
       // TODO(carl-mastrangelo): Pass channelLogger in.
       NettyClientTransport transport = new NettyClientTransport(
-          serverAddress, channelFactory, channelOptions, group,
+          serverAddress, channelFactory, channelOptions, group, scheduledExecutorService,
           localNegotiator, autoFlowControl, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
@@ -745,6 +767,9 @@ public final class NettyChannelBuilder extends
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
+      if (scheduledExecutorService != null) {
+        return scheduledExecutorService;
+      }
       return group;
     }
 
@@ -757,9 +782,9 @@ public final class NettyChannelBuilder extends
       }
       ClientTransportFactory factory = new NettyTransportFactory(
           result.negotiator.newNegotiator(), channelFactory, channelOptions, groupPool,
-          autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeNanos,
-          keepAliveTimeoutNanos, keepAliveWithoutCalls, transportTracerFactory,  localSocketPicker,
-          useGetForSafeMethods);
+          scheduledExecutorService, autoFlowControl, flowControlWindow, maxMessageSize,
+          maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
+          transportTracerFactory,  localSocketPicker, useGetForSafeMethods);
       return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 

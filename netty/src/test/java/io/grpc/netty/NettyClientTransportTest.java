@@ -98,7 +98,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
@@ -129,6 +131,9 @@ public class NettyClientTransportTest {
   private final LinkedBlockingQueue<Attributes> serverTransportAttributesList =
       new LinkedBlockingQueue<>();
   private final NioEventLoopGroup group = new NioEventLoopGroup(1);
+
+  private final ScheduledExecutorService scheduledExecutorService =
+      Executors.newSingleThreadScheduledExecutor();
   private final EchoServerListener serverListener = new EchoServerListener();
   private final InternalChannelz channelz = new InternalChannelz();
   private Runnable tooManyPingsRunnable = new Runnable() {
@@ -191,8 +196,9 @@ public class NettyClientTransportTest {
     channelOptions.put(ChannelOption.SO_LINGER, soLinger);
     NettyClientTransport transport = new NettyClientTransport(
         address, new ReflectiveChannelFactory<>(NioSocketChannel.class), channelOptions, group,
-        newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
-        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
+        scheduledExecutorService, newNegotiator(), false, DEFAULT_WINDOW_SIZE,
+        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
         new SocketPicker(), new FakeChannelLogger(), false, Ticker.systemTicker());
     transports.add(transport);
@@ -440,7 +446,7 @@ public class NettyClientTransportTest {
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
     NettyClientTransport transport = new NettyClientTransport(
         address, new ReflectiveChannelFactory<>(CantConstructChannel.class),
-        new HashMap<ChannelOption<?>, Object>(), group,
+        new HashMap<ChannelOption<?>, Object>(), group, scheduledExecutorService,
         newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
@@ -753,8 +759,8 @@ public class NettyClientTransportTest {
     }
     NettyClientTransport transport = new NettyClientTransport(
         address, channelFactory, new HashMap<ChannelOption<?>, Object>(), group,
-        negotiator, false, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
-        keepAliveTimeNano, keepAliveTimeoutNano,
+        scheduledExecutorService, negotiator, false, DEFAULT_WINDOW_SIZE, maxMsgSize,
+        maxHeaderListSize, keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
         new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false,
         Ticker.systemTicker());

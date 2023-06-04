@@ -62,6 +62,7 @@ import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -75,6 +76,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final SocketAddress remoteAddress;
   private final ChannelFactory<? extends Channel> channelFactory;
   private final EventLoopGroup group;
+  private final ScheduledExecutorService scheduledExecutorService;
   private final ProtocolNegotiator negotiator;
   private final String authorityString;
   private final AsciiString authority;
@@ -108,6 +110,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
+      ScheduledExecutorService scheduledExecutorService,
       ProtocolNegotiator negotiator, boolean autoFlowControl, int flowControlWindow,
       int maxMessageSize, int maxHeaderListSize,
       long keepAliveTimeNanos, long keepAliveTimeoutNanos,
@@ -120,6 +123,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.negotiationScheme = this.negotiator.scheme();
     this.remoteAddress = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
+    this.scheduledExecutorService = scheduledExecutorService;
     this.channelFactory = channelFactory;
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
     this.autoFlowControl = autoFlowControl;
@@ -214,8 +218,9 @@ class NettyClientTransport implements ConnectionClientTransport {
     EventLoop eventLoop = group.next();
     if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
       keepAliveManager = new KeepAliveManager(
-          new ClientKeepAlivePinger(this), eventLoop, keepAliveTimeNanos, keepAliveTimeoutNanos,
-          keepAliveWithoutCalls);
+          new ClientKeepAlivePinger(this),
+          scheduledExecutorService == null ? eventLoop : scheduledExecutorService,
+          keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls);
     }
 
     handler = NettyClientHandler.newHandler(
