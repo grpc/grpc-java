@@ -43,10 +43,14 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -120,6 +124,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
    * receiving the CDS LB policy config with the top-level cluster name.
    */
   private final class CdsLbState {
+
+    public static final boolean NACK_LOOPS = false;
     private final ClusterState root;
     private LoadBalancer childLb;
 
@@ -140,6 +146,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
     private void handleClusterDiscovered() {
       List<DiscoveryMechanism> instances = new ArrayList<>();
+      Map<ClusterState, List<ClusterState>> parentClusters = new HashMap<>();
       // Level-order traversal.
       // Collect configurations for all non-aggregate (leaf) clusters.
       Queue<ClusterState> queue = new ArrayDeque<>();
@@ -169,8 +176,39 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             }
             instances.add(instance);
           } else {
-            if (clusterState.childClusterStates != null) {
+            if (clusterState.childClusterStates == null) {
+              continue;
+            }
+            List<String> namesCausingLoops = identifyLoops(clusterState, parentClusters);
+            if (namesCausingLoops.isEmpty()) {
               queue.addAll(clusterState.childClusterStates.values());
+            } else {
+              if (NACK_LOOPS) {
+                if (childLb != null) {
+                  childLb.shutdown();
+                  childLb = null;
+                }
+                Status unavailable =
+                    Status.UNAVAILABLE.withDescription(String.format(
+                        "CDS error: circular aggregate clusters directly under %s for "
+                            + "root cluster %s, named %s",
+                        clusterState.name, root.name, namesCausingLoops));
+                helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
+                return;
+              } else {
+                String msg = String.format(
+                    "Ignoring circular aggregate clusters directly under %s: %s",
+                    clusterState.name, namesCausingLoops);
+                logger.log(XdsLogLevel.WARNING, msg);
+                for (String nameCausingLoops : namesCausingLoops) {
+                  ClusterState removedCS = clusterState.childClusterStates.remove(nameCausingLoops);
+                  if (removedCS.discovered) {
+                    xdsClient.cancelXdsResourceWatch(
+                        XdsClusterResource.getInstance(), nameCausingLoops, removedCS);
+                  }
+                }
+                queue.addAll(clusterState.childClusterStates.values());
+              }
             }
           }
         }
@@ -212,6 +250,53 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
       childLb.handleResolvedAddresses(
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build());
+    }
+
+    /**
+     * Returns children that would cause loops and builds up the parentClusters map.
+     **/
+
+    private List<String> identifyLoops(ClusterState clusterState,
+        Map<ClusterState, List<ClusterState>> parentClusters) {
+      Set<String> ancestors = new HashSet<>();
+      ancestors.add(clusterState.name);
+      addAncestors(ancestors, clusterState, parentClusters);
+
+      List<String> namesCausingLoops = new ArrayList<>();
+      for (ClusterState state : clusterState.childClusterStates.values()) {
+        if (ancestors.contains(state.name)) {
+          namesCausingLoops.add(state.name);
+        }
+      }
+
+      if (!namesCausingLoops.isEmpty()) {
+        logger.log(XdsLogLevel.WARNING,
+            "Ignoring circular aggregate clusters: " + namesCausingLoops);
+
+        for (String name : namesCausingLoops) {
+          ClusterState loopingState = clusterState.childClusterStates.get(name);
+          xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, loopingState);
+        }
+      }
+
+      // Update parent map with entries from remaining children to clusterState
+      clusterState.childClusterStates.values().stream()
+          .filter(child -> !namesCausingLoops.contains(child.name))
+          .forEach(
+              child -> parentClusters.computeIfAbsent(child, k -> new ArrayList<>())
+                  .add(clusterState));
+
+      return namesCausingLoops;
+    }
+
+    /** Recursively add all parents to the ancestors list. **/
+    private void addAncestors(Set<String> ancestors, ClusterState clusterState,
+        Map<ClusterState, List<ClusterState>> parentClusters) {
+      List<ClusterState> directParents = parentClusters.get(clusterState);
+      if (directParents != null) {
+        directParents.stream().map(c -> c.name).forEach(ancestors::add);
+        directParents.forEach(p -> addAncestors(ancestors, p, parentClusters));
+      }
     }
 
     private void handleClusterDiscoveryError(Status error) {
@@ -311,6 +396,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                   update.clusterName(), update.prioritizedClusterNames());
               Map<String, ClusterState> newChildStates = new LinkedHashMap<>();
               for (String cluster : update.prioritizedClusterNames()) {
+                if (newChildStates.containsKey(cluster)) {
+                  logger.log(XdsLogLevel.WARNING,
+                      String.format("duplicate cluster name %s in aggregate %s is being ignored",
+                          cluster, update.clusterName()));
+                  continue;
+                }
                 if (childClusterStates == null || !childClusterStates.containsKey(cluster)) {
                   ClusterState childState = new ClusterState(cluster);
                   childState.start();
