@@ -498,9 +498,9 @@ def requireUpperBoundDepsMatch(Configuration conf, Project project) {
             version = ((ModuleComponentSelector) result.requested).version
         }
         String goldenVersion = golden[artifact]
-        if (goldenVersion != version && "[$goldenVersion]" != version) {
+        if (VersionNumber.parse(version) > VersionNumber.parse(goldenVersion)) {
             throw new RuntimeException(
-                "Maven version skew: $artifact ($version != $goldenVersion) "
+                "Maven version skew: $artifact ($version > $goldenVersion) "
                 + "Bad version dependency path: " + depAndParents.parents
                 + " Run './gradlew $project.path:dependencies --configuration $conf.name' "
                 + "to diagnose")
