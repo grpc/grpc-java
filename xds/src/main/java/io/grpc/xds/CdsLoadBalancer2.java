@@ -50,7 +50,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -59,6 +58,7 @@ import javax.annotation.Nullable;
  * by a group of sub-clusters in a tree hierarchy.
  */
 final class CdsLoadBalancer2 extends LoadBalancer {
+  public static final boolean NACK_LOOPS = true;
   private final XdsLogger logger;
   private final Helper helper;
   private final SynchronizationContext syncContext;
@@ -125,7 +125,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
    */
   private final class CdsLbState {
 
-    public static final boolean NACK_LOOPS = false;
     private final ClusterState root;
     private LoadBalancer childLb;
 
@@ -147,6 +146,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     private void handleClusterDiscovered() {
       List<DiscoveryMechanism> instances = new ArrayList<>();
       Map<ClusterState, List<ClusterState>> parentClusters = new HashMap<>();
+      Status loopStatus = null;
       // Level-order traversal.
       // Collect configurations for all non-aggregate (leaf) clusters.
       Queue<ClusterState> queue = new ArrayDeque<>();
@@ -183,36 +183,53 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             if (namesCausingLoops.isEmpty()) {
               queue.addAll(clusterState.childClusterStates.values());
             } else {
+              // Do cleanup
+              namesCausingLoops.stream()
+                  .map(clusterState.childClusterStates::get)
+                  .filter(cs -> cs.discovered)
+                  .forEach(cs -> xdsClient.cancelXdsResourceWatch(
+                      XdsClusterResource.getInstance(), cs.name, cs));
+              for (String nameCausingLoops : namesCausingLoops) {
+                ClusterState removedCS = clusterState.childClusterStates.remove(nameCausingLoops);
+                xdsClient.cancelXdsResourceWatch(
+                    XdsClusterResource.getInstance(), nameCausingLoops, removedCS);
+              }
+
               if (NACK_LOOPS) {
                 if (childLb != null) {
                   childLb.shutdown();
                   childLb = null;
                 }
-                Status unavailable =
-                    Status.UNAVAILABLE.withDescription(String.format(
-                        "CDS error: circular aggregate clusters directly under %s for "
-                            + "root cluster %s, named %s",
-                        clusterState.name, root.name, namesCausingLoops));
-                helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
-                return;
+                if (loopStatus != null) {
+                  logger.log(XdsLogLevel.WARNING,
+                      "Multiple loops in CDS config.  Old msg:  " + loopStatus.getDescription());
+                }
+                loopStatus = Status.UNAVAILABLE.withDescription(String.format(
+                    "CDS error: circular aggregate clusters directly under %s for "
+                        + "root cluster %s, named %s",
+                    clusterState.name, root.name, namesCausingLoops));
               } else {
                 String msg = String.format(
                     "Ignoring circular aggregate clusters directly under %s: %s",
                     clusterState.name, namesCausingLoops);
                 logger.log(XdsLogLevel.WARNING, msg);
-                for (String nameCausingLoops : namesCausingLoops) {
-                  ClusterState removedCS = clusterState.childClusterStates.remove(nameCausingLoops);
-                  if (removedCS.discovered) {
-                    xdsClient.cancelXdsResourceWatch(
-                        XdsClusterResource.getInstance(), nameCausingLoops, removedCS);
-                  }
-                }
+                namesCausingLoops.forEach(clusterState.childClusterStates::remove);
                 queue.addAll(clusterState.childClusterStates.values());
               }
             }
           }
         }
       }
+
+      if (loopStatus != null) {
+        if (childLb != null) {
+          childLb.shutdown();
+          childLb = null;
+        }
+        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(loopStatus));
+        return;
+      }
+
       if (instances.isEmpty()) {  // none of non-aggregate clusters exists
         if (childLb != null) {
           childLb.shutdown();
@@ -266,16 +283,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       for (ClusterState state : clusterState.childClusterStates.values()) {
         if (ancestors.contains(state.name)) {
           namesCausingLoops.add(state.name);
-        }
-      }
-
-      if (!namesCausingLoops.isEmpty()) {
-        logger.log(XdsLogLevel.WARNING,
-            "Ignoring circular aggregate clusters: " + namesCausingLoops);
-
-        for (String name : namesCausingLoops) {
-          ClusterState loopingState = clusterState.childClusterStates.get(name);
-          xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, loopingState);
         }
       }
 
