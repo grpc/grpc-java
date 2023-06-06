@@ -47,7 +47,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   @VisibleForTesting
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
   @VisibleForTesting
-  static boolean enableRouteLookup = getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", false);
+  static boolean enableRouteLookup = getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
   @VisibleForTesting
   static boolean enableLeastRequest =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))

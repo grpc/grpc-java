@@ -172,7 +172,6 @@ public class XdsClientImplDataTest {
   @Before
   public void setUp() {
     originalEnableRouteLookup = XdsResourceType.enableRouteLookup;
-    assertThat(originalEnableRouteLookup).isFalse();
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     assertThat(originalEnableLeastRequest).isFalse();
     originalEnableWrr = XdsResourceType.enableWrr;
