@@ -18,6 +18,8 @@ package io.grpc.xds;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /** Represents client load stats. */
@@ -101,10 +103,31 @@ final class Stats {
 
     abstract long totalRequestsInProgress();
 
+    abstract ImmutableMap<String, BackendLoadMetricStats> loadMetricStatsMap();
+
     static UpstreamLocalityStats create(Locality locality, long totalIssuedRequests,
-        long totalSuccessfulRequests, long totalErrorRequests, long totalRequestsInProgress) {
+        long totalSuccessfulRequests, long totalErrorRequests, long totalRequestsInProgress,
+        Map<String, BackendLoadMetricStats> loadMetricStatsMap) {
       return new AutoValue_Stats_UpstreamLocalityStats(locality, totalIssuedRequests,
-          totalSuccessfulRequests, totalErrorRequests, totalRequestsInProgress);
+          totalSuccessfulRequests, totalErrorRequests, totalRequestsInProgress,
+          ImmutableMap.copyOf(loadMetricStatsMap));
+    }
+  }
+
+  /**
+   * Load metric stats for multi-dimensional load balancing.
+   */
+  @AutoValue
+  abstract static class BackendLoadMetricStats {
+
+    abstract long numRequestsFinishedWithMetric();
+
+    abstract double totalMetricValue();
+
+    static BackendLoadMetricStats create(long numRequestsFinishedWithMetric,
+        double totalMetricValue) {
+      return new AutoValue_Stats_BackendLoadMetricStats(numRequestsFinishedWithMetric,
+          totalMetricValue);
     }
   }
 }
