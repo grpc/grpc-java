@@ -42,6 +42,7 @@ public final class CallMetricRecorder {
   private final AtomicReference<ConcurrentHashMap<String, Double>> requestCostMetrics =
       new AtomicReference<>();
   private double cpuUtilizationMetric = 0;
+  private double applicationUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
   private double qps = 0;
   private double eps = 0;
@@ -127,7 +128,7 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for CPU utilization in the range [0, 1]. Values outside the
+   * Records a call metric measurement for CPU utilization in the range [0, inf). Values outside the
    * valid range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
@@ -136,10 +137,26 @@ public final class CallMetricRecorder {
    * @since 1.47.0
    */
   public CallMetricRecorder recordCpuUtilizationMetric(double value) {
-    if (disabled || !MetricRecorderHelper.isCpuUtilizationValid(value)) {
+    if (disabled || !MetricRecorderHelper.isCpuOrApplicationUtilizationValid(value)) {
       return this;
     }
     cpuUtilizationMetric = value;
+    return this;
+  }
+
+  /**
+   * Records a call metric measurement for application specific utilization in the range [0, inf).
+   * Values outside the valid range are ignored. If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   */
+  public CallMetricRecorder recordApplicationUtilizationMetric(double value) {
+    if (disabled || !MetricRecorderHelper.isCpuOrApplicationUtilizationValid(value)) {
+      return this;
+    }
+    applicationUtilizationMetric = value;
     return this;
   }
 
@@ -221,8 +238,8 @@ public final class CallMetricRecorder {
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    return new MetricReport(cpuUtilizationMetric, memoryUtilizationMetric, qps, eps,
-        Collections.unmodifiableMap(savedRequestCostMetrics),
+    return new MetricReport(cpuUtilizationMetric, applicationUtilizationMetric,
+        memoryUtilizationMetric, qps, eps, Collections.unmodifiableMap(savedRequestCostMetrics),
         Collections.unmodifiableMap(savedUtilizationMetrics)
     );
   }
