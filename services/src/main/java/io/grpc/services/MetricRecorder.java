@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class MetricRecorder {
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
   private volatile double cpuUtilization;
+  private volatile double applicationUtilization;
   private volatile double memoryUtilization;
   private volatile double qps;
   private volatile double eps;
@@ -69,7 +70,7 @@ public final class MetricRecorder {
    * are ignored.
    */
   public void setCpuUtilizationMetric(double value) {
-    if (!MetricRecorderHelper.isCpuUtilizationValid(value)) {
+    if (!MetricRecorderHelper.isCpuOrApplicationUtilizationValid(value)) {
       return;
     }
     cpuUtilization = value;
@@ -80,6 +81,24 @@ public final class MetricRecorder {
    */
   public void clearCpuUtilizationMetric() {
     cpuUtilization = 0;
+  }
+
+  /**
+   * Update the application specific utilization metrics data in the range [0, inf). Values outside
+   * the valid range are ignored.
+   */
+  public void setApplicationUtilizationMetric(double value) {
+    if (!MetricRecorderHelper.isCpuOrApplicationUtilizationValid(value)) {
+      return;
+    }
+    applicationUtilization = value;
+  }
+
+  /**
+   * Clear the application specific utilization metrics data.
+   */
+  public void clearApplicationUtilizationMetric() {
+    applicationUtilization = 0;
   }
 
   /**
@@ -135,7 +154,7 @@ public final class MetricRecorder {
   }
 
   MetricReport getMetricReport() {
-    return new MetricReport(cpuUtilization, memoryUtilization, qps, eps,
+    return new MetricReport(cpuUtilization, applicationUtilization, memoryUtilization, qps, eps,
         Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
   }
 }

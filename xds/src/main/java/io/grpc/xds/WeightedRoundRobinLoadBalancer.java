@@ -228,12 +228,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       @Override
       public void onLoadReport(MetricReport report) {
         double newWeight = 0;
-        if (report.getCpuUtilization() > 0 && report.getQps() > 0) {
+        // Prefer application utilization and fallback to CPU utilization if unset.
+        double utilization =
+            report.getApplicationUtilization() > 0 ? report.getApplicationUtilization()
+                : report.getCpuUtilization();
+        if (utilization > 0 && report.getQps() > 0) {
           double penalty = 0;
           if (report.getEps() > 0 && errorUtilizationPenalty > 0) {
             penalty = report.getEps() / report.getQps() * errorUtilizationPenalty;
           }
-          newWeight = report.getQps() / (report.getCpuUtilization() + penalty);
+          newWeight = report.getQps() / (utilization + penalty);
         }
         if (newWeight == 0) {
           return;
