@@ -677,14 +677,14 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
-  private void closeStreamWhenDone(ChannelPromise promise, int streamId) throws Http2Exception {
-    final NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
-    promise.addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) {
-        stream.complete();
-      }
-    });
+  private void closeStreamWhenDone(ChannelPromise promise, Http2Stream stream) {
+    promise.addListener(
+        new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) {
+            serverStream(stream).complete();
+          }
+        });
   }
 
   /**
@@ -695,11 +695,13 @@ class NettyServerHandler extends AbstractNettyHandler {
     try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.sendGrpcFrame")) {
       PerfMark.attachTag(cmd.stream().tag());
       PerfMark.linkIn(cmd.getLink());
-      if (cmd.endStream()) {
-        closeStreamWhenDone(promise, cmd.stream().id());
+      int streamId = cmd.stream().id();
+      Http2Stream stream = connection().stream(streamId);
+      if (stream != null && cmd.endStream()) {
+        closeStreamWhenDone(promise, stream);
       }
       // Call the base class to write the HTTP/2 DATA frame.
-      encoder().writeData(ctx, cmd.stream().id(), cmd.content(), 0, cmd.endStream(), promise);
+      encoder().writeData(ctx, streamId, cmd.content(), 0, cmd.endStream(), promise);
     }
   }
 
@@ -711,16 +713,10 @@ class NettyServerHandler extends AbstractNettyHandler {
     try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.sendResponseHeaders")) {
       PerfMark.attachTag(cmd.stream().tag());
       PerfMark.linkIn(cmd.getLink());
-      // TODO(carl-mastrangelo): remove this check once https://github.com/netty/netty/issues/6296
-      // is fixed.
       int streamId = cmd.stream().id();
       Http2Stream stream = connection().stream(streamId);
-      if (stream == null) {
-        resetStream(ctx, streamId, Http2Error.CANCEL.code(), promise);
-        return;
-      }
-      if (cmd.endOfStream()) {
-        closeStreamWhenDone(promise, streamId);
+      if (stream != null && cmd.endOfStream()) {
+        closeStreamWhenDone(promise, stream);
       }
       encoder().writeHeaders(ctx, streamId, cmd.headers(), 0, cmd.endOfStream(), promise);
     }
