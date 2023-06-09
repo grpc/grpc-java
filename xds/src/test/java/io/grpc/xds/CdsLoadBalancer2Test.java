@@ -488,36 +488,19 @@ public class CdsLoadBalancer2Test {
         upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
     FakeLoadBalancer childBalancer = null;
-    if (CdsLoadBalancer2.NACK_LOOPS) {
-      verify(helper).updateBalancingState(
-          eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-      Status unavailable = Status.UNAVAILABLE.withDescription(
-          "CDS error: circular aggregate clusters directly under cluster-02.googleapis.com for root"
-              + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
-              + " cluster-02.googleapis.com]");
-      assertPicker(pickerCaptor.getValue(), unavailable, null);
-    } else {
-      childBalancer = Iterables.getOnlyElement(childBalancers);
-      ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-      assertThat(childLbConfig.discoveryMechanisms).hasSize(1);
-      DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
-      assertDiscoveryMechanism(instance, cluster3, DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME,
-          null, LRS_SERVER_INFO, 100L, upstreamTlsContext, outlierDetection);
-    }
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    Status unavailable = Status.UNAVAILABLE.withDescription(
+        "CDS error: circular aggregate clusters directly under cluster-02.googleapis.com for root"
+            + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
+            + " cluster-02.googleapis.com]");
+    assertPicker(pickerCaptor.getValue(), unavailable, null);
 
     // cluster2 revoked
     xdsClient.deliverResourceNotExist(cluster2);
     assertThat(xdsClient.watchers.keySet())
         .containsExactly(CLUSTER, cluster1, cluster2);  // cancelled subscription to cluster3
     assertThat(childBalancers).isEmpty();
-    if (!CdsLoadBalancer2.NACK_LOOPS) {
-      verify(helper).updateBalancingState(
-          eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-      assertThat(childBalancer.shutdown).isTrue();
-      Status unavailable = Status.UNAVAILABLE.withDescription(
-          "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
-      assertPicker(pickerCaptor.getValue(), unavailable, null);
-    }
   }
 
   @Test

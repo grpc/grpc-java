@@ -58,7 +58,6 @@ import javax.annotation.Nullable;
  * by a group of sub-clusters in a tree hierarchy.
  */
 final class CdsLoadBalancer2 extends LoadBalancer {
-  public static final boolean NACK_LOOPS = true;
   private final XdsLogger logger;
   private final Helper helper;
   private final SynchronizationContext syncContext;
@@ -195,27 +194,18 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                     XdsClusterResource.getInstance(), nameCausingLoops, removedCS);
               }
 
-              if (NACK_LOOPS) {
-                if (childLb != null) {
-                  childLb.shutdown();
-                  childLb = null;
-                }
-                if (loopStatus != null) {
-                  logger.log(XdsLogLevel.WARNING,
-                      "Multiple loops in CDS config.  Old msg:  " + loopStatus.getDescription());
-                }
-                loopStatus = Status.UNAVAILABLE.withDescription(String.format(
-                    "CDS error: circular aggregate clusters directly under %s for "
-                        + "root cluster %s, named %s",
-                    clusterState.name, root.name, namesCausingLoops));
-              } else {
-                String msg = String.format(
-                    "Ignoring circular aggregate clusters directly under %s: %s",
-                    clusterState.name, namesCausingLoops);
-                logger.log(XdsLogLevel.WARNING, msg);
-                namesCausingLoops.forEach(clusterState.childClusterStates::remove);
-                queue.addAll(clusterState.childClusterStates.values());
+              if (childLb != null) {
+                childLb.shutdown();
+                childLb = null;
               }
+              if (loopStatus != null) {
+                logger.log(XdsLogLevel.WARNING,
+                    "Multiple loops in CDS config.  Old msg:  " + loopStatus.getDescription());
+              }
+              loopStatus = Status.UNAVAILABLE.withDescription(String.format(
+                  "CDS error: circular aggregate clusters directly under %s for "
+                      + "root cluster %s, named %s",
+                  clusterState.name, root.name, namesCausingLoops));
             }
           }
         }
