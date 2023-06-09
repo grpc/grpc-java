@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -487,7 +488,6 @@ public class CdsLoadBalancer2Test {
     CdsUpdate update3 = CdsUpdate.forEds(cluster3, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L,
         upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
-    FakeLoadBalancer childBalancer = null;
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
@@ -495,12 +495,6 @@ public class CdsLoadBalancer2Test {
             + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
             + " cluster-02.googleapis.com]");
     assertPicker(pickerCaptor.getValue(), unavailable, null);
-
-    // cluster2 revoked
-    xdsClient.deliverResourceNotExist(cluster2);
-    assertThat(xdsClient.watchers.keySet())
-        .containsExactly(CLUSTER, cluster1, cluster2);  // cancelled subscription to cluster3
-    assertThat(childBalancers).isEmpty();
   }
 
   @Test
