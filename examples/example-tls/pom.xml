@@ -14,7 +14,6 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <grpc.version>1.57.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
     <protoc.version>3.22.3</protoc.version>
-    <netty.tcnative.version>2.0.56.Final</netty.tcnative.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>

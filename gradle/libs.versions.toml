@@ -4,7 +4,9 @@
 googleauth = "1.4.0"
 guava = "31.1-android"
 netty = '4.1.87.Final'
-nettytcnative = '2.0.56.Final'
+# Keep the following references of tcnative version in sync whenever it's updated:
+#   SECURITY.md
+nettytcnative = '2.0.61.Final'
 opencensus = "0.31.1"
 protobuf = "3.22.3"
 
@@ -46,10 +48,6 @@ mockito-android = "org.mockito:mockito-android:3.12.4"
 mockito-core = "org.mockito:mockito-core:3.12.4"
 netty-codec-http2 = { module = "io.netty:netty-codec-http2", version.ref = "netty" }
 netty-handler-proxy = { module = "io.netty:netty-handler-proxy", version.ref = "netty" }
-# Keep the following references of tcnative version in sync whenever it's updated:
-#   SECURITY.md (multiple occurrences)
-#   examples/example-tls/build.gradle
-#   examples/example-tls/pom.xml
 netty-tcnative = { module = "io.netty:netty-tcnative-boringssl-static", version.ref = "nettytcnative" }
 netty-tcnative-classes = { module = "io.netty:netty-tcnative-classes", version.ref = "nettytcnative" }
 netty-transport-epoll = { module = "io.netty:netty-transport-native-epoll", version.ref = "netty" }
