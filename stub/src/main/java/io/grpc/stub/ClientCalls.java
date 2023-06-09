@@ -33,8 +33,11 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -760,6 +763,7 @@ public final class ClientCalls {
 
     // Set to the calling thread while it's parked, SHUTDOWN on RPC completion
     private volatile Object waiter;
+    private final Queue<Thread> waitingThreads = new ConcurrentLinkedQueue<>();
 
     // Non private to avoid synthetic class
     ThreadlessExecutor() {}
@@ -784,21 +788,29 @@ public final class ClientCalls {
       throwIfInterrupted();
       Runnable runnable = poll();
       if (runnable == null) {
-        waiter = Thread.currentThread();
+        if (waiter != null && waiter != SHUTDOWN) {
+          waitingThreads.add(Thread.currentThread());
+        } else {
+          waiter = Thread.currentThread();
+        }
         try {
-          while ((runnable = poll()) == null) {
-            if (nanos == 0) {
-              LockSupport.park(this);
-            } else {
-              if (System.nanoTime() - start > nanos) {
-                return;
-              }
-              LockSupport.parkNanos(this, nanos);
-              throwIfInterrupted();
+          if (nanos == 0) {
+            LockSupport.park(this);
+          } else {
+            if (System.nanoTime() - start > nanos) {
+              return;
             }
+            LockSupport.parkNanos(this, nanos);
+            throwIfInterrupted();
           }
         } finally {
           waiter = null;
+          List<Thread> threads = new ArrayList<>(waitingThreads);
+          waitingThreads.clear();
+          threads.forEach(thread -> LockSupport.unpark(thread));
+        }
+        if (runnable == null) {
+          return;
         }
       }
       do {
@@ -848,7 +860,7 @@ public final class ClientCalls {
       add(runnable);
       Object waiter = this.waiter;
       if (waiter != SHUTDOWN) {
-        LockSupport.unpark((Thread) waiter); // no-op if null
+        LockSupport.unpark((Thread) waiter);
       } else if (remove(runnable) && rejectRunnableOnExecutor) {
         throw new RejectedExecutionException();
       }

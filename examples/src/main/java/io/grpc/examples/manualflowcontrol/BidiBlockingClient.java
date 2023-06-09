@@ -19,6 +19,7 @@ package io.grpc.examples.manualflowcontrol;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.StatusRuntimeException;
 import io.grpc.examples.manualflowcontrol.StreamingGreeterGrpc.StreamingGreeterBlockingStub;
 import io.grpc.stub.BlockingBiDiStream;
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 
 
@@ -76,17 +78,11 @@ public class BidiBlockingClient {
       long t1 = System.currentTimeMillis();
       List<String> blockUntilSomethingReady = useBlockUntilSomethingReady(blockingStub, echoInput);
       long t2 = System.currentTimeMillis();
-      List<String> writeUnlessBlockedAndReadIsReady =
-          useWriteUnlessBlockedAndReadIsReady(blockingStub, echoInput);
-      long t3 = System.currentTimeMillis();
 
       System.out.println("The echo requests and results were:");
       printResultMessage("Input", echoInput, 0L);
       printResultMessage("simpleWrite", simpleWrite, t1 - start);
       printResultMessage("blockUntilSomethingReady", blockUntilSomethingReady, t2 - t1);
-      printResultMessage("writeUnlessBlockedAndReadIsReady", writeUnlessBlockedAndReadIsReady,
-          t3 - t2);
-
     } finally {
       // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
       // resources the channel should be shut down when it will no longer be used. If it may be used
@@ -125,71 +121,9 @@ public class BidiBlockingClient {
     }
   }
 
-  /**
-   * useWriteUnlessBlockedAndReadIsReady returns true if write was successful or valueToWrite was null
-   **/
-  private static List<String> useWriteUnlessBlockedAndReadIsReady(
-      StreamingGreeterBlockingStub stub, List<String> strings) throws InterruptedException {
-
-    logMethodStart("writeUnlessBlockedAndReadIsReady");
-    BlockingBiDiStream<HelloRequest, HelloReply> stream = stub.sayHelloStreaming();
-    List<String> readValues = new ArrayList<>();
-    Iterator<String> iterator = strings.iterator();
-
-    while ((stream.getClosedStatus() == null)
-        && (iterator.hasNext() || readValues.size() < strings.size())) {
-
-      // If read is ready and write isn't, do a read
-      if (stream.isReadReady() && !stream.isWriteReady() && readValues.size() < strings.size()) {
-        HelloReply response = stream.read(1, TimeUnit.SECONDS);
-        if (response != null) {
-          readValues.add(response.getMessage());
-        }
-        continue;
-      }
-
-      // If we have something to write try to do so and if fail do a read looping until successful
-      if (iterator.hasNext()) {
-        HelloRequest req = HelloRequest.newBuilder().setName(iterator.next()).build();
-        boolean writeSuccesful = false;
-        while (!writeSuccesful && stream.getClosedStatus() == null) {
-          if (stream.writeUnlessBlockedAndReadIsReady(req, 10, TimeUnit.SECONDS)) {
-            writeSuccesful = true;
-            if (!iterator.hasNext() &&
-                (stream.getClosedStatus() == null || stream.getClosedStatus().isOk())) {
-              stream.sendCloseWrite();
-              logger.info("Completed writes");
-            }
-          } else if (readValues.size() < strings.size()) {
-            HelloReply response = stream.read(1, TimeUnit.SECONDS);
-            if (response != null) {
-              readValues.add(response.getMessage());
-            }
-          }
-        }
-        continue;
-      }
-
-      // No writes are available, so patiently read
-      HelloReply response = stream.read(10, TimeUnit.MINUTES);
-      if (response != null) {
-        readValues.add(response.getMessage());
-      }
-    }
-
-    if (stream.getClosedStatus() != null && !stream.getClosedStatus().isOk()) {
-      throw stream.getClosedStatus().asRuntimeException();
-    }
-    return readValues;
-  }
-
-
-
-
-
-
   private static List<String> useBlockUntilSomethingReady(
-      StreamingGreeterBlockingStub stub, List<String> strings) throws InterruptedException {
+      StreamingGreeterBlockingStub stub, List<String> strings)
+      throws InterruptedException, TimeoutException {
 
     logMethodStart("blockUntilSomethingReady");
 
@@ -204,7 +138,7 @@ public class BidiBlockingClient {
 
       boolean doWrite;
       if (iterator.hasNext() && readValues.size() < strings.size()) {
-        doWrite = stream.blockUntilSomethingReady(10, TimeUnit.MINUTES);
+        doWrite = stream.waitForReady(10, TimeUnit.MINUTES);
       } else {
         doWrite = iterator.hasNext();
       }
@@ -259,51 +193,55 @@ public class BidiBlockingClient {
     logMethodStart("Simple Write");
 
     List<String> readValues = new ArrayList<>();
-    BlockingBiDiStream<HelloRequest, HelloReply> stream =
-        blockingStub.sayHelloStreaming();
+    BlockingBiDiStream<HelloRequest, HelloReply> stream = blockingStub.sayHelloStreaming();
 
-    for (String curValue : valuesToWrite) {
-      boolean successfulWrite = false;
-      HelloRequest req = HelloRequest.newBuilder().setName(curValue).build();
-      while (stream.isWriteLegal() && !successfulWrite) {
-        successfulWrite = stream.write(req, 1, TimeUnit.SECONDS);
-        if (stream.isWriteReady()) {
-          continue;
+    Thread reader = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          stream.waitForReady(10, TimeUnit.SECONDS);
+        } catch (InterruptedException | TimeoutException e) {
+         logger.info("Waiting exception was: " + e);
         }
-        // Since write is now blocked, try to do reads
-        while (stream.isReadReady()) {
-          HelloReply readValue = stream.read(100, TimeUnit.MILLISECONDS);
-          if (readValue != null) {
-            logger.info("Read a value");
-            readValues.add(readValue.getMessage());
+
+        try {
+          HelloReply response;
+          while ((response = stream.read()) != null) {
+            readValues.add(response.getMessage());
           }
+        } catch (InterruptedException e) {
+          stream.cancel("Interrupted", e);
+        } catch (StatusRuntimeException e) {
+          logger.warning("Encountered error while reading: " + e);
         }
       }
-      if (!successfulWrite && stream.getClosedStatus() != null) {
-        throw new IllegalStateException("Writing hasn't completed and stream has been closed",
-            stream.getClosedStatus().asRuntimeException());
+    });
+
+    Thread writer = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        Iterator<String> iterator = valuesToWrite.iterator();
+        boolean first = true;
+        try {
+          while (iterator.hasNext()) {
+            stream.write(HelloRequest.newBuilder().setName(iterator.next()).build());
+          }
+          logger.info("Completed writes");
+          stream.sendCloseWrite();
+        } catch (InterruptedException e) {
+          stream.cancel("Interrupted", e);
+          Thread.currentThread().interrupt();
+        }
       }
-    }
+    });
 
-    // If state is still good after writes, let server know that we are done writing
-    if (stream.getClosedStatus() == null || stream.getClosedStatus().isOk()) {
-      stream.sendCloseWrite();
-      logger.info("Completed writes");
-    }
 
-    // Read any remaining values
-    while (readValues.size() < valuesToWrite.size() && stream.getClosedStatus() == null) {
-      HelloReply readValue = stream.read(1, TimeUnit.SECONDS);
-      if (readValue != null) {
-        readValues.add(readValue.getMessage());
-      } else {
-        logger.info("Skipped reading");
-      }
-    }
 
-    if (stream.getClosedStatus() != null && !stream.getClosedStatus().isOk()) {
-      throw stream.getClosedStatus().asRuntimeException();
-    }
+    writer.start();
+    reader.start();
+    writer.join();
+    reader.join();
+
     return readValues;
   }
 

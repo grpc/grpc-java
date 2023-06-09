@@ -16,6 +16,7 @@
 
 package io.grpc.stub;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
@@ -25,6 +26,7 @@ import io.grpc.stub.ClientCalls.ThreadlessExecutor;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -48,71 +50,6 @@ public final class BlockingBiDiStream<ReqT, RespT> {
   private volatile boolean writeClosed;
   private Status closedStatus;
 
-  /**
-   * Indicates which actions have been performed and maybe contains a value sent by the server.
-   *
-   * @param <RespT> is the response type expected from the server
-   */
-  public static final class ActivityDescr<RespT> {
-
-    private RespT response = null;
-    private boolean writeDone;
-    private boolean readDone;
-
-    /**
-     * If a read was successfully done then this will return the value that was read.
-     *
-     * @return value read from server or null if no value was read or stream has been closed
-     */
-    public RespT getResponse() {
-      return response;
-    }
-
-    /**
-     * Was the value requested to be written passed to the stream to send to the server. If this
-     * returns false then the write was skipped and can be tried again later.
-     * <br><br>
-     * <p>
-     * <b>NOTE</b> that this does not indicate
-     * whether the value has been received, only that it was passed to the stream for sending.
-     * </p>
-     *
-     * @return True if the req argument was sent to the channel
-     */
-    public boolean isWriteDone() {
-      return writeDone;
-    }
-
-    /**
-     * Was a value read.
-     *
-     * @return True if a value was retrieved from the server
-     */
-    public boolean isReadDone() {
-      return readDone;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      if (this == obj) {
-        return true;
-      }
-      if (!(obj instanceof ActivityDescr)) {
-        return false;
-      }
-      ActivityDescr<?> o = (ActivityDescr<?>) obj;
-      return this.response == o.response
-          && this.readDone == o.readDone
-          && this.writeDone == o.writeDone;
-    }
-
-    @Override
-    public int hashCode() {
-      // Not likely to be used anywhere, but need something
-      return response.hashCode() + (readDone ? 1 << 10 : 0) + (writeDone ? 1 << 20 : 0);
-    }
-  }
-
   BlockingBiDiStream(ClientCall<ReqT, RespT> call, ThreadlessExecutor executor) {
     this.call = call;
     this.executor = executor;
@@ -121,43 +58,13 @@ public final class BlockingBiDiStream<ReqT, RespT> {
   }
 
   /**
-   * Check for whether some action is ready.
-   *
-   * @return True if legal to write and writeOrRead can run without blocking
-   */
-  public boolean isEitherReadOrWriteReady() {
-    return (isWriteLegal() && isWriteReady()) || isReadReady();
-  }
-
-  /**
-   * Check whether there are any values waiting to be read.
-   *
-   * @return true if read will not block
-   */
-  public boolean isReadReady() {
-    drainQuietly();
-
-    return !buffer.isEmpty();
-  }
-
-  /**
-   * Check that write hasn't been marked complete and stream is ready to receive a write (so will
-   * not block).
-   *
-   * @return true if legal to write and write will not block
-   */
-  public boolean isWriteReady() {
-    drainQuietly();
-
-    return isWriteLegal() && call.isReady();
-  }
-
-  /**
    * Block until read or write is ready or timeout is exceeded or stream is closed.
    *
-   * @return true if something is ready, false if stream was closed
+   * @return true if writes are ready, false if stream was closed or only read is ready
+   * @throws TimeoutException if nothing becomes ready before the specified timeout expires
    */
-  public boolean blockUntilSomethingReady(long timeout, TimeUnit unit) throws InterruptedException {
+  public boolean waitForReady(long timeout, TimeUnit unit)
+      throws InterruptedException, TimeoutException {
     if (closedStatus != null) {
       return false;
     }
@@ -166,108 +73,10 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     long duration = unit.toNanos(timeout);
 
     while (!isReadReady() && !isWriteReady()) {
-      if (waitAndDrainExecutorOrTimeout(start, duration)) {
-        return false;
-      }
+      waitAndDrainExecutorOrTimeout(start, duration);
     }
 
-    return true;
-  }
-
-  /**
-   * Write a value unless write would block and a read is ready.  The write will be skipped if:
-   * <ul>
-   *   <li>Write would block and a read would not block</li>
-   *   <li>Called after calling {@link #sendCloseWrite} or {@linkplain #cancel}</li>
-   *   <li>Called after close is received from the server (either onComplete or onError)</li>
-   * </ul>
-   *
-   * @param request value to send to server
-   * @param timeout how long to wait before giving up.  Values &lt;= 0 are no wait
-   * @param unit a TimeUnit determining how to interpret the timeout parameter
-   * @return True if the request was passed to the stream.  False if skipped
-   */
-  public boolean writeUnlessBlockedAndReadIsReady(ReqT request, long timeout, TimeUnit unit)
-      throws InterruptedException {
-    if (!isWriteLegal() || (!isWriteReady() && isReadReady())) {
-      return false;
-    }
-
-    long start = System.nanoTime();
-    long duration = unit.toNanos(timeout);
-
-    while (isWriteLegal() && !isWriteReady() && !isReadReady()) {
-      // wait for something to be ready or timeout
-      if (waitAndDrainExecutorOrTimeout(start, duration)) {
-        return false;
-      }
-    }
-
-    if (isWriteReady()) {
-      return write(request, duration - (System.nanoTime() - start), TimeUnit.NANOSECONDS);
-    } else {
-      return false;
-    }
-  }
-
-  /**
-   * Write a value or read a value.  If the write will not block, immediately do the write. If write
-   * was not done and there is a value to read, get that value and return it. If neither write nor
-   * read were ready, park until one or the other is ready or timeout triggers.
-   * <br>
-   * This method is a no-op when called after {@link #sendCloseWrite}, {@linkplain #cancel} or after
-   * close is received from the server (either onComplete or onError).
-   * <br><br>
-   * <b>NOTE:</b> that this method will consider the write action to be complete as soon as it
-   * passes the request to the grpc stream layer.  It will not wait for the message to be sent on
-   * the wire.
-   *
-   * @param request value to send to server
-   * @param timeout how long to wait before giving up.  Values &lt;= 0 are no wait
-   * @param unit a TimeUnit determining how to interpret the timeout parameter
-   * @return Object identifying which actions were done and maybe value received from server
-   */
-  public ActivityDescr<RespT> writeOrRead(ReqT request, long timeout, TimeUnit unit)
-      throws InterruptedException {
-
-    if (!isWriteLegal()) {
-      return new ActivityDescr<>();
-    }
-
-    ActivityDescr<RespT> retVal = new ActivityDescr<>();
-
-    long start = System.nanoTime();
-    long duration = unit.toNanos(timeout);
-
-    while (!retVal.writeDone && !retVal.readDone && !writeClosed && closedStatus == null) {
-      // Try to write
-      if (call.isReady()) {
-        call.sendMessage(request);
-        retVal.writeDone = true;
-        executor.drain();
-        return retVal;
-      }
-
-      // Try to read
-      executor.drain();
-      retVal.response = buffer.poll();
-      if (retVal.response != null) {
-        retVal.readDone = true;
-        call.request(1);
-      }
-
-      // If we did something then we are ready to return
-      if (retVal.isReadDone() || retVal.isWriteDone()) {
-        break;
-      }
-
-      // Wait for something to become available, timeout or stream to close
-      if (waitAndDrainExecutorOrTimeout(start, duration)) {
-        break;
-      }
-    }
-
-    return retVal;
+    return isWriteReady();
   }
 
   /**
@@ -276,9 +85,14 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    * available or the stream to be closed
    *
    * @return value from server or null if stream has been closed
+   * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
    */
   public RespT read() throws InterruptedException {
-    return read(Integer.MAX_VALUE, TimeUnit.DAYS);
+    try {
+      return read(Integer.MAX_VALUE, TimeUnit.DAYS);
+    } catch (TimeoutException e) {
+      throw new RuntimeException(e); // should never happen
+    }
   }
 
   /**
@@ -289,8 +103,10 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    * @param timeout how long to wait before giving up.  Values &lt;= 0 are no wait
    * @param unit a TimeUnit determining how to interpret the timeout parameter
    * @return value from server or null (if stream has been closed or timeout occurs)
+   * @throws TimeoutException if no read becomes ready before the specified timeout expires
+   * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
    */
-  public RespT read(long timeout, TimeUnit unit) throws InterruptedException {
+  public RespT read(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException {
     long start = System.nanoTime();
 
     executor.drain();
@@ -302,9 +118,7 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     long duration = unit.toNanos(timeout);
     RespT bufferedValue;
     while ((bufferedValue = buffer.poll()) == null && closedStatus == null) {
-      if (waitAndDrainExecutorOrTimeout(start, duration)) {
-        break;
-      }
+      waitAndDrainExecutorOrTimeout(start, duration);
     }
 
     if (logger.isLoggable(Level.FINER)) {
@@ -313,6 +127,8 @@ public final class BlockingBiDiStream<ReqT, RespT> {
 
     if (bufferedValue != null) {
       call.request(1);
+    } else if (closedStatus != null && !closedStatus.isOk()) {
+      throw closedStatus.asRuntimeException();
     }
 
     return bufferedValue;
@@ -334,9 +150,14 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    *
    * @param request Message to send to the server
    * @return true if the request is sent to stream, false if skipped
+   * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
    */
   public boolean write(ReqT request) throws InterruptedException {
-    return write(request, Integer.MAX_VALUE, TimeUnit.DAYS);
+    try {
+      return write(request, Integer.MAX_VALUE, TimeUnit.DAYS);
+    } catch (TimeoutException e) {
+      throw new RuntimeException(e); // should never happen
+    }
   }
 
   /**
@@ -359,10 +180,16 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    * @param timeout How long to wait before giving up.  Values &lt;= 0 are no wait
    * @param unit A TimeUnit determining how to interpret the timeout parameter
    * @return true if the request is sent to stream, false if skipped
+   * @throws TimeoutException if write does not become ready before the specified timeout expires
+   * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
    */
   public boolean write(ReqT request, long timeout, TimeUnit unit)
-      throws InterruptedException {
+      throws InterruptedException, TimeoutException {
     executor.drain();
+
+    if (getClosedStatus() != null && !getClosedStatus().isOk()) {
+      throw getClosedStatus().asRuntimeException();
+    }
 
     if (!isWriteLegal()) {
       return false;
@@ -377,39 +204,22 @@ public final class BlockingBiDiStream<ReqT, RespT> {
       if (call.isReady()) {
         call.sendMessage(request);
         writeDone = true;
+      } else if (getClosedStatus() == null) {
+        waitAndDrainExecutorOrTimeout(start, duration);
       } else {
-        if (waitAndDrainExecutorOrTimeout(start, duration)) {
-          break;
-        }
+        break;
       }
     }
 
-    return writeDone;
-  }
-
-  /**
-   * Check whether we'll ever be able to do writes or should terminate.
-   * @return True if writes haven't been closed and the server hasn't closed the stream
-   */
-  public boolean isWriteLegal() {
-    return !writeClosed && closedStatus == null;
-  }
-
-  /**
-   * calls this.executor's waitAndDrain or waitAndDrainWithTimeout.
-   *
-   * @return true if there was a timeout
-   */
-  private boolean waitAndDrainExecutorOrTimeout(long start, long duration)
-      throws InterruptedException {
-    long soFar = System.nanoTime() - start;
-    if (soFar >= duration) {
-      return true;
+    if (writeDone || getClosedStatus() == null) {
+      return writeDone;
     }
-    // Let threadless executor do stuff until there is something for us to check
-    executor.waitAndDrainWithTimeout(duration - soFar);
 
-    return System.nanoTime() - start > duration;
+    if (getClosedStatus().isOk()) {
+      return false;
+    } else {
+      throw getClosedStatus().asRuntimeException();
+    }
   }
 
   /**
@@ -451,6 +261,69 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     return closedStatus;
   }
 
+  /**
+   * Check for whether some action is ready.
+   *
+   * @return True if legal to write and writeOrRead can run without blocking
+   */
+  @VisibleForTesting
+  boolean isEitherReadOrWriteReady() {
+    return (isWriteLegal() && isWriteReady()) || isReadReady();
+  }
+
+  /**
+   * Check whether there are any values waiting to be read.
+   *
+   * @return true if read will not block
+   */
+  @VisibleForTesting
+  boolean isReadReady() {
+    drainQuietly();
+
+    return !buffer.isEmpty();
+  }
+
+  /**
+   * Check that write hasn't been marked complete and stream is ready to receive a write (so will
+   * not block).
+   *
+   * @return true if legal to write and write will not block
+   */
+  @VisibleForTesting
+  boolean isWriteReady() {
+    drainQuietly();
+
+    return isWriteLegal() && call.isReady();
+  }
+
+  /**
+   * Check whether we'll ever be able to do writes or should terminate.
+   * @return True if writes haven't been closed and the server hasn't closed the stream
+   */
+  private boolean isWriteLegal() {
+    return !writeClosed && closedStatus == null;
+  }
+
+  /**
+   * calls this.executor's waitAndDrain or waitAndDrainWithTimeout.
+   *
+   * @throws TimeoutException If no events become available on the queue within the specified
+   *     timeout or processing them exceeds the timeout
+   */
+  private void waitAndDrainExecutorOrTimeout(long start, long duration)
+      throws InterruptedException, TimeoutException {
+    long soFar = System.nanoTime() - start;
+    if (soFar >= duration) {
+      throw new TimeoutException();
+    }
+    // Let threadless executor do stuff until there is something for us to check
+    executor.waitAndDrainWithTimeout(duration - soFar);
+
+    if (System.nanoTime() - start > duration) {
+      throw new TimeoutException();
+    }
+  }
+
   StartableListener<RespT> getListener() {
     return listener;
   }
@@ -471,7 +344,7 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     executor.add(NoOpRunnable.INSTANCE);
   }
 
-  final class QueuingListener extends StartableListener<RespT> {
+  private final class QueuingListener extends StartableListener<RespT> {
 
     private final ClientCall<ReqT, RespT> call;
     private boolean done = false;
@@ -481,10 +354,6 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     QueuingListener(BlockingQueue<RespT> bufferArg, ClientCall<ReqT, RespT> callArg) {
       this.call = callArg;
       this.buffer = bufferArg;
-    }
-
-    @Override
-    public void onHeaders(Metadata headers) {
     }
 
     @Override
