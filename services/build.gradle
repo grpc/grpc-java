@@ -23,7 +23,8 @@ dependencies {
     implementation libraries.protobuf.java.util,
             libraries.guava.jre // JRE required by protobuf-java-util
 
-    runtimeOnly libraries.errorprone.annotations
+    runtimeOnly libraries.errorprone.annotations,
+            libraries.j2objc.annotations // Explicit dependency to keep in step with version used by guava
 
     compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),

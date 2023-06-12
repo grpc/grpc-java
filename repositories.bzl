@@ -20,7 +20,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.code.gson:gson:2.10.1",
     "com.google.errorprone:error_prone_annotations:2.18.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:31.1-android",
+    "com.google.guava:guava:32.0.1-android",
     "com.google.re2j:re2j:1.7",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.5",
