@@ -40,16 +40,15 @@ import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Random;
-import java.util.Vector;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -332,13 +331,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         avgWeight = 1;
       }
 
-      List<Float> newWeights = new ArrayList<>();
+      float[] newWeights = new float[list.size()];
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
         double newWeight = subchannel.getWeight();
-        newWeights.add(
-            i,
-            newWeight > 0 ? (float) newWeight : (float) avgWeight); // check desired type (float?)
+        newWeights[i] = newWeight > 0 ? (float) newWeight : (float) avgWeight;
       }
 
       StaticStrideScheduler ssScheduler = new StaticStrideScheduler(newWeights);
@@ -474,15 +471,14 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
    */
   @VisibleForTesting
   static final class StaticStrideScheduler {
-    private Vector<Long> scaledWeights;
-    // private final long[] scaledWeights;
-    private final int sizeDivisor;
+    private final long[] scaledWeights;
+    private final AtomicInteger sizeDivisor;
     private long sequence;
     private static final int K_MAX_WEIGHT = 65535; // uint16? can be uint8
     private static final long UINT32_MAX = 429967295L; // max value for uint32
 
-    StaticStrideScheduler(List<Float> weights) {
-      int numChannels = weights.size();
+    StaticStrideScheduler(float[] weights) {
+      int numChannels = weights.length;
       int numZeroWeightChannels = 0;
       double sumWeight = 0;
       float maxWeight = 0;
@@ -496,25 +492,25 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       // checkArgument(numChannels <= 1, "Couldn't build scheduler: requires at least two weights");
       // checkArgument(numZeroWeightChannels == numChannels, "Couldn't build scheduler: only zero
-      // weights");
+      // weights"); // checks break code
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
       long meanWeight =
           Math.round(scalingFactor * sumWeight / (numChannels - numZeroWeightChannels));
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
-      Vector<Long> scaledWeights = new Vector<>(numChannels);
+      long[] scaledWeights = new long[numChannels];
       // vectors are deprecated post Java 9?
       for (int i = 0; i < numChannels; i++) {
-        if (weights.get(i) == 0) {
-          scaledWeights.add(meanWeight);
+        if (weights[i] == 0) {
+          scaledWeights[i] = meanWeight;
         } else {
-          scaledWeights.add(Math.round(weights.get(i) * scalingFactor));
+          scaledWeights[i] = Math.round(weights[i] * scalingFactor);
         }
       }
 
       this.scaledWeights = scaledWeights;
-      this.sizeDivisor = numChannels; // why not just call it numChannels or numBackends
+      this.sizeDivisor = new AtomicInteger(numChannels); // why not call numChannels or numBackends
       this.sequence = (long) (Math.random() * UINT32_MAX); // why not initialize to [0,numChannels)
     }
 
@@ -525,7 +521,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
 
     // is this getter necessary? (is it ever called outside of this class)
-    public Vector<Long> getWeights() {
+    public long[] getWeights() {
       return this.scaledWeights;
     }
 
@@ -533,10 +529,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     int pickChannel() {
       while (true) {
         long sequence = this.nextSequence();
-        int backendIndex = (int) sequence % this.sizeDivisor;
-        long generation = sequence / this.sizeDivisor;
+        int backendIndex = (int) sequence % this.sizeDivisor.get();
+        long generation = sequence / this.sizeDivisor.get();
         // is this really that much more efficient than a 2d array?
-        long weight = this.scaledWeights.get(backendIndex);
+        long weight = this.scaledWeights[backendIndex];
         long kOffset = K_MAX_WEIGHT / 2;
         long mod = (weight * generation + backendIndex * kOffset) % K_MAX_WEIGHT;
         if (mod < K_MAX_WEIGHT - weight) { // review this math
