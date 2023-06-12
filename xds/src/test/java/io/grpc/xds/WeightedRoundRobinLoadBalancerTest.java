@@ -53,6 +53,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.EdfScheduler;
+import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WrrSubchannel;
@@ -860,6 +861,36 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test(expected = NullPointerException.class)
   public void wrrConfig_BooleanValueNonNull() {
     WeightedRoundRobinLoadBalancerConfig.newBuilder().setEnableOobLoadReport((Boolean) null);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void emptyWeights() {
+  List<Float> weights = new ArrayList<>();
+  StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+  }
+
+  @Test
+  public void testPicksEqualsWeights() {
+    float[] weights = {1.0f, 2.0f, 3.0f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    int[] expectedPicks = new int[] {1, 2, 3};
+    int[] picks = new int[3];
+    for (int i = 0; i < 6; i++) {
+      picks[sss.pickChannel()] += 1;
+    }
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testContainsZeroWeight() {
+    float[] weights = {3.0f, 0.0f, 1.0f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    int[] expectedPicks = new int[] {3, 2, 1};
+    int[] picks = new int[3];
+    for (int i = 0; i < 6; i++) {
+      picks[sss.pickChannel()] += 1;
+    }
+    assertThat(picks).isEqualTo(expectedPicks);
   }
 
   private static class FakeSocketAddress extends SocketAddress {
