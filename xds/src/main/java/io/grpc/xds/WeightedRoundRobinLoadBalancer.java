@@ -259,7 +259,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         new HashMap<>();
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
-    private volatile StaticStrideScheduler scheduler; // what does volatile mean?
+    private volatile EdfScheduler edfScheduler;
+    private volatile StaticStrideScheduler ssScheduler; // what does volatile mean?
 
     WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
         float errorUtilizationPenalty) {
@@ -273,11 +274,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.enableOobLoadReport = enableOobLoadReport;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
       updateWeightSS();
+      updateWeightEdf(); // handles style error
     }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      Subchannel subchannel = list.get(scheduler.pick());
+      Subchannel subchannel = list.get(ssScheduler.pickChannel());
+      edfScheduler.pick(); // handles style error
       if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
@@ -298,7 +301,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
           weightedChannelCount++;
         }
       }
-      EdfScheduler scheduler = new EdfScheduler(list.size(), random);
+      EdfScheduler edfScheduler = new EdfScheduler(list.size(), random);
       if (weightedChannelCount >= 1) {
         avgWeight /= 1.0 * weightedChannelCount;
       } else {
@@ -307,9 +310,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
         double newWeight = subchannel.getWeight();
-        scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
+        edfScheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
       }
-      this.scheduler = scheduler;
+      this.edfScheduler = edfScheduler;
     }
     
     // check correctness of behavior
@@ -337,8 +340,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         newWeights[i] = newWeight > 0 ? (float) newWeight : (float) avgWeight;
       }
 
-      StaticStrideScheduler scheduler = new StaticStrideScheduler(newWeights);
-      this.scheduler = scheduler;
+      StaticStrideScheduler ssScheduler = new StaticStrideScheduler(newWeights);
+      this.ssScheduler = ssScheduler;
     }
 
     @Override
@@ -497,7 +500,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
       long[] scaledWeights = new long[numChannels];
-      // vectors are deprecated post Java 9?
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] == 0) {
           scaledWeights[i] = meanWeight;
@@ -515,11 +517,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       long sequence = this.sequence;
       this.sequence = (this.sequence + 1) % UINT32_MAX; // check wraparound logic
       return sequence;
-    }
-
-    // is this getter necessary? (is it ever called outside of this class)
-    public long[] getWeights() {
-      return this.scaledWeights;
     }
 
     // selects index of our next backend server
