@@ -865,8 +865,9 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void emptyWeights() {
-  List<Float> weights = new ArrayList<>();
+  float[] weights = {};
   StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+  sss.pickChannel();
   }
 
   @Test
