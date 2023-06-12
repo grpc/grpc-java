@@ -40,12 +40,14 @@ import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Random;
+import java.util.Vector;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -259,6 +261,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
     private volatile EdfScheduler scheduler;
+    private volatile StaticStrideScheduler ssScheduler; // what does volatile mean?
 
     WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
         float errorUtilizationPenalty) {
@@ -312,7 +315,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
     
     // check correctness of behavior
-    private void updateWeightSSS() {
+    private void updateWeightSS() {
       int weightedChannelCount = 0;
       double avgWeight = 0;
       for (Subchannel value : list) {
@@ -463,11 +466,17 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
   }
 
-  // TODO: add javadocs comments
+  /*
+   * Implementation of Static Stride Scheduler
+   * Replaces EDFScheduler
+   * 
+   * go/static-stride-scheduler
+   */
   @VisibleForTesting
   static final class StaticStrideScheduler {
     private Vector<Long> scaledWeights;
-    private int sizeDivisor;
+    // private final long[] scaledWeights;
+    private final int sizeDivisor;
     private long sequence;
     private static final int K_MAX_WEIGHT = 65535; // uint16? can be uint8
     private static final long UINT32_MAX = 429967295L; // max value for uint32
@@ -519,8 +528,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     public Vector<Long> getWeights() {
       return this.scaledWeights;
     }
-
-    private void addChannel() {}
 
     // selects index of our next backend server
     int pickChannel() {
