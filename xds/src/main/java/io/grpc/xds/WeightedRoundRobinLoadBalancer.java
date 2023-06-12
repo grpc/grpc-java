@@ -46,7 +46,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Random;
-import java.util.Vector;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -260,7 +259,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
     private volatile EdfScheduler scheduler;
-    private volatile StaticStrideScheduler ssScheduler;
 
     WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
         float errorUtilizationPenalty) {
@@ -313,36 +311,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.scheduler = scheduler;
     }
 
-    private void updateWeightSSS() {
-      int weightedChannelCount = 0;
-      double avgWeight = 0;
-      for (Subchannel value : list) {
-        double newWeight = ((WrrSubchannel) value).getWeight();
-        if (newWeight > 0) {
-          avgWeight += newWeight;
-          weightedChannelCount++;
-        }
-      }
-
-      if (weightedChannelCount >= 1) {
-        avgWeight /= 1.0 * weightedChannelCount;
-      } else {
-        avgWeight = 1;
-      }
-
-      List<Float> newWeights = new ArrayList<>();
-      for (int i = 0; i < list.size(); i++) {
-        WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
-        double newWeight = subchannel.getWeight();
-        newWeights.add(
-            i,
-            newWeight > 0 ? (float) newWeight : (float) avgWeight);
-      }
-
-      StaticStrideScheduler ssScheduler = new StaticStrideScheduler(newWeights);
-      this.ssScheduler = ssScheduler;
-    }
-    
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(WeightedRoundRobinPicker.class)
@@ -464,79 +432,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
   }
 
-  @VisibleForTesting
-  static final class StaticStrideScheduler {
-    private Vector<Long> scaledWeights;
-    private int sizeDivisor;
-    private long sequence;
-    private static final int K_MAX_WEIGHT = 65535;
-    private static final long UINT32_MAX = 429967295L;
-
-    StaticStrideScheduler(List<Float> weights) {
-      int numChannels = weights.size();
-      int numZeroWeightChannels = 0;
-      double sumWeight = 0;
-      float maxWeight = 0;
-      for (float weight : weights) {
-        if (weight == 0) {
-          numZeroWeightChannels++;
-        }
-        sumWeight += weight;
-        maxWeight = Math.max(weight, maxWeight);
-      }
-
-      // checkArgument(numChannels <= 1, "Couldn't build scheduler: requires at least two weights");
-      // checkArgument(numZeroWeightChannels == numChannels, "Couldn't build scheduler: only zero
-      // weights");
-
-      double scalingFactor = K_MAX_WEIGHT / maxWeight;
-      long meanWeight =
-          Math.round(scalingFactor * sumWeight / (numChannels - numZeroWeightChannels));
-
-      // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
-      Vector<Long> scaledWeights = new Vector<>(numChannels);
-      for (int i = 0; i < numChannels; i++) {
-        if (weights.get(i) == 0) {
-          scaledWeights.add(meanWeight);
-        } else {
-          scaledWeights.add(Math.round(weights.get(i) * scalingFactor));
-        }
-      }
-
-      this.scaledWeights = scaledWeights;
-      this.sizeDivisor = numChannels;
-      this.sequence = (long) (Math.random() * UINT32_MAX);
-    }
-
-    private long nextSequence() {
-      long sequence = this.sequence;
-      this.sequence = (this.sequence + 1) % UINT32_MAX;
-      return sequence;
-    }
-
-    public Vector<Long> getWeights() {
-      return this.scaledWeights;
-    }
-
-    private void addChannel() {}
-
-    // selects index of our next backend server
-    int pickChannel() {
-      while (true) {
-        long sequence = this.nextSequence();
-        int backendIndex = (int) sequence % this.sizeDivisor;
-        long generation = sequence / this.sizeDivisor;
-        long weight = this.scaledWeights.get(backendIndex);
-        long kOffset = K_MAX_WEIGHT / 2;
-        long mod = (weight * generation + backendIndex * kOffset) % K_MAX_WEIGHT;
-        if (mod < K_MAX_WEIGHT - weight) {
-          continue;
-        }
-        return backendIndex;
-      }
-    }
-  }  
-  
   /** Holds the state of the object. */
   @VisibleForTesting
   static class ObjectState {
