@@ -490,9 +490,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         maxWeight = Math.max(weight, maxWeight);
       }
 
-      // checkArgument(numChannels <= 1, "Couldn't build scheduler: requires at least two weights");
-      // checkArgument(numZeroWeightChannels == numChannels, "Couldn't build scheduler: only zero
-      // weights"); // checks break code
+      checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
       long meanWeight =
