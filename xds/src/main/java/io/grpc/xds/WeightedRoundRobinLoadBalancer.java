@@ -121,7 +121,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     @Override
     public void run() {
       if (currentPicker != null && currentPicker instanceof WeightedRoundRobinPicker) {
-        ((WeightedRoundRobinPicker)currentPicker).updateWeight();
+        ((WeightedRoundRobinPicker)currentPicker).updateWeightSS();
       }
       weightUpdateTimer = syncContext.schedule(this, config.weightUpdatePeriodNanos,
           TimeUnit.NANOSECONDS, timeService);
@@ -259,8 +259,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         new HashMap<>();
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
-    private volatile EdfScheduler scheduler;
-    private volatile StaticStrideScheduler ssScheduler; // what does volatile mean?
+    private volatile StaticStrideScheduler scheduler; // what does volatile mean?
 
     WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
         float errorUtilizationPenalty) {
@@ -273,7 +272,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
       this.enableOobLoadReport = enableOobLoadReport;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
-      updateWeight();
+      updateWeightSS();
     }
 
     @Override
@@ -289,7 +288,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
     }
 
-    private void updateWeight() {
+    private void updateWeightEdf() {
       int weightedChannelCount = 0;
       double avgWeight = 0;
       for (Subchannel value : list) {
@@ -338,8 +337,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         newWeights[i] = newWeight > 0 ? (float) newWeight : (float) avgWeight;
       }
 
-      StaticStrideScheduler ssScheduler = new StaticStrideScheduler(newWeights);
-      this.ssScheduler = ssScheduler;
+      StaticStrideScheduler scheduler = new StaticStrideScheduler(newWeights);
+      this.scheduler = scheduler;
     }
 
     @Override
