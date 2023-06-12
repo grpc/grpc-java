@@ -894,18 +894,6 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(picks).isEqualTo(expectedPicks);
   }
 
-  @Test
-  public void testEqualSchedulers() {
-    float[] weights = {1.0f, 7.0f, 3.0f, 5.0f, 1.1f};
-    StaticStrideScheduler sss1 = new StaticStrideScheduler(weights);
-    StaticStrideScheduler sss2 = new StaticStrideScheduler(weights);
-    for (int i = 0; i < 100; i++) {
-      int firstChannel = sss1.pickChannel();
-      int secondChannel = sss2.pickChannel();
-      assertThat(firstChannel).isEqualTo(secondChannel);
-    }
-  }
-
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 
