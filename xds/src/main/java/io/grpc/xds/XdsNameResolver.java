@@ -153,7 +153,7 @@ final class XdsNameResolver extends NameResolver {
     // If the encoding fails, fallback to the non-encoded string.
     String authority = UrlEscapers.urlPathSegmentEscaper().escape(checkNotNull(name, "name"));
     
-    // Verify the authority using encoding, but use non-decoded version for
+    // Verify the authority using encoding, but use non-escaped version for
     // serviceAuthority.
     GrpcUtil.checkAuthority(authority);
     serviceAuthority = name;
