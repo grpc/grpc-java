@@ -26,6 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
+import com.google.common.net.UrlEscapers;
 import com.google.gson.Gson;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
@@ -102,8 +103,6 @@ final class XdsNameResolver extends NameResolver {
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"));
   
-  private static String authorityEncoding = "UTF-8";
-
   private final InternalLogId logId;
   private final XdsLogger logger;
   @Nullable
@@ -152,18 +151,11 @@ final class XdsNameResolver extends NameResolver {
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
 
-    logId = InternalLogId.allocate("xds-resolver", name);
-    logger = XdsLogger.withLogId(logId);
-    String authority;
 
     // The name might have multiple slashes so encode it before verifying.
     // If the encoding fails, fallback to the non-encoded string.
-    try {
-      authority = URLEncoder.encode(checkNotNull(name, "name"), authorityEncoding);
-    } catch (UnsupportedEncodingException e) {
-      // This should never happen since all JVMs must support UTF-8.
-      throw new RuntimeException(e);
-    }
+    String authority = UrlEscapers.urlPathSegmentEscaper().escape(checkNotNull(name, "name"));
+    
     // Verify the authority using encoding, but use non-decoded version for
     // serviceAuthority.
     GrpcUtil.checkAuthority(authority);
@@ -179,6 +171,9 @@ final class XdsNameResolver extends NameResolver {
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
     randomChannelId = random.nextLong();
+
+    logId = InternalLogId.allocate("xds-resolver", name);
+    logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
   }
 
