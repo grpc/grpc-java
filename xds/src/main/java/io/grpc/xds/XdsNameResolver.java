@@ -68,7 +68,6 @@ import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
