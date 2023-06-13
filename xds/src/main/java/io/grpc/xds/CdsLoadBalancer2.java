@@ -190,12 +190,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
               queue.addAll(clusterState.childClusterStates.values());
             } else {
               // Do cleanup
-              // for (String nameCausingLoops : namesCausingLoops) {
-              //   ClusterState removedCS = clusterState.childClusterStates.remove(nameCausingLoops);
-              //   xdsClient.cancelXdsResourceWatch(
-              //       XdsClusterResource.getInstance(), nameCausingLoops, removedCS);
-              // }
-
               if (childLb != null) {
                 childLb.shutdown();
                 childLb = null;
