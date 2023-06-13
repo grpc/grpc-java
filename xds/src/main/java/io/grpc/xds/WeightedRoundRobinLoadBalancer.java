@@ -317,27 +317,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     
     // verbose work done (requires optimization)
     private void updateWeightSS() {
-      int weightedChannelCount = 0;
-      double avgWeight = 0;
-      for (Subchannel value : list) {
-        double newWeight = ((WrrSubchannel) value).getWeight();
-        if (newWeight > 0) {
-          avgWeight += newWeight;
-          weightedChannelCount++;
-        }
-      }
-
-      if (weightedChannelCount >= 1) {
-        avgWeight /= 1.0 * weightedChannelCount;
-      } else {
-        avgWeight = 1;
-      }
-
       float[] newWeights = new float[list.size()];
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
         double newWeight = subchannel.getWeight();
-        newWeights[i] = newWeight > 0 ? (float) newWeight : (float) avgWeight;
+        newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
 
       StaticStrideScheduler ssScheduler = new StaticStrideScheduler(newWeights);
@@ -485,7 +469,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       double sumWeight = 0;
       float maxWeight = 0;
       for (float weight : weights) {
-        if (weight == 0) {
+        if (Math.abs(weight - 0.0) < 0.0001) {
           numZeroWeightChannels++;
         }
         sumWeight += weight;
