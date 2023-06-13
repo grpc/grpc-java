@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 /**
@@ -125,6 +126,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   private final class CdsLbState {
 
     private final ClusterState root;
+    private final Map<String, ClusterState> clusterStates = new ConcurrentHashMap<>();
     private LoadBalancer childLb;
 
     private CdsLbState(String rootCluster) {
@@ -161,19 +163,24 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             continue;
           }
           if (clusterState.isLeaf) {
-            DiscoveryMechanism instance;
-            if (clusterState.result.clusterType() ==  ClusterType.EDS) {
-              instance = DiscoveryMechanism.forEds(
-                  clusterState.name, clusterState.result.edsServiceName(),
-                  clusterState.result.lrsServerInfo(), clusterState.result.maxConcurrentRequests(),
-                  clusterState.result.upstreamTlsContext(), clusterState.result.outlierDetection());
-            } else {  // logical DNS
-              instance = DiscoveryMechanism.forLogicalDns(
-                  clusterState.name, clusterState.result.dnsHostName(),
-                  clusterState.result.lrsServerInfo(), clusterState.result.maxConcurrentRequests(),
-                  clusterState.result.upstreamTlsContext());
+            if (instances.stream().map(inst -> inst.cluster).noneMatch(clusterState.name::equals)) {
+              DiscoveryMechanism instance;
+              if (clusterState.result.clusterType() == ClusterType.EDS) {
+                instance = DiscoveryMechanism.forEds(
+                    clusterState.name, clusterState.result.edsServiceName(),
+                    clusterState.result.lrsServerInfo(),
+                    clusterState.result.maxConcurrentRequests(),
+                    clusterState.result.upstreamTlsContext(),
+                    clusterState.result.outlierDetection());
+              } else {  // logical DNS
+                instance = DiscoveryMechanism.forLogicalDns(
+                    clusterState.name, clusterState.result.dnsHostName(),
+                    clusterState.result.lrsServerInfo(),
+                    clusterState.result.maxConcurrentRequests(),
+                    clusterState.result.upstreamTlsContext());
+              }
+              instances.add(instance);
             }
-            instances.add(instance);
           } else {
             if (clusterState.childClusterStates == null) {
               continue;
@@ -183,16 +190,11 @@ final class CdsLoadBalancer2 extends LoadBalancer {
               queue.addAll(clusterState.childClusterStates.values());
             } else {
               // Do cleanup
-              namesCausingLoops.stream()
-                  .map(clusterState.childClusterStates::get)
-                  .filter(cs -> cs.discovered)
-                  .forEach(cs -> xdsClient.cancelXdsResourceWatch(
-                      XdsClusterResource.getInstance(), cs.name, cs));
-              for (String nameCausingLoops : namesCausingLoops) {
-                ClusterState removedCS = clusterState.childClusterStates.remove(nameCausingLoops);
-                xdsClient.cancelXdsResourceWatch(
-                    XdsClusterResource.getInstance(), nameCausingLoops, removedCS);
-              }
+              // for (String nameCausingLoops : namesCausingLoops) {
+              //   ClusterState removedCS = clusterState.childClusterStates.remove(nameCausingLoops);
+              //   xdsClient.cancelXdsResourceWatch(
+              //       XdsClusterResource.getInstance(), nameCausingLoops, removedCS);
+              // }
 
               if (childLb != null) {
                 childLb.shutdown();
@@ -212,10 +214,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       if (loopStatus != null) {
-        if (childLb != null) {
-          childLb.shutdown();
-          childLb = null;
-        }
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(loopStatus));
         return;
       }
@@ -320,14 +318,19 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       private void start() {
+        shutdown = false;
         xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this);
       }
 
       void shutdown() {
         shutdown = true;
         xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, this);
-        if (childClusterStates != null) {  // recursively shut down all descendants
-          for (ClusterState state : childClusterStates.values()) {
+        if (childClusterStates == null) {
+          return;
+        }
+        // recursively shut down all descendants
+        for (ClusterState state : childClusterStates.values()) {
+          if (!state.shutdown) {
             state.shutdown();
           }
         }
@@ -400,8 +403,17 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                   continue;
                 }
                 if (childClusterStates == null || !childClusterStates.containsKey(cluster)) {
-                  ClusterState childState = new ClusterState(cluster);
-                  childState.start();
+                  ClusterState childState;
+                  if (clusterStates.containsKey(cluster)) {
+                    childState = clusterStates.get(cluster);
+                    if (childState.shutdown) {
+                      childState.start();
+                    }
+                  } else {
+                    childState = new ClusterState(cluster);
+                    clusterStates.put(cluster, childState);
+                    childState.start();
+                  }
                   newChildStates.put(cluster, childState);
                 } else {
                   newChildStates.put(cluster, childClusterStates.remove(cluster));
