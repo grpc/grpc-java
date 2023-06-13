@@ -100,7 +100,7 @@ final class XdsNameResolver extends NameResolver {
   static boolean enableTimeout =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"));
-  
+
   private final InternalLogId logId;
   private final XdsLogger logger;
   @Nullable
@@ -149,7 +149,6 @@ final class XdsNameResolver extends NameResolver {
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
 
-
     // The name might have multiple slashes so encode it before verifying.
     // If the encoding fails, fallback to the non-encoded string.
     String authority = UrlEscapers.urlPathSegmentEscaper().escape(checkNotNull(name, "name"));
@@ -169,7 +168,6 @@ final class XdsNameResolver extends NameResolver {
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
     randomChannelId = random.nextLong();
-
     logId = InternalLogId.allocate("xds-resolver", name);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
