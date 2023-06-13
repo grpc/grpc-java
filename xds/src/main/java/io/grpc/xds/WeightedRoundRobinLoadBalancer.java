@@ -121,7 +121,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     @Override
     public void run() {
       if (currentPicker != null && currentPicker instanceof WeightedRoundRobinPicker) {
-        ((WeightedRoundRobinPicker)currentPicker).updateWeightSS();
+        ((WeightedRoundRobinPicker) currentPicker).updateWeightSS();
       }
       weightUpdateTimer = syncContext.schedule(this, config.weightUpdatePeriodNanos,
           TimeUnit.NANOSECONDS, timeService);
@@ -315,7 +315,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.edfScheduler = edfScheduler;
     }
     
-    // check correctness of behavior
+    // verbose work done (requires optimization)
     private void updateWeightSS() {
       int weightedChannelCount = 0;
       double avgWeight = 0;
@@ -495,7 +495,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
-      long meanWeight =
+      long meanWeight = numZeroWeightChannels == numChannels ? 1 :
           Math.round(scalingFactor * sumWeight / (numChannels - numZeroWeightChannels));
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
