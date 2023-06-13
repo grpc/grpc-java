@@ -164,7 +164,9 @@ final class OkHttpServerTransport implements ServerTransport,
       HandshakerSocketFactory.HandshakeResult result =
           config.handshakerSocketFactory.handshake(socket, Attributes.EMPTY);
       socket.setTcpNoDelay(true);
-      this.socket = result.socket;
+      synchronized (lock) {
+        this.socket = result.socket;
+      }
       this.attributes = result.attributes;
 
       int maxQueuedControlFrames = 10000;
