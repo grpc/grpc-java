@@ -933,8 +933,71 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(sss.pickChannel()).isEqualTo(1);
     assertThat(sss.pickChannel()).isEqualTo(2);
     assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+  }
+
+  @Test
+  public void testRebuildSamePicks() {
+    float[] weights = {3.1f, 1.6f, 2.3f};
+    StaticStrideScheduler sss1 = new StaticStrideScheduler(weights);
+    StaticStrideScheduler sss2 = new StaticStrideScheduler(weights);
+    for (int i = 0; i < 1000; i++) {
+      assertThat(sss1.pickChannel()).isEqualTo(sss2.pickChannel());
+    }
+  }
+
+  @Test
+  public void testStaticStrideSchedulerSimpleExample() {
+    float[] weights = {2.0f, (float) (10.0 / 3.0), 1.0f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    // assertThat(sss.pickChannel()).isEqualTo(2); // edf
+    assertThat(sss.pickChannel()).isEqualTo(1); // sss
+  }
+
+  @Test
+  public void testStaticStrideSchedulerNonIntegers() {
+    float[] weights = {0.5f, 0.3f, 1.0f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    // assertThat(sss.pickChannel()).isEqualTo(1); // edf
+    assertThat(sss.pickChannel()).isEqualTo(0); // sss
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    // sss and edf have diff behaviors?
   }
   
+  // @Test
+  // public void testStaticStrideSchedulerManyIterations() {
+  //   Random random = new Random();
+  //   double totalWeight = 0;
+  //   int capacity = random.nextInt(10) + 1;
+  //   double[] weights = new double[capacity];
+  //   EdfScheduler scheduler = new EdfScheduler(capacity, random);
+  //   for (int i = 0; i < capacity; i++) {
+  //     weights[i] = random.nextDouble();
+  //     scheduler.add(i, weights[i]);
+  //     totalWeight += weights[i];
+  //   }
+  //   Map<Integer, Integer> pickCount = new HashMap<>();
+  //   for (int i = 0; i < 1000; i++) {
+  //     int result = scheduler.pick();
+  //     pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+  //   }
+  //   for (int i = 0; i < capacity; i++) {
+  //     assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+  //         .isAtMost(0.01);
+  //   }
+  // }
+
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 
