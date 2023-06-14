@@ -932,7 +932,7 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   @Test
   public void testAllInvalidWeightsUseOne() {
-    float[] weights = {-1.0f, -0.0f, 0.0f};
+    float[] weights = {-3.1f, -0.0f, 0.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
@@ -1023,7 +1023,17 @@ public class WeightedRoundRobinLoadBalancerTest {
     // sss and edf have diff behaviors?
   }
 
-  
+  @Test
+  public void testTwoWeights() {
+    float[] weights = {1.0f, 2.0f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+  }
 
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
