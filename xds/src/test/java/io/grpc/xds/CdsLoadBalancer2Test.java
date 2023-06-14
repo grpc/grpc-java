@@ -500,7 +500,7 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
-  public void aggregateCluster_withLoops_afterEDS() {
+  public void aggregateCluster_withLoops_afterEds() {
     String cluster1 = "cluster-01.googleapis.com";
     // CLUSTER (aggr.) -> [cluster1]
     CdsUpdate update =
