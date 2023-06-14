@@ -458,10 +458,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @VisibleForTesting
   static final class StaticStrideScheduler {
     private final long[] scaledWeights;
-    private final AtomicInteger sizeDivisor;
-    private long sequence;
+    private final int sizeDivisor;
+    private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 65535; // uint16? can be uint8
-    private static final long UINT32_MAX = 429967295L; // max value for uint32
+    private static final int UINT32_MAX = 429967295; // max value for uint32
 
     StaticStrideScheduler(float[] weights) {
       int numChannels = weights.length;
@@ -469,7 +469,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       double sumWeight = 0;
       float maxWeight = 0;
       for (float weight : weights) {
-        if (Math.abs(weight - 0.0) < 0.0001) {
+        if (Math.abs(weight - 0.0) < 0.0001) { // just equal to 0?
           numZeroWeightChannels++;
         }
         sumWeight += weight;
@@ -479,13 +479,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
+      if (numZeroWeightChannels == numChannels) {
+        System.out.println("ALL 0 WEIGHT CHANNELS");
+      }
       long meanWeight = numZeroWeightChannels == numChannels ? 1 :
           Math.round(scalingFactor * sumWeight / (numChannels - numZeroWeightChannels));
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
       long[] scaledWeights = new long[numChannels];
       for (int i = 0; i < numChannels; i++) {
-        if (weights[i] == 0) {
+        if (Math.abs(weights[i]) < 0.0001) { // just equal to 0?
           scaledWeights[i] = meanWeight;
         } else {
           scaledWeights[i] = Math.round(weights[i] * scalingFactor);
@@ -493,27 +496,27 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
 
       this.scaledWeights = scaledWeights;
-      this.sizeDivisor = new AtomicInteger(numChannels); // why not call numChannels or numBackends
-      this.sequence = (long) (Math.random() * UINT32_MAX); // why not initialize to [0,numChannels)
+      this.sizeDivisor = numChannels;
+      // this.sequence = new AtomicInteger((int) (Math.random() * UINT32_MAX));
+      this.sequence = new AtomicInteger(0);
+      // optimization: isn't sequence guaranteed to be in the first generation?
+      // failing test cases when initialized to non-zero value
     }
 
-    private long nextSequence() {
-      long sequence = this.sequence;
-      this.sequence = (this.sequence + 1) % UINT32_MAX; // check wraparound logic
-      return sequence;
+    private int nextSequence() {
+      return this.sequence.getAndUpdate(seq -> ((seq + 1) % UINT32_MAX));
     }
 
     // selects index of our next backend server
     int pickChannel() {
       while (true) {
-        long sequence = this.nextSequence();
-        int backendIndex = (int) sequence % this.sizeDivisor.get();
-        long generation = sequence / this.sizeDivisor.get();
+        int sequence = this.nextSequence();
+        int backendIndex = sequence % this.sizeDivisor;
+        long generation = sequence / this.sizeDivisor;
         // is this really that much more efficient than a 2d array?
         long weight = this.scaledWeights[backendIndex];
-        long kOffset = K_MAX_WEIGHT / 2;
-        long mod = (weight * generation + backendIndex * kOffset) % K_MAX_WEIGHT;
-        if (mod < K_MAX_WEIGHT - weight) { // review this math
+        if ((weight * generation) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) { 
+          // wow how does this work/how was it discovered
           continue;
         }
         return backendIndex;
