@@ -315,7 +315,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.edfScheduler = edfScheduler;
     }
     
-    // verbose work done (requires optimization)
     private void updateWeightSS() {
       float[] newWeights = new float[list.size()];
       for (int i = 0; i < list.size(); i++) {
@@ -457,7 +456,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
    */
   @VisibleForTesting
   static final class StaticStrideScheduler {
-    private final long[] scaledWeights;
+    private final int[] scaledWeights;
     private final int sizeDivisor;
     private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 65535; // uint16? can be uint8
@@ -479,19 +478,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
-      if (numZeroWeightChannels == numChannels) {
-        System.out.println("ALL 0 WEIGHT CHANNELS");
-      }
-      long meanWeight = numZeroWeightChannels == numChannels ? 1 :
-          Math.round(scalingFactor * sumWeight / (numChannels - numZeroWeightChannels));
+      int meanWeight = numZeroWeightChannels == numChannels ? 1 :
+          (int) Math.round(scalingFactor * sumWeight / (numChannels - numZeroWeightChannels));
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
-      long[] scaledWeights = new long[numChannels];
+      int[] scaledWeights = new int[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (Math.abs(weights[i]) < 0.0001) { // just equal to 0?
           scaledWeights[i] = meanWeight;
         } else {
-          scaledWeights[i] = Math.round(weights[i] * scalingFactor);
+          scaledWeights[i] = (int) Math.round(weights[i] * scalingFactor);
         }
       }
 
