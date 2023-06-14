@@ -883,7 +883,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testContainsZeroWeight() {
+  public void testContainsZeroWeightUseMean() {
     float[] weights = {3.0f, 0.0f, 1.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
     int[] expectedPicks = new int[] {3, 2, 1};
@@ -894,6 +894,47 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(picks).isEqualTo(expectedPicks);
   }
 
+  @Test
+  public void testLargestPickedEveryGeneration() {
+    float[] weights = {1.0f, 2.0f, 3.0f};
+    int mean = 2;
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    int largestWeightPickCount = 0;
+    int kMaxWeight = 65535;
+    for (int i = 0; i < mean * kMaxWeight; i++) {
+      if (sss.pickChannel() == mean) {
+        largestWeightPickCount += 1;
+      }
+    }
+    assertThat(largestWeightPickCount).isEqualTo(kMaxWeight);
+  }
+
+  @Test
+  public void testStaticStrideSchedulerGivenExample() {
+    float[] weights = {10.0f, 20.0f, 30.0f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+  }
+
+  @Test
+  public void testStaticStrideSchedulerGivenExample2() {
+    float[] weights = {2.0f, 3.0f, 6.0f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+  }
+  
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 
