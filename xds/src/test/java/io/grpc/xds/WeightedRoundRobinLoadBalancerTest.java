@@ -1035,6 +1035,27 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(sss.pickChannel()).isEqualTo(1);
   }
 
+  @Test
+  public void testManyWeights() {
+    float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    assertThat(sss.pickChannel()).isEqualTo(4);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(3);
+    assertThat(sss.pickChannel()).isEqualTo(4);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(3);
+    assertThat(sss.pickChannel()).isEqualTo(4);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(3);
+    assertThat(sss.pickChannel()).isEqualTo(4);
+    assertThat(sss.pickChannel()).isEqualTo(0);
+    assertThat(sss.pickChannel()).isEqualTo(1);
+    assertThat(sss.pickChannel()).isEqualTo(2);
+    assertThat(sss.pickChannel()).isEqualTo(3);
+    assertThat(sss.pickChannel()).isEqualTo(4);
+  }
+
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 
