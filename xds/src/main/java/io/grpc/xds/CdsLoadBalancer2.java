@@ -146,8 +146,11 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
     private void handleClusterDiscovered() {
       List<DiscoveryMechanism> instances = new ArrayList<>();
+
+      // Used for loop detection to break the infinite recursion that loops would cause
       Map<ClusterState, List<ClusterState>> parentClusters = new HashMap<>();
       Status loopStatus = null;
+
       // Level-order traversal.
       // Collect configurations for all non-aggregate (leaf) clusters.
       Queue<ClusterState> queue = new ArrayDeque<>();
@@ -185,6 +188,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             if (clusterState.childClusterStates == null) {
               continue;
             }
+            // Do loop detection and break recursion if detected
             List<String> namesCausingLoops = identifyLoops(clusterState, parentClusters);
             if (namesCausingLoops.isEmpty()) {
               queue.addAll(clusterState.childClusterStates.values());
@@ -319,14 +323,11 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       void shutdown() {
         shutdown = true;
         xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, this);
-        if (childClusterStates == null) {
-          return;
-        }
-        // recursively shut down all descendants
-        for (ClusterState state : childClusterStates.values()) {
-          if (!state.shutdown) {
-            state.shutdown();
-          }
+        if (childClusterStates != null) {
+          // recursively shut down all descendants
+          childClusterStates.values().stream()
+              .filter(state -> !state.shutdown)
+              .forEach(ClusterState::shutdown);
         }
       }
 
