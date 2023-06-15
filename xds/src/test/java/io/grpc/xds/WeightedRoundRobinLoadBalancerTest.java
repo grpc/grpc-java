@@ -52,7 +52,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
-import io.grpc.xds.WeightedRoundRobinLoadBalancer.EdfScheduler;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
@@ -220,8 +219,6 @@ public class WeightedRoundRobinLoadBalancerTest {
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
-    assertThat(weightedPicker.pickSubchannel(mockArgs)
-            .getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
@@ -619,8 +616,6 @@ public class WeightedRoundRobinLoadBalancerTest {
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
-    assertThat(weightedPicker.pickSubchannel(mockArgs)
-        .getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
@@ -637,8 +632,6 @@ public class WeightedRoundRobinLoadBalancerTest {
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
     assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
-    assertThat(weightedPicker.pickSubchannel(mockArgs)
-        .getSubchannel()).isEqualTo(weightedSubchannel2);
   }
 
   @Test
@@ -867,37 +860,6 @@ public class WeightedRoundRobinLoadBalancerTest {
             .isAtMost(0.001);
   }
 
-  @Test
-  public void edfScheduler() {
-    Random random = new Random();
-    double totalWeight = 0;
-    int capacity = random.nextInt(10) + 1;
-    double[] weights = new double[capacity];
-    EdfScheduler scheduler = new EdfScheduler(capacity, random);
-    for (int i = 0; i < capacity; i++) {
-      weights[i] = random.nextDouble();
-      scheduler.add(i, weights[i]);
-      totalWeight += weights[i];
-    }
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = scheduler.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
-    }
-    for (int i = 0; i < capacity; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
-          .isAtMost(0.01);
-    }
-  }
-
-  @Test
-  public void edsScheduler_sameWeight() {
-    EdfScheduler scheduler = new EdfScheduler(2, new FakeRandom());
-    scheduler.add(0, 0.5);
-    scheduler.add(1, 0.5);
-    assertThat(scheduler.pick()).isEqualTo(0);
-  }
-
   @Test(expected = NullPointerException.class)
   public void wrrConfig_TimeValueNonNull() {
     WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos((Long) null);
@@ -912,7 +874,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void emptyWeights() {
     float[] weights = {};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    sss.pickChannel();
+    sss.pick();
   }
 
   @Test
@@ -922,7 +884,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     int[] expectedPicks = new int[] {1, 2, 3};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
-      picks[sss.pickChannel()] += 1;
+      picks[sss.pick()] += 1;
     }
     assertThat(picks).isEqualTo(expectedPicks);
   }
@@ -934,7 +896,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     int[] expectedPicks = new int[] {3, 2, 1};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
-      picks[sss.pickChannel()] += 1;
+      picks[sss.pick()] += 1;
     }
     assertThat(picks).isEqualTo(expectedPicks);
   }
@@ -946,7 +908,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     int[] expectedPicks = new int[] {3, 2, 1};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
-      picks[sss.pickChannel()] += 1;
+      picks[sss.pick()] += 1;
     }
     assertThat(picks).isEqualTo(expectedPicks);
   }
@@ -958,7 +920,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
-      picks[sss.pickChannel()] += 1;
+      picks[sss.pick()] += 1;
     }
     assertThat(picks).isEqualTo(expectedPicks);
   }
@@ -970,7 +932,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
-      picks[sss.pickChannel()] += 1;
+      picks[sss.pick()] += 1;
     }
     assertThat(picks).isEqualTo(expectedPicks);
   }
@@ -982,7 +944,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
-      picks[sss.pickChannel()] += 1;
+      picks[sss.pick()] += 1;
     }
     assertThat(picks).isEqualTo(expectedPicks);
   }
@@ -995,7 +957,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     int largestWeightPickCount = 0;
     int kMaxWeight = 65535;
     for (int i = 0; i < mean * kMaxWeight; i++) {
-      if (sss.pickChannel() == mean) {
+      if (sss.pick() == mean) {
         largestWeightPickCount += 1;
       }
     }
@@ -1006,99 +968,119 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testStaticStrideSchedulerGivenExample1() {
     float[] weights = {10.0f, 20.0f, 30.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(2);
+    Random random = new Random();
+    double totalWeight = 60;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 3; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+          .isAtMost(0.01);
+    }
   }
 
   @Test
   public void testStaticStrideSchedulerGivenExample2() {
     float[] weights = {2.0f, 3.0f, 6.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-  }
-
-  @Test
-  public void testRebuildSamePicks() {
-    float[] weights = {3.1f, 1.6f, 2.3f};
-    StaticStrideScheduler sss1 = new StaticStrideScheduler(weights);
-    StaticStrideScheduler sss2 = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    double totalWeight = 11;
+    Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
-      assertThat(sss1.pickChannel()).isEqualTo(sss2.pickChannel());
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
-  } // will fail if sequence is non-deterministic
+    for (int i = 0; i < 3; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+          .isAtMost(0.01);
+    }
+  }
 
   @Test
   public void testStaticStrideSchedulerNonIntegers1() {
     float[] weights = {2.0f, (float) (10.0 / 3.0), 1.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    // assertThat(sss.pickChannel()).isEqualTo(2); // edf
-    assertThat(sss.pickChannel()).isEqualTo(1); // sss
+    Random random = new Random();
+    double totalWeight = 2 + 10.0 / 3.0 + 1.0;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 3; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+          .isAtMost(0.01);
+    }
   }
 
   @Test
   public void testStaticStrideSchedulerNonIntegers2() {
     float[] weights = {0.5f, 0.3f, 1.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    // assertThat(sss.pickChannel()).isEqualTo(1); // edf
-    assertThat(sss.pickChannel()).isEqualTo(0); // sss
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    // sss and edf have diff behaviors?
+    Random random = new Random();
+    double totalWeight = 1.8;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 3; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+          .isAtMost(0.01);
+    }
   }
 
   @Test
   public void testTwoWeights() {
     float[] weights = {1.0f, 2.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    assertThat(sss.pickChannel()).isEqualTo(1);
+    Random random = new Random();
+    double totalWeight = 3;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 2; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+          .isAtMost(0.01);
+    }
   }
 
   @Test
-  public void testManyWeights() {
+  public void testManyWeights1() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    assertThat(sss.pickChannel()).isEqualTo(4);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(3);
-    assertThat(sss.pickChannel()).isEqualTo(4);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(3);
-    assertThat(sss.pickChannel()).isEqualTo(4);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(3);
-    assertThat(sss.pickChannel()).isEqualTo(4);
-    assertThat(sss.pickChannel()).isEqualTo(0);
-    assertThat(sss.pickChannel()).isEqualTo(1);
-    assertThat(sss.pickChannel()).isEqualTo(2);
-    assertThat(sss.pickChannel()).isEqualTo(3);
-    assertThat(sss.pickChannel()).isEqualTo(4);
+    Random random = new Random();
+    double totalWeight = 15;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 3; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+          .isAtMost(0.01);
+    }
+  }
+
+  @Test
+  public void testManyComplexWeights2() {
+    float[] weights = {1.2f, 2.4f, 222.56f, 0f, 15.0f, 226342.0f, 5123.0f, 0.0001f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    double totalWeight = 1.2 + 2.4 + 222.56 + 15.0 + 226342.0 + 5123.0 + 0.0001;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 8; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 10000.0 - weights[i] / totalWeight) )
+          .isAtMost(5);
+    }
   }
 
   private static class FakeSocketAddress extends SocketAddress {
