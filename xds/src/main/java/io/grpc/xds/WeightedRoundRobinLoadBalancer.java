@@ -468,11 +468,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       double sumWeight = 0;
       float maxWeight = 0;
       for (float weight : weights) {
-        if (Math.abs(weight - 0.0) < 0.0001) { // just equal to 0?
+        if (weight < 0.0001) { // just equal to 0?
           numZeroWeightChannels++;
+        } else {
+          sumWeight += weight;
+          maxWeight = Math.max(weight, maxWeight);  
         }
-        sumWeight += weight;
-        maxWeight = Math.max(weight, maxWeight);
       }
 
       checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
@@ -484,7 +485,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
       int[] scaledWeights = new int[numChannels];
       for (int i = 0; i < numChannels; i++) {
-        if (Math.abs(weights[i]) < 0.0001) { // just equal to 0?
+        if (weights[i] < 0.0001) { // just equal to 0?
           scaledWeights[i] = meanWeight;
         } else {
           scaledWeights[i] = (int) Math.round(weights[i] * scalingFactor);
@@ -512,7 +513,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         // is this really that much more efficient than a 2d array?
         long weight = this.scaledWeights[backendIndex];
         if ((weight * generation) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) { 
-          // wow how does this work/how was it discovered
+          // how does this work/how was it discovered
           continue;
         }
         return backendIndex;
