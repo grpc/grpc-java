@@ -161,9 +161,11 @@ final class OkHttpServerTransport implements ServerTransport,
 
   private void startIo(SerializingExecutor serializingExecutor) {
     try {
+      synchronized (lock) {
+        socket.setTcpNoDelay(true);
+      }
       HandshakerSocketFactory.HandshakeResult result =
           config.handshakerSocketFactory.handshake(socket, Attributes.EMPTY);
-      socket.setTcpNoDelay(true);
       synchronized (lock) {
         this.socket = result.socket;
       }
