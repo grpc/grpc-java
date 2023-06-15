@@ -79,6 +79,7 @@ public class CallMetricRecorderTest {
     recorder.recordUtilizationMetric("cost", 0.154353423);
     recorder.recordQpsMetric(3.14159);
     recorder.recordEpsMetric(1.618);
+    recorder.recordNamedMetric("named1", 2.718);
     assertThat(recorder.finalizeAndDump()).isEqualTo(initDump);
   }
 
