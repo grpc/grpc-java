@@ -503,8 +503,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       return this.sequence.getAndUpdate(seq -> ((seq + 1) % UINT32_MAX));
     }
 
-  /** Selects index of next backend server */
-  int pickChannel() {
+    /** Selects index of next backend server */
+    int pickChannel() {
       while (true) {
         long sequence = this.nextSequence();
         long backendIndex = sequence % this.sizeDivisor;
