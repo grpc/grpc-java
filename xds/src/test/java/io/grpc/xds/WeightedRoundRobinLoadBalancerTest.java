@@ -63,7 +63,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CyclicBarrier;
@@ -174,8 +173,7 @@ public class WeightedRoundRobinLoadBalancerTest {
               return subchannel;
             }
             });
-    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker(),
-        new FakeRandom());
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
   }
 
   @Test
@@ -968,7 +966,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testStaticStrideSchedulerGivenExample1() {
     float[] weights = {10.0f, 20.0f, 30.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    Random random = new Random();
     double totalWeight = 60;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -985,7 +982,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testStaticStrideSchedulerGivenExample2() {
     float[] weights = {2.0f, 3.0f, 6.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    Random random = new Random();
     double totalWeight = 11;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1002,7 +998,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testStaticStrideSchedulerNonIntegers1() {
     float[] weights = {2.0f, (float) (10.0 / 3.0), 1.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    Random random = new Random();
     double totalWeight = 2 + 10.0 / 3.0 + 1.0;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1019,7 +1014,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testStaticStrideSchedulerNonIntegers2() {
     float[] weights = {0.5f, 0.3f, 1.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    Random random = new Random();
     double totalWeight = 1.8;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1036,7 +1030,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testTwoWeights() {
     float[] weights = {1.0f, 2.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    Random random = new Random();
     double totalWeight = 3;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1053,7 +1046,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testManyWeights1() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    Random random = new Random();
     double totalWeight = 15;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1070,7 +1062,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testManyComplexWeights2() {
     float[] weights = {1.2f, 2.4f, 222.56f, 0f, 15.0f, 226342.0f, 5123.0f, 0.0001f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights);
-    Random random = new Random();
     double totalWeight = 1.2 + 2.4 + 222.56 + 15.0 + 226342.0 + 5123.0 + 0.0001;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1092,14 +1083,6 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     @Override public String toString() {
       return "FakeSocketAddress-" + name;
-    }
-  }
-
-  private static class FakeRandom extends Random {
-    @Override
-    public double nextDouble() {
-      // return constant value to disable init deadline randomization in the scheduler
-      return 0.322023;
     }
   }
 }
