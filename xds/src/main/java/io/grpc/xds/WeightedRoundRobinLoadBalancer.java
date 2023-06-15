@@ -44,7 +44,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -65,15 +64,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final ScheduledExecutorService timeService;
   private ScheduledHandle weightUpdateTimer;
   private final Runnable updateWeightTask;
-  private final Random random;
   private final long infTime;
   private final Ticker ticker;
 
-  public WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
-    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker, new Random());
-  }
-
-  public WeightedRoundRobinLoadBalancer(WrrHelper helper, Ticker ticker, Random random) {
+  public WeightedRoundRobinLoadBalancer(WrrHelper helper, Ticker ticker) {
     super(helper);
     helper.setLoadBalancer(this);
     this.ticker = checkNotNull(ticker, "ticker");
@@ -81,13 +75,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.updateWeightTask = new UpdateWeightTask();
-    this.random = random;
     log.log(Level.FINE, "weighted_round_robin LB created");
   }
 
   @VisibleForTesting
-  WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker, Random random) {
-    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker, random);
+  WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
+    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker);
   }
 
   @Override
