@@ -48,7 +48,7 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -260,7 +260,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
     private volatile EdfScheduler edfScheduler;
-    private volatile StaticStrideScheduler ssScheduler; // what does volatile mean?
+    private volatile StaticStrideScheduler ssScheduler;
 
     WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
         float errorUtilizationPenalty) {
@@ -458,12 +458,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   static final class StaticStrideScheduler {
     private final int[] scaledWeights;
     private final int sizeDivisor;
-    private final AtomicInteger sequence;
-    private static final int K_MAX_WEIGHT = 65535; // uint16? can be uint8
-    private static final int UINT32_MAX = 429967295; // max value for uint32
+    private final AtomicLong sequence;
+    private static final int K_MAX_WEIGHT = 65535;
+    private static final long UINT32_MAX = 4294967295L;
 
     StaticStrideScheduler(float[] weights) {
       int numChannels = weights.length;
+      checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
       int numZeroWeightChannels = 0;
       double sumWeight = 0;
       float maxWeight = 0;
@@ -475,8 +476,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
           maxWeight = Math.max(weight, maxWeight);  
         }
       }
-
-      checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
       int meanWeight = numZeroWeightChannels == numChannels ? 1 :
@@ -494,29 +493,27 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       this.scaledWeights = scaledWeights;
       this.sizeDivisor = numChannels;
-      // this.sequence = new AtomicInteger((int) (Math.random() * UINT32_MAX));
-      this.sequence = new AtomicInteger(0);
+      // this.sequence = new AtomicLong((long) (Math.random() * UINT32_MAX));
+      this.sequence = new AtomicLong(0);
       // optimization: isn't sequence guaranteed to be in the first generation?
       // failing test cases when initialized to non-zero value
     }
 
-    private int nextSequence() {
+    private long nextSequence() {
       return this.sequence.getAndUpdate(seq -> ((seq + 1) % UINT32_MAX));
     }
 
-    // selects index of our next backend server
-    int pickChannel() {
+  /** Selects index of next backend server */
+  int pickChannel() {
       while (true) {
-        int sequence = this.nextSequence();
-        int backendIndex = sequence % this.sizeDivisor;
+        long sequence = this.nextSequence();
+        long backendIndex = sequence % this.sizeDivisor;
         long generation = sequence / this.sizeDivisor;
-        // is this really that much more efficient than a 2d array?
-        long weight = this.scaledWeights[backendIndex];
+        long weight = this.scaledWeights[(int) backendIndex];
         if ((weight * generation) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) { 
-          // how does this work/how was it discovered
           continue;
         }
-        return backendIndex;
+        return (int) backendIndex;
       }
     }
   }
