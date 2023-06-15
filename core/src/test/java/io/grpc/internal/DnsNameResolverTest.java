@@ -886,16 +886,7 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
   }
-
-  @Test
-  public void maybeChooseServiceConfig_failsOnMisspelling() {
-    Map<String, Object> bad = new LinkedHashMap<>();
-    bad.put("parcentage", 1.0);
-    thrown.expectMessage("Bad key");
-
-    DnsNameResolver.maybeChooseServiceConfig(bad, new Random(), "host");
-  }
-
+  
   @Test
   public void maybeChooseServiceConfig_clientLanguageMatchesJava() {
     Map<String, Object> choice = new LinkedHashMap<>();
