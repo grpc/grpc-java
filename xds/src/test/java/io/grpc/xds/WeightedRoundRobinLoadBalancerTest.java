@@ -339,7 +339,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void pickByWeight_LargeWeight() {
+  public void pickByWeight_largeWeight() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
         0.1, 0, 0.1, 999, 0, new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
@@ -381,6 +381,51 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
         weight3 / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_lowWeight() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.22, 0, 0.1, 122, 0, new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.7, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0, 0.1, 80, 0, new HashMap<>(), new HashMap<>());
+    double totalWeight = 122 / 0.22 + 1 / 0.7 + 80 / 0.86;
+
+    pickByWeight(report1, report2, report3, 122 / 0.22 / totalWeight, 1 / 0.7 / totalWeight,
+            80 / 0.86 / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_lowWeight_useApplicationUtilization() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.22, 0.2, 0.1, 122, 0, new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.7, 0.5, 0.1, 1, 0, new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0.33, 0.1, 80, 0, new HashMap<>(), new HashMap<>());
+    double totalWeight = 122 / 0.2 + 1 / 0.5 + 80 / 0.33;
+
+    pickByWeight(report1, report2, report3, 122 / 0.2 / totalWeight, 1 / 0.5 / totalWeight,
+            80 / 0.33 / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_lowWeight_withEps_defaultErrorUtilizationPenalty() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.22, 0, 0.1, 122, 5, new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.7, 0, 0.1, 1, 11, new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0, 0.1, 80, 1, new HashMap<>(), new HashMap<>());
+    double weight1 = 122 / (0.22 + 5 / 122F * weightedConfig.errorUtilizationPenalty);
+    double weight2 = 1 / (0.7 + 11 / 1F * weightedConfig.errorUtilizationPenalty);
+    double weight3 = 80 / (0.86 + 1 / 80F * weightedConfig.errorUtilizationPenalty);
+    double totalWeight = weight1 + weight2 + weight3;
+
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
+            weight3 / totalWeight);
   }
 
   @Test
