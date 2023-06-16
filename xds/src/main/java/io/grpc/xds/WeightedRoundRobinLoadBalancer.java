@@ -46,7 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -340,27 +340,29 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final int[] scaledWeights;
     private final int sizeDivisor;
     private static final int K_MAX_WEIGHT = 65535;
-    private static final long UINT32_MAX = 4294967295L;
-    private final AtomicLong sequence = new AtomicLong((long) (Math.random() * UINT32_MAX));
+    private static final long UINT32_MAX = 0xFFFF_FFFFL;
+    private final AtomicInteger sequence = new AtomicInteger((int) (Math.random() * UINT32_MAX));
 
     StaticStrideScheduler(float[] weights) {
       int numChannels = weights.length;
       checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
-      int numZeroWeightChannels = 0;
+      int numWeightedChannels = 0;
       double sumWeight = 0;
       float maxWeight = 0;
       for (float weight : weights) {
-        if (weight < 0.0001) {
-          numZeroWeightChannels++;
-        } else {
+        if (weight > 0.0001) {
           sumWeight += weight;
           maxWeight = Math.max(weight, maxWeight);  
+          numWeightedChannels++;
         }
       }
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
-      int meanWeight = numZeroWeightChannels == numChannels ? 1 :
-          (int) Math.round(scalingFactor * sumWeight / (numChannels - numZeroWeightChannels));
+      if (numWeightedChannels > 0) {
+        int meanWeight = (int) Math.round(scalingFactor * sumWeight / numWeightedChannels);
+      } else {
+        int meanWeight = 1;
+      }
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
       int[] scaledWeights = new int[numChannels];
@@ -378,8 +380,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     /** Returns the next sequence number and increases sequence with wraparound. */
     private long nextSequence() {
-      return this.sequence.getAndUpdate(seq -> ((seq + 1) % UINT32_MAX));
+      return Integer.toUnsignedLong(sequence.getAndIncrement());
     }
+  
 
     /** Selects index of next backend server. */
     int pick() {
@@ -388,7 +391,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         long backendIndex = sequence % this.sizeDivisor;
         long generation = sequence / this.sizeDivisor;
         long weight = this.scaledWeights[(int) backendIndex];
-        if ((weight * generation) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) { 
+        long offset = backendIndex * K_MAX_WEIGHT / 2;
+        if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) { 
           continue;
         }
         return (int) backendIndex;
