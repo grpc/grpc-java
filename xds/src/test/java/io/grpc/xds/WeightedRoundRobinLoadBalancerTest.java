@@ -63,6 +63,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CyclicBarrier;
@@ -173,7 +174,8 @@ public class WeightedRoundRobinLoadBalancerTest {
               return subchannel;
             }
             });
-    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+    Random random = new Random();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker(), random);
   }
 
   @Test
@@ -262,7 +264,6 @@ public class WeightedRoundRobinLoadBalancerTest {
             0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
-    assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNotNull(); // verify per-request listener
     assertThat(oobCalls.isEmpty()).isTrue();
 
@@ -276,7 +277,6 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor2.capture());
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor2.getAllValues().get(2);
     pickResult = weightedPicker.pickSubchannel(mockArgs);
-    assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNull();
     OrcaLoadReportRequest golden = OrcaLoadReportRequest.newBuilder().setReportInterval(
             Duration.newBuilder().setSeconds(20).setNanos(30000000).build()).build();
@@ -871,14 +871,16 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test(expected = IllegalArgumentException.class)
   public void emptyWeights() {
     float[] weights = {};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     sss.pick();
   }
 
   @Test
   public void testPicksEqualsWeights() {
     float[] weights = {1.0f, 2.0f, 3.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     int[] expectedPicks = new int[] {1, 2, 3};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -890,7 +892,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testContainsZeroWeightUseMean() {
     float[] weights = {3.0f, 0.0f, 1.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     int[] expectedPicks = new int[] {3, 2, 1};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -902,7 +905,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testContainsNegativeWeightUseMean() {
     float[] weights = {3.0f, -1.0f, 1.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     int[] expectedPicks = new int[] {3, 2, 1};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -914,7 +918,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testAllSameWeights() {
     float[] weights = {1.0f, 1.0f, 1.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -926,7 +931,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testAllZeroWeightsUseOne() {
     float[] weights = {0.0f, 0.0f, 0.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -938,7 +944,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testAllInvalidWeightsUseOne() {
     float[] weights = {-3.1f, -0.0f, 0.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -951,7 +958,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testLargestPickedEveryGeneration() {
     float[] weights = {1.0f, 2.0f, 3.0f};
     int mean = 2;
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     int largestWeightPickCount = 0;
     int kMaxWeight = 65535;
     for (int i = 0; i < mean * kMaxWeight; i++) {
@@ -965,7 +973,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testStaticStrideSchedulerGivenExample1() {
     float[] weights = {10.0f, 20.0f, 30.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 60;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -981,7 +990,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testStaticStrideSchedulerGivenExample2() {
     float[] weights = {2.0f, 3.0f, 6.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 11;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -997,7 +1007,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testStaticStrideSchedulerNonIntegers1() {
     float[] weights = {2.0f, (float) (10.0 / 3.0), 1.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 2 + 10.0 / 3.0 + 1.0;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1013,7 +1024,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testStaticStrideSchedulerNonIntegers2() {
     float[] weights = {0.5f, 0.3f, 1.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 1.8;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1029,7 +1041,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testTwoWeights() {
     float[] weights = {1.0f, 2.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 3;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1045,7 +1058,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testManyWeights1() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 15;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1060,8 +1074,9 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   @Test
   public void testManyComplexWeights2() {
-    float[] weights = {1.2f, 2.4f, 222.56f, 0f, 15.0f, 226342.0f, 5123.0f, 0.0001f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights);
+    float[] weights = {1.2f, 2.4f, 222.56f, 1.1f, 15.0f, 226342.0f, 5123.0f, 532.2f};
+    Random random = new Random();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 1.2 + 2.4 + 222.56 + 15.0 + 226342.0 + 5123.0 + 0.0001;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1070,7 +1085,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 8; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 10000.0 - weights[i] / totalWeight) )
-          .isAtMost(5);
+          .isAtMost(2);
     }
   }
 
