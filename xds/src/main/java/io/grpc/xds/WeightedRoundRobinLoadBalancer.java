@@ -44,6 +44,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -64,10 +65,15 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final ScheduledExecutorService timeService;
   private ScheduledHandle weightUpdateTimer;
   private final Runnable updateWeightTask;
+  private final Random random;
   private final long infTime;
   private final Ticker ticker;
 
-  public WeightedRoundRobinLoadBalancer(WrrHelper helper, Ticker ticker) {
+  public WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
+    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker, new Random());
+  }
+
+  public WeightedRoundRobinLoadBalancer(WrrHelper helper, Ticker ticker, Random random) {
     super(helper);
     helper.setLoadBalancer(this);
     this.ticker = checkNotNull(ticker, "ticker");
@@ -75,12 +81,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.updateWeightTask = new UpdateWeightTask();
+    this.random = random;
     log.log(Level.FINE, "weighted_round_robin LB created");
   }
 
   @VisibleForTesting
-  WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
-    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker);
+  WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker, Random random) {
+    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker, random);
   }
 
   @Override
@@ -288,7 +295,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
 
-      StaticStrideScheduler ssScheduler = new StaticStrideScheduler(newWeights);
+      StaticStrideScheduler ssScheduler = new StaticStrideScheduler(newWeights, random);
       this.ssScheduler = ssScheduler;
     }
 
@@ -339,16 +346,18 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   static final class StaticStrideScheduler {
     private final int[] scaledWeights;
     private final int sizeDivisor;
+    private final Random random;
+    private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 65535;
     private static final long UINT32_MAX = 0xFFFF_FFFFL;
-    private final AtomicInteger sequence = new AtomicInteger((int) (Math.random() * UINT32_MAX));
 
-    StaticStrideScheduler(float[] weights) {
+    StaticStrideScheduler(float[] weights, Random random) {
       int numChannels = weights.length;
       checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
       int numWeightedChannels = 0;
       double sumWeight = 0;
       float maxWeight = 0;
+      int meanWeight = 0;
       for (float weight : weights) {
         if (weight > 0.0001) {
           sumWeight += weight;
@@ -359,9 +368,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
       if (numWeightedChannels > 0) {
-        int meanWeight = (int) Math.round(scalingFactor * sumWeight / numWeightedChannels);
+        meanWeight = (int) Math.round(scalingFactor * sumWeight / numWeightedChannels);
       } else {
-        int meanWeight = 1;
+        meanWeight = 1;
       }
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
@@ -376,6 +385,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       this.scaledWeights = scaledWeights;
       this.sizeDivisor = numChannels;
+      this.random = random;
+      this.sequence = new AtomicInteger((int) (this.random.nextDouble() * UINT32_MAX));
+      
     }
 
     /** Returns the next sequence number and increases sequence with wraparound. */
