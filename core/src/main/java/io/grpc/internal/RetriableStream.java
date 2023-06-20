@@ -1067,6 +1067,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
         }
       }
+      if (!isFatal && !isThrottled && !status.isOk()
+          && (pushbackMillis != null && pushbackMillis > 0)) {
+        pushbackMillis = 0; // We want the retry after a nonfatal error to be immediate
+      }
       return new HedgingPlan(!isFatal && !isThrottled, pushbackMillis);
     }
 
