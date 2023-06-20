@@ -348,7 +348,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final int sizeDivisor;
     private final Random random;
     private final AtomicInteger sequence;
-    private static final int K_MAX_WEIGHT = 65535;
+    private static final int K_MAX_WEIGHT = 0xFFFF;
     private static final long UINT32_MAX = 0xFFFF_FFFFL;
 
     StaticStrideScheduler(float[] weights, Random random) {

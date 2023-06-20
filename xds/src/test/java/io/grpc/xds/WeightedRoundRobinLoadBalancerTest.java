@@ -1084,8 +1084,8 @@ public class WeightedRoundRobinLoadBalancerTest {
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 8; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 10000.0 - weights[i] / totalWeight) )
-          .isAtMost(2);
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+          .isAtMost(0.01);
     }
   }
 
