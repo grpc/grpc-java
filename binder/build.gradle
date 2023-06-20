@@ -82,6 +82,7 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
             "-Xlint:-cast"
     ]
+    options.compilerArgs -= ["-Werror"] // https://github.com/grpc/grpc-java/issues/10297
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
 }
 

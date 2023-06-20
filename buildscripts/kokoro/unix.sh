@@ -47,8 +47,12 @@ GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
-GRADLE_FLAGS+=" -PskipAndroid=true"
 GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
+if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
+  GRADLE_FLAGS+=" -PskipAndroid=true"
+else
+  GRADLE_FLAGS+=" -Pandroid.useAndroidX=true"
+fi
 export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 
 # Make protobuf discoverable by :grpc-compiler
