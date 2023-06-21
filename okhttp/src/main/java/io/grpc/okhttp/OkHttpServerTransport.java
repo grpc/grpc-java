@@ -161,6 +161,7 @@ final class OkHttpServerTransport implements ServerTransport,
 
   private void startIo(SerializingExecutor serializingExecutor) {
     try {
+      // lock is needed due to Java Socket bug: https://bugs.openjdk.org/browse/JDK-8278326
       synchronized (lock) {
         socket.setTcpNoDelay(true);
       }
