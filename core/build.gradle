@@ -33,8 +33,7 @@ dependencies {
             libraries.mockito.core,
             libraries.truth,
             project(':grpc-testing')
-    testImplementation testFixtures(project(':grpc-context')),
-            testFixtures(project(':grpc-api')),
+    testImplementation testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
             project(':grpc-grpclb')
     testImplementation libraries.guava.testlib

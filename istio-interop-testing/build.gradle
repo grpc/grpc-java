@@ -26,8 +26,7 @@ dependencies {
 
     runtimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
-    testImplementation testFixtures(project(':grpc-context')),
-            testFixtures(project(':grpc-api')),
+    testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
             libraries.mockito.core,
             libraries.junit,
