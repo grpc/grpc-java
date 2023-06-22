@@ -63,20 +63,30 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    * @return true if writes are ready, false if stream was closed or only read is ready
    * @throws TimeoutException if nothing becomes ready before the specified timeout expires
    */
-  public boolean waitForReady(long timeout, TimeUnit unit)
+  public ReadyType waitForReady(long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
     if (closedStatus != null) {
-      return false;
+      return ReadyType.CLOSED;
     }
 
     long start = System.nanoTime();
     long duration = unit.toNanos(timeout);
 
-    while (!isReadReady() && !isWriteReady()) {
+    while (!isReadReady() && !isWriteReady() && closedStatus == null) {
       waitAndDrainExecutorOrTimeout(start, duration);
     }
 
-    return isWriteReady();
+    if (closedStatus != null) {
+      return ReadyType.CLOSED;
+    }
+    else if (isWriteReady() && !isReadReady()) {
+      return ReadyType.WRITE;
+    }
+    else if (isWriteReady() && isReadReady()) {
+      return ReadyType.BOTH;
+    }
+
+    return ReadyType.READ;
   }
 
   /**
@@ -102,7 +112,7 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    *
    * @param timeout how long to wait before giving up.  Values &lt;= 0 are no wait
    * @param unit a TimeUnit determining how to interpret the timeout parameter
-   * @return value from server or null (if stream has been closed or timeout occurs)
+   * @return value from server or null (if stream has been closed)
    * @throws TimeoutException if no read becomes ready before the specified timeout expires
    * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
    */
@@ -122,7 +132,7 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     }
 
     if (logger.isLoggable(Level.FINER)) {
-      logger.finer("Client Blocking read with timeout had value:  " + bufferedValue);
+      logger.finer("Client Blocking read had value:  " + bufferedValue);
     }
 
     if (bufferedValue != null) {
@@ -132,6 +142,41 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     }
 
     return bufferedValue;
+  }
+
+  /**
+   * Wait with timeout, if necessary, for a value to be available from the server. If there is an
+   * available value, return true immediately.  If the stream was closed with Status.OK, return
+   * false.  If the stream was closed with an error status, throw a StatusException. Otherwise, wait
+   * for a value to be available, the stream to be closed or the timeout to expire.
+   *
+   * @return True when there is a value to read.  Return false if stream closed cleanly.
+   * @throws io.grpc.StatusRuntimeException If the stream was closed in an error state
+   */
+  public boolean hasNext() throws InterruptedException {
+    executor.drain();
+
+    if (closedStatus != null) {
+      if (!closedStatus.isOk()) {
+        throw closedStatus.asRuntimeException();
+      }
+      return false;
+    }
+
+    if (!buffer.isEmpty()) {
+      return true;
+    }
+
+    while (!isReadReady() && closedStatus == null) {
+      executor.waitAndDrain();
+    }
+
+
+    if (closedStatus != null && !closedStatus.isOk()) {
+      throw closedStatus.asRuntimeException();
+    }
+
+    return !buffer.isEmpty();
   }
 
   /**
@@ -145,7 +190,8 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    * not guarantee that the server gets the message.
    * <p>
    * <b>WARNING:  </b>Doing only writes without reads can lead to deadlocks as a result of flow
-   * control.
+   * control.  Furthermore, the server closing the stream will only be identified after the last
+   * sent value is read.
    * </p>
    *
    * @param request Message to send to the server
@@ -173,7 +219,8 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    * </p>
    * <p>
    * <b>WARNING:  </b>Doing only writes without reads can lead to deadlocks as a result of flow
-   * control.
+   * control.  Furthermore, the server closing the stream will only be identified after the last
+   * sent value is read.
    * </p>
    *
    * @param request Message to send to the server
@@ -191,7 +238,9 @@ public final class BlockingBiDiStream<ReqT, RespT> {
       throw getClosedStatus().asRuntimeException();
     }
 
-    if (!isWriteLegal()) {
+    if (writeClosed) {
+      throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
+    } else if (!isWriteLegal()) {
       return false;
     }
 
@@ -243,10 +292,15 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    * <br>
    * See {@link ClientCall#halfClose()}
    */
-  public void sendCloseWrite() {
+  public void halfClose() {
+    boolean origWriteClosed = writeClosed;
+
     if (!writeClosed && closedStatus == null) {
       call.halfClose();
+    } else if (origWriteClosed) {
+      throw new IllegalStateException("halfClose cannot be called after stream terminated");
     }
+
     writeClosed = true;
     executor.add(NoOpRunnable.INSTANCE);
   }
@@ -367,7 +421,7 @@ public final class BlockingBiDiStream<ReqT, RespT> {
       Preconditions.checkState(!done, "ClientCall already closed");
       closedStatus = status;
       done = true;
-      sendCloseWrite(); // We are not allowed to send anything to server after close
+      halfClose(); // We are not allowed to send anything to server after close
     }
 
     @Override
@@ -383,6 +437,18 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     @Override
     public void run() {
       // do nothing
+    }
+  }
+
+  /** Used as the return value for the waitForReady() method **/
+  public enum ReadyType {
+    READ,
+    WRITE,
+    BOTH,
+    CLOSED;
+
+    public boolean isWritable() {
+      return this == WRITE || this == BOTH;
     }
   }
 }

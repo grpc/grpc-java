@@ -116,7 +116,7 @@ public class BlockingBidiStreamTest {
     assertEquals(Integer.valueOf(10), biDiStream.read(DELAY_MILLIS, TimeUnit.MILLISECONDS));
 
     // mark complete
-    biDiStream.sendCloseWrite();
+    biDiStream.halfClose();
     assertNull(biDiStream.read(2, TimeUnit.SECONDS));
 
     // verify activity !ready and !writeable
@@ -245,7 +245,7 @@ public class BlockingBidiStreamTest {
     assertTrue(biDiStream.isWriteReady());
 
     // read only ready
-    biDiStream.sendCloseWrite();
+    biDiStream.halfClose();
     assertTrue(biDiStream.isEitherReadOrWriteReady());
     assertTrue(biDiStream.isReadReady());
     assertFalse(biDiStream.isWriteReady());
@@ -320,7 +320,7 @@ public class BlockingBidiStreamTest {
     int count = 0;
     while (!done) {
       count++;
-      if (biDiStream.waitForReady(2, TimeUnit.SECONDS)) {
+      if (biDiStream.waitForReady(2, TimeUnit.SECONDS).isWritable()) {
         done = biDiStream.write(100, 2, TimeUnit.SECONDS);
       } else {
         biDiStream.read(2, TimeUnit.SECONDS);
@@ -355,7 +355,7 @@ public class BlockingBidiStreamTest {
         CallOptions.DEFAULT);
 
     // Verify pending write released
-    delayedVoidMethod(DELAY_MILLIS, biDiStream::sendCloseWrite);
+    delayedVoidMethod(DELAY_MILLIS, biDiStream::halfClose);
     assertFalse(biDiStream.write(1)); // should block until writeComplete is triggered
 
     // verify new writes just return doing nothing
@@ -364,7 +364,7 @@ public class BlockingBidiStreamTest {
     // verify pending writeOrRead released
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
-    delayedVoidMethod(DELAY_MILLIS, biDiStream::sendCloseWrite);
+    delayedVoidMethod(DELAY_MILLIS, biDiStream::halfClose);
     assertFalse(biDiStream.write(3, 2, TimeUnit.SECONDS));
   }
 

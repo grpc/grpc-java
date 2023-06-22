@@ -38,8 +38,6 @@ import java.util.logging.Logger;
 public class BidiBlockingClient {
 
   private static final Logger logger = Logger.getLogger(BidiBlockingClient.class.getName());
-  private static String lastLogMsg = "";
-  private static int consecutiveCount = 0;
 
   /**
    * Greet server. If provided, the first element of {@code args} is the name to use in the
@@ -54,8 +52,7 @@ public class BidiBlockingClient {
     // Allow passing in the user and target strings as command line arguments
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
-        System.err.println("Usage: [target]");
-        System.err.println("");
+        System.err.println("Usage: [target]\n");
         System.err.println("  target  The server to connect to. Defaults to " + target);
         System.exit(1);
       }
@@ -76,7 +73,7 @@ public class BidiBlockingClient {
       long start = System.currentTimeMillis();
       List<String> simpleWrite = useSimpleWrite(blockingStub, echoInput);
       long t1 = System.currentTimeMillis();
-      List<String> blockUntilSomethingReady = useBlockUntilSomethingReady(blockingStub, echoInput);
+      List<String> blockUntilSomethingReady = useWaitForReady(blockingStub, echoInput);
       long t2 = System.currentTimeMillis();
 
       System.out.println("The echo requests and results were:");
@@ -98,30 +95,9 @@ public class BidiBlockingClient {
 
   private static void logMethodStart(String method) {
     logger.info("--------------------- Starting to process using method:  " + method);
-    lastLogMsg = "";
-    consecutiveCount = 0;
   }
 
-  private static void logAction(List<String> readValues, boolean lastWriteOk, String lastValue,
-      int readCount) {
-    String writeResult =
-        (lastValue != null) ? (lastWriteOk ? "successful" : "not done") : "skipped";
-    String msg = String.format("The write was %s.  There were %d values read",
-        writeResult, readValues.size() - readCount);
-
-    if (msg.equals(lastLogMsg)) {
-      consecutiveCount++;
-    } else {
-      if (consecutiveCount > 0) {
-        logger.info("Repeated " + consecutiveCount + " times");
-      }
-      consecutiveCount = 0;
-      lastLogMsg = msg;
-      logger.info(msg);
-    }
-  }
-
-  private static List<String> useBlockUntilSomethingReady(
+  private static List<String> useWaitForReady(
       StreamingGreeterBlockingStub stub, List<String> strings)
       throws InterruptedException, TimeoutException {
 
@@ -133,30 +109,26 @@ public class BidiBlockingClient {
 
     TimeUnit readTimeUnit = TimeUnit.MILLISECONDS;
 
-    while ((stream.getClosedStatus() == null)
-        && (iterator.hasNext() || readValues.size() < strings.size())) {
+    while (stream.getClosedStatus() == null) {
 
-      boolean doWrite;
-      if (iterator.hasNext() && readValues.size() < strings.size()) {
-        doWrite = stream.waitForReady(10, TimeUnit.MINUTES);
-      } else {
-        doWrite = iterator.hasNext();
-      }
-
-      if (doWrite) {
-        HelloRequest req = HelloRequest.newBuilder().setName(iterator.next()).build();
-        stream.write(req);
-        if (!iterator.hasNext() &&
-            (stream.getClosedStatus() == null || stream.getClosedStatus().isOk())) {
-          stream.sendCloseWrite();
-          readTimeUnit = TimeUnit.MINUTES; // No writes, so block longer on reads
-          logger.info("Completed writes");
+      try {
+        if (stream.waitForReady(10, TimeUnit.MINUTES).isWritable() && iterator.hasNext()) {
+          HelloRequest req = HelloRequest.newBuilder().setName(iterator.next()).build();
+          stream.write(req);
+          if (!iterator.hasNext() &&
+              (stream.getClosedStatus() == null || stream.getClosedStatus().isOk())) {
+            stream.halfClose();
+            readTimeUnit = TimeUnit.MINUTES; // No writes, so block longer on reads
+            logger.info("Completed writes");
+          }
+        } else {
+          HelloReply response = stream.read(10, readTimeUnit);
+          if (response != null) {
+            readValues.add(response.getMessage());
+          }
         }
-      } else {
-        HelloReply response = stream.read(10, readTimeUnit);
-        if (response != null) {
-          readValues.add(response.getMessage());
-        }
+      } catch (TimeoutException e) {
+        logger.warning("Timed out waiting for activity to be available");
       }
     }
 
@@ -193,24 +165,18 @@ public class BidiBlockingClient {
     logMethodStart("Simple Write");
 
     List<String> readValues = new ArrayList<>();
-    BlockingBiDiStream<HelloRequest, HelloReply> stream = blockingStub.sayHelloStreaming();
+    final BlockingBiDiStream<HelloRequest, HelloReply> stream = blockingStub.sayHelloStreaming();
 
     Thread reader = new Thread(new Runnable() {
       @Override
       public void run() {
         try {
-          stream.waitForReady(10, TimeUnit.SECONDS);
-        } catch (InterruptedException | TimeoutException e) {
-         logger.info("Waiting exception was: " + e);
-        }
-
-        try {
-          HelloReply response;
-          while ((response = stream.read()) != null) {
-            readValues.add(response.getMessage());
+          while (stream.hasNext()) {
+            readValues.add(stream.read().getMessage());
           }
         } catch (InterruptedException e) {
           stream.cancel("Interrupted", e);
+          Thread.currentThread().interrupt();
         } catch (StatusRuntimeException e) {
           logger.warning("Encountered error while reading: " + e);
         }
@@ -221,21 +187,25 @@ public class BidiBlockingClient {
       @Override
       public void run() {
         Iterator<String> iterator = valuesToWrite.iterator();
-        boolean first = true;
+        boolean hadProblem = false;
         try {
           while (iterator.hasNext()) {
-            stream.write(HelloRequest.newBuilder().setName(iterator.next()).build());
+            if (!stream.write(HelloRequest.newBuilder().setName(iterator.next()).build())) {
+              logger.warning("Stream closed before writes completed");
+              hadProblem = true;
+              break;
+            }
           }
-          logger.info("Completed writes");
-          stream.sendCloseWrite();
+          if (!hadProblem) {
+            logger.info("Completed writes");
+            stream.halfClose();
+          }
         } catch (InterruptedException e) {
           stream.cancel("Interrupted", e);
           Thread.currentThread().interrupt();
         }
       }
     });
-
-
 
     writer.start();
     reader.start();
