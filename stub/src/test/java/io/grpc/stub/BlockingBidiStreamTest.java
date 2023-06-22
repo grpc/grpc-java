@@ -320,10 +320,10 @@ public class BlockingBidiStreamTest {
     int count = 0;
     while (!done) {
       count++;
-      if (biDiStream.waitForReady(2, TimeUnit.SECONDS).isWritable()) {
-        done = biDiStream.write(100, 2, TimeUnit.SECONDS);
+      if (!biDiStream.isWriteReady() && biDiStream.isReadReady()) {
+        biDiStream.read(100, TimeUnit.MILLISECONDS);
       } else {
-        biDiStream.read(2, TimeUnit.SECONDS);
+        done = biDiStream.write(100, 1, TimeUnit.SECONDS);
       }
     }
     assertEquals(4, count);

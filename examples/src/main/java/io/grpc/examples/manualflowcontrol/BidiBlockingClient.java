@@ -27,7 +27,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 
 
@@ -71,15 +70,12 @@ public class BidiBlockingClient {
     List<String> echoInput = names();
     try {
       long start = System.currentTimeMillis();
-      List<String> simpleWrite = useSimpleWrite(blockingStub, echoInput);
-      long t1 = System.currentTimeMillis();
-      List<String> blockUntilSomethingReady = useWaitForReady(blockingStub, echoInput);
-      long t2 = System.currentTimeMillis();
+      List<String> twoThreadResult = useTwoThreads(blockingStub, echoInput);
+      long finish = System.currentTimeMillis();
 
       System.out.println("The echo requests and results were:");
       printResultMessage("Input", echoInput, 0L);
-      printResultMessage("simpleWrite", simpleWrite, t1 - start);
-      printResultMessage("blockUntilSomethingReady", blockUntilSomethingReady, t2 - t1);
+      printResultMessage("2 threads", twoThreadResult, finish - start);
     } finally {
       // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
       // resources the channel should be shut down when it will no longer be used. If it may be used
@@ -97,72 +93,12 @@ public class BidiBlockingClient {
     logger.info("--------------------- Starting to process using method:  " + method);
   }
 
-  private static List<String> useWaitForReady(
-      StreamingGreeterBlockingStub stub, List<String> strings)
-      throws InterruptedException, TimeoutException {
-
-    logMethodStart("blockUntilSomethingReady");
-
-    List<String> readValues = new ArrayList<>();
-    BlockingBiDiStream<HelloRequest, HelloReply> stream = stub.sayHelloStreaming();
-    Iterator<String> iterator = strings.iterator();
-
-    TimeUnit readTimeUnit = TimeUnit.MILLISECONDS;
-
-    while (stream.getClosedStatus() == null) {
-
-      try {
-        if (stream.waitForReady(10, TimeUnit.MINUTES).isWritable() && iterator.hasNext()) {
-          HelloRequest req = HelloRequest.newBuilder().setName(iterator.next()).build();
-          stream.write(req);
-          if (!iterator.hasNext() &&
-              (stream.getClosedStatus() == null || stream.getClosedStatus().isOk())) {
-            stream.halfClose();
-            readTimeUnit = TimeUnit.MINUTES; // No writes, so block longer on reads
-            logger.info("Completed writes");
-          }
-        } else {
-          HelloReply response = stream.read(10, readTimeUnit);
-          if (response != null) {
-            readValues.add(response.getMessage());
-          }
-        }
-      } catch (TimeoutException e) {
-        logger.warning("Timed out waiting for activity to be available");
-      }
-    }
-
-    if (stream.getClosedStatus() != null && !stream.getClosedStatus().isOk()) {
-      throw stream.getClosedStatus().asRuntimeException();
-    }
-    return readValues;
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   /**
-   *  Try to write all values (with breaks for reads as needed to manage flow control), and then
-   *  read the rest.
+   *  Create 2 threads, one that writes all values, and one that reads until the stream closes.
    */
-  private static List<String> useSimpleWrite(StreamingGreeterBlockingStub blockingStub,
+  private static List<String> useTwoThreads(StreamingGreeterBlockingStub blockingStub,
       List<String> valuesToWrite) throws InterruptedException {
-    logMethodStart("Simple Write");
+    logMethodStart("Two Threads");
 
     List<String> readValues = new ArrayList<>();
     final BlockingBiDiStream<HelloRequest, HelloReply> stream = blockingStub.sayHelloStreaming();
@@ -175,8 +111,8 @@ public class BidiBlockingClient {
             readValues.add(stream.read().getMessage());
           }
         } catch (InterruptedException e) {
-          stream.cancel("Interrupted", e);
           Thread.currentThread().interrupt();
+          stream.cancel("Interrupted", e);
         } catch (StatusRuntimeException e) {
           logger.warning("Encountered error while reading: " + e);
         }
@@ -201,8 +137,8 @@ public class BidiBlockingClient {
             stream.halfClose();
           }
         } catch (InterruptedException e) {
-          stream.cancel("Interrupted", e);
           Thread.currentThread().interrupt();
+          stream.cancel("Interrupted", e);
         }
       }
     });

@@ -58,38 +58,6 @@ public final class BlockingBiDiStream<ReqT, RespT> {
   }
 
   /**
-   * Block until read or write is ready or timeout is exceeded or stream is closed.
-   *
-   * @return true if writes are ready, false if stream was closed or only read is ready
-   * @throws TimeoutException if nothing becomes ready before the specified timeout expires
-   */
-  public ReadyType waitForReady(long timeout, TimeUnit unit)
-      throws InterruptedException, TimeoutException {
-    if (closedStatus != null) {
-      return ReadyType.CLOSED;
-    }
-
-    long start = System.nanoTime();
-    long duration = unit.toNanos(timeout);
-
-    while (!isReadReady() && !isWriteReady() && closedStatus == null) {
-      waitAndDrainExecutorOrTimeout(start, duration);
-    }
-
-    if (closedStatus != null) {
-      return ReadyType.CLOSED;
-    }
-    else if (isWriteReady() && !isReadReady()) {
-      return ReadyType.WRITE;
-    }
-    else if (isWriteReady() && isReadReady()) {
-      return ReadyType.BOTH;
-    }
-
-    return ReadyType.READ;
-  }
-
-  /**
    * Wait if necessary for a value to be available from the server. If there is an available value
    * return it immediately, if the stream is closed return a null. Otherwise, wait for a value to be
    * available or the stream to be closed
@@ -440,15 +408,4 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     }
   }
 
-  /** Used as the return value for the waitForReady() method **/
-  public enum ReadyType {
-    READ,
-    WRITE,
-    BOTH,
-    CLOSED;
-
-    public boolean isWritable() {
-      return this == WRITE || this == BOTH;
-    }
-  }
 }
