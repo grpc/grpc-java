@@ -358,8 +358,13 @@ public class BlockingBidiStreamTest {
     delayedVoidMethod(DELAY_MILLIS, biDiStream::halfClose);
     assertFalse(biDiStream.write(1)); // should block until writeComplete is triggered
 
-    // verify new writes just return doing nothing
-    assertFalse(biDiStream.write(2));
+    // verify new writes throw an illegalStateException
+    try {
+      assertFalse(biDiStream.write(2));
+      fail("write did not throw an exception when called after halfClose");
+    } catch (IllegalStateException e) {
+      assertThat(e.getMessage()).containsMatch("after.*halfClose.*cancel");
+    }
 
     // verify pending writeOrRead released
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
