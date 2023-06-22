@@ -164,7 +164,6 @@ final class OkHttpServerTransport implements ServerTransport,
       // The socket implementation is lazily initialized, but had broken thread-safety 
       // for that laziness https://bugs.openjdk.org/browse/JDK-8278326. 
       // As a workaround, we lock to synchronize initialization with shutdown().
-
       synchronized (lock) {
         socket.setTcpNoDelay(true);
       }
