@@ -262,14 +262,14 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    */
   public void halfClose() {
     boolean origWriteClosed = writeClosed;
+    writeClosed = true;
 
-    if (!writeClosed && closedStatus == null) {
+    if (!origWriteClosed && closedStatus == null) {
       call.halfClose();
     } else if (origWriteClosed) {
       throw new IllegalStateException("halfClose cannot be called after stream terminated");
     }
 
-    writeClosed = true;
     executor.add(NoOpRunnable.INSTANCE);
   }
 
@@ -278,7 +278,7 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    *
    * @return null if stream not closed by server, otherwise Status sent by server
    */
-  public Status getClosedStatus() {
+  Status getClosedStatus() {
     drainQuietly();
     return closedStatus;
   }
@@ -389,7 +389,6 @@ public final class BlockingBiDiStream<ReqT, RespT> {
       Preconditions.checkState(!done, "ClientCall already closed");
       closedStatus = status;
       done = true;
-      halfClose(); // We are not allowed to send anything to server after close
     }
 
     @Override
