@@ -280,8 +280,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
                 OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
-                        subchannelToReportListenerMap.getOrDefault(subchannel,
-                                ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty))));
+                subchannelToReportListenerMap.getOrDefault(subchannel,
+                ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty))));
       } else {
         return PickResult.withSubchannel(subchannel);
       }
