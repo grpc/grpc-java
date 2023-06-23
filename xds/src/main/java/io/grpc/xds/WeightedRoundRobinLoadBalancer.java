@@ -59,7 +59,7 @@ import java.util.logging.Logger;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
 final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private static final Logger log = Logger.getLogger(
-          WeightedRoundRobinLoadBalancer.class.getName());
+      WeightedRoundRobinLoadBalancer.class.getName());
   private WeightedRoundRobinLoadBalancerConfig config;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
@@ -113,7 +113,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @Override
   public RoundRobinPicker createReadyPicker(List<Subchannel> activeList) {
     return new WeightedRoundRobinPicker(activeList, config.enableOobLoadReport,
-            config.errorUtilizationPenalty);
+        config.errorUtilizationPenalty);
   }
 
   private final class UpdateWeightTask implements Runnable {
@@ -123,7 +123,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         ((WeightedRoundRobinPicker) currentPicker).updateWeight();
       }
       weightUpdateTimer = syncContext.schedule(this, config.weightUpdatePeriodNanos,
-              TimeUnit.NANOSECONDS, timeService);
+          TimeUnit.NANOSECONDS, timeService);
     }
   }
 
@@ -132,7 +132,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       WrrSubchannel weightedSubchannel = (WrrSubchannel) subchannel;
       if (config.enableOobLoadReport) {
         OrcaOobUtil.setListener(weightedSubchannel,
-                weightedSubchannel.new OrcaReportListener(config.errorUtilizationPenalty),
+            weightedSubchannel.new OrcaReportListener(config.errorUtilizationPenalty),
                 OrcaOobUtil.OrcaReportingConfig.newBuilder()
                         .setReportInterval(config.oobReportingPeriodNanos, TimeUnit.NANOSECONDS)
                         .build());
@@ -206,7 +206,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         nonEmptySince = infTime;
         return 0;
       } else if (now - nonEmptySince < config.blackoutPeriodNanos
-              && config.blackoutPeriodNanos > 0) {
+          && config.blackoutPeriodNanos > 0) {
         return 0;
       } else {
         return weight;
@@ -230,8 +230,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         double newWeight = 0;
         // Prefer application utilization and fallback to CPU utilization if unset.
         double utilization =
-                report.getApplicationUtilization() > 0 ? report.getApplicationUtilization()
-                        : report.getCpuUtilization();
+            report.getApplicationUtilization() > 0 ? report.getApplicationUtilization()
+                : report.getCpuUtilization();
         if (utilization > 0 && report.getQps() > 0) {
           double penalty = 0;
           if (report.getEps() > 0 && errorUtilizationPenalty > 0) {
@@ -255,19 +255,19 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   final class WeightedRoundRobinPicker extends RoundRobinPicker {
     private final List<Subchannel> list;
     private final Map<Subchannel, OrcaPerRequestReportListener> subchannelToReportListenerMap =
-            new HashMap<>();
+        new HashMap<>();
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
-    private volatile StaticStrideScheduler ssScheduler;
+    private volatile StaticStrideScheduler scheduler;
 
     WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
-                             float errorUtilizationPenalty) {
+        float errorUtilizationPenalty) {
       checkNotNull(list, "list");
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
       for (Subchannel subchannel : list) {
         this.subchannelToReportListenerMap.put(subchannel,
-                ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty));
+            ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty));
       }
       this.enableOobLoadReport = enableOobLoadReport;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
@@ -276,12 +276,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      Subchannel subchannel = list.get(ssScheduler.pick());
+      Subchannel subchannel = list.get(scheduler.pick());
       if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
                 OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                 subchannelToReportListenerMap.getOrDefault(subchannel,
-                ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty))));
+                    ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty))));
       } else {
         return PickResult.withSubchannel(subchannel);
       }
@@ -295,16 +295,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
 
-      StaticStrideScheduler ssScheduler = new StaticStrideScheduler(newWeights, random);
-      this.ssScheduler = ssScheduler;
+      StaticStrideScheduler scheduler = new StaticStrideScheduler(newWeights, random);
+      this.scheduler = scheduler;
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(WeightedRoundRobinPicker.class)
-              .add("enableOobLoadReport", enableOobLoadReport)
-              .add("errorUtilizationPenalty", errorUtilizationPenalty)
-              .add("list", list).toString();
+          .add("enableOobLoadReport", enableOobLoadReport)
+          .add("errorUtilizationPenalty", errorUtilizationPenalty)
+          .add("list", list).toString();
     }
 
     @VisibleForTesting
@@ -323,8 +323,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
       // the lists cannot contain duplicate subchannels
       return enableOobLoadReport == other.enableOobLoadReport
-              && Float.compare(errorUtilizationPenalty, other.errorUtilizationPenalty) == 0
-              && list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list);
+          && Float.compare(errorUtilizationPenalty, other.errorUtilizationPenalty) == 0
+          && list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list);
     }
   }
 
