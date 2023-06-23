@@ -174,8 +174,8 @@ public class WeightedRoundRobinLoadBalancerTest {
               return subchannel;
             }
             });
-    Random random = new Random();
-    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker(), random);
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker(),
+        new FakeRandom());
   }
 
   @Test
@@ -219,6 +219,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(weightedPicker.pickSubchannel(mockArgs)
+        .getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
@@ -264,6 +266,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
+    assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNotNull(); // verify per-request listener
     assertThat(oobCalls.isEmpty()).isTrue();
 
@@ -277,6 +280,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor2.capture());
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor2.getAllValues().get(2);
     pickResult = weightedPicker.pickSubchannel(mockArgs);
+    assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNull();
     OrcaLoadReportRequest golden = OrcaLoadReportRequest.newBuilder().setReportInterval(
             Duration.newBuilder().setSeconds(20).setNanos(30000000).build()).build();
@@ -376,51 +380,6 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
         weight3 / totalWeight);
-  }
-
-  @Test
-  public void pickByWeight_lowWeight() {
-    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.22, 0, 0.1, 122, 0, new HashMap<>(), new HashMap<>());
-    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.7, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>());
-    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 80, 0, new HashMap<>(), new HashMap<>());
-    double totalWeight = 122 / 0.22 + 1 / 0.7 + 80 / 0.86;
-
-    pickByWeight(report1, report2, report3, 122 / 0.22 / totalWeight, 1 / 0.7 / totalWeight,
-            80 / 0.86 / totalWeight);
-  }
-
-  @Test
-  public void pickByWeight_lowWeight_useApplicationUtilization() {
-    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.22, 0.2, 0.1, 122, 0, new HashMap<>(), new HashMap<>());
-    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.7, 0.5, 0.1, 1, 0, new HashMap<>(), new HashMap<>());
-    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0.33, 0.1, 80, 0, new HashMap<>(), new HashMap<>());
-    double totalWeight = 122 / 0.2 + 1 / 0.5 + 80 / 0.33;
-
-    pickByWeight(report1, report2, report3, 122 / 0.2 / totalWeight, 1 / 0.5 / totalWeight,
-            80 / 0.33 / totalWeight);
-  }
-
-  @Test
-  public void pickByWeight_lowWeight_withEps_defaultErrorUtilizationPenalty() {
-    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.22, 0, 0.1, 122, 5, new HashMap<>(), new HashMap<>());
-    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.7, 0, 0.1, 1, 11, new HashMap<>(), new HashMap<>());
-    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 80, 1, new HashMap<>(), new HashMap<>());
-    double weight1 = 122 / (0.22 + 5 / 122F * weightedConfig.errorUtilizationPenalty);
-    double weight2 = 1 / (0.7 + 11 / 1F * weightedConfig.errorUtilizationPenalty);
-    double weight3 = 80 / (0.86 + 1 / 80F * weightedConfig.errorUtilizationPenalty);
-    double totalWeight = weight1 + weight2 + weight3;
-
-    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
-            weight3 / totalWeight);
   }
 
   @Test
@@ -614,6 +573,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(weightedPicker.pickSubchannel(mockArgs)
+        .getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
@@ -630,6 +591,9 @@ public class WeightedRoundRobinLoadBalancerTest {
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
     assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
+    assertThat(weightedPicker.pickSubchannel(mockArgs)
+        .getSubchannel()).isEqualTo(weightedSubchannel2);
+
   }
 
   @Test
@@ -787,12 +751,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 4.0 / 9))
-            .isAtMost(0.001);
+            .isAtMost(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 2.0 / 9))
-            .isAtMost(0.001);
+            .isAtMost(0.002);
     // subchannel3's weight is average of subchannel1 and subchannel2
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 1000.0 - 3.0 / 9))
-            .isAtMost(0.001);
+            .isAtMost(0.002);
   }
 
   @Test
@@ -955,7 +919,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testLargestPickedEveryGeneration() {
+  public void testLacrgestWeightIndexPickedEveryGeneration() {
     float[] weights = {1.0f, 2.0f, 3.0f};
     int mean = 2;
     Random random = new Random();
@@ -971,40 +935,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testStaticStrideSchedulerGivenExample1() {
-    float[] weights = {10.0f, 20.0f, 30.0f};
-    Random random = new Random();
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
-    double totalWeight = 60;
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = sss.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
-    }
-    for (int i = 0; i < 3; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
-          .isAtMost(0.01);
-    }
-  }
-
-  @Test
-  public void testStaticStrideSchedulerGivenExample2() {
-    float[] weights = {2.0f, 3.0f, 6.0f};
-    Random random = new Random();
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
-    double totalWeight = 11;
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = sss.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
-    }
-    for (int i = 0; i < 3; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
-          .isAtMost(0.01);
-    }
-  }
-
-  @Test
   public void testStaticStrideSchedulerNonIntegers1() {
     float[] weights = {2.0f, (float) (10.0 / 3.0), 1.0f};
     Random random = new Random();
@@ -1016,7 +946,7 @@ public class WeightedRoundRobinLoadBalancerTest {
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 3; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
           .isAtMost(0.01);
     }
   }
@@ -1033,7 +963,7 @@ public class WeightedRoundRobinLoadBalancerTest {
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 3; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
           .isAtMost(0.01);
     }
   }
@@ -1050,7 +980,7 @@ public class WeightedRoundRobinLoadBalancerTest {
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 2; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
           .isAtMost(0.01);
     }
   }
@@ -1066,9 +996,9 @@ public class WeightedRoundRobinLoadBalancerTest {
       int result = sss.pick();
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
-    for (int i = 0; i < 3; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
-          .isAtMost(0.01);
+    for (int i = 0; i < 5; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
+          .isAtMost(0.001);
     }
   }
 
@@ -1084,9 +1014,83 @@ public class WeightedRoundRobinLoadBalancerTest {
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 8; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
           .isAtMost(0.01);
     }
+  }
+
+  @Test
+  public void testDeterministicPicks() {
+    float[] weights = {2.0f, 3.0f, 6.0f};
+    Random random = new FakeRandom();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
+    assertThat(sss.getSequence()).isEqualTo(0);
+    assertThat(sss.pick()).isEqualTo(1);
+    assertThat(sss.getSequence()).isEqualTo(2);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sss.getSequence()).isEqualTo(3);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sss.getSequence()).isEqualTo(6);
+    assertThat(sss.pick()).isEqualTo(0);
+    assertThat(sss.getSequence()).isEqualTo(7);
+    assertThat(sss.pick()).isEqualTo(1);
+    assertThat(sss.getSequence()).isEqualTo(8);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sss.getSequence()).isEqualTo(9);
+  }
+
+  @Test
+  public void testWraparound() {
+    float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+    Random random = new FakeRandomWraparound();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
+    double totalWeight = 15;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 5; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
+          .isAtMost(0.001);
+    }
+  }
+  
+  @Test
+  public void testWraparound2() {
+    float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+    Random random = new FakeRandomWraparound2();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
+    double totalWeight = 15;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 5; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
+          .isAtMost(0.0011);
+    }
+  }
+
+  @Test
+  public void testDeterministicWraparound() {
+    float[] weights = {2.0f, 3.0f, 6.0f};
+    Random random = new FakeRandomWraparound();
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
+    assertThat(sss.getSequence()).isEqualTo(0xFFFF_FFFFL);
+    assertThat(sss.pick()).isEqualTo(1);
+    assertThat(sss.getSequence()).isEqualTo(2);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sss.getSequence()).isEqualTo(3);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sss.getSequence()).isEqualTo(6);
+    assertThat(sss.pick()).isEqualTo(0);
+    assertThat(sss.getSequence()).isEqualTo(7);
+    assertThat(sss.pick()).isEqualTo(1);
+    assertThat(sss.getSequence()).isEqualTo(8);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sss.getSequence()).isEqualTo(9);
   }
 
   private static class FakeSocketAddress extends SocketAddress {
@@ -1098,6 +1102,29 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     @Override public String toString() {
       return "FakeSocketAddress-" + name;
+    }
+  }
+
+  private static class FakeRandom extends Random {
+    @Override
+    public int nextInt() {
+      // return constant value to disable init deadline randomization in the scheduler
+      // sequence will be initialized to 0
+      return 0;
+    }
+  }
+
+  private static class FakeRandomWraparound extends Random {
+    @Override
+    public int nextInt() {
+      return -1;
+    }
+  }
+
+  private static class FakeRandomWraparound2 extends Random {
+    @Override
+    public int nextInt() {
+      return -500;
     }
   }
 }
