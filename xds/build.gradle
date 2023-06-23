@@ -24,6 +24,9 @@ sourceSets {
             srcDir 'third_party/istio/src/main/proto'
         }
     }
+    main {
+        output.classesDirs.from(sourceSets.thirdparty.output.classesDirs)
+    }
     test {
         java {
             srcDir "${projectDir}/third_party/zero-allocation-hashing/test/java"
@@ -42,7 +45,7 @@ dependencies {
     thirdpartyImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.opencensus.proto
-    implementation sourceSets.thirdparty.output
+    compileOnly sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-services'),
@@ -139,7 +142,6 @@ tasks.named("compileJava").configure {
 
 tasks.named("jar").configure {
     archiveClassifier = 'original'
-    from sourceSets.thirdparty.output
 }
 
 tasks.named("javadoc").configure {
@@ -238,10 +240,6 @@ publishing {
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')
                 project.configurations.pomDeps.allDependencies.each { dep ->
-                    if (dep.group == null && dep.name == 'unspecified') {
-                        // Ignore the thirdparty self-dependency
-                        return;
-                    }
                     def dependencyNode = dependenciesNode.appendNode('dependency')
                     dependencyNode.appendNode('groupId', dep.group)
                     dependencyNode.appendNode('artifactId', dep.name)
