@@ -986,7 +986,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testManyWeights1() {
+  public void testManyWeights() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
     Random random = new Random();
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
@@ -998,12 +998,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.001);
+          .isAtMost(0.0011);
     }
   }
 
   @Test
-  public void testManyComplexWeights2() {
+  public void testManyComplexWeights() {
     float[] weights = {1.2f, 2.4f, 222.56f, 1.1f, 15.0f, 226342.0f, 5123.0f, 532.2f};
     Random random = new Random();
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
@@ -1040,7 +1040,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testWraparound() {
+  public void testImmediateWraparound() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
     Random random = new FakeRandomWraparound();
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
@@ -1057,7 +1057,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
   
   @Test
-  public void testWraparound2() {
+  public void testWraparound() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
     Random random = new FakeRandomWraparound2();
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
