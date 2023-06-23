@@ -33,9 +33,7 @@ dependencies {
             libraries.mockito.core,
             libraries.truth
 
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
     testRuntimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
     testRuntimeOnly (libraries.netty.transport.epoll) {

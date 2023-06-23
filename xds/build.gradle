@@ -68,9 +68,7 @@ dependencies {
             classifier = "linux-x86_64"
         }
     }
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
 
     shadow configurations.implementation.getDependencies().minus([nettyDependency])
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
