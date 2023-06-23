@@ -21,9 +21,7 @@ dependencies {
     testImplementation testFixtures(project(':grpc-context')),
             project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
     jmh project(':grpc-core')
 
     signature libraries.signature.java
