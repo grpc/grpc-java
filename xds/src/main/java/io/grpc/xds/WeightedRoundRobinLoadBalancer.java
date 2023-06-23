@@ -332,8 +332,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
    * Implementation of Static Stride Scheduler, replaces EDFScheduler.
    * <p>
    * The Static Stride Scheduler works by iterating through the list of subchannel weights
-   * and using modular arithmetic to evenly distribute picks and skips, favoring
-   * entries with the highest weight.
+   * and using modular arithmetic to evenly distribute picks and skips, favoring entries with the
+   * highest weight. It generates a practically equivalent sequence of picks as the EDFScheduler. 
+   * Albeit needing more bandwidth, the Static Stride Scheduler is more performant than the 
+   * EDFScheduler, as it removes the need for a priority queue (and thus mutex locks).
    * <p>
    * go/static-stride-scheduler
    * <p>
@@ -346,14 +348,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   static final class StaticStrideScheduler {
     private final int[] scaledWeights;
     private final int sizeDivisor;
-    private final Random random;
     private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 0xFFFF;
-    private static final long UINT32_MAX = 0xFFFF_FFFFL;
 
     StaticStrideScheduler(float[] weights, Random random) {
+      checkArgument(weights.length >= 1, "Couldn't build scheduler: requires at least one weight");
       int numChannels = weights.length;
-      checkArgument(numChannels >= 1, "Couldn't build scheduler: requires at least one weight");
       int numWeightedChannels = 0;
       double sumWeight = 0;
       float maxWeight = 0;
@@ -385,29 +385,39 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       this.scaledWeights = scaledWeights;
       this.sizeDivisor = numChannels;
-      this.random = random;
-      this.sequence = new AtomicInteger((int) (this.random.nextDouble() * UINT32_MAX));
+      this.sequence = new AtomicInteger(random.nextInt());
       
     }
 
-    /** Returns the next sequence number and increases sequence with wraparound. */
+    /** Returns the next sequence number and atomically increases sequence with wraparound. */
     private long nextSequence() {
       return Integer.toUnsignedLong(sequence.getAndIncrement());
     }
   
+    public long getSequence() {
+      return Integer.toUnsignedLong(sequence.get());
+    }
 
-    /** Selects index of next backend server. */
+    /*
+     * Selects index of next backend server. 
+     * <p>
+     * A 2D array is compactly represented where the row represents the generation and the column
+     * represents the backend index. The value of an element is a boolean value which indicates
+     * whether or not a backend should be picked now. An atomically incremented counter keeps track 
+     * of our backend and generation through modular arithmetic within the pick() method.
+     * An offset is also included to minimize consecutive non-picks of a backend.
+     */
     int pick() {
       while (true) {
         long sequence = this.nextSequence();
-        long backendIndex = sequence % this.sizeDivisor;
+        int backendIndex = (int) (sequence % this.sizeDivisor);
         long generation = sequence / this.sizeDivisor;
-        long weight = this.scaledWeights[(int) backendIndex];
-        long offset = backendIndex * K_MAX_WEIGHT / 2;
+        long weight = this.scaledWeights[backendIndex];
+        long offset = (long) K_MAX_WEIGHT / 2 * backendIndex;
         if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) { 
           continue;
         }
-        return (int) backendIndex;
+        return backendIndex;
       }
     }
   }
