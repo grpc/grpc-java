@@ -780,38 +780,41 @@ public final class ClientCalls {
     /**
      * Waits for up to specified nanoseconds until there is a Runnable, then executes it and all
      * queued Runnables after it.
-     * This, {@link #drain} and {@link #waitAndDrain()} must only be called by one thread at a
-     * time.
      */
     public void waitAndDrainWithTimeout(long nanos) throws InterruptedException {
       long start = System.nanoTime();
       throwIfInterrupted();
       Runnable runnable = poll();
       if (runnable == null) {
-        if (waiter != null && waiter != SHUTDOWN) {
+        synchronized (this) {
           waitingThreads.add(Thread.currentThread());
-        } else {
-          waiter = Thread.currentThread();
-        }
-        try {
-          if (nanos == 0) {
-            LockSupport.park(this);
-          } else {
-            if (System.nanoTime() - start > nanos) {
-              return;
-            }
-            LockSupport.parkNanos(this, nanos);
-            throwIfInterrupted();
+          if (waiter != SHUTDOWN) {
+            waiter = Thread.currentThread();
           }
-        } finally {
-          waiter = null;
-          List<Thread> threads = new ArrayList<>(waitingThreads);
-          waitingThreads.clear();
-          threads.forEach(thread -> LockSupport.unpark(thread));
+          try {
+            if (nanos == 0) {
+              LockSupport.park(this);
+            } else {
+              if (System.nanoTime() - start > nanos) {
+                return;
+              }
+              LockSupport.parkNanos(this, nanos);
+              throwIfInterrupted();
+            }
+          } finally {
+            if (waiter != SHUTDOWN) {
+              waiter = null;
+            }
+            List<Thread> threads = new ArrayList<>(waitingThreads);
+            waitingThreads.clear();
+            threads.forEach(thread -> LockSupport.unpark(thread));
+          }
         }
-        if (runnable == null) {
-          return;
-        }
+        runnable = poll();
+      }
+
+      if (runnable == null) {
+        return;
       }
       do {
         runQuietly(runnable);
@@ -860,7 +863,8 @@ public final class ClientCalls {
       add(runnable);
       Object waiter = this.waiter;
       if (waiter != SHUTDOWN) {
-        LockSupport.unpark((Thread) waiter);
+        List<Thread> threads = new ArrayList<>(waitingThreads);
+        threads.forEach(thread -> LockSupport.unpark(thread));
       } else if (remove(runnable) && rejectRunnableOnExecutor) {
         throw new RejectedExecutionException();
       }

@@ -198,10 +198,13 @@ public class BlockingBidiStreamTest {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
     delayedCancel(biDiStream, "cancel write");
+    assertFalse(biDiStream.write(30));
     start = System.currentTimeMillis();
     try {
       biDiStream.write(30);
       fail("No exception doing write after cancel");
+    } catch (IllegalStateException e) {
+      assertThat(e.getMessage()).contains("cancel");
     } catch (StatusRuntimeException e) {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
       assertThat(System.currentTimeMillis() - start).isLessThan(2 * DELAY_MILLIS);

@@ -90,7 +90,11 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     executor.drain();
 
     if (buffer.isEmpty() && closedStatus != null) {
-      return null;
+      if (closedStatus.isOk()) {
+        return null;
+      } else {
+        throw closedStatus.asRuntimeException();
+      }
     }
 
     long duration = unit.toNanos(timeout);
@@ -382,6 +386,7 @@ public final class BlockingBiDiStream<ReqT, RespT> {
     public void onMessage(RespT value) {
       Preconditions.checkState(!done, "ClientCall already closed");
       buffer.add(value);
+      executor.add(NoOpRunnable.INSTANCE);
     }
 
     @Override

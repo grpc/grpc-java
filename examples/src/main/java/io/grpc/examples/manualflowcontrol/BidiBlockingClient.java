@@ -16,12 +16,14 @@
 
 package io.grpc.examples.manualflowcontrol;
 
+import com.google.protobuf.ByteString;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.manualflowcontrol.StreamingGreeterGrpc.StreamingGreeterBlockingStub;
 import io.grpc.stub.BlockingBiDiStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -103,33 +105,45 @@ public class BidiBlockingClient {
     List<String> readValues = new ArrayList<>();
     final BlockingBiDiStream<HelloRequest, HelloReply> stream = blockingStub.sayHelloStreaming();
 
-    Thread reader = new Thread(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          while (stream.hasNext()) {
-            readValues.add(stream.read().getMessage());
+    Thread reader = new Thread(null,
+        new Runnable() {
+          @Override
+          public void run() {
+            int count = 0;
+            try {
+              while (stream.hasNext()) {
+                readValues.add(stream.read().getMessage());
+                if (++count % 10 == 0) {
+                  logger.info("Finished " + count + " reads");
+                }
+              }
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              stream.cancel("Interrupted", e);
+            } catch (StatusRuntimeException e) {
+              logger.warning("Encountered error while reading: " + e);
+            }
           }
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          stream.cancel("Interrupted", e);
-        } catch (StatusRuntimeException e) {
-          logger.warning("Encountered error while reading: " + e);
-        }
-      }
-    });
+        },"reader");
 
-    Thread writer = new Thread(new Runnable() {
+    Thread writer = new Thread(null,
+        new Runnable() {
       @Override
       public void run() {
+        ByteString padding = createPadding();
+        int count = 0;
         Iterator<String> iterator = valuesToWrite.iterator();
         boolean hadProblem = false;
         try {
           while (iterator.hasNext()) {
-            if (!stream.write(HelloRequest.newBuilder().setName(iterator.next()).build())) {
+            if (!stream.write(HelloRequest.newBuilder().setName(iterator.next()).setPadding(padding)
+                .build())) {
               logger.warning("Stream closed before writes completed");
               hadProblem = true;
               break;
+            }
+            if (++count % 10 == 0) {
+              logger.info("Finished " + count + " writes");
             }
           }
           if (!hadProblem) {
@@ -141,7 +155,7 @@ public class BidiBlockingClient {
           stream.cancel("Interrupted", e);
         }
       }
-    });
+    }, "writer");
 
     writer.start();
     reader.start();
@@ -151,6 +165,16 @@ public class BidiBlockingClient {
     return readValues;
   }
 
+  private static ByteString createPadding() {
+    int multiple = 50;
+    ByteBuffer data = ByteBuffer.allocate(1024 * multiple);
+
+    for (int i = 0; i < multiple * 1024 / 4; i++) {
+      data.putInt(4 * i, 1111);
+    }
+
+    return ByteString.copyFrom(data);
+  }
 
 
   private static List<String> names() {
