@@ -16,26 +16,22 @@
 
 package io.grpc.android.integrationtest;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
 
 import android.net.LocalSocketAddress.Namespace;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.rule.ActivityTestRule;
-import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Server;
 import io.grpc.android.UdsChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.testing.integration.TestServiceImpl;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
