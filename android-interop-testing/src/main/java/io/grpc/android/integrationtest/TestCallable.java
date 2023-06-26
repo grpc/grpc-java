@@ -33,7 +33,7 @@ public class TestCallable implements Callable<String> {
   private final String testCase;
 
   private static final String LOG_TAG = "GrpcInteropTask";
-  private static final String SUCCESS_MESSAGE = "Success!";
+  static final String SUCCESS_MESSAGE = "Success!";
 
   public TestCallable(ManagedChannel channel, String testCase) {
     this.channel = channel;
