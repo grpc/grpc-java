@@ -22,6 +22,7 @@ description = 'gRPC: Core'
 
 dependencies {
     api project(':grpc-api')
+    runtimeOnly project(":grpc-context")
     implementation libraries.gson,
             libraries.android.annotations,
             libraries.animalsniffer.annotations,

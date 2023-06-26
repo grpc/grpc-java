@@ -9,6 +9,7 @@ description = 'gRPC: Census'
 
 dependencies {
     api project(':grpc-api')
+    runtimeOnly project(":grpc-context")
     implementation libraries.guava,
             libraries.opencensus.api,
             libraries.opencensus.contrib.grpc.metrics
