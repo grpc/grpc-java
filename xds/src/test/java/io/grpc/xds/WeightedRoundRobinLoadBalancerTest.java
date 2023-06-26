@@ -175,7 +175,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             }
             });
     wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker(),
-        new FakeRandom());
+        new FakeRandom(0));
   }
 
   @Test
@@ -919,15 +919,15 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testLacrgestWeightIndexPickedEveryGeneration() {
+  public void testLargestWeightIndexPickedEveryGeneration() {
     float[] weights = {1.0f, 2.0f, 3.0f};
-    int mean = 2;
+    int largestWeightIndex = 2;
     Random random = new Random();
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     int largestWeightPickCount = 0;
     int kMaxWeight = 65535;
-    for (int i = 0; i < mean * kMaxWeight; i++) {
-      if (sss.pick() == mean) {
+    for (int i = 0; i < largestWeightIndex * kMaxWeight; i++) {
+      if (sss.pick() == largestWeightIndex) {
         largestWeightPickCount += 1;
       }
     }
@@ -1022,7 +1022,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testDeterministicPicks() {
     float[] weights = {2.0f, 3.0f, 6.0f};
-    Random random = new FakeRandom();
+    Random random = new FakeRandom(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     assertThat(sss.getSequence()).isEqualTo(0);
     assertThat(sss.pick()).isEqualTo(1);
@@ -1042,7 +1042,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testImmediateWraparound() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-    Random random = new FakeRandomWraparound();
+    Random random = new FakeRandom(-1);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 15;
     Map<Integer, Integer> pickCount = new HashMap<>();
@@ -1059,7 +1059,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testWraparound() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-    Random random = new FakeRandomWraparound2();
+    Random random = new FakeRandom(-500);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     double totalWeight = 15;
     Map<Integer, Integer> pickCount = new HashMap<>();
@@ -1076,7 +1076,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testDeterministicWraparound() {
     float[] weights = {2.0f, 3.0f, 6.0f};
-    Random random = new FakeRandomWraparound();
+    Random random = new FakeRandom(-1);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights, random);
     assertThat(sss.getSequence()).isEqualTo(0xFFFF_FFFFL);
     assertThat(sss.pick()).isEqualTo(1);
@@ -1106,25 +1106,17 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   private static class FakeRandom extends Random {
+    private int nextInt;
+
+    public FakeRandom(int nextInt) {
+      this.nextInt = nextInt;
+    }
+
     @Override
     public int nextInt() {
       // return constant value to disable init deadline randomization in the scheduler
       // sequence will be initialized to 0
-      return 0;
-    }
-  }
-
-  private static class FakeRandomWraparound extends Random {
-    @Override
-    public int nextInt() {
-      return -1;
-    }
-  }
-
-  private static class FakeRandomWraparound2 extends Random {
-    @Override
-    public int nextInt() {
-      return -500;
+      return nextInt;
     }
   }
 }

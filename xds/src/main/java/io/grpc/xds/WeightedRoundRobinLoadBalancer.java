@@ -332,10 +332,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
    * Implementation of Static Stride Scheduler, replaces EDFScheduler.
    * <p>
    * The Static Stride Scheduler works by iterating through the list of subchannel weights
-   * and using modular arithmetic to evenly distribute picks and skips, favoring entries with the
-   * highest weight. It generates a practically equivalent sequence of picks as the EDFScheduler.
-   * Albeit needing more bandwidth, the Static Stride Scheduler is more performant than the
-   * EDFScheduler, as it removes the need for a priority queue (and thus mutex locks).
+   * and using modular arithmetic to proportionally distribute picks, favoring entries 
+   * with higher weights. It is based on the observation that the intended sequence generated 
+   * from the EDF scheduler is a periodic one that can be achieved through modular arithmetic. 
+   * This scheduler generates a practically equivalent sequence of picks as the EDFScheduler.
+   * The Static Stride Scheduler is more performant than the EDFScheduler, as it removes 
+   * the need for a priority queue (and thus mutex locks).
    * <p>
    * go/static-stride-scheduler
    * <p>
@@ -359,7 +361,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       float maxWeight = 0;
       int meanWeight = 0;
       for (float weight : weights) {
-        if (weight > 0.0001) {
+        if (weight > 0) {
           sumWeight += weight;
           maxWeight = Math.max(weight, maxWeight);
           numWeightedChannels++;
@@ -376,7 +378,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
       int[] scaledWeights = new int[numChannels];
       for (int i = 0; i < numChannels; i++) {
-        if (weights[i] < 0.0001) {
+        if (weights[i] <= 0) {
           scaledWeights[i] = meanWeight;
         } else {
           scaledWeights[i] = (int) Math.round(weights[i] * scalingFactor);
@@ -394,7 +396,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       return Integer.toUnsignedLong(sequence.getAndIncrement());
     }
 
-    public long getSequence() {
+    long getSequence() {
       return Integer.toUnsignedLong(sequence.get());
     }
 
