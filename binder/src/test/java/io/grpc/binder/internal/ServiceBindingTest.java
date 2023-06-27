@@ -412,10 +412,10 @@ public final class ServiceBindingTest {
       return new ServiceBinding(
           ContextCompat.getMainExecutor(sourceContext),
           sourceContext,
-          bindIntent,
-          bindServiceFlags,
           channelCredentials,
+          bindIntent,
           targetUserHandle,
+          bindServiceFlags,
           observer);
     }
   }

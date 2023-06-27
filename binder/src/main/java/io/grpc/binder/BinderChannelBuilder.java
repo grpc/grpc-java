@@ -200,14 +200,14 @@ public final class BinderChannelBuilder
       public ClientTransportFactory buildClientTransportFactory() {
         return new TransportFactory(
             sourceContext,
+            channelCredentials,
             mainThreadExecutor,
             schedulerPool,
             managedChannelImplBuilder.getOffloadExecutorPool(),
             securityPolicy,
+            targetUserHandle,
             bindServiceFlags,
-            inboundParcelablePolicy,
-            channelCredentials,
-            targetUserHandle);
+            inboundParcelablePolicy);
       }
     }
 
@@ -290,7 +290,7 @@ public final class BinderChannelBuilder
    * @param targetUserHandle the target user to bind into.
    * @return this
    */
-  public BinderChannelBuilder bindForUser(UserHandle targetUserHandle) {
+  public BinderChannelBuilder bindAsUser(UserHandle targetUserHandle) {
     this.targetUserHandle = targetUserHandle;
     return this;
   }
@@ -324,14 +324,14 @@ public final class BinderChannelBuilder
   /** Creates new binder transports. */
   private static final class TransportFactory implements ClientTransportFactory {
     private final Context sourceContext;
+    private final BinderChannelCredentials channelCredentials;
     private final Executor mainThreadExecutor;
     private final ObjectPool<ScheduledExecutorService> scheduledExecutorPool;
     private final ObjectPool<? extends Executor> offloadExecutorPool;
     private final SecurityPolicy securityPolicy;
-    private final InboundParcelablePolicy inboundParcelablePolicy;
-    private final BindServiceFlags bindServiceFlags;
-    private final BinderChannelCredentials channelCredentials;
     @Nullable private final UserHandle targetUserHandle;
+    private final BindServiceFlags bindServiceFlags;
+    private final InboundParcelablePolicy inboundParcelablePolicy;
 
     private ScheduledExecutorService executorService;
     private Executor offloadExecutor;
@@ -339,23 +339,23 @@ public final class BinderChannelBuilder
 
     TransportFactory(
         Context sourceContext,
+        BinderChannelCredentials channelCredentials,
         Executor mainThreadExecutor,
         ObjectPool<ScheduledExecutorService> scheduledExecutorPool,
         ObjectPool<? extends Executor> offloadExecutorPool,
         SecurityPolicy securityPolicy,
+        @Nullable UserHandle targetUserHandle,
         BindServiceFlags bindServiceFlags,
-        InboundParcelablePolicy inboundParcelablePolicy,
-        BinderChannelCredentials channelCredentials,
-        @Nullable UserHandle targetUserHandle) {
+        InboundParcelablePolicy inboundParcelablePolicy) {
       this.sourceContext = sourceContext;
+      this.channelCredentials = channelCredentials;
       this.mainThreadExecutor = mainThreadExecutor;
       this.scheduledExecutorPool = scheduledExecutorPool;
       this.offloadExecutorPool = offloadExecutorPool;
       this.securityPolicy = securityPolicy;
+      this.targetUserHandle = targetUserHandle;
       this.bindServiceFlags = bindServiceFlags;
       this.inboundParcelablePolicy = inboundParcelablePolicy;
-      this.channelCredentials = channelCredentials;
-      this.targetUserHandle = targetUserHandle;
 
       executorService = scheduledExecutorPool.getObject();
       offloadExecutor = offloadExecutorPool.getObject();
@@ -369,10 +369,10 @@ public final class BinderChannelBuilder
       }
       return new BinderTransport.BinderClientTransport(
           sourceContext,
-          (AndroidComponentAddress) addr,
-          bindServiceFlags,
           channelCredentials,
+          (AndroidComponentAddress) addr,
           targetUserHandle,
+          bindServiceFlags,
           mainThreadExecutor,
           scheduledExecutorPool,
           offloadExecutorPool,

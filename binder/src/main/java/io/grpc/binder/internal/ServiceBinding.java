@@ -78,12 +78,12 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     }
   }
 
-  private final Intent bindIntent;
-  private final int bindFlags;
   private final BinderChannelCredentials channelCredentials;
+  private final Intent bindIntent;
+  @Nullable private final UserHandle targetUserHandle;
+  private final int bindFlags;
   private final Observer observer;
   private final Executor mainThreadExecutor;
-  @Nullable private final UserHandle targetUserHandle;
 
   @GuardedBy("this")
   private State state;
@@ -100,10 +100,10 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   ServiceBinding(
       Executor mainThreadExecutor,
       Context sourceContext,
-      Intent bindIntent,
-      int bindFlags,
       BinderChannelCredentials channelCredentials,
+      Intent bindIntent,
       @Nullable UserHandle targetUserHandle,
+      int bindFlags,
       Observer observer) {
     // We need to synchronize here ensure other threads see all
     // non-final fields initialized after the constructor.

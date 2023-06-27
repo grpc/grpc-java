@@ -570,10 +570,10 @@ public abstract class BinderTransport
 
     public BinderClientTransport(
         Context sourceContext,
-        AndroidComponentAddress targetAddress,
-        BindServiceFlags bindServiceFlags,
         BinderChannelCredentials channelCredentials,
+        AndroidComponentAddress targetAddress,
         @Nullable UserHandle targetUserHandle,
+        BindServiceFlags bindServiceFlags,
         Executor mainThreadExecutor,
         ObjectPool<ScheduledExecutorService> executorServicePool,
         ObjectPool<? extends Executor> offloadExecutorPool,
@@ -594,10 +594,10 @@ public abstract class BinderTransport
           new ServiceBinding(
               mainThreadExecutor,
               sourceContext,
-              targetAddress.asBindIntent(),
-              bindServiceFlags.toInteger(),
               channelCredentials,
+              targetAddress.asBindIntent(),
               targetUserHandle,
+              bindServiceFlags.toInteger(),
               this);
     }
 
