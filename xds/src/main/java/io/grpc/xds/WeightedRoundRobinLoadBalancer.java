@@ -329,15 +329,20 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   /*
-   * Implementation of Static Stride Scheduler, replaces EDFScheduler.
+   * The Static Stride Scheduler is an implementation of an earliest deadline first (EDF) scheduler
+   * in which each object is chosen periodically with frequency proportional to its weight.
    * <p>
+   * Specifically, each backend is given a deadline equal to the multiplicative inverse of 
+   * its weight. The place of each backend in its deadline is tracked, and each call to
+   * pick a backend returns the backend index with the least remaining time in its deadline.
+   * <p>
+   * The way in which this is implemented is through a static stride scheduler. 
    * The Static Stride Scheduler works by iterating through the list of subchannel weights
    * and using modular arithmetic to proportionally distribute picks, favoring entries 
    * with higher weights. It is based on the observation that the intended sequence generated 
-   * from the EDF scheduler is a periodic one that can be achieved through modular arithmetic. 
-   * This scheduler generates a practically equivalent sequence of picks as the EDFScheduler.
-   * The Static Stride Scheduler is more performant than the EDFScheduler, as it removes 
-   * the need for a priority queue (and thus mutex locks).
+   * from an EDF scheduler is a periodic one that can be achieved through modular arithmetic. 
+   * The Static Stride Scheduler is more performant than other implementations of the EDF
+   * Scheduler, as it removes the need for a priority queue (and thus mutex locks).
    * <p>
    * go/static-stride-scheduler
    * <p>
@@ -348,7 +353,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
    */
   @VisibleForTesting
   static final class StaticStrideScheduler {
-    private final int[] scaledWeights;
+    private final short[] scaledWeights;
     private final int sizeDivisor;
     private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 0xFFFF;
@@ -359,7 +364,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       int numWeightedChannels = 0;
       double sumWeight = 0;
       float maxWeight = 0;
-      int meanWeight = 0;
+      short meanWeight = 0;
       for (float weight : weights) {
         if (weight > 0) {
           sumWeight += weight;
@@ -370,18 +375,19 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
       if (numWeightedChannels > 0) {
-        meanWeight = (int) Math.round(scalingFactor * sumWeight / numWeightedChannels);
+        int value = (int) Math.round(scalingFactor * sumWeight / numWeightedChannels);
+        meanWeight = (short) (value > 0x7FFF ? value - 0x10000 : value);
       } else {
         meanWeight = 1;
       }
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
-      int[] scaledWeights = new int[numChannels];
+      short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] <= 0) {
           scaledWeights[i] = meanWeight;
         } else {
-          scaledWeights[i] = (int) Math.round(weights[i] * scalingFactor);
+          scaledWeights[i] = (short) Math.round(weights[i] * scalingFactor);
         }
       }
 
@@ -414,7 +420,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         long sequence = this.nextSequence();
         int backendIndex = (int) (sequence % this.sizeDivisor);
         long generation = sequence / this.sizeDivisor;
-        long weight = this.scaledWeights[backendIndex];
+        int weight = Short.toUnsignedInt(this.scaledWeights[backendIndex]);
         long offset = (long) K_MAX_WEIGHT / 2 * backendIndex;
         if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) {
           continue;
