@@ -142,6 +142,10 @@ tasks.named("jar").configure {
     archiveClassifier = 'original'
 }
 
+tasks.named("sourcesJar").configure {
+    from sourceSets.thirdparty.allSource
+}
+
 tasks.named("javadoc").configure {
     // Exclusions here should generally also be relocated
     exclude 'com/github/udpa/**'
