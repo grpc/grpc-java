@@ -10,18 +10,9 @@ plugins {
 description = 'gRPC: API'
 
 sourceSets {
-    context {
-        java {
-            srcDir "${projectDir}/context/src/main/java"
-        }
-    }
+    context
     main {
         output.classesDirs.from(sourceSets.context.output.classesDirs)
-    }
-    test {
-        java {
-            srcDir "${projectDir}/context/src/test/java"
-        }
     }
 }
 
@@ -33,14 +24,12 @@ compileContextJava {
 
 dependencies {
     compileOnly sourceSets.context.output
-    testFixturesApi libraries.truth
-    // Explicitly choose the guava version to stay Java 7-compatible.
-    testFixturesImplementation 'com.google.guava:guava:30.1.1-android'
-    testFixturesImplementation libraries.jsr305
     api libraries.jsr305,
             libraries.errorprone.annotations
     implementation libraries.guava
 
+    testFixturesApi libraries.truth
+    testFixturesImplementation libraries.jsr305
     testFixturesImplementation libraries.guava,
             libraries.junit,
             libraries.mockito.core
@@ -54,8 +43,13 @@ dependencies {
 }
 
 tasks.named("javadoc").configure {
+    source sourceSets.context.allSource
     // We want io.grpc.Internal, but not io.grpc.Internal*
     exclude 'io/grpc/Internal?*.java'
+}
+
+tasks.named("sourcesJar").configure {
+    from sourceSets.context.allSource
 }
 
 components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }

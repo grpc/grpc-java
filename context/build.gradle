@@ -5,8 +5,12 @@ plugins {
 
 description = 'gRPC: Context'
 
+sourceCompatibility = 1.7
+
 dependencies {
     runtimeOnly (project(":grpc-api")) {
         exclude group: "com.google.guava", module: "guava"
+        exclude group: "com.google.code.findbugs", module: "jsr305"
+        exclude group: "com.google.errorprone", module: "error_prone_annotations"
     }
 }
