@@ -362,7 +362,7 @@ public class BlockingBidiStreamTest {
     delayedVoidMethod(DELAY_MILLIS, biDiStream::halfClose);
     assertFalse(biDiStream.write(1)); // should block until writeComplete is triggered
     long end = System.currentTimeMillis();
-    assertThat (end-start).isAtLeast(DELAY_MILLIS);
+    assertThat(end - start).isAtLeast(DELAY_MILLIS);
 
     // verify new writes throw an illegalStateException
     try {
