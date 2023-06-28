@@ -96,6 +96,7 @@ public final class BinderChannelBuilder
    *     establish a binder connection.
    * @return a new builder
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
   public static BinderChannelBuilder forAddress(
       AndroidComponentAddress directAddress,
       Context sourceContext,
@@ -148,6 +149,7 @@ public final class BinderChannelBuilder
    *     establish a binder connection.
    * @return a new builder
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
   public static BinderChannelBuilder forTarget(
       String target, Context sourceContext, BinderChannelCredentials channelCredentials) {
     return new BinderChannelBuilder(
