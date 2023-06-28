@@ -51,8 +51,8 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.TlsContextManager;
-import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSdsHandler;
-import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSdsProtocolNegotiator;
+import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityHandler;
+import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityProtocolNegotiator;
 import io.grpc.xds.internal.security.certprovider.CommonCertProviderTestUtils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -95,20 +95,21 @@ public class SecurityProtocolNegotiatorsTest {
   private ChannelHandlerContext channelHandlerCtx;
 
   @Test
-  public void clientSdsProtocolNegotiatorNewHandler_noTlsContextAttribute() {
+  public void clientSecurityProtocolNegotiatorNewHandler_noTlsContextAttribute() {
     ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
     ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
     when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
-    ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator(mockProtocolNegotiator);
+    ClientSecurityProtocolNegotiator pn
+        = new ClientSecurityProtocolNegotiator(mockProtocolNegotiator);
     ChannelHandler newHandler = pn.newHandler(grpcHandler);
     assertThat(newHandler).isNotNull();
     assertThat(newHandler).isSameInstanceAs(mockChannelHandler);
   }
 
   @Test
-  public void clientSdsProtocolNegotiatorNewHandler_noFallback_expectException() {
-    ClientSdsProtocolNegotiator pn =
-        new ClientSdsProtocolNegotiator(/* fallbackProtocolNegotiator= */ null);
+  public void clientSecurityProtocolNegotiatorNewHandler_noFallback_expectException() {
+    ClientSecurityProtocolNegotiator pn =
+        new ClientSecurityProtocolNegotiator(/* fallbackProtocolNegotiator= */ null);
     try {
       pn.newHandler(grpcHandler);
       fail("exception expected!");
@@ -120,11 +121,11 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void clientSdsProtocolNegotiatorNewHandler_withTlsContextAttribute() {
+  public void clientSecurityProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build());
-    ClientSdsProtocolNegotiator pn =
-        new ClientSdsProtocolNegotiator(InternalProtocolNegotiators.plaintext());
+    ClientSecurityProtocolNegotiator pn =
+        new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
     ChannelLogger logger = mock(ChannelLogger.class);
     doNothing().when(logger).log(any(ChannelLogLevel.class), anyString());
@@ -138,11 +139,11 @@ public class SecurityProtocolNegotiatorsTest {
                 .build());
     ChannelHandler newHandler = pn.newHandler(mockHandler);
     assertThat(newHandler).isNotNull();
-    assertThat(newHandler).isInstanceOf(ClientSdsHandler.class);
+    assertThat(newHandler).isInstanceOf(ClientSecurityHandler.class);
   }
 
   @Test
-  public void clientSdsHandler_addLast()
+  public void clientSecurityHandler_addLast()
       throws InterruptedException, TimeoutException, ExecutionException {
     FakeClock executor = new FakeClock();
     CommonCertProviderTestUtils.register(executor);
@@ -156,11 +157,11 @@ public class SecurityProtocolNegotiatorsTest {
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
             new TlsContextManagerImpl(bootstrapInfoForClient));
-    SecurityProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SecurityProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
-    pipeline.addLast(clientSdsHandler);
-    channelHandlerCtx = pipeline.context(clientSdsHandler);
-    assertNotNull(channelHandlerCtx); // clientSdsHandler ctx is non-null since we just added it
+    ClientSecurityHandler clientSecurityHandler =
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier);
+    pipeline.addLast(clientSecurityHandler);
+    channelHandlerCtx = pipeline.context(clientSecurityHandler);
+    assertNotNull(channelHandlerCtx);
 
     // kick off protocol negotiation.
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
@@ -182,7 +183,7 @@ public class SecurityProtocolNegotiatorsTest {
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
     assertThat(fromFuture).isInstanceOf(SslContext.class);
     channel.runPendingTasks();
-    channelHandlerCtx = pipeline.context(clientSdsHandler);
+    channelHandlerCtx = pipeline.context(clientSecurityHandler);
     assertThat(channelHandlerCtx).isNull();
 
     // pipeline should have SslHandler and ClientTlsHandler
@@ -195,7 +196,7 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void serverSdsHandler_addLast()
+  public void serverSecurityHandler_addLast()
       throws InterruptedException, TimeoutException, ExecutionException {
     FakeClock executor = new FakeClock();
     CommonCertProviderTestUtils.register(executor);
@@ -228,7 +229,7 @@ public class SecurityProtocolNegotiatorsTest {
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
 
-    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSdsHandler
+    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSecurityHandler
     ProtocolNegotiationEvent event = InternalProtocolNegotiationEvent.getDefault();
     Attributes attr = InternalProtocolNegotiationEvent.getAttributes(event)
             .toBuilder().set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER,
@@ -236,7 +237,7 @@ public class SecurityProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.withAttributes(event, attr));
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNull();
-    channelHandlerCtx = pipeline.context(SecurityProtocolNegotiators.ServerSdsHandler.class);
+    channelHandlerCtx = pipeline.context(SecurityProtocolNegotiators.ServerSecurityHandler.class);
     assertThat(channelHandlerCtx).isNotNull();
 
     SslContextProviderSupplier sslContextProviderSupplier =
@@ -259,7 +260,7 @@ public class SecurityProtocolNegotiatorsTest {
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
     assertThat(fromFuture).isInstanceOf(SslContext.class);
     channel.runPendingTasks();
-    channelHandlerCtx = pipeline.context(SecurityProtocolNegotiators.ServerSdsHandler.class);
+    channelHandlerCtx = pipeline.context(SecurityProtocolNegotiators.ServerSecurityHandler.class);
     assertThat(channelHandlerCtx).isNull();
 
     // pipeline should only have SslHandler and ServerTlsHandler
@@ -272,7 +273,7 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void serverSdsHandler_defaultDownstreamTlsContext_expectFallbackProtocolNegotiator()
+  public void serverSecurityHandler_defaultDownstreamTlsContext_expectFallbackProtocolNegotiator()
       throws IOException {
     ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
     ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
@@ -294,7 +295,7 @@ public class SecurityProtocolNegotiatorsTest {
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
 
-    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSdsHandler
+    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSecurityHandler
     ProtocolNegotiationEvent event = InternalProtocolNegotiationEvent.getDefault();
     Attributes attr = InternalProtocolNegotiationEvent.getAttributes(event)
             .toBuilder().set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER, null).build();
@@ -309,7 +310,7 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void serverSdsHandler_nullTlsContext_expectFallbackProtocolNegotiator() {
+  public void serverSecurityHandler_nullTlsContext_expectFallbackProtocolNegotiator() {
     ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
     ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
     when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
@@ -354,7 +355,7 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void clientSdsProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()
+  public void clientSecurityProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()
           throws InterruptedException, TimeoutException, ExecutionException {
     FakeClock executor = new FakeClock();
     CommonCertProviderTestUtils.register(executor);
@@ -368,11 +369,11 @@ public class SecurityProtocolNegotiatorsTest {
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
             new TlsContextManagerImpl(bootstrapInfoForClient));
-    SecurityProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SecurityProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
+    ClientSecurityHandler clientSecurityHandler =
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier);
 
-    pipeline.addLast(clientSdsHandler);
-    channelHandlerCtx = pipeline.context(clientSdsHandler);
+    pipeline.addLast(clientSecurityHandler);
+    channelHandlerCtx = pipeline.context(clientSecurityHandler);
     assertNotNull(channelHandlerCtx); // non-null since we just added it
 
     // kick off protocol negotiation.
@@ -395,7 +396,7 @@ public class SecurityProtocolNegotiatorsTest {
     Object fromFuture = future.get(5, TimeUnit.SECONDS);
     assertThat(fromFuture).isInstanceOf(SslContext.class);
     channel.runPendingTasks();
-    channelHandlerCtx = pipeline.context(clientSdsHandler);
+    channelHandlerCtx = pipeline.context(clientSecurityHandler);
     assertThat(channelHandlerCtx).isNull();
     Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;
 
@@ -406,7 +407,7 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void clientSdsProtocolNegotiatorNewHandler_handleHandlerRemoved() {
+  public void clientSecurityProtocolNegotiatorNewHandler_handleHandlerRemoved() {
     FakeClock executor = new FakeClock();
     CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
@@ -419,17 +420,17 @@ public class SecurityProtocolNegotiatorsTest {
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
             new TlsContextManagerImpl(bootstrapInfoForClient));
-    SecurityProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SecurityProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
+    ClientSecurityHandler clientSecurityHandler =
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier);
 
-    pipeline.addLast(clientSdsHandler);
-    channelHandlerCtx = pipeline.context(clientSdsHandler);
+    pipeline.addLast(clientSecurityHandler);
+    channelHandlerCtx = pipeline.context(clientSecurityHandler);
 
     // kick off protocol negotiation.
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
 
     executor.runDueTasks();
-    pipeline.remove(clientSdsHandler);
+    pipeline.remove(clientSecurityHandler);
     channel.runPendingTasks();
     channel.checkException();
     CommonCertProviderTestUtils.register0();

@@ -119,7 +119,10 @@ public class OrcaPerRequestUtilTest {
   static boolean reportEqual(MetricReport a,
                              MetricReport b) {
     return a.getCpuUtilization() == b.getCpuUtilization()
+        && a.getApplicationUtilization() == b.getApplicationUtilization()
         && a.getMemoryUtilization() == b.getMemoryUtilization()
+        && a.getQps() == b.getQps()
+        && a.getEps() == b.getEps()
         && Objects.equal(a.getRequestCostMetrics(), b.getRequestCostMetrics())
         && Objects.equal(a.getUtilizationMetrics(), b.getUtilizationMetrics());
   }

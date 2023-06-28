@@ -37,9 +37,7 @@ dependencies {
             testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
 
     testRuntimeOnly project(':grpc-census')
 

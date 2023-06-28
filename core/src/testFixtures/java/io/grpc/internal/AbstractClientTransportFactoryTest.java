@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.internal.testing;
+package io.grpc.internal;
 
 import io.grpc.ChannelLogger;
-import io.grpc.internal.ClientTransportFactory;
 import java.net.InetSocketAddress;
 import org.junit.Test;
 import org.junit.runner.RunWith;

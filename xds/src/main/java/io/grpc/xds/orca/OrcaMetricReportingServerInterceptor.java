@@ -115,8 +115,10 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   private static OrcaLoadReport.Builder fromInternalReport(MetricReport internalReport) {
     return OrcaLoadReport.newBuilder()
         .setCpuUtilization(internalReport.getCpuUtilization())
+        .setApplicationUtilization(internalReport.getApplicationUtilization())
         .setMemUtilization(internalReport.getMemoryUtilization())
         .setRpsFractional(internalReport.getQps())
+        .setEps(internalReport.getEps())
         .putAllUtilization(internalReport.getUtilizationMetrics())
         .putAllRequestCost(internalReport.getRequestCostMetrics());
   }
@@ -137,6 +139,10 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
     if (isReportValueSet(cpu)) {
       metricRecorderReportBuilder.setCpuUtilization(cpu);
     }
+    double applicationUtilization = callMetricRecorderReport.getApplicationUtilization();
+    if (isReportValueSet(applicationUtilization)) {
+      metricRecorderReportBuilder.setApplicationUtilization(applicationUtilization);
+    }
     double mem = callMetricRecorderReport.getMemoryUtilization();
     if (isReportValueSet(mem)) {
       metricRecorderReportBuilder.setMemUtilization(mem);
@@ -144,6 +150,10 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
     double rps = callMetricRecorderReport.getQps();
     if (isReportValueSet(rps)) {
       metricRecorderReportBuilder.setRpsFractional(rps);
+    }
+    double eps = callMetricRecorderReport.getEps();
+    if (isReportValueSet(eps)) {
+      metricRecorderReportBuilder.setEps(eps);
     }
   }
 

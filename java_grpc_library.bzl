@@ -127,6 +127,7 @@ _java_grpc_library = rule(
             default = Label("//compiler:java_grpc_library_toolchain"),
         ),
     },
+    toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
     fragments = ["java"],
     outputs = {
         "jar": "lib%{name}.jar",
@@ -153,6 +154,7 @@ _java_lite_grpc_library = rule(
             default = Label("//compiler:java_lite_grpc_library_toolchain"),
         ),
     },
+    toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
     fragments = ["java"],
     outputs = {
         "jar": "lib%{name}.jar",

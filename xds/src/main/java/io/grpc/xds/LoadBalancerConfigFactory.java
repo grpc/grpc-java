@@ -89,6 +89,8 @@ class LoadBalancerConfigFactory {
   static final String PICK_FIRST_FIELD_NAME = "pick_first";
   static final String SHUFFLE_ADDRESS_LIST_FIELD_NAME = "shuffleAddressList";
 
+  static final String ERROR_UTILIZATION_PENALTY = "errorUtilizationPenalty";
+
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
    * Cluster}.
@@ -135,7 +137,8 @@ class LoadBalancerConfigFactory {
                                                         String weightExpirationPeriod,
                                                         String oobReportingPeriod,
                                                         Boolean enableOobLoadReport,
-                                                        String weightUpdatePeriod) {
+                                                        String weightUpdatePeriod,
+                                                        Float errorUtilizationPenalty) {
     ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
     if (blackoutPeriod != null) {
       configBuilder.put(BLACK_OUT_PERIOD, blackoutPeriod);
@@ -151,6 +154,9 @@ class LoadBalancerConfigFactory {
     }
     if (weightUpdatePeriod != null) {
       configBuilder.put(WEIGHT_UPDATE_PERIOD, weightUpdatePeriod);
+    }
+    if (errorUtilizationPenalty != null) {
+      configBuilder.put(ERROR_UTILIZATION_PENALTY, errorUtilizationPenalty);
     }
     return ImmutableMap.of(WeightedRoundRobinLoadBalancerProvider.SCHEME,
         configBuilder.buildOrThrow());
@@ -291,7 +297,8 @@ class LoadBalancerConfigFactory {
                 ? Durations.toString(wrr.getWeightExpirationPeriod()) : null,
             wrr.hasOobReportingPeriod() ? Durations.toString(wrr.getOobReportingPeriod()) : null,
             wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
-            wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null);
+            wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null,
+            wrr.hasErrorUtilizationPenalty() ? wrr.getErrorUtilizationPenalty().getValue() : null);
       } catch (IllegalArgumentException ex) {
         throw new ResourceInvalidException("Invalid duration in weighted round robin config: "
             + ex.getMessage());

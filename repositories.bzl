@@ -20,7 +20,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.code.gson:gson:2.10.1",
     "com.google.errorprone:error_prone_annotations:2.18.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:31.1-android",
+    "com.google.guava:guava:32.0.1-android",
     "com.google.re2j:re2j:1.7",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.5",
@@ -34,8 +34,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.netty:netty-handler-proxy:4.1.87.Final",
     "io.netty:netty-handler:4.1.87.Final",
     "io.netty:netty-resolver:4.1.87.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.56.Final",
-    "io.netty:netty-tcnative-classes:2.0.56.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.61.Final",
+    "io.netty:netty-tcnative-classes:2.0.61.Final",
     "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.87.Final",
     "io.netty:netty-transport-native-unix-common:4.1.87.Final",
     "io.netty:netty-transport:4.1.87.Final",
@@ -54,17 +54,9 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 # )
 #
 # If you have your own overrides as well, you can use:
-#     override_targets = dict(
-#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
+#     override_targets = {
 #         "your.target:artifact": "@//third_party/artifact",
-#     )
-#
-# To combine OVERRIDE_TARGETS from multiple libraries:
-#     override_targets = dict(
-#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS.items() +
-#         OTHER_OVERRIDE_TARGETS.items(),
-#         "your.target:artifact": "@//third_party/artifact",
-#     )
+#     } | IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
 IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "com.google.protobuf:protobuf-java": "@com_google_protobuf//:protobuf_java",
     "com.google.protobuf:protobuf-java-util": "@com_google_protobuf//:protobuf_java_util",
@@ -94,10 +86,10 @@ def grpc_java_repositories():
     if not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",
-            strip_prefix = "xds-06c439db220b89134a8a49bad41994560d6537c6",
-            sha256 = "41ea212940ab44bf7f8a8b4169cfbc612ed2166dafabc0a56a8820ef665fc6a4",
+            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
+            sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
             urls = [
-                "https://github.com/cncf/xds/archive/06c439db220b89134a8a49bad41994560d6537c6.tar.gz",
+                "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
             ],
         )
     if not native.existing_rule("com_github_grpc_grpc"):

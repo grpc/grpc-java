@@ -629,7 +629,7 @@ public class XdsX509TrustManagerTest {
       throws CertificateException, IOException, CertStoreException {
     X509Certificate[] caCerts =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE));
-    trustManager = XdsTrustManagerFactory.createSdsX509TrustManager(caCerts,
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(caCerts,
         null);
     when(mockSession.getProtocol()).thenReturn("TLSv1.2");
     when(mockSession.getPeerHost()).thenReturn("peer-host-from-mock");

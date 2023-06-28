@@ -110,7 +110,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.File;
 import java.io.InputStream;
@@ -193,8 +192,7 @@ public class ProtocolNegotiatorsTest {
   public void setUp() throws Exception {
     InputStream serverCert = TlsTesting.loadCert("server1.pem");
     InputStream key = TlsTesting.loadCert("server1.key");
-    sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
+    sslContext = GrpcSslContexts.forServer(serverCert, key).build();
     engine = SSLContext.getDefault().createSSLEngine();
     engine.setUseClientMode(true);
   }
@@ -801,7 +799,6 @@ public class ProtocolNegotiatorsTest {
         alpnList);
 
     sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
 
     ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
@@ -838,7 +835,6 @@ public class ProtocolNegotiatorsTest {
         alpnList);
 
     sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
     ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
@@ -911,7 +907,6 @@ public class ProtocolNegotiatorsTest {
 
     sslContext = GrpcSslContexts.forClient()
         .keyManager(clientCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,

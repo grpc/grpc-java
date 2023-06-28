@@ -47,13 +47,8 @@ dependencies {
     testImplementation libraries.androidx.lifecycle.service
     testImplementation libraries.junit
     testImplementation libraries.mockito.core
-    testImplementation (libraries.robolectric) {
-        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
-        exclude group: 'com.google.auto.service', module: 'auto-service'
-    }
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.robolectric
+    testImplementation libraries.guava.testlib
     testImplementation libraries.truth
     testImplementation project(':grpc-testing')
     testImplementation testFixtures(project(':grpc-core'))
@@ -70,9 +65,7 @@ dependencies {
     androidTestImplementation libraries.truth
     androidTestImplementation libraries.mockito.android
     androidTestImplementation libraries.androidx.lifecycle.service
-    androidTestImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    androidTestImplementation libraries.guava.testlib
     androidTestImplementation testFixtures(project(':grpc-core'))
 }
 

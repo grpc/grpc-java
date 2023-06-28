@@ -69,10 +69,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   static boolean enableCircuitBreaking =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
-  @VisibleForTesting
-  static boolean enableSecurity =
-      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"))
-          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
+
   private static final Attributes.Key<ClusterLocalityStats> ATTR_CLUSTER_LOCALITY_STATS =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityStats");
 
@@ -240,7 +237,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       for (EquivalentAddressGroup eag : addresses) {
         Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
             InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
-        if (enableSecurity && sslContextProviderSupplier != null) {
+        if (sslContextProviderSupplier != null) {
           attrBuilder.set(
               InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
               sslContextProviderSupplier);

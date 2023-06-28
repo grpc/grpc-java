@@ -44,7 +44,6 @@ import java.net.InetSocketAddress;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -56,13 +55,6 @@ import org.junit.runners.JUnit4;
 public class Http2OkHttpTest extends AbstractInteropTest {
 
   private static final String BAD_HOSTNAME = "I.am.a.bad.hostname";
-
-  @BeforeClass
-  public static void loadConscrypt() throws Exception {
-    // Load conscrypt if it is available. Either Conscrypt or Jetty ALPN needs to be available for
-    // OkHttp to negotiate.
-    TestUtils.installConscryptIfAvailable();
-  }
 
   @Override
   protected ServerBuilder<?> getServerBuilder() {

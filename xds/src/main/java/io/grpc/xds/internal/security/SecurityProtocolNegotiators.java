@@ -44,7 +44,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * Provides client and server side gRPC {@link ProtocolNegotiator}s that use SDS to provide the SSL
+ * Provides client and server side gRPC {@link ProtocolNegotiator}s to provide the SSL
  * context.
  */
 @VisibleForTesting
@@ -61,7 +61,7 @@ public final class SecurityProtocolNegotiators {
 
   public static final Attributes.Key<SslContextProviderSupplier>
           ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
-          Attributes.Key.create("io.grpc.xds.internal.sds.server.sslContextProviderSupplier");
+          Attributes.Key.create("io.grpc.xds.internal.security.server.sslContextProviderSupplier");
 
   /**
    * Returns a {@link InternalProtocolNegotiator.ClientFactory}.
@@ -88,7 +88,7 @@ public final class SecurityProtocolNegotiators {
 
     @Override
     public ProtocolNegotiator newNegotiator(ObjectPool<? extends Executor> offloadExecutorPool) {
-      return new ServerSdsProtocolNegotiator(
+      return new ServerSecurityProtocolNegotiator(
           fallbackProtocolNegotiator.newNegotiator(offloadExecutorPool));
     }
   }
@@ -103,7 +103,7 @@ public final class SecurityProtocolNegotiators {
 
     @Override
     public ProtocolNegotiator newNegotiator() {
-      return new ClientSdsProtocolNegotiator(fallbackProtocolNegotiator.newNegotiator());
+      return new ClientSecurityProtocolNegotiator(fallbackProtocolNegotiator.newNegotiator());
     }
 
     @Override
@@ -113,11 +113,11 @@ public final class SecurityProtocolNegotiators {
   }
 
   @VisibleForTesting
-  static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
+  static final class ClientSecurityProtocolNegotiator implements ProtocolNegotiator {
 
     @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
-    ClientSdsProtocolNegotiator(@Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
+    ClientSecurityProtocolNegotiator(@Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
@@ -137,7 +137,7 @@ public final class SecurityProtocolNegotiators {
             fallbackProtocolNegotiator, "No TLS config and no fallbackProtocolNegotiator!");
         return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
-      return new ClientSdsHandler(grpcHandler, localSslContextProviderSupplier);
+      return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier);
     }
 
     @Override
@@ -176,12 +176,12 @@ public final class SecurityProtocolNegotiators {
   }
 
   @VisibleForTesting
-  static final class ClientSdsHandler
+  static final class ClientSecurityHandler
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    ClientSdsHandler(
+    ClientSecurityHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
         SslContextProviderSupplier sslContextProviderSupplier) {
       super(
@@ -214,7 +214,7 @@ public final class SecurityProtocolNegotiators {
               }
               logger.log(
                   Level.FINEST,
-                  "ClientSdsHandler.updateSslContext authority={0}, ctx.name={1}",
+                  "ClientSecurityHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
                   InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
@@ -241,13 +241,14 @@ public final class SecurityProtocolNegotiators {
     }
   }
 
-  private static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
+  private static final class ServerSecurityProtocolNegotiator implements ProtocolNegotiator {
 
     @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
     /** Constructor. */
     @VisibleForTesting
-    public ServerSdsProtocolNegotiator(@Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
+    public ServerSecurityProtocolNegotiator(
+        @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
 
@@ -306,7 +307,7 @@ public final class SecurityProtocolNegotiators {
               .replace(
                   this,
                   null,
-                  new ServerSdsHandler(
+                  new ServerSecurityHandler(
                       grpcHandler, sslContextProviderSupplier));
           ctx.fireUserEventTriggered(pne);
           return;
@@ -318,12 +319,12 @@ public final class SecurityProtocolNegotiators {
   }
 
   @VisibleForTesting
-  static final class ServerSdsHandler
+  static final class ServerSecurityHandler
           extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    ServerSdsHandler(
+    ServerSecurityHandler(
             GrpcHttp2ConnectionHandler grpcHandler,
             SslContextProviderSupplier sslContextProviderSupplier) {
       super(
