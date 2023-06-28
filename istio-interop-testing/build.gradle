@@ -13,8 +13,6 @@ configurations {
     alpnagent
 }
 
-evaluationDependsOn(project(':grpc-context').path)
-
 dependencies {
     implementation  project(':grpc-core'),
             project(':grpc-netty'),
@@ -28,9 +26,9 @@ dependencies {
 
     runtimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
-    testImplementation project(':grpc-context').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
-            project(':grpc-core').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-context')),
+            testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-core')),
             libraries.mockito.core,
             libraries.junit,
             libraries.truth

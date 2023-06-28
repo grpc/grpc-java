@@ -284,7 +284,8 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
     public abstract boolean isEquivalentTo(RoundRobinPicker picker);
   }
 
-  public static class ReadyPicker extends RoundRobinPicker {
+  @VisibleForTesting
+  static class ReadyPicker extends RoundRobinPicker {
     private static final AtomicIntegerFieldUpdater<ReadyPicker> indexUpdater =
         AtomicIntegerFieldUpdater.newUpdater(ReadyPicker.class, "index");
 
@@ -336,7 +337,8 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
     }
   }
 
-  public static final class EmptyPicker extends RoundRobinPicker {
+  @VisibleForTesting
+  static final class EmptyPicker extends RoundRobinPicker {
 
     private final Status status;
 

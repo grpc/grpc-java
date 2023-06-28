@@ -52,16 +52,11 @@ readonly MVN_ARTIFACT_DIR="${MVN_ARTIFACT_DIR:-$GRPC_JAVA_DIR/mvn-artifacts}"
 mkdir -p "$MVN_ARTIFACT_DIR"
 cp -r "$LOCAL_MVN_TEMP"/* "$MVN_ARTIFACT_DIR"/
 
-# for aarch64 platform
-sudo apt-get install -y g++-aarch64-linux-gnu
-SKIP_TESTS=true ARCH=aarch_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
-
-# for ppc64le platform
-sudo apt-get install -y g++-powerpc64le-linux-gnu
-SKIP_TESTS=true ARCH=ppcle_64 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
-
-# for s390x platform
-# building these artifacts inside a Docker container as we have specific requirements
-# for GCC (version 11.x needed) which in turn requires Ubuntu 22.04 LTS
-"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-multiarch /grpc-java/buildscripts/build_s390x_artifacts_in_docker.sh
-
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-multiarch env \
+  SKIP_TESTS=true ARCH=aarch_64 /grpc-java/buildscripts/kokoro/unix.sh
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-multiarch env \
+  SKIP_TESTS=true ARCH=ppcle_64 /grpc-java/buildscripts/kokoro/unix.sh
+# Use a newer GCC version. GCC 7 in multiarch has a bug:
+#   internal compiler error: output_operand: invalid %-code
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-ubuntu2004 env \
+  SKIP_TESTS=true ARCH=s390_64 /grpc-java/buildscripts/kokoro/unix.sh

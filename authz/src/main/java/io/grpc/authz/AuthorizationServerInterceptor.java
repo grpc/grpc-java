@@ -35,7 +35,8 @@ import java.util.List;
  * <a href="https://github.com/grpc/proposal/blob/master/A43-grpc-authorization-api.md#user-facing-authorization-policy">
  * gRPC Authorization policy</a> as a JSON string during initialization.
  * This policy will be translated to Envoy RBAC policies to make
- * authorization decisions. The policy cannot be changed once created.
+ * authorization decisions. The policy cannot be changed once created. To
+ * change the policy after creation, see FileWatcherAuthorizationServerInterceptor.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9746")
 public final class AuthorizationServerInterceptor implements ServerInterceptor {

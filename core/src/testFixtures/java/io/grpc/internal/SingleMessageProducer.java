@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-package io.grpc.internal.testing;
+package io.grpc.internal;
 
-import io.grpc.internal.StreamListener;
 import java.io.InputStream;
 import javax.annotation.Nullable;
 

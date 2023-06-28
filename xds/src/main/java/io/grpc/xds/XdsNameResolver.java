@@ -60,16 +60,12 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
-import io.grpc.xds.VirtualHost.Route.RouteMatch;
-import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
-import io.grpc.xds.internal.Matchers.FractionMatcher;
-import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -304,47 +300,6 @@ final class XdsNameResolver extends NameResolver {
     receivedConfig = true;
   }
 
-  @VisibleForTesting
-  @Nullable
-  static VirtualHost findVirtualHostForHostName(List<VirtualHost> virtualHosts, String hostName) {
-    // Domain search order:
-    //  1. Exact domain names: ``www.foo.com``.
-    //  2. Suffix domain wildcards: ``*.foo.com`` or ``*-bar.foo.com``.
-    //  3. Prefix domain wildcards: ``foo.*`` or ``foo-*``.
-    //  4. Special wildcard ``*`` matching any domain.
-    //
-    //  The longest wildcards match first.
-    //  Assuming only a single virtual host in the entire route configuration can match
-    //  on ``*`` and a domain must be unique across all virtual hosts.
-    int matchingLen = -1; // longest length of wildcard pattern that matches host name
-    boolean exactMatchFound = false;  // true if a virtual host with exactly matched domain found
-    VirtualHost targetVirtualHost = null;  // target VirtualHost with longest matched domain
-    for (VirtualHost vHost : virtualHosts) {
-      for (String domain : vHost.domains()) {
-        boolean selected = false;
-        if (matchHostName(hostName, domain)) { // matching
-          if (!domain.contains("*")) { // exact matching
-            exactMatchFound = true;
-            targetVirtualHost = vHost;
-            break;
-          } else if (domain.length() > matchingLen) { // longer matching pattern
-            selected = true;
-          } else if (domain.length() == matchingLen && domain.startsWith("*")) { // suffix matching
-            selected = true;
-          }
-        }
-        if (selected) {
-          matchingLen = domain.length();
-          targetVirtualHost = vHost;
-        }
-      }
-      if (exactMatchFound) {
-        break;
-      }
-    }
-    return targetVirtualHost;
-  }
-
   /**
    * Returns {@code true} iff {@code hostName} matches the domain name {@code pattern} with
    * case-insensitive.
@@ -418,7 +373,8 @@ final class XdsNameResolver extends NameResolver {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
         for (Route route : routingCfg.routes) {
-          if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
+          if (RoutingUtils.matchRoute(
+                  route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
               headers, random)) {
             selectedRoute = route;
             selectedOverrideConfigs.putAll(route.filterConfigOverrides());
@@ -619,34 +575,6 @@ final class XdsNameResolver extends NameResolver {
     };
   }
 
-  @VisibleForTesting
-  static boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
-      Metadata headers, ThreadSafeRandom random) {
-    if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
-      return false;
-    }
-    for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
-      if (!headerMatcher.matches(getHeaderValue(headers, headerMatcher.name()))) {
-        return false;
-      }
-    }
-    FractionMatcher fraction = routeMatch.fractionMatcher();
-    return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
-  }
-
-  private static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
-    if (pathMatcher.path() != null) {
-      return pathMatcher.caseSensitive()
-          ? pathMatcher.path().equals(fullMethodName)
-          : pathMatcher.path().equalsIgnoreCase(fullMethodName);
-    } else if (pathMatcher.prefix() != null) {
-      return pathMatcher.caseSensitive()
-          ? fullMethodName.startsWith(pathMatcher.prefix())
-          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
-    }
-    return pathMatcher.regEx().matches(fullMethodName);
-  }
-
   @Nullable
   private static String getHeaderValue(Metadata headers, String headerName) {
     if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
@@ -775,7 +703,7 @@ final class XdsNameResolver extends NameResolver {
     private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
       String authority = overrideAuthority != null ? overrideAuthority : ldsResourceName;
-      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, authority);
+      VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(virtualHosts, authority);
       if (virtualHost == null) {
         String error = "Failed to find virtual host matching hostname: " + authority;
         logger.log(XdsLogLevel.WARNING, error);

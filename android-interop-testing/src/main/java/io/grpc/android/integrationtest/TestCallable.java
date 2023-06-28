@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,49 +16,36 @@
 
 package io.grpc.android.integrationtest;
 
-import android.os.AsyncTask;
 import android.util.Log;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.lang.ref.WeakReference;
+import java.util.concurrent.Callable;
 import org.junit.AssumptionViolatedException;
 
-/** AsyncTask for interop test cases. */
-final class InteropTask extends AsyncTask<Void, Void, String> {
+/**
+ * Used to run a single test case against a channel in a separate thread.
+ */
+public class TestCallable implements Callable<String> {
+  private final ManagedChannel channel;
+  private final String testCase;
+
   private static final String LOG_TAG = "GrpcInteropTask";
-
-  interface Listener {
-    void onComplete(String result);
-  }
-
   static final String SUCCESS_MESSAGE = "Success!";
 
-  private final WeakReference<Listener> listenerReference;
-  private final String testCase;
-  private final Tester tester;
-
-  InteropTask(
-      Listener listener,
-      ManagedChannel channel,
-      String testCase) {
-    this.listenerReference = new WeakReference<Listener>(listener);
+  public TestCallable(ManagedChannel channel, String testCase) {
+    this.channel = channel;
     this.testCase = testCase;
-    this.tester = new Tester(channel);
   }
 
   @Override
-  protected void onPreExecute() {
+  public String call() {
+    Tester tester = new Tester(channel);
     tester.setUp();
-  }
-
-  @SuppressWarnings("Finally")
-  @Override
-  protected String doInBackground(Void... ignored) {
     try {
-      runTest(testCase);
+      runTest(tester, testCase);
       return SUCCESS_MESSAGE;
     } catch (Throwable t) {
       // Print the stack trace to logcat.
@@ -78,7 +65,7 @@ final class InteropTask extends AsyncTask<Void, Void, String> {
     }
   }
 
-  private void runTest(String testCase) throws Exception {
+  private void runTest(Tester tester, String testCase) throws Exception {
     Log.i(LOG_TAG, "Running test case: " + testCase);
     if ("empty_unary".equals(testCase)) {
       tester.emptyUnary();
@@ -135,14 +122,6 @@ final class InteropTask extends AsyncTask<Void, Void, String> {
       tester.gracefulShutdown();
     } else {
       throw new IllegalArgumentException("Unimplemented/Unknown test case: " + testCase);
-    }
-  }
-
-  @Override
-  protected void onPostExecute(String result) {
-    Listener listener = listenerReference.get();
-    if (listener != null) {
-      listener.onComplete(result);
     }
   }
 

@@ -73,17 +73,21 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link ClusterImplLoadBalancer}.
  */
 @RunWith(JUnit4.class)
 public class ClusterImplLoadBalancerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final String AUTHORITY = "api.google.com";
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
@@ -135,7 +139,6 @@ public class ClusterImplLoadBalancerTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom);
   }
 
@@ -163,6 +166,41 @@ public class ClusterImplLoadBalancerTest {
     assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
     assertThat(childBalancer.attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
+  }
+
+  /**
+   * If the control plane switches from using the legacy lb_policy field in the xDS Cluster proto
+   * to the newer load_balancing_policy then the child policy can switch from weighted_target to
+   * xds_wrr_locality (this could happen the opposite way as well). This test assures that this
+   * results in the child LB changing if this were to happen. If this is not done correctly the new
+   * configuration would be given to the old LB implementation which would cause a channel panic.
+   */
+  @Test
+  public void handleResolvedAddresses_childPolicyChanges() {
+    FakeLoadBalancerProvider weightedTargetProvider =
+        new FakeLoadBalancerProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);
+    Object weightedTargetConfig = new Object();
+    ClusterImplConfig configWithWeightedTarget = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
+        LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWeightedTarget);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);
+    assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
+
+    FakeLoadBalancerProvider wrrLocalityProvider =
+        new FakeLoadBalancerProvider(XdsLbPolicies.WRR_LOCALITY_POLICY_NAME);
+    Object wrrLocalityConfig = new Object();
+    ClusterImplConfig configWithWrrLocality = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
+        LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(wrrLocalityProvider, wrrLocalityConfig), null);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWrrLocality);
+    childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.WRR_LOCALITY_POLICY_NAME);
+    assertThat(childBalancer.config).isSameInstanceAs(wrrLocalityConfig);
   }
 
   @Test
@@ -491,19 +529,7 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void endpointAddressesAttachedWithTlsConfig_disableSecurity() {
-    boolean originalEnableSecurity = ClusterImplLoadBalancer.enableSecurity;
-    ClusterImplLoadBalancer.enableSecurity = false;
-    subtest_endpointAddressesAttachedWithTlsConfig(false);
-    ClusterImplLoadBalancer.enableSecurity = originalEnableSecurity;
-  }
-
-  @Test
   public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
-    subtest_endpointAddressesAttachedWithTlsConfig(true);
-  }
-
-  private void subtest_endpointAddressesAttachedWithTlsConfig(boolean enableSecurity) {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
@@ -528,11 +554,7 @@ public class ClusterImplLoadBalancerTest {
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
-      } else {
-        assertThat(supplier).isNull();
-      }
+      assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
     }
 
     // Removes UpstreamTlsContext from the config.
@@ -559,20 +581,14 @@ public class ClusterImplLoadBalancerTest {
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.isShutdown()).isFalse();
-        assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
-      } else {
-        assertThat(supplier).isNull();
-      }
+      assertThat(supplier.isShutdown()).isFalse();
+      assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
     }
     loadBalancer.shutdown();
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
               eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.isShutdown()).isTrue();
-      }
+      assertThat(supplier.isShutdown()).isTrue();
     }
     loadBalancer = null;
   }

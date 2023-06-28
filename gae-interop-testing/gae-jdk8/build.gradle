@@ -19,7 +19,6 @@ buildscript {
             url "https://maven-central.storage-download.googleapis.com/maven2/" }
     }
     dependencies {
-        classpath 'com.google.cloud.tools:appengine-gradle-plugin:2.3.0'
         classpath 'com.squareup.okhttp:okhttp:2.7.4'
     }
 }
@@ -29,6 +28,7 @@ plugins {
     id "war"
 
     id "ru.vyarus.animalsniffer"
+    id 'com.google.cloud.tools.appengine' version '2.3.0'
 }
 
 description = 'gRPC: gae interop testing (jdk8)'

@@ -92,6 +92,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -100,11 +101,14 @@ import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Tests for {@link ClusterResolverLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class ClusterResolverLoadBalancerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final String AUTHORITY = "api.google.com";
   private static final String CLUSTER1 = "cluster-foo.googleapis.com";
   private static final String CLUSTER2 = "cluster-bar.googleapis.com";
@@ -188,8 +192,6 @@ public class ClusterResolverLoadBalancerTest {
 
   @Before
   public void setUp() throws URISyntaxException {
-    MockitoAnnotations.initMocks(this);
-
     lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_IMPL_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider(WEIGHTED_TARGET_POLICY_NAME));

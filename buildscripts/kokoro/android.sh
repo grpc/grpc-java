@@ -20,7 +20,7 @@ cat <<EOF >> gradle.properties
 # https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
 # Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
 # space is exhausted", and to increase build speed
-org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m
 EOF
 
 echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"

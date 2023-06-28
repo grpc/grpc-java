@@ -30,15 +30,18 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link FileWatcherCertificateProviderProvider}. */
 @RunWith(JUnit4.class)
 public class FileWatcherCertificateProviderProviderTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock FileWatcherCertificateProvider.Factory fileWatcherCertificateProviderFactory;
   @Mock private FileWatcherCertificateProviderProvider.ScheduledExecutorServiceFactory
@@ -49,7 +52,6 @@ public class FileWatcherCertificateProviderProviderTest {
 
   @Before
   public void setUp() throws IOException {
-    MockitoAnnotations.initMocks(this);
     provider =
         new FileWatcherCertificateProviderProvider(
             fileWatcherCertificateProviderFactory, scheduledExecutorServiceFactory, timeProvider);

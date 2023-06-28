@@ -66,7 +66,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link LoadReportClient}.
@@ -104,6 +105,8 @@ public class LoadReportClientTest {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -138,7 +141,6 @@ public class LoadReportClientTest {
   @SuppressWarnings("unchecked")
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     mockLoadReportingService = mock(LoadReportingServiceGrpc.LoadReportingServiceImplBase.class,
         delegatesTo(
             new LoadReportingServiceGrpc.LoadReportingServiceImplBase() {

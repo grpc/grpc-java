@@ -28,6 +28,7 @@ import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.Header;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import java.util.List;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
@@ -83,58 +84,49 @@ class OkHttpServerStream extends AbstractServerStream {
   class Sink implements AbstractServerStream.Sink {
     @Override
     public void writeHeaders(Metadata metadata) {
-      PerfMark.startTask("OkHttpServerStream$Sink.writeHeaders");
-      try {
+      try (TaskCloseable ignore =
+               PerfMark.traceTask("OkHttpServerStream$Sink.writeHeaders")) {
         List<Header> responseHeaders = Headers.createResponseHeaders(metadata);
         synchronized (state.lock) {
           state.sendHeaders(responseHeaders);
         }
-      } finally {
-        PerfMark.stopTask("OkHttpServerStream$Sink.writeHeaders");
       }
     }
 
     @Override
     public void writeFrame(WritableBuffer frame, boolean flush, int numMessages) {
-      PerfMark.startTask("OkHttpServerStream$Sink.writeFrame");
-      Buffer buffer = ((OkHttpWritableBuffer) frame).buffer();
-      int size = (int) buffer.size();
-      if (size > 0) {
-        onSendingBytes(size);
-      }
-
-      try {
+      try (TaskCloseable ignore =
+               PerfMark.traceTask("OkHttpServerStream$Sink.writeFrame")) {
+        Buffer buffer = ((OkHttpWritableBuffer) frame).buffer();
+        int size = (int) buffer.size();
+        if (size > 0) {
+          onSendingBytes(size);
+        }
         synchronized (state.lock) {
           state.sendBuffer(buffer, flush);
           transportTracer.reportMessageSent(numMessages);
         }
-      } finally {
-        PerfMark.stopTask("OkHttpServerStream$Sink.writeFrame");
       }
     }
 
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
-      PerfMark.startTask("OkHttpServerStream$Sink.writeTrailers");
-      try {
+      try (TaskCloseable ignore =
+               PerfMark.traceTask("OkHttpServerStream$Sink.writeTrailers")) {
         List<Header> responseTrailers = Headers.createResponseTrailers(trailers, headersSent);
         synchronized (state.lock) {
           state.sendTrailers(responseTrailers);
         }
-      } finally {
-        PerfMark.stopTask("OkHttpServerStream$Sink.writeTrailers");
       }
     }
 
     @Override
     public void cancel(Status reason) {
-      PerfMark.startTask("OkHttpServerStream$Sink.cancel");
-      try {
+      try (TaskCloseable ignore =
+               PerfMark.traceTask("OkHttpServerStream$Sink.cancel")) {
         synchronized (state.lock) {
           state.cancel(ErrorCode.CANCEL, reason);
         }
-      } finally {
-        PerfMark.stopTask("OkHttpServerStream$Sink.cancel");
       }
     }
   }

@@ -100,8 +100,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -112,6 +113,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Rule
   public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final AsciiString HTTP_FAKE_METHOD = AsciiString.of("FAKE");
 
@@ -160,8 +163,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
 

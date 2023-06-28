@@ -38,6 +38,4 @@ final class FakeCallCredentials extends CallCredentials {
       CallCredentials.MetadataApplier applier) {
     applier.apply(headers);
   }
-
-  @Override public void thisUsesUnstableApi() {}
 }

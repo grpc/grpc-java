@@ -24,6 +24,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import java.util.Map;
@@ -38,7 +39,7 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
   @VisibleForTesting
   static final long MIN_WEIGHT_UPDATE_PERIOD_NANOS = 100_000_000L; // 100ms
 
-  static final String SCHEME = "weighted_round_robin_experimental";
+  static final String SCHEME = "weighted_round_robin";
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
@@ -62,12 +63,23 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
+    try {
+      return parseLoadBalancingPolicyConfigInternal(rawConfig);
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.UNAVAILABLE.withCause(e).withDescription(
+              "Failed parsing configuration for " + getPolicyName()));
+    }
+  }
+
+  private ConfigOrError parseLoadBalancingPolicyConfigInternal(Map<String, ?> rawConfig) {
     Long blackoutPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "blackoutPeriod");
     Long weightExpirationPeriodNanos =
             JsonUtil.getStringAsDuration(rawConfig, "weightExpirationPeriod");
     Long oobReportingPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "oobReportingPeriod");
     Boolean enableOobLoadReport = JsonUtil.getBoolean(rawConfig, "enableOobLoadReport");
     Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
+    Float errorUtilizationPenalty = JsonUtil.getNumberAsFloat(rawConfig, "errorUtilizationPenalty");
 
     WeightedRoundRobinLoadBalancerConfig.Builder configBuilder =
             WeightedRoundRobinLoadBalancerConfig.newBuilder();
@@ -88,6 +100,9 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
       if (weightUpdatePeriodNanos < MIN_WEIGHT_UPDATE_PERIOD_NANOS) {
         configBuilder.setWeightUpdatePeriodNanos(MIN_WEIGHT_UPDATE_PERIOD_NANOS);
       }
+    }
+    if (errorUtilizationPenalty != null) {
+      configBuilder.setErrorUtilizationPenalty(errorUtilizationPenalty);
     }
     return ConfigOrError.fromConfig(configBuilder.build());
   }

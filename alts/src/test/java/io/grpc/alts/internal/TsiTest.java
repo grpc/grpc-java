@@ -36,7 +36,7 @@ import javax.crypto.AEADBadTagException;
 
 /** Utility class that provides tests for implementations of {@link TsiHandshaker}. */
 public final class TsiTest {
-  private static final String DECRYPTION_FAILURE_RE = "Tag mismatch!|BAD_DECRYPT";
+  private static final String DECRYPTION_FAILURE_RE = "Tag mismatch|BAD_DECRYPT";
 
   private TsiTest() {}
 

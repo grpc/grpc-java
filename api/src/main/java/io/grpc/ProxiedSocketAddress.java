@@ -22,7 +22,6 @@ import java.net.SocketAddress;
  * An address that contains the information about making a connection via a proxy.  It is created by
  * a {@link ProxyDetector}.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5279")
 public abstract class ProxiedSocketAddress extends SocketAddress {
   private static final long serialVersionUID = 0L;
 }

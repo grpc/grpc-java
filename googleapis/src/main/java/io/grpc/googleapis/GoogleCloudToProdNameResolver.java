@@ -66,8 +66,8 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           || System.getProperty("io.grpc.xds.bootstrapConfig") != null;
   @VisibleForTesting
   static boolean enableFederation =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
-          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
+          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
 
   private static final String serverUriOverride =
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
@@ -209,7 +209,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     serverBuilder.put("server_uri", serverUri);
     serverBuilder.put("channel_creds",
         ImmutableList.of(ImmutableMap.of("type", "google_default")));
-    serverBuilder.put("server_features", ImmutableList.of("xds_v3"));
+    serverBuilder.put("server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
     ImmutableMap.Builder<String, Object> authoritiesBuilder = ImmutableMap.builder();
     authoritiesBuilder.put(
         C2P_AUTHORITY,

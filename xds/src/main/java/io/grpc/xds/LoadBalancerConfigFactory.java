@@ -31,6 +31,7 @@ import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.least_request.v3.LeastRequest;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.pick_first.v3.PickFirst;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.ring_hash.v3.RingHash;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.round_robin.v3.RoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
@@ -85,6 +86,11 @@ class LoadBalancerConfigFactory {
 
   static final String WEIGHT_UPDATE_PERIOD = "weightUpdatePeriod";
 
+  static final String PICK_FIRST_FIELD_NAME = "pick_first";
+  static final String SHUFFLE_ADDRESS_LIST_FIELD_NAME = "shuffleAddressList";
+
+  static final String ERROR_UTILIZATION_PENALTY = "errorUtilizationPenalty";
+
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
    * Cluster}.
@@ -92,14 +98,14 @@ class LoadBalancerConfigFactory {
    * @throws ResourceInvalidException If the {@link Cluster} has an invalid LB configuration.
    */
   static ImmutableMap<String, ?> newConfig(Cluster cluster, boolean enableLeastRequest,
-      boolean enableCustomLbConfig, boolean enableWrr)
+      boolean enableWrr, boolean enablePickFirst)
       throws ResourceInvalidException {
     // The new load_balancing_policy will always be used if it is set, but for backward
     // compatibility we will fall back to using the old lb_policy field if the new field is not set.
-    if (cluster.hasLoadBalancingPolicy() && enableCustomLbConfig) {
+    if (cluster.hasLoadBalancingPolicy()) {
       try {
         return LoadBalancingPolicyConverter.convertToServiceConfig(cluster.getLoadBalancingPolicy(),
-            0, enableWrr);
+            0, enableWrr, enablePickFirst);
       } catch (MaxRecursionReachedException e) {
         throw new ResourceInvalidException("Maximum LB config recursion depth reached", e);
       }
@@ -131,7 +137,8 @@ class LoadBalancerConfigFactory {
                                                         String weightExpirationPeriod,
                                                         String oobReportingPeriod,
                                                         Boolean enableOobLoadReport,
-                                                        String weightUpdatePeriod) {
+                                                        String weightUpdatePeriod,
+                                                        Float errorUtilizationPenalty) {
     ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
     if (blackoutPeriod != null) {
       configBuilder.put(BLACK_OUT_PERIOD, blackoutPeriod);
@@ -148,13 +155,16 @@ class LoadBalancerConfigFactory {
     if (weightUpdatePeriod != null) {
       configBuilder.put(WEIGHT_UPDATE_PERIOD, weightUpdatePeriod);
     }
+    if (errorUtilizationPenalty != null) {
+      configBuilder.put(ERROR_UTILIZATION_PENALTY, errorUtilizationPenalty);
+    }
     return ImmutableMap.of(WeightedRoundRobinLoadBalancerProvider.SCHEME,
         configBuilder.buildOrThrow());
   }
 
   /**
    * Builds a service config JSON object for the least_request load balancer config based on the
-   * given config values..
+   * given config values.
    */
   private static ImmutableMap<String, ?> buildLeastRequestConfig(Integer choiceCount) {
     ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
@@ -181,6 +191,16 @@ class LoadBalancerConfigFactory {
   }
 
   /**
+   * Builds a service config JSON object for the pick_first load balancer config based on the
+   * given config values.
+   */
+  private static ImmutableMap<String, ?> buildPickFirstConfig(boolean shuffleAddressList) {
+    ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
+    configBuilder.put(SHUFFLE_ADDRESS_LIST_FIELD_NAME, shuffleAddressList);
+    return ImmutableMap.of(PICK_FIRST_FIELD_NAME, configBuilder.buildOrThrow());
+  }
+
+  /**
    * Responsible for converting from a {@code envoy.config.cluster.v3.LoadBalancingPolicy} proto
    * message to a gRPC service config format.
    */
@@ -192,7 +212,8 @@ class LoadBalancerConfigFactory {
      * Converts a {@link LoadBalancingPolicy} object to a service config JSON object.
      */
     private static ImmutableMap<String, ?> convertToServiceConfig(
-        LoadBalancingPolicy loadBalancingPolicy, int recursionDepth, boolean enableWrr)
+        LoadBalancingPolicy loadBalancingPolicy, int recursionDepth, boolean enableWrr,
+        boolean enablePickFirst)
         throws ResourceInvalidException, MaxRecursionReachedException {
       if (recursionDepth > MAX_RECURSION) {
         throw new MaxRecursionReachedException();
@@ -206,7 +227,7 @@ class LoadBalancerConfigFactory {
             serviceConfig = convertRingHashConfig(typedConfig.unpack(RingHash.class));
           } else if (typedConfig.is(WrrLocality.class)) {
             serviceConfig = convertWrrLocalityConfig(typedConfig.unpack(WrrLocality.class),
-                recursionDepth, enableWrr);
+                recursionDepth, enableWrr, enablePickFirst);
           } else if (typedConfig.is(RoundRobin.class)) {
             serviceConfig = convertRoundRobinConfig();
           } else if (typedConfig.is(LeastRequest.class)) {
@@ -215,6 +236,10 @@ class LoadBalancerConfigFactory {
             if (enableWrr) {
               serviceConfig = convertWeightedRoundRobinConfig(
                   typedConfig.unpack(ClientSideWeightedRoundRobin.class));
+            }
+          } else if (typedConfig.is(PickFirst.class)) {
+            if (enablePickFirst) {
+              serviceConfig = convertPickFirstConfig(typedConfig.unpack(PickFirst.class));
             }
           } else if (typedConfig.is(com.github.xds.type.v3.TypedStruct.class)) {
             serviceConfig = convertCustomConfig(
@@ -272,7 +297,8 @@ class LoadBalancerConfigFactory {
                 ? Durations.toString(wrr.getWeightExpirationPeriod()) : null,
             wrr.hasOobReportingPeriod() ? Durations.toString(wrr.getOobReportingPeriod()) : null,
             wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
-            wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null);
+            wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null,
+            wrr.hasErrorUtilizationPenalty() ? wrr.getErrorUtilizationPenalty().getValue() : null);
       } catch (IllegalArgumentException ex) {
         throw new ResourceInvalidException("Invalid duration in weighted round robin config: "
             + ex.getMessage());
@@ -283,11 +309,12 @@ class LoadBalancerConfigFactory {
      * Converts a wrr_locality {@link Any} configuration to service config format.
      */
     private static ImmutableMap<String, ?> convertWrrLocalityConfig(WrrLocality wrrLocality,
-        int recursionDepth, boolean enableWrr) throws ResourceInvalidException,
+        int recursionDepth, boolean enableWrr, boolean enablePickFirst)
+        throws ResourceInvalidException,
         MaxRecursionReachedException {
       return buildWrrLocalityConfig(
           convertToServiceConfig(wrrLocality.getEndpointPickingPolicy(),
-              recursionDepth + 1, enableWrr));
+              recursionDepth + 1, enableWrr, enablePickFirst));
     }
 
     /**
@@ -295,6 +322,13 @@ class LoadBalancerConfigFactory {
      */
     private static ImmutableMap<String, ?> convertRoundRobinConfig() {
       return buildRoundRobinConfig();
+    }
+
+    /**
+     * "Converts" a pick_first configuration to service config format.
+     */
+    private static ImmutableMap<String, ?> convertPickFirstConfig(PickFirst pickFirst) {
+      return buildPickFirstConfig(pickFirst.getShuffleAddressList());
     }
 
     /**

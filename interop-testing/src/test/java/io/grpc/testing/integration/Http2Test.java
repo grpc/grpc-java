@@ -36,11 +36,11 @@ import io.grpc.okhttp.InternalOkHttpServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpServerBuilder;
 import io.grpc.stub.MetadataUtils;
+import io.grpc.testing.TlsTesting;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -51,13 +51,6 @@ import org.junit.runners.Parameterized.Parameters;
  */
 @RunWith(Parameterized.class)
 public class Http2Test extends AbstractInteropTest {
-  @BeforeClass
-  public static void loadConscrypt() throws Exception {
-    // Load conscrypt if it is available. Either Conscrypt or Jetty ALPN needs to be available for
-    // OkHttp to negotiate.
-    TestUtils.installConscryptIfAvailable();
-  }
-
   enum Transport {
     NETTY, OKHTTP;
   }
@@ -87,7 +80,7 @@ public class Http2Test extends AbstractInteropTest {
     ServerCredentials serverCreds;
     try {
       serverCreds = TlsServerCredentials.create(
-          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+          TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"));
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
@@ -115,7 +108,7 @@ public class Http2Test extends AbstractInteropTest {
     ChannelCredentials channelCreds;
     try {
       channelCreds = TlsChannelCredentials.newBuilder()
-          .trustManager(TestUtils.loadCert("ca.pem"))
+          .trustManager(TlsTesting.loadCert("ca.pem"))
           .build();
     } catch (Exception ex) {
       throw new RuntimeException(ex);

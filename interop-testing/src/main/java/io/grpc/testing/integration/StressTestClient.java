@@ -38,11 +38,11 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.StatusException;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.TlsTesting;
 import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -345,7 +345,7 @@ public class StressTestClient {
     if (useTestCa) {
       try {
         sslContext = GrpcSslContexts.forClient().trustManager(
-            TestUtils.loadCert("ca.pem")).build();
+            TlsTesting.loadCert("ca.pem")).build();
       } catch (Exception ex) {
         throw new RuntimeException(ex);
       }

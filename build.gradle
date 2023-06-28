@@ -1,4 +1,6 @@
 plugins {
+    id 'java' // changes the behavior of TARGET_JVM_VERSION_ATTRIBUTE
+
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
     id "net.ltgt.errorprone" apply false
@@ -18,7 +20,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.55.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.57.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -89,13 +91,9 @@ subprojects {
                         all().each { task ->
                             String variantOrSourceSet = isAndroid ? task.variant.name : task.sourceSet.name
                             def syncTask = project.tasks.register("syncGeneratedSources${variantOrSourceSet}", Sync) {
-                                from "$buildDir/generated/source/proto/${variantOrSourceSet}/grpc"
-                                into "$generatedSourcePath/${variantOrSourceSet}/grpc"
-                                String source = GUtil.toCamelCase(variantOrSourceSet)
-                                if (source == "Main") {
-                                    source = ""
-                                }
-                                dependsOn "generate${source}Proto"
+                                from task
+                                into "$generatedSourcePath/$variantOrSourceSet"
+                                include "grpc/"
                             }
                             syncGeneratedSources.configure {
                                 dependsOn syncTask
@@ -166,7 +164,7 @@ subprojects {
 
     checkstyle {
         configDirectory = file("$rootDir/buildscripts")
-        toolVersion = libs.versions.checkstyle.get()
+        toolVersion = libs.checkstyle.get().version
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
@@ -260,7 +258,7 @@ subprojects {
         plugins.withId("ru.vyarus.animalsniffer") {
 	    // Only available after java plugin has loaded
             animalsniffer {
-                toolVersion = libs.versions.animalsniffer.get()
+                toolVersion = libs.animalsniffer.asProvider().get().version
             }
         }
     }
@@ -357,21 +355,6 @@ subprojects {
                                 organizationUrl = "https://www.google.com"
                             }
                         }
-
-                        withXml {
-                            if (!(project.name in
-                            [
-                                "grpc-stub",
-                                "grpc-protobuf",
-                                "grpc-protobuf-lite",
-                            ])) {
-                                asNode().dependencies.'*'.findAll() { dep ->
-                                    dep.artifactId.text() in ['grpc-api', 'grpc-core']
-                                }.each() { core ->
-                                    core.version*.value = "[" + core.version.text() + "]"
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -453,7 +436,7 @@ subprojects {
         tasks.register("japicmp", me.champeau.gradle.japicmp.JapicmpTask) {
             dependsOn jar
             oldClasspath = files(baselineArtifact)
-            newClasspath = files(jar.archivePath)
+            newClasspath = files(jar.archiveFile)
             onlyBinaryIncompatibleModified = false
             // Be quiet about things that did not change
             onlyModified = true
@@ -525,6 +508,70 @@ def requireUpperBoundDepsMatch(Configuration conf, Project project) {
         result.selected.dependencies.each {
             queue.add(new DepAndParents(
                 dep: it, parents: depAndParents.parents + [artifact + ":" + version]))
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    google()
+}
+
+def isAcceptableVersion(ModuleComponentIdentifier candidate) {
+    String group = candidate.group
+    String module = candidate.module
+    String version = candidate.version
+    if (group == 'com.google.guava')
+        return true
+    if (group == 'io.netty' && version.contains('Final'))
+        return true
+    if (module == 'android-api-level-19')
+        return true
+    return version ==~ /^[0-9]+(\.[0-9]+)+$/
+}
+
+configurations {
+    checkForUpdates {
+        attributes.attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 8)
+        resolutionStrategy {
+            componentSelection {
+                all {
+                    if (!isAcceptableVersion(it.candidate))
+                        it.reject("Not stable version")
+                }
+            }
+        }
+    }
+}
+
+// Checks every dependency in the version catalog to see if there is a newer
+// version available. The 'checkForUpdates' configuration restricts the
+// versions considered.
+tasks.register('checkForUpdates') {
+    doLast {
+        def updateConf = project.configurations.checkForUpdates
+        updateConf.setVisible(false)
+        updateConf.setTransitive(false)
+        def versionCatalog = project.extensions.getByType(VersionCatalogsExtension).named("libs")
+        versionCatalog.libraryAliases.each { name ->
+            def dep = versionCatalog.findLibrary(name).get().get()
+
+            def oldConf = updateConf.copy()
+            def oldDep = project.dependencies.create(
+                group: dep.group, name: dep.name, version: dep.versionConstraint, classifier: 'pom')
+            oldConf.dependencies.add(oldDep)
+            def oldResolved = oldConf.resolvedConfiguration.resolvedArtifacts.iterator().next()
+
+            def newConf = updateConf.copy()
+            def newDep = project.dependencies.create(
+                group: dep.group, name: dep.name, version: '+', classifier: 'pom')
+            newConf.dependencies.add(newDep)
+            def newResolved = newConf.resolvedConfiguration.resolvedArtifacts.iterator().next()
+            if (oldResolved != newResolved) {
+                def oldId = oldResolved.id.componentIdentifier
+                def newId = newResolved.id.componentIdentifier
+                println("${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
+            }
         }
     }
 }

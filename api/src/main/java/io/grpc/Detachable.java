@@ -32,7 +32,6 @@ import java.io.InputStream;
  * with {@link HasByteBuffer}, a custom {@link io.grpc.MethodDescriptor.Marshaller} can take
  * over the ownership of buffers containing inbound data and perform delayed deserialization.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7387")
 public interface Detachable {
 
   /**

@@ -37,13 +37,13 @@ import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.TlsTesting;
 import io.grpc.testing.integration.EmptyProtos.Empty;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -56,19 +56,12 @@ public class Http2OkHttpTest extends AbstractInteropTest {
 
   private static final String BAD_HOSTNAME = "I.am.a.bad.hostname";
 
-  @BeforeClass
-  public static void loadConscrypt() throws Exception {
-    // Load conscrypt if it is available. Either Conscrypt or Jetty ALPN needs to be available for
-    // OkHttp to negotiate.
-    TestUtils.installConscryptIfAvailable();
-  }
-
   @Override
   protected ServerBuilder<?> getServerBuilder() {
     // Starts the server with HTTPS.
     try {
       ServerCredentials serverCreds = TlsServerCredentials.create(
-          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+          TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"));
       NettyServerBuilder builder = NettyServerBuilder.forPort(0, serverCreds)
           .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
@@ -86,7 +79,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     ChannelCredentials channelCreds;
     try {
       channelCreds = TlsChannelCredentials.newBuilder()
-          .trustManager(TestUtils.loadCert("ca.pem"))
+          .trustManager(TlsTesting.loadCert("ca.pem"))
           .build();
     } catch (IOException ex) {
       throw new RuntimeException(ex);

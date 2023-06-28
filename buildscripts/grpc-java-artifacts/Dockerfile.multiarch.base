@@ -1,15 +1,14 @@
-FROM ubuntu:22.04
+FROM ubuntu:18.04
 
-# make sure apt-get works in unattended mode
-ENV DEBIAN_FRONTEND=noninteractive
-
-# install the OS-level prerequisites for building protobuf and running the gradle build
-RUN apt-get update && \
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends ca-certificates build-essential wget curl openjdk-8-jdk && \
-    apt-get autoclean -y && \
-    apt-get autoremove -y && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+        g++-aarch64-linux-gnu \
+        g++-powerpc64le-linux-gnu \
+        openjdk-8-jdk \
+        && \
     rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
-

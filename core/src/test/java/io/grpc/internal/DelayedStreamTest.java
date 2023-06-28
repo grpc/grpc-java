@@ -42,7 +42,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
-import io.grpc.internal.testing.SingleMessageProducer;
+import io.grpc.internal.SingleMessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.concurrent.TimeUnit;

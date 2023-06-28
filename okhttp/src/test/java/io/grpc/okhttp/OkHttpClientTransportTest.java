@@ -121,7 +121,6 @@ import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.ByteString;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.Timeout;
@@ -132,7 +131,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link OkHttpClientTransport}.
@@ -155,6 +155,7 @@ public class OkHttpClientTransportTest {
   };
 
   @Rule public final Timeout globalTimeout = Timeout.seconds(10);
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
 
@@ -181,12 +182,6 @@ public class OkHttpClientTransportTest {
       .scheduledExecutorService(new FakeClock().getScheduledExecutorService()) // Executor unused
       .transportExecutor(executor)
       .flowControlWindow(INITIAL_WINDOW_SIZE);
-
-  /** Set up for test. */
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   @After
   public void tearDown() {

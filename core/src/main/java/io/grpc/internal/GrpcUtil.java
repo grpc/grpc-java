@@ -59,6 +59,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -217,7 +218,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.55.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.57.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -436,7 +437,7 @@ public final class GrpcUtil {
       return false;
     }
 
-    contentType = contentType.toLowerCase();
+    contentType = contentType.toLowerCase(Locale.US);
     if (!contentType.startsWith(CONTENT_TYPE_GRPC)) {
       // Not a gRPC content-type.
       return false;

@@ -34,6 +34,7 @@ import io.grpc.TlsServerCredentials;
 import io.grpc.TlsServerCredentials.ClientAuth;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.TlsTesting;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
@@ -98,20 +99,13 @@ public class AdvancedTlsTest {
     serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
     clientKey0File = TestUtils.loadCert(CLIENT_0_KEY_FILE);
     clientCert0File = TestUtils.loadCert(CLIENT_0_PEM_FILE);
-    caCert = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + CA_PEM_FILE));
-    serverKey0 = CertificateUtils.getPrivateKey(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_0_KEY_FILE));
-    serverCert0 = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_0_PEM_FILE));
-    clientKey0 = CertificateUtils.getPrivateKey(
-        TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_KEY_FILE));
-    clientCert0 = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_PEM_FILE));
-    serverKeyBad = CertificateUtils.getPrivateKey(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_BAD_KEY_FILE));
-    serverCertBad = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_BAD_PEM_FILE));
+    caCert = CertificateUtils.getX509Certificates(TlsTesting.loadCert(CA_PEM_FILE));
+    serverKey0 = CertificateUtils.getPrivateKey(TlsTesting.loadCert(SERVER_0_KEY_FILE));
+    serverCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_0_PEM_FILE));
+    clientKey0 = CertificateUtils.getPrivateKey(TlsTesting.loadCert(CLIENT_0_KEY_FILE));
+    clientCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(CLIENT_0_PEM_FILE));
+    serverKeyBad = CertificateUtils.getPrivateKey(TlsTesting.loadCert(SERVER_BAD_KEY_FILE));
+    serverCertBad = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_BAD_PEM_FILE));
   }
 
   @After

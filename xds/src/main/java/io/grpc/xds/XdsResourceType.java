@@ -47,13 +47,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   @VisibleForTesting
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
   @VisibleForTesting
-  static boolean enableFaultInjection = getFlag("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION", true);
-  @VisibleForTesting
-  static boolean enableRetry = getFlag("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY", true);
-  @VisibleForTesting
-  static boolean enableRbac = getFlag("GRPC_XDS_EXPERIMENTAL_RBAC", true);
-  @VisibleForTesting
-  static boolean enableRouteLookup = getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", false);
+  static boolean enableRouteLookup = getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
   @VisibleForTesting
   static boolean enableLeastRequest =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
@@ -61,13 +55,11 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
 
   @VisibleForTesting
-  static boolean enableWrr = getFlag("GRPC_EXPERIMENTAL_XDS_WRR_LB", false);
+  static boolean enableWrr = getFlag("GRPC_EXPERIMENTAL_XDS_WRR_LB", true);
 
   @VisibleForTesting
-  static boolean enableCustomLbConfig = getFlag("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG", true);
-  @VisibleForTesting
-  static boolean enableOutlierDetection = getFlag("GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION",
-      true);
+  static boolean enablePickFirst = getFlag("GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG", false);
+
   static final String TYPE_URL_CLUSTER_CONFIG =
       "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
   static final String TYPE_URL_TYPED_STRUCT_UDPA =

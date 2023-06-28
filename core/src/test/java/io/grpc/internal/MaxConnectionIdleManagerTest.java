@@ -19,16 +19,19 @@ package io.grpc.internal;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link MaxConnectionIdleManager}. */
 @RunWith(JUnit4.class)
 public class MaxConnectionIdleManagerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private final FakeClock fakeClock = new FakeClock();
   private final MaxConnectionIdleManager.Ticker ticker = new MaxConnectionIdleManager.Ticker() {
     @Override
@@ -39,11 +42,6 @@ public class MaxConnectionIdleManagerTest {
 
   @Mock
   private Runnable closure;
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   @Test
   public void maxIdleReached() {

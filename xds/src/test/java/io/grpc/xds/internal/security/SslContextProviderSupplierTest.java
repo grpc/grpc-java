@@ -30,30 +30,27 @@ import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.Executor;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link SslContextProviderSupplier}.
  */
 @RunWith(JUnit4.class)
 public class SslContextProviderSupplierTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private TlsContextManager mockTlsContextManager;
   private SslContextProviderSupplier supplier;
   private SslContextProvider mockSslContextProvider;
   private EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext;
   private SslContextProvider.Callback mockCallback;
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   private void prepareSupplier() {
     upstreamTlsContext =

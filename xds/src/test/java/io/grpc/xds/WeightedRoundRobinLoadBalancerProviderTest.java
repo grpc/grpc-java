@@ -78,7 +78,8 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
         + " \"weightExpirationPeriod\" : \"300s\","
         + " \"oobReportingPeriod\" : \"100s\","
         + " \"enableOobLoadReport\" : true,"
-        + " \"weightUpdatePeriod\" : \"2s\""
+        + " \"weightUpdatePeriod\" : \"2s\","
+        + " \"errorUtilizationPenalty\" : \"1.75\""
         + " }";
 
     ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
@@ -91,6 +92,7 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
     assertThat(config.oobReportingPeriodNanos).isEqualTo(100_000_000_000L);
     assertThat(config.enableOobLoadReport).isEqualTo(true);
     assertThat(config.weightUpdatePeriodNanos).isEqualTo(2_000_000_000L);
+    assertThat(config.errorUtilizationPenalty).isEqualTo(1.75F);
   }
 
   @Test
@@ -106,6 +108,7 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
     assertThat(config.weightExpirationPeriodNanos).isEqualTo(180_000_000_000L);
     assertThat(config.enableOobLoadReport).isEqualTo(false);
     assertThat(config.weightUpdatePeriodNanos).isEqualTo(100_000_000L);
+    assertThat(config.errorUtilizationPenalty).isEqualTo(1.0F);
   }
 
 

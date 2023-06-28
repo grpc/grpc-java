@@ -35,18 +35,21 @@ import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.TestServiceGrpc;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for stub reconfiguration.
  */
 @RunWith(JUnit4.class)
 public class StubConfigTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock
   private Channel channel;
@@ -58,7 +61,6 @@ public class StubConfigTest {
    * Sets up mocks.
    */
   @Before public void setUp() {
-    MockitoAnnotations.initMocks(this);
     ClientCall<SimpleRequest, SimpleResponse> call =
         new NoopClientCall<>();
     when(channel.newCall(

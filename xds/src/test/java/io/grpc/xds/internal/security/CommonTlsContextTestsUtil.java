@@ -31,6 +31,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsCont
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.testing.TlsTesting;
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.handler.ssl.SslContext;
@@ -200,9 +201,9 @@ public class CommonTlsContextTestsUtil {
     }
   }
 
-  /** Gets contents of a resource from TestUtils.class loader. */
+  /** Gets contents of a certs resource. */
   public static String getResourceContents(String resourceName) throws IOException {
-    InputStream inputStream = TestUtils.class.getResourceAsStream("/certs/" + resourceName);
+    InputStream inputStream = TlsTesting.loadCert(resourceName);
     String text = null;
     try (Reader reader = new InputStreamReader(inputStream, UTF_8)) {
       text = CharStreams.toString(reader);

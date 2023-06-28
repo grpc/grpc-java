@@ -111,15 +111,6 @@ publishing {
                     core.scope*.value = "compile"
                 }
             }
-
-            // shadow.component() is run after the main build.gradle's withXml
-            pom.withXml {
-                asNode().dependencies.'*'.findAll() { dep ->
-                    dep.artifactId.text() in ['grpc-api', 'grpc-core']
-                }.each() { core ->
-                    core.version*.value = "[" + core.version.text() + "]"
-                }
-            }
         }
     }
 }

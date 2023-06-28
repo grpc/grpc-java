@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.testing.TlsTesting;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
@@ -58,7 +59,7 @@ public class XdsTrustManagerFactoryTest {
     assertThat(acceptedIssuers).hasLength(1);
     X509Certificate caCert = acceptedIssuers[0];
     assertThat(caCert)
-        .isEqualTo(CertificateUtils.toX509Certificates(TestUtils.loadCert(CA_PEM_FILE))[0]);
+        .isEqualTo(CertificateUtils.toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE))[0]);
   }
 
   @Test
@@ -78,7 +79,7 @@ public class XdsTrustManagerFactoryTest {
     assertThat(acceptedIssuers).hasLength(1);
     X509Certificate caCert = acceptedIssuers[0];
     assertThat(caCert)
-        .isEqualTo(CertificateUtils.toX509Certificates(TestUtils.loadCert(CA_PEM_FILE))[0]);
+        .isEqualTo(CertificateUtils.toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE))[0]);
   }
 
   @Test
@@ -101,7 +102,7 @@ public class XdsTrustManagerFactoryTest {
     assertThat(acceptedIssuers).hasLength(1);
     X509Certificate caCert = acceptedIssuers[0];
     assertThat(caCert)
-        .isEqualTo(CertificateUtils.toX509Certificates(TestUtils.loadCert(CA_PEM_FILE))[0]);
+        .isEqualTo(CertificateUtils.toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE))[0]);
   }
 
   @Test
@@ -114,7 +115,7 @@ public class XdsTrustManagerFactoryTest {
         new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext);
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] serverChain =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
     xdsX509TrustManager.checkServerTrusted(serverChain, "RSA");
   }
 
@@ -143,7 +144,7 @@ public class XdsTrustManagerFactoryTest {
         new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext);
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] serverChain =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
     try {
       xdsX509TrustManager.checkServerTrusted(serverChain, "RSA");
       Assert.fail("no exception thrown");
@@ -164,7 +165,7 @@ public class XdsTrustManagerFactoryTest {
         new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext);
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] clientChain =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
     try {
       xdsX509TrustManager.checkClientTrusted(clientChain, "RSA");
       Assert.fail("no exception thrown");
@@ -182,7 +183,7 @@ public class XdsTrustManagerFactoryTest {
         new XdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] serverChain =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
     xdsX509TrustManager.checkServerTrusted(serverChain, "RSA");
   }
 
@@ -193,7 +194,7 @@ public class XdsTrustManagerFactoryTest {
         new XdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] clientChain =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(CLIENT_PEM_FILE));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(CLIENT_PEM_FILE));
     xdsX509TrustManager.checkClientTrusted(clientChain, "RSA");
   }
 
@@ -204,7 +205,7 @@ public class XdsTrustManagerFactoryTest {
         new XdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] serverChain =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_SERVER_PEM_FILE));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(BAD_SERVER_PEM_FILE));
     try {
       xdsX509TrustManager.checkServerTrusted(serverChain, "RSA");
       Assert.fail("no exception thrown");
@@ -222,7 +223,7 @@ public class XdsTrustManagerFactoryTest {
         new XdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] clientChain =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_CLIENT_PEM_FILE));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(BAD_CLIENT_PEM_FILE));
     try {
       xdsX509TrustManager.checkClientTrusted(clientChain, "RSA");
       Assert.fail("no exception thrown");

@@ -26,6 +26,7 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.testing.TlsTesting;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import org.junit.Test;
@@ -43,8 +44,8 @@ public class Http2NettyTest extends AbstractInteropTest {
     // Starts the server with HTTPS.
     try {
       ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
-          .keyManager(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
-          .trustManager(TestUtils.loadCert("ca.pem"))
+          .keyManager(TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"))
+          .trustManager(TlsTesting.loadCert("ca.pem"))
           .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
           .build();
       NettyServerBuilder builder = NettyServerBuilder.forPort(0, serverCreds)
@@ -62,8 +63,8 @@ public class Http2NettyTest extends AbstractInteropTest {
   protected NettyChannelBuilder createChannelBuilder() {
     try {
       ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
-          .keyManager(TestUtils.loadCert("client.pem"), TestUtils.loadCert("client.key"))
-          .trustManager(TestUtils.loadCert("ca.pem"))
+          .keyManager(TlsTesting.loadCert("client.pem"), TlsTesting.loadCert("client.key"))
+          .trustManager(TlsTesting.loadCert("ca.pem"))
           .build();
       NettyChannelBuilder builder = NettyChannelBuilder
           .forAddress("localhost", ((InetSocketAddress) getListenAddress()).getPort(), channelCreds)

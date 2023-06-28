@@ -44,7 +44,6 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -71,18 +70,10 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class FakeControlPlaneXdsIntegrationTest {
 
-  public ControlPlaneRule controlPlane;
-  public DataPlaneRule dataPlane;
-
-  /**
-   * The {@link ControlPlaneRule} should run before the {@link DataPlaneRule}.
-   */
-  @Rule
-  public RuleChain ruleChain() {
-    controlPlane = new ControlPlaneRule();
-    dataPlane = new DataPlaneRule(controlPlane);
-    return RuleChain.outerRule(controlPlane).around(dataPlane);
-  }
+  @Rule(order = 0)
+  public ControlPlaneRule controlPlane = new ControlPlaneRule();
+  @Rule(order = 1)
+  public DataPlaneRule dataPlane = new DataPlaneRule(controlPlane);
 
   @Test
   public void pingPong() throws Exception {

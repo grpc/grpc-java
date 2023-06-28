@@ -1,5 +1,6 @@
 plugins {
     id "java-library"
+    id "java-test-fixtures"
     id "maven-publish"
 
     id "me.champeau.jmh"
@@ -8,20 +9,19 @@ plugins {
 
 description = 'gRPC: API'
 
-evaluationDependsOn(project(':grpc-context').path)
-
 dependencies {
     api project(':grpc-context'),
             libraries.jsr305,
             libraries.errorprone.annotations
     implementation libraries.guava
 
-    testImplementation project(':grpc-context').sourceSets.test.output,
+    testFixturesImplementation libraries.guava,
+            libraries.junit,
+            libraries.mockito.core
+    testImplementation testFixtures(project(':grpc-context')),
             project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
     jmh project(':grpc-core')
 
     signature libraries.signature.java
@@ -32,3 +32,6 @@ tasks.named("javadoc").configure {
     // We want io.grpc.Internal, but not io.grpc.Internal*
     exclude 'io/grpc/Internal?*.java'
 }
+
+components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
+components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }

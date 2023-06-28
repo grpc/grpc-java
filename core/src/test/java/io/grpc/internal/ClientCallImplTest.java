@@ -61,7 +61,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
-import io.grpc.internal.testing.SingleMessageProducer;
+import io.grpc.internal.SingleMessageProducer;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

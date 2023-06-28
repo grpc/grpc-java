@@ -36,17 +36,19 @@ import io.grpc.testing.TestMethodDescriptors;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
 import org.chromium.net.ExperimentalCronetEngine;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P)
 public final class CronetChannelBuilderTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private ExperimentalCronetEngine mockEngine;
   @Mock private ChannelLogger channelLogger;
@@ -54,11 +56,6 @@ public final class CronetChannelBuilderTest {
   private final ClientStreamTracer[] tracers =
       new ClientStreamTracer[]{ new ClientStreamTracer() {} };
   private MethodDescriptor<?, ?> method = TestMethodDescriptors.voidMethod();
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   @Test
   public void alwaysUsePutTrue_cronetStreamIsIdempotent() throws Exception {

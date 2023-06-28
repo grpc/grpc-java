@@ -106,6 +106,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -115,13 +116,16 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link GrpclbLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class GrpclbLoadBalancerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final String SERVICE_AUTHORITY = "api.google.com";
 
   // The tasks are wrapped by SynchronizationContext, so we can't compare the types
@@ -203,7 +207,6 @@ public class GrpclbLoadBalancerTest {
 
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     mockLbService = mock(LoadBalancerGrpc.LoadBalancerImplBase.class, delegatesTo(
         new LoadBalancerGrpc.LoadBalancerImplBase() {
           @Override

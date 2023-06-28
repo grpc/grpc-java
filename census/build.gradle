@@ -7,17 +7,15 @@ plugins {
 
 description = 'gRPC: Census'
 
-evaluationDependsOn(project(':grpc-api').path)
-
 dependencies {
     api project(':grpc-api')
     implementation libraries.guava,
             libraries.opencensus.api,
             libraries.opencensus.contrib.grpc.metrics
 
-    testImplementation project(':grpc-api').sourceSets.test.output,
-            project(':grpc-context').sourceSets.test.output,
-            project(':grpc-core').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-context')),
+            testFixtures(project(':grpc-core')),
             project(':grpc-testing'),
             libraries.opencensus.impl
 

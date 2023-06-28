@@ -38,8 +38,6 @@ public class AuthorizationServerInterceptorTest {
       assertThat(ioe).hasMessageThat().isEqualTo(
           "Use JsonReader.setLenient(true) to accept malformed JSON"
           + " at line 1 column 18 path $.name");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 

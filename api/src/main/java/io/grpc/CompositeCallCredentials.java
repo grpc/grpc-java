@@ -40,9 +40,6 @@ public final class CompositeCallCredentials extends CallCredentials {
         new WrappingMetadataApplier(requestInfo, appExecutor, applier, Context.current()));
   }
 
-  @Override
-  public void thisUsesUnstableApi() {}
-
   private final class WrappingMetadataApplier extends MetadataApplier {
     private final RequestInfo requestInfo;
     private final Executor appExecutor;

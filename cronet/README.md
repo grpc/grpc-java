@@ -22,13 +22,9 @@ See the example app at https://github.com/GoogleChrome/cronet-sample/blob/master
 
 ## Example usage:
 
-In your app module's `build.gradle` file, include a dependency on both `grpc-cronet` and the 
-Google Play Services Client Library for Cronet
-
-```
-implementation 'io.grpc:grpc-cronet:1.54.0'
-implementation 'com.google.android.gms:play-services-cronet:16.0.0'
-```
+In your app module's `build.gradle` file, include a dependency on both
+`io.grpc:grpc-cronet` and the Google Play Services Client Library for Cronet,
+`com.google.android.gms:play-services-cronet`.
 
 In cases where Cronet cannot be loaded from Google Play services, there is a less performant 
 implementation of Cronet's API that can be used. Depend on `org.chromium.net:cronet-fallback` 

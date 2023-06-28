@@ -51,9 +51,10 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.NameResolverRegistry;
 import io.grpc.Server;
-import io.grpc.netty.NettyServerBuilder;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -83,6 +84,7 @@ public class ControlPlaneRule extends TestWatcher {
   private String serverHostName;
   private Server server;
   private XdsTestControlPlaneService controlPlaneService;
+  private XdsTestLoadReportingService loadReportingService;
   private XdsNameResolverProvider nameResolverProvider;
 
   public ControlPlaneRule() {
@@ -112,9 +114,12 @@ public class ControlPlaneRule extends TestWatcher {
     // Start the control plane server.
     try {
       controlPlaneService = new XdsTestControlPlaneService();
-      NettyServerBuilder controlPlaneServerBuilder = NettyServerBuilder.forPort(0)
-          .addService(controlPlaneService);
-      server = controlPlaneServerBuilder.build().start();
+      loadReportingService = new XdsTestLoadReportingService();
+      server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+          .addService(controlPlaneService)
+          .addService(loadReportingService)
+          .build()
+          .start();
     } catch (Exception e) {
       throw new AssertionError("unable to start the control plane server", e);
     }

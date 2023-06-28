@@ -99,13 +99,11 @@ Tagging the Release
    ```bash
    $ git checkout v$MAJOR.$MINOR.x
    $ git pull upstream v$MAJOR.$MINOR.x
-   $ git checkout -b release
+   $ git checkout -b release-v$MAJOR.$MINOR.$PATCH
    
    # Bump documented gRPC versions.
    # Also update protoc version to match protobuf version in gradle/libs.versions.toml.
    $ ${EDITOR:-nano -w} README.md
-   $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
-   $ ${EDITOR:-nano -w} cronet/README.md
    
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
@@ -137,7 +135,7 @@ Tagging the Release
 
    ```bash
    $ git checkout v$MAJOR.$MINOR.x
-   $ git merge --ff-only release
+   $ git merge --ff-only release-v$MAJOR.$MINOR.$PATCH
    $ git push upstream v$MAJOR.$MINOR.x
    $ git push upstream v$MAJOR.$MINOR.$PATCH
    ```
@@ -212,6 +210,9 @@ Finally, document and publicize the release.
 2. Post a release announcement to [grpc-io](https://groups.google.com/forum/#!forum/grpc-io)
    (`grpc-io@googlegroups.com`). The title should be something that clearly identifies
    the release (e.g.`GRPC-Java <tag> Released`).
+   - Note that there may have been backports to the release branch since you
+     generated the release notes. Please verify that any backports are reflected
+     in the release notes before sending them out.
 
 Update Hosted Javadoc
 ---------------------

@@ -38,16 +38,19 @@ public class JsonUtilTest {
     map.put("key_string_nan", "NaN");
     map.put("key_number_5.5", 5.5D);
     map.put("key_string_six", "six");
+    map.put("key_number_7", 7F);
     map.put("key_string_infinity", "Infinity");
     map.put("key_string_minus_infinity", "-Infinity");
     map.put("key_string_exponent", "2.998e8");
     map.put("key_string_minus_zero", "-0");
+    map.put("key_string_boolean", true);
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_number_1")).isEqualTo(1D);
     assertThat(JsonUtil.getNumberAsInteger(map, "key_number_1")).isEqualTo(1);
     assertThat(JsonUtil.getNumberAsLong(map, "key_number_1")).isEqualTo(1L);
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_2.0")).isEqualTo(2D);
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_string_2.0")).isEqualTo(2F);
     try {
       JsonUtil.getNumberAsInteger(map, "key_string_2.0");
       fail("expecting to throw but did not");
@@ -66,8 +69,10 @@ public class JsonUtilTest {
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_3")).isEqualTo(3D);
     assertThat(JsonUtil.getNumberAsInteger(map, "key_string_3")).isEqualTo(3);
     assertThat(JsonUtil.getNumberAsLong(map, "key_string_3")).isEqualTo(3L);
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_string_3")).isEqualTo(3F);
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_nan")).isNaN();
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_string_nan")).isNaN();
     try {
       JsonUtil.getNumberAsInteger(map, "key_string_nan");
       fail("expecting to throw but did not");
@@ -118,18 +123,41 @@ public class JsonUtilTest {
       assertThat(e).hasMessageThat().isEqualTo(
           "value 'six' for key 'key_string_six' is not a long integer");
     }
+    try {
+      JsonUtil.getNumberAsFloat(map, "key_string_six");
+      fail("expecting to throw but did not");
+    } catch (RuntimeException e) {
+      assertThat(e).hasMessageThat().isEqualTo(
+          "string value 'six' for key 'key_string_six' cannot be parsed as a float");
+    }
+
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_number_7")).isEqualTo(7F);
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_infinity")).isPositiveInfinity();
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_minus_infinity")).isNegativeInfinity();
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_exponent")).isEqualTo(2.998e8D);
 
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_string_infinity")).isPositiveInfinity();
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_string_minus_infinity")).isNegativeInfinity();
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_string_exponent")).isEqualTo(2.998e8F);
+
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_minus_zero")).isZero();
     assertThat(JsonUtil.getNumberAsInteger(map, "key_string_minus_zero")).isEqualTo(0);
     assertThat(JsonUtil.getNumberAsLong(map, "key_string_minus_zero")).isEqualTo(0L);
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_string_minus_zero")).isZero();
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_nonexistent")).isNull();
     assertThat(JsonUtil.getNumberAsInteger(map, "key_nonexistent")).isNull();
     assertThat(JsonUtil.getNumberAsLong(map, "key_nonexistent")).isNull();
+    assertThat(JsonUtil.getNumberAsFloat(map, "key_nonexistent")).isNull();
+
+    try {
+      JsonUtil.getNumberAsFloat(map, "key_string_boolean");
+      fail("expecting to throw but did not");
+    } catch (RuntimeException e) {
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value true for key 'key_string_boolean' is not a float");
+    }
   }
 
   @Test

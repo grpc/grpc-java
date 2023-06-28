@@ -111,10 +111,10 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       helper.setRpcBehavior(
           ((RpcBehaviorConfig) resolvedAddresses.getLoadBalancingPolicyConfig()).rpcBehavior);
-      return delegateLb.acceptResolvedAddresses(resolvedAddresses);
+      delegateLb.handleResolvedAddresses(resolvedAddresses);
     }
   }
 

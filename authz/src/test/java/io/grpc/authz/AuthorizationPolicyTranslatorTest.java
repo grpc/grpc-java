@@ -48,8 +48,6 @@ public class AuthorizationPolicyTranslatorTest {
       assertThat(ioe).hasMessageThat().isEqualTo(
           "Use JsonReader.setLenient(true) to accept malformed JSON"
           + " at line 1 column 18 path $.name");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -61,8 +59,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("\"name\" is absent or empty");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -75,8 +71,6 @@ public class AuthorizationPolicyTranslatorTest {
     } catch (ClassCastException cce) {
       assertThat(cce).hasMessageThat().isEqualTo(
           "value '[abc]' for key 'name' in '{name=[abc]}' is not String");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -88,8 +82,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("\"allow_rules\" is absent");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -106,8 +98,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("rule \"name\" is absent or empty");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -173,8 +163,6 @@ public class AuthorizationPolicyTranslatorTest {
     } catch (ClassCastException cce) {
       assertThat(cce).hasMessageThat().isEqualTo(
           "value '{}' for key 'allow_rules' in '{name=abc, allow_rules={}}' is not List");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -281,8 +269,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" :method");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -311,8 +297,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" grpc-xxx");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -341,8 +325,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" Host");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -366,8 +348,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("\"key\" is absent or empty");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -393,8 +373,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("\"values\" is absent or empty");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -421,8 +399,6 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("\"values\" is absent or empty");
-    } catch (Exception e) {
-      throw new AssertionError("the test failed ", e);
     }
   }
 

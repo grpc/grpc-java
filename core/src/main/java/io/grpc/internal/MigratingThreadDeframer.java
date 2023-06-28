@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.Decompressor;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
+import io.perfmark.TaskCloseable;
 import java.io.Closeable;
 import java.io.InputStream;
 import java.util.ArrayDeque;
@@ -107,11 +108,9 @@ final class MigratingThreadDeframer implements ThreadOptimizedDeframer {
     } else {
       if (!alreadyEnqueued) {
         if (currentThreadIsTransportThread) {
-          PerfMark.startTask("MigratingThreadDeframer.messageAvailable");
-          try {
+          try (TaskCloseable ignore =
+                   PerfMark.traceTask("MigratingThreadDeframer.messageAvailable")) {
             transportListener.messagesAvailable(messageProducer);
-          } finally {
-            PerfMark.stopTask("MigratingThreadDeframer.messageAvailable");
           }
         } else {
           final Link link = PerfMark.linkOut();
@@ -119,12 +118,10 @@ final class MigratingThreadDeframer implements ThreadOptimizedDeframer {
           // MigratingThreadDeframer
           transportExecutor.runOnTransportThread(new Runnable() {
             @Override public void run() {
-              PerfMark.startTask("MigratingThreadDeframer.messageAvailable");
-              PerfMark.linkIn(link);
-              try {
+              try (TaskCloseable ignore =
+                       PerfMark.traceTask("MigratingThreadDeframer.messageAvailable")) {
+                PerfMark.linkIn(link);
                 transportListener.messagesAvailable(messageProducer);
-              } finally {
-                PerfMark.stopTask("MigratingThreadDeframer.messageAvailable");
               }
             }
           });
@@ -145,28 +142,22 @@ final class MigratingThreadDeframer implements ThreadOptimizedDeframer {
           // necessary processing
           transportExecutor.runOnTransportThread(new Runnable() {
             @Override public void run() {
-              PerfMark.startTask("MigratingThreadDeframer.request");
-              PerfMark.linkIn(link);
-              try {
+              try (TaskCloseable ignore = PerfMark.traceTask("MigratingThreadDeframer.request")) {
+                PerfMark.linkIn(link);
                 // Since processing continues from transport thread while this runnable was
                 // enqueued, the state may have changed since we ran runOnTransportThread. So we
                 // must make sure deframerOnTransportThread==true
                 requestFromTransportThread(numMessages);
-              } finally {
-                PerfMark.stopTask("MigratingThreadDeframer.request");
               }
             }
           });
           return;
         }
-        PerfMark.startTask("MigratingThreadDeframer.request");
-        try {
+        try (TaskCloseable ignore = PerfMark.traceTask("MigratingThreadDeframer.request")) {
           deframer.request(numMessages);
         } catch (Throwable t) {
           appListener.deframeFailed(t);
           deframer.close(); // unrecoverable state
-        } finally {
-          PerfMark.stopTask("MigratingThreadDeframer.request");
         }
       }
     }
@@ -205,8 +196,7 @@ final class MigratingThreadDeframer implements ThreadOptimizedDeframer {
   public void deframe(final ReadableBuffer data) {
     class DeframeOp implements Op, Closeable {
       @Override public void run(boolean isDeframerOnTransportThread) {
-        PerfMark.startTask("MigratingThreadDeframer.deframe");
-        try {
+        try (TaskCloseable ignore = PerfMark.traceTask("MigratingThreadDeframer.deframe")) {
           if (isDeframerOnTransportThread) {
             deframer.deframe(data);
             return;
@@ -218,8 +208,6 @@ final class MigratingThreadDeframer implements ThreadOptimizedDeframer {
             appListener.deframeFailed(t);
             deframer.close(); // unrecoverable state
           }
-        } finally {
-          PerfMark.stopTask("MigratingThreadDeframer.deframe");
         }
       }
 

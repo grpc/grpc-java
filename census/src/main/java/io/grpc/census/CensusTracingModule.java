@@ -17,6 +17,7 @@
 package io.grpc.census;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.census.internal.ObservabilityCensusConstants.CLIENT_TRACE_SPAN_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -269,6 +270,9 @@ final class CensusTracingModule {
           "previous-rpc-attempts", AttributeValue.longAttributeValue(info.getPreviousAttempts()));
       attemptSpan.putAttribute(
           "transparent-retry", AttributeValue.booleanAttributeValue(info.isTransparentRetry()));
+      if (info.getCallOptions().getOption(NAME_RESOLUTION_DELAYED)) {
+        span.addAnnotation("Delayed name resolution complete");
+      }
       return new ClientTracer(attemptSpan, span, tracingHeader, isSampledToLocalTracing);
     }
 
@@ -299,6 +303,7 @@ final class CensusTracingModule {
     final Metadata.Key<SpanContext> tracingHeader;
     final boolean isSampledToLocalTracing;
     volatile int seqNo;
+    boolean isPendingStream;
 
     ClientTracer(
         Span span, Span parentSpan, Metadata.Key<SpanContext> tracingHeader,
@@ -315,6 +320,14 @@ final class CensusTracingModule {
         headers.discardAll(tracingHeader);
         headers.put(tracingHeader, span.getContext());
       }
+      if (isPendingStream) {
+        span.addAnnotation("Delayed LB pick complete");
+      }
+    }
+
+    @Override
+    public void createPendingStream() {
+      isPendingStream = true;
     }
 
     @Override

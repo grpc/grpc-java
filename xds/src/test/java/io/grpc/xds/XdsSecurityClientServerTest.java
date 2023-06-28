@@ -88,7 +88,7 @@ import org.junit.runners.JUnit4;
  * modes.
  */
 @RunWith(JUnit4.class)
-public class XdsSdsClientServerTest {
+public class XdsSecurityClientServerTest {
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
@@ -356,7 +356,7 @@ public class XdsSdsClientServerTest {
     xdsClient.deliverLdsUpdate(listenerUpdate);
     startFuture.get(10, TimeUnit.SECONDS);
     port = xdsServer.getPort();
-    URI expectedUri = new URI("sdstest://localhost:" + port);
+    URI expectedUri = new URI("sectest://localhost:" + port);
     fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
     NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
   }
@@ -400,7 +400,7 @@ public class XdsSdsClientServerTest {
       throws URISyntaxException {
     ManagedChannelBuilder<?> channelBuilder =
         Grpc.newChannelBuilder(
-            "sdstest://localhost:" + port,
+            "sectest://localhost:" + port,
             XdsChannelCredentials.create(InsecureChannelCredentials.create()));
 
     if (overrideAuthority != null) {
@@ -486,7 +486,7 @@ public class XdsSdsClientServerTest {
 
     @Override
     public String getDefaultScheme() {
-      return "sdstest";
+      return "sectest";
     }
 
     @Override

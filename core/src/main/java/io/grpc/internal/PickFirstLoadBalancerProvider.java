@@ -16,10 +16,14 @@
 
 package io.grpc.internal;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
+import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.util.Map;
 
 /**
@@ -30,6 +34,10 @@ import java.util.Map;
  */
 public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   private static final String NO_CONFIG = "no service config";
+  private static final String SHUFFLE_ADDRESS_LIST_KEY = "shuffleAddressList";
+  private static final String CONFIG_FLAG_NAME = "GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG";
+  @VisibleForTesting
+  static boolean enablePickFirstConfig = !Strings.isNullOrEmpty(System.getenv(CONFIG_FLAG_NAME));
 
   @Override
   public boolean isAvailable() {
@@ -54,6 +62,18 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
-    return ConfigOrError.fromConfig(NO_CONFIG);
+    if (enablePickFirstConfig) {
+      try {
+        return ConfigOrError.fromConfig(
+            new PickFirstLoadBalancerConfig(JsonUtil.getBoolean(rawLoadBalancingPolicyConfig,
+                SHUFFLE_ADDRESS_LIST_KEY)));
+      } catch (RuntimeException e) {
+        return ConfigOrError.fromError(
+            Status.UNAVAILABLE.withCause(e).withDescription(
+                "Failed parsing configuration for " + getPolicyName()));
+      }
+    } else {
+      return ConfigOrError.fromConfig(NO_CONFIG);
+    }
   }
 }

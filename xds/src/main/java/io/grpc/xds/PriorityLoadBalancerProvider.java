@@ -25,6 +25,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -57,7 +58,8 @@ public final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
-    throw new UnsupportedOperationException();
+    return ConfigOrError.fromError(
+        Status.INTERNAL.withDescription(getPolicyName() + " cannot be used from service config"));
   }
 
   static final class PriorityLbConfig {

@@ -183,6 +183,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     if (getPendingStreamsCount() == 1) {
       syncContext.executeLater(reportTransportInUse);
     }
+    for (ClientStreamTracer streamTracer : tracers) {
+      streamTracer.createPendingStream();
+    }
     return pendingStream;
   }
 

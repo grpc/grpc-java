@@ -26,6 +26,7 @@ import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Settings;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
+import io.perfmark.TaskCloseable;
 import java.io.IOException;
 import java.net.Socket;
 import javax.annotation.Nullable;
@@ -100,8 +101,7 @@ final class AsyncSink implements Sink {
     if (closed) {
       throw new IOException("closed");
     }
-    PerfMark.startTask("AsyncSink.write");
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("AsyncSink.write")) {
       boolean closeSocket = false;
       synchronized (lock) {
         buffer.write(source, byteCount);
@@ -130,10 +130,9 @@ final class AsyncSink implements Sink {
         final Link link = PerfMark.linkOut();
         @Override
         public void doRun() throws IOException {
-          PerfMark.startTask("WriteRunnable.runWrite");
-          PerfMark.linkIn(link);
           Buffer buf = new Buffer();
-          try {
+          try (TaskCloseable ignore = PerfMark.traceTask("WriteRunnable.runWrite")) {
+            PerfMark.linkIn(link);
             int writingControlFrames;
             synchronized (lock) {
               buf.write(buffer, buffer.completeSegmentByteCount());
@@ -146,13 +145,9 @@ final class AsyncSink implements Sink {
             synchronized (lock) {
               queuedControlFrames -= writingControlFrames;
             }
-          } finally {
-            PerfMark.stopTask("WriteRunnable.runWrite");
           }
         }
       });
-    } finally {
-      PerfMark.stopTask("AsyncSink.write");
     }
   }
 
@@ -161,8 +156,7 @@ final class AsyncSink implements Sink {
     if (closed) {
       throw new IOException("closed");
     }
-    PerfMark.startTask("AsyncSink.flush");
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("AsyncSink.flush")) {
       synchronized (lock) {
         if (flushEnqueued) {
           return;
@@ -173,23 +167,18 @@ final class AsyncSink implements Sink {
         final Link link = PerfMark.linkOut();
         @Override
         public void doRun() throws IOException {
-          PerfMark.startTask("WriteRunnable.runFlush");
-          PerfMark.linkIn(link);
           Buffer buf = new Buffer();
-          try {
+          try (TaskCloseable ignore = PerfMark.traceTask("WriteRunnable.runFlush")) {
+            PerfMark.linkIn(link);
             synchronized (lock) {
               buf.write(buffer, buffer.size());
               flushEnqueued = false;
             }
             sink.write(buf, buf.size());
             sink.flush();
-          } finally {
-            PerfMark.stopTask("WriteRunnable.runFlush");
           }
         }
       });
-    } finally {
-      PerfMark.stopTask("AsyncSink.flush");
     }
   }
 

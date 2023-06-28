@@ -59,6 +59,16 @@ public final class OutlierDetectionLoadBalancerProvider extends LoadBalancerProv
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
+    try {
+      return parseLoadBalancingPolicyConfigInternal(rawConfig);
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.UNAVAILABLE.withCause(e).withDescription(
+              "Failed parsing configuration for " + getPolicyName()));
+    }
+  }
+
+  private ConfigOrError parseLoadBalancingPolicyConfigInternal(Map<String, ?> rawConfig) {
     // Common configuration.
     Long intervalNanos = JsonUtil.getStringAsDuration(rawConfig, "interval");
     Long baseEjectionTimeNanos = JsonUtil.getStringAsDuration(rawConfig, "baseEjectionTime");

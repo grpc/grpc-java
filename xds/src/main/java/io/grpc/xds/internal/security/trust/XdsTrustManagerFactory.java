@@ -73,7 +73,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
           certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
           "only static certificateValidationContext expected");
     }
-    xdsX509TrustManager = createSdsX509TrustManager(certs, certificateValidationContext);
+    xdsX509TrustManager = createX509TrustManager(certs, certificateValidationContext);
   }
 
   private static X509Certificate[] getTrustedCaFromCertContext(
@@ -98,7 +98,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
   }
 
   @VisibleForTesting
-  static XdsX509TrustManager createSdsX509TrustManager(
+  static XdsX509TrustManager createX509TrustManager(
       X509Certificate[] certs, CertificateValidationContext certContext) throws CertStoreException {
     TrustManagerFactory tmf = null;
     try {
@@ -115,7 +115,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
       }
       tmf.init(ks);
     } catch (NoSuchAlgorithmException | KeyStoreException | IOException | CertificateException e) {
-      logger.log(Level.SEVERE, "createSdsX509TrustManager", e);
+      logger.log(Level.SEVERE, "createX509TrustManager", e);
       throw new CertStoreException(e);
     }
     TrustManager[] tms = tmf.getTrustManagers();
