@@ -37,6 +37,9 @@ subprojects {
             "-Xlint:-try"
         ]
         it.options.encoding = "UTF-8"
+        // Avoid Gradle OOM.
+        // https://docs.gradle.org/current/userguide/performance.html#run_the_compiler_as_a_separate_process
+        it.options.fork = true
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
             it.options.compilerArgs += ["-Werror"]
         }
