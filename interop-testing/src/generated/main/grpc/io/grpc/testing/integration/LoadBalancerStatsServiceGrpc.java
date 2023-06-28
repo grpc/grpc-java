@@ -15,7 +15,7 @@ public final class LoadBalancerStatsServiceGrpc {
 
   private LoadBalancerStatsServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.LoadBalancerStatsService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.LoadBalancerStatsService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.LoadBalancerStatsRequest,
@@ -376,9 +376,9 @@ public final class LoadBalancerStatsServiceGrpc {
   private static final class LoadBalancerStatsServiceMethodDescriptorSupplier
       extends LoadBalancerStatsServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    LoadBalancerStatsServiceMethodDescriptorSupplier(String methodName) {
+    LoadBalancerStatsServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

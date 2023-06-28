@@ -12,7 +12,7 @@ public final class MetricsServiceGrpc {
 
   private MetricsServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.MetricsService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.MetricsService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage,
@@ -351,9 +351,9 @@ public final class MetricsServiceGrpc {
   private static final class MetricsServiceMethodDescriptorSupplier
       extends MetricsServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    MetricsServiceMethodDescriptorSupplier(String methodName) {
+    MetricsServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

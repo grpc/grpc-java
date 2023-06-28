@@ -12,7 +12,7 @@ public final class HealthGrpc {
 
   private HealthGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.health.v1.Health";
+  public static final java.lang.String SERVICE_NAME = "grpc.health.v1.Health";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
@@ -388,9 +388,9 @@ public final class HealthGrpc {
   private static final class HealthMethodDescriptorSupplier
       extends HealthBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    HealthMethodDescriptorSupplier(String methodName) {
+    HealthMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

@@ -12,7 +12,7 @@ public final class ReportQpsScenarioServiceGrpc {
 
   private ReportQpsScenarioServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.ReportQpsScenarioService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.ReportQpsScenarioService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ScenarioResult,
@@ -273,9 +273,9 @@ public final class ReportQpsScenarioServiceGrpc {
   private static final class ReportQpsScenarioServiceMethodDescriptorSupplier
       extends ReportQpsScenarioServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ReportQpsScenarioServiceMethodDescriptorSupplier(String methodName) {
+    ReportQpsScenarioServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 
