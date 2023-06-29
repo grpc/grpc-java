@@ -5,8 +5,6 @@ plugins {
 
 description = 'gRPC: Context'
 
-sourceCompatibility = 1.7
-
 dependencies {
     runtimeOnly (project(":grpc-api")) {
         exclude group: "com.google.guava", module: "guava"

@@ -9,6 +9,7 @@ description = 'gRPC: Census'
 
 dependencies {
     api project(':grpc-api')
+    // force dependent jars to depend on latest grpc-context
     runtimeOnly project(":grpc-context")
     implementation libraries.guava,
             libraries.opencensus.api,
