@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.api.expr.v1alpha1.Expr;
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
@@ -341,15 +342,15 @@ public class RbacFilterTest {
 
   @Test
   public void testOrderIndependenceOfPolicies() {
-    Message rawProto = buildComplexRbac(List.of(1, 2, 3, 4, 5, 6), true);
+    Message rawProto = buildComplexRbac(ImmutableList.of(1, 2, 3, 4, 5, 6), true);
     ConfigOrError<RbacConfig> ascFirst = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
 
-    rawProto = buildComplexRbac(List.of(1, 2, 3, 4, 5, 6), false);
+    rawProto = buildComplexRbac(ImmutableList.of(1, 2, 3, 4, 5, 6), false);
     ConfigOrError<RbacConfig> ascLast = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
 
     assertThat(ascFirst.config).isEqualTo(ascLast.config);
 
-    rawProto = buildComplexRbac(List.of(6, 5, 4, 3, 2, 1), true);
+    rawProto = buildComplexRbac(ImmutableList.of(6, 5, 4, 3, 2, 1), true);
     ConfigOrError<RbacConfig> decFirst = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
 
     assertThat(ascFirst.config).isEqualTo(decFirst.config);
