@@ -59,8 +59,10 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /** RBAC Http filter implementation. */
@@ -117,9 +119,12 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
       default:
         return ConfigOrError.fromError("Unknown rbacConfig action type: " + rbacConfig.getAction());
     }
-    Map<String, Policy> policyMap = rbacConfig.getPoliciesMap();
     List<GrpcAuthorizationEngine.PolicyMatcher> policyMatchers = new ArrayList<>();
-    for (Map.Entry<String, Policy> entry: policyMap.entrySet()) {
+    List<Entry<String, Policy>> sortedPolicyEntries = rbacConfig.getPoliciesMap().entrySet()
+        .stream()
+        .sorted((a,b)->a.getKey().compareTo(b.getKey()))
+        .collect(Collectors.toList());
+    for (Map.Entry<String, Policy> entry: sortedPolicyEntries) {
       try {
         Policy policy = entry.getValue();
         if (policy.hasCondition() || policy.hasCheckedCondition()) {
