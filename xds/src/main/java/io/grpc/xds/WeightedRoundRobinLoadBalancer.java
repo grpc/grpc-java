@@ -332,10 +332,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
    * The Static Stride Scheduler is an implementation of an earliest deadline first (EDF) scheduler
    * in which each object is chosen periodically with frequency proportional to its weight.
    * <p>
-   * Specifically, each backend is given a deadline equal to the multiplicative inverse of 
-   * its weight. The place of each backend in its deadline is tracked, and each call to
-   * pick a backend returns the backend index with the least remaining time in its deadline.
-   * <p>
    * The way in which this is implemented is through a static stride scheduler. 
    * The Static Stride Scheduler works by iterating through the list of subchannel weights
    * and using modular arithmetic to proportionally distribute picks, favoring entries 
@@ -375,8 +371,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       double scalingFactor = K_MAX_WEIGHT / maxWeight;
       if (numWeightedChannels > 0) {
-        int value = (int) Math.round(scalingFactor * sumWeight / numWeightedChannels);
-        meanWeight = (short) (value > 0x7FFF ? value - 0x10000 : value);
+        meanWeight = (short) Math.round(scalingFactor * sumWeight / numWeightedChannels);
       } else {
         meanWeight = 1;
       }
@@ -409,11 +404,32 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     /*
      * Selects index of next backend server.
      * <p>
-     * A 2D array is compactly represented where the row represents the generation and the column
-     * represents the backend index. The value of an element is a boolean value which indicates
-     * whether or not a backend should be picked now. An atomically incremented counter keeps track
-     * of our backend and generation through modular arithmetic within the pick() method.
-     * An offset is also included to minimize consecutive non-picks of a backend.
+     * A 2D array is compactly represented as a function of W(backend), where the row
+     * represents the generation and the column represents the backend index:
+     * X(backend,generation) | generation ∈ [0,kMaxWeight).
+     * Each element in the conceptual array is a boolean indicating whether the backend at
+     * this index should be picked now. If false, the counter is incremented again,
+     * and the new element is checked. An atomically incremented counter keeps track of our
+     * backend and generation through modular arithmetic within the pick() method.
+     * <p>
+     * Modular arithmetic allows us to evenly distribute picks and skips between
+     * generations based on W(backend).
+     * X(backend,generation) = (W(backend) * generation) % kMaxWeight >= kMaxWeight - W(backend)
+     * If we have the same three backends with weights:
+     * W(backend) = {2,3,6} scaled to max(W(backend)) = 6, then X(backend,generation) is:
+     * <p>
+     * B0    B1    B2
+     * T     T     T
+     * F     F     T
+     * F     T     T
+     * T     F     T
+     * F     T     T
+     * F     F     T
+     * The sequence of picked backend indices is given by
+     * walking across and down: {0,1,2,2,1,2,0,2,1,2,2}.
+     * <p>
+     * To reduce the variance and spread the wasted work among different picks,
+     * an offset that varies per backend index is also included to the calculation.
      */
     int pick() {
       while (true) {
