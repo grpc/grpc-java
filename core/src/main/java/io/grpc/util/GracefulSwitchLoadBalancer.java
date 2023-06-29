@@ -43,6 +43,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
+    @SuppressWarnings("deprecation")
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       //  Most LB policies using this class will receive child policy configuration within the
       //  service config, so they are naturally calling switchTo() just before

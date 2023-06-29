@@ -126,7 +126,13 @@ public abstract class LoadBalancer {
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
+   * @deprecated Please override {@code acceptResolvedAddresses()} instead. Also note that
+   *     {@code canHandleEmptyAddressListFromNameResolution()} is deprecated as well as
+   *     {@code acceptResolvedAddresses()} should now indicate the acceptance of the addresses with
+   *     its return value.
    */
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
       // Note that the information about the addresses actually being accepted will be lost
@@ -141,7 +147,9 @@ public abstract class LoadBalancer {
    * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
    * single list if needed.
    *
-   * <p>Implementations can choose to reject the given addresses by returning {@code false}.
+   * <p>Implementations can choose to reject the given addresses by returning {@code false}. Please
+   * note that an empty list of addresses could be provided and that the deprecated {@code
+   * canHandleEmptyAddressListFromNameResolution()} will be ignored when this method is overwritten.
    *
    * <p>Implementations should not modify the given {@code addresses}.
    *
@@ -379,7 +387,17 @@ public abstract class LoadBalancer {
    *
    * <p>This method should always return a constant value.  It's not specified when this will be
    * called.
+   *
+   * <p>Note that this method is only called when the deprecated {@code handleResolvedAddresses()}
+   * is overwritten.
+   *
+   * @deprecated Instead of overwriting this and {@code handleResolvedAddresses()} please only
+   *     overwrite {@code acceptResolvedAddresses()}. In that method you can indicate if the
+   *     addresses provided by the name resolver are acceptable with the {@code boolean} return
+   *     value.
    */
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return false;
   }

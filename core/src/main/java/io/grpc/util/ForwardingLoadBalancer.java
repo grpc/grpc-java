@@ -30,6 +30,7 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   protected abstract LoadBalancer delegate();
 
   @Override
+  @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     delegate().handleResolvedAddresses(resolvedAddresses);
   }
@@ -52,6 +53,7 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return delegate().canHandleEmptyAddressListFromNameResolution();
   }

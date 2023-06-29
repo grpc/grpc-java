@@ -153,6 +153,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return true;
   }
