@@ -2453,9 +2453,8 @@ public abstract class XdsClientImplTestBase {
             null, false, null, "envoy.transport_sockets.tls", null, null
         ));
     final Any okClusterRoundRobin =
-        Any.pack(mf.buildEdsCluster(cdsResourceName, "eds-service-bar.googleapis.com", "round_robin", null,
-            null, false, null, "envoy.transport_sockets.tls", null, null
-        ));
+        Any.pack(mf.buildEdsCluster(cdsResourceName, "eds-service-bar.googleapis.com",
+            "round_robin", null,null, false, null, "envoy.transport_sockets.tls", null, null));
 
 
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(),
