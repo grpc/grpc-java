@@ -22,6 +22,8 @@ description = 'gRPC: Core'
 
 dependencies {
     api project(':grpc-api')
+    // force dependent jars to depend on latest grpc-context
+    runtimeOnly project(":grpc-context")
     implementation libraries.gson,
             libraries.android.annotations,
             libraries.animalsniffer.annotations,
@@ -33,8 +35,7 @@ dependencies {
             libraries.mockito.core,
             libraries.truth,
             project(':grpc-testing')
-    testImplementation testFixtures(project(':grpc-context')),
-            testFixtures(project(':grpc-api')),
+    testImplementation testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
             project(':grpc-grpclb')
     testImplementation libraries.guava.testlib

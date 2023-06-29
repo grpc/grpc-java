@@ -2,6 +2,7 @@ java_library(
     name = "api",
     srcs = glob([
         "src/main/java/**/*.java",
+        "src/context/java/**/*.java",
     ]),
     javacopts = ["-Xep:DoNotCall:OFF"],  # Remove once requiring Bazel 3.4.0+; allows non-final
     visibility = ["//visibility:public"],
@@ -13,4 +14,5 @@ java_library(
         "@com_google_guava_guava//jar",
         "@com_google_j2objc_j2objc_annotations//jar",
     ],
+    exports = ["//context"],
 )

@@ -14,7 +14,7 @@ dependencies {
             libraries.junit
     // Only io.grpc.internal.testing.StatsTestUtils depends on opencensus_api, for internal use.
     compileOnly libraries.opencensus.api
-    runtimeOnly project(":grpc-context") // Pull in newer version than census-api
+    runtimeOnly project(":grpc-api")   // Pull in newer version than census-api
 
     testImplementation libraries.mockito.core
 
