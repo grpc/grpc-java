@@ -2445,6 +2445,35 @@ public abstract class XdsClientImplTestBase {
   }
 
   @Test
+  public void cdsResponseErrorHandling_xdstpWithoutEdsConfig() {
+    String cdsResourceName = "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1";
+
+    final Any testClusterRoundRobin =
+        Any.pack(mf.buildEdsCluster(cdsResourceName, null, "round_robin", null,
+            null, false, null, "envoy.transport_sockets.tls", null, null
+        ));
+    final Any okClusterRoundRobin =
+        Any.pack(mf.buildEdsCluster(cdsResourceName, "eds-service-bar.googleapis.com", "round_robin", null,
+            null, false, null, "envoy.transport_sockets.tls", null, null
+        ));
+
+
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(),
+        cdsResourceName, cdsResourceWatcher);
+    call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
+
+    List<String> errors = ImmutableList.of("CDS response Cluster "
+        + "\'xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1\' "
+        + "validation error: EDS service_name must be set when Cluster resource has an xdstp name");
+    call.verifyRequest(CDS, cdsResourceName, "", "", NODE); // get this out of the way
+    call.verifyRequestNack(CDS, cdsResourceName, "", "0000", NODE, errors);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+
+    call.sendResponse(CDS, okClusterRoundRobin, VERSION_1, "0001");
+    call.verifyRequest(CDS, cdsResourceName, VERSION_1, "0001", NODE);
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   public void cachedCdsResource_data() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
