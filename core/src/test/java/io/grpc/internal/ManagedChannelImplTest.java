@@ -279,6 +279,11 @@ public class ManagedChannelImplTest {
       ArgumentCaptor.forClass(ClientStreamListener.class);
 
   private void createChannel(ClientInterceptor... interceptors) {
+    createChannel(false, interceptors);
+  }
+
+  private void createChannel(boolean nameResolutionExpectedToFail,
+      ClientInterceptor... interceptors) {
     checkState(channel == null);
 
     channel = new ManagedChannelImpl(
@@ -287,7 +292,7 @@ public class ManagedChannelImplTest {
         timer.getTimeProvider());
 
     if (requestConnection) {
-      int numExpectedTasks = 0;
+      int numExpectedTasks = nameResolutionExpectedToFail ? 1 : 0;
 
       // Force-exit the initial idle-mode
       channel.syncContext.execute(new Runnable() {
@@ -2955,7 +2960,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
+    createChannel(true);
 
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Failed to resolve name: " + error)
@@ -3458,10 +3463,11 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
-    verify(mockLoadBalancer).acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(nameResolverFactory.servers)
-            .build());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
+    ResolvedAddresses resolvedAddresses = resolvedAddressCaptor.getValue();
+    assertThat(resolvedAddresses.getAddresses()).isEqualTo(nameResolverFactory.servers);
+    assertThat(resolvedAddresses.getAttributes()
+        .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)).isNotNull();
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel =
@@ -3564,10 +3570,11 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
-    verify(mockLoadBalancer).acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(nameResolverFactory.servers)
-            .build());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
+    ResolvedAddresses resolvedAddresses = resolvedAddressCaptor.getValue();
+    assertThat(resolvedAddresses.getAddresses()).isEqualTo(nameResolverFactory.servers);
+    assertThat(resolvedAddresses.getAttributes()
+        .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)).isNotNull();
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel =
