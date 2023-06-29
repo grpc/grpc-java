@@ -15,7 +15,7 @@ public final class XdsUpdateHealthServiceGrpc {
 
   private XdsUpdateHealthServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.XdsUpdateHealthService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.XdsUpdateHealthService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,

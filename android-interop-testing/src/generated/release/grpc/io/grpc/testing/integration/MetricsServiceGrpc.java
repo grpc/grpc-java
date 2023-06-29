@@ -12,7 +12,7 @@ public final class MetricsServiceGrpc {
 
   private MetricsServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.MetricsService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.MetricsService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage,
