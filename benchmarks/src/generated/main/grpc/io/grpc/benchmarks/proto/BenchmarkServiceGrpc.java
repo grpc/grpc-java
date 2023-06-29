@@ -12,7 +12,7 @@ public final class BenchmarkServiceGrpc {
 
   private BenchmarkServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.BenchmarkService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.BenchmarkService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
@@ -552,9 +552,9 @@ public final class BenchmarkServiceGrpc {
   private static final class BenchmarkServiceMethodDescriptorSupplier
       extends BenchmarkServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    BenchmarkServiceMethodDescriptorSupplier(String methodName) {
+    BenchmarkServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

@@ -989,9 +989,9 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
         "private static final class $proto_method_descriptor_supplier$\n"
         "    extends $proto_base_descriptor_supplier$\n"
         "    implements $ProtoMethodDescriptorSupplier$ {\n"
-        "  private final String methodName;\n"
+        "  private final $String$ methodName;\n"
         "\n"
-        "  $proto_method_descriptor_supplier$(String methodName) {\n"
+        "  $proto_method_descriptor_supplier$($String$ methodName) {\n"
         "    this.methodName = methodName;\n"
         "  }\n"
         "\n"
@@ -1149,7 +1149,7 @@ static void PrintService(const ServiceDescriptor* service,
 
   p->Print(
       *vars,
-      "public static final String SERVICE_NAME = "
+      "public static final $String$ SERVICE_NAME = "
       "\"$Package$$service_name$\";\n\n");
 
   PrintMethodFields(service, vars, p, flavor);

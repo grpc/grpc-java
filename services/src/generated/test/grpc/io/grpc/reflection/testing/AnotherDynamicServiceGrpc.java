@@ -15,7 +15,7 @@ public final class AnotherDynamicServiceGrpc {
 
   private AnotherDynamicServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.reflection.testing.AnotherDynamicService";
+  public static final java.lang.String SERVICE_NAME = "grpc.reflection.testing.AnotherDynamicService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.reflection.testing.DynamicRequest,
@@ -291,9 +291,9 @@ public final class AnotherDynamicServiceGrpc {
   private static final class AnotherDynamicServiceMethodDescriptorSupplier
       extends AnotherDynamicServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    AnotherDynamicServiceMethodDescriptorSupplier(String methodName) {
+    AnotherDynamicServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

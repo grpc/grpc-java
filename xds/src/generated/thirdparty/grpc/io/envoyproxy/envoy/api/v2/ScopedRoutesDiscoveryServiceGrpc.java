@@ -21,7 +21,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
   private ScopedRoutesDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.api.v2.ScopedRoutesDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.api.v2.ScopedRoutesDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -429,9 +429,9 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   private static final class ScopedRoutesDiscoveryServiceMethodDescriptorSupplier
       extends ScopedRoutesDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ScopedRoutesDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    ScopedRoutesDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

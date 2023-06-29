@@ -12,7 +12,7 @@ public final class ReflectableServiceGrpc {
 
   private ReflectableServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.reflection.testing.ReflectableService";
+  public static final java.lang.String SERVICE_NAME = "grpc.reflection.testing.ReflectableService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.reflection.testing.Request,
@@ -261,9 +261,9 @@ public final class ReflectableServiceGrpc {
   private static final class ReflectableServiceMethodDescriptorSupplier
       extends ReflectableServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ReflectableServiceMethodDescriptorSupplier(String methodName) {
+    ReflectableServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

@@ -16,7 +16,7 @@ public final class ChannelzGrpc {
 
   private ChannelzGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.channelz.v1.Channelz";
+  public static final java.lang.String SERVICE_NAME = "grpc.channelz.v1.Channelz";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.channelz.v1.GetTopChannelsRequest,
@@ -811,9 +811,9 @@ public final class ChannelzGrpc {
   private static final class ChannelzMethodDescriptorSupplier
       extends ChannelzBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ChannelzMethodDescriptorSupplier(String methodName) {
+    ChannelzMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 
