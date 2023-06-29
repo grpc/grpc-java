@@ -748,9 +748,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       String target, @Nullable final String overrideAuthority,
       NameResolver.Factory nameResolverFactory, NameResolver.Args nameResolverArgs) {
     NameResolver resolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
-    if (overrideAuthority == null) {
-      return resolver;
-    }
 
     // If the nameResolver is not already a RetryingNameResolver, then wrap it with it.
     // This helps guarantee that name resolution retry remains supported even as it has been
@@ -766,6 +763,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
               nameResolverArgs.getScheduledExecutorService(),
               nameResolverArgs.getSynchronizationContext()),
           nameResolverArgs.getSynchronizationContext());
+    }
+
+    if (overrideAuthority == null) {
+      return usedNameResolver;
     }
 
     return new ForwardingNameResolver(usedNameResolver) {
