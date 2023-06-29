@@ -71,11 +71,6 @@ subprojects {
                 }
                 generateProtoTasks {
                     all().each { task ->
-                        // Recompile protos when build.gradle has been changed, because
-                        // it's possible the version of protoc has been changed.
-                        task.inputs.file("${rootProject.projectDir}/build.gradle")
-                          .withPathSensitivity(PathSensitivity.RELATIVE)
-                          .withPropertyName('root build.gradle')
                         if (isAndroid) {
                             task.builtins {
                                 java { option 'lite' }
