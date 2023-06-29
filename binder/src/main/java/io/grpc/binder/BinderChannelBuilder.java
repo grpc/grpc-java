@@ -292,6 +292,7 @@ public final class BinderChannelBuilder
    * @param targetUserHandle the target user to bind into.
    * @return this
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
   public BinderChannelBuilder bindAsUser(UserHandle targetUserHandle) {
     this.targetUserHandle = targetUserHandle;
     return this;
