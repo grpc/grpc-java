@@ -198,7 +198,7 @@ public class BlockingBidiStreamTest {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
     delayedCancel(biDiStream, "cancel write");
-    assertFalse(biDiStream.write(30));
+    assertFalse(biDiStream.write(30)); // this is interrupted by cancel
     start = System.currentTimeMillis();
     try {
       biDiStream.write(30);
