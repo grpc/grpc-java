@@ -358,7 +358,11 @@ final class LoadStatsManager2 {
     }
 
     /**
-     * Records a custom named backend load metric stat for per-call load reporting.
+     * Records a custom named backend load metric stat for per-call load reporting. For the metric
+     * key {@code name}, creates a new {@link BackendLoadMetricStats} with a finished requests
+     * counter of 1 and the {@code value} if the key is not present in the map. Otherwise,
+     * increments the finished requests counter and adds the {@code value} to the existing
+     * {@link BackendLoadMetricStats}. This entire method is performed atomically in one operation.
      */
     void recordBackendLoadMetricStats(String name, double value) {
       loadMetricStatsMap.get().merge(name, BackendLoadMetricStats.create(1, value),
