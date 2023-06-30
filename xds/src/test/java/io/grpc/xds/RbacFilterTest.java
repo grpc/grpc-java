@@ -437,7 +437,6 @@ public class RbacFilterTest {
         Principal.newBuilder().setAndIds(Principal.Set.newBuilder()
             .addIds(Principal.newBuilder().setDirectRemoteIp(cidrRange).build())
             .addIds(Principal.newBuilder().setRemoteIp(cidrRange).build())
-            .addIds(Principal.newBuilder().setSourceIp(cidrRange).build())
             .build()).build());
 
     return Policy.newBuilder()
