@@ -197,9 +197,17 @@ public class BlockingBidiStreamTest {
     // write terminated
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
-    delayedCancel(biDiStream, "cancel write");
-    assertFalse(biDiStream.write(30)); // this is interrupted by cancel
     start = System.currentTimeMillis();
+    delayedCancel(biDiStream, "cancel write");
+
+    // Write interrupted by cancel
+    try {
+      assertFalse(biDiStream.write(30)); // this is interrupted by cancel
+    } catch (StatusRuntimeException e) {
+      assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
+    }
+
+    // Write after cancel
     try {
       biDiStream.write(30);
       fail("No exception doing write after cancel");
@@ -220,15 +228,6 @@ public class BlockingBidiStreamTest {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
     }
 
-    // new write immediately throws an exception
-    start = System.currentTimeMillis();
-    try {
-      biDiStream.write(31);
-      fail("No exception doing write after cancel");
-    } catch (StatusRuntimeException e) {
-      assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
-      assertThat(System.currentTimeMillis() - start).isLessThan(2000);
-    }
   }
 
   @Test

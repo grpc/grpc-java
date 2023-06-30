@@ -251,11 +251,11 @@ public final class BlockingBiDiStream<ReqT, RespT> {
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
    */
   public void cancel(String message, Throwable cause) {
-    writeClosed = true;
     if (message == null) {
       message = "User requested a cancel";
     }
     call.cancel(message, cause);
+    writeClosed = true;
     executor.add(NoOpRunnable.INSTANCE);
   }
 
