@@ -122,7 +122,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
     List<GrpcAuthorizationEngine.PolicyMatcher> policyMatchers = new ArrayList<>();
     List<Entry<String, Policy>> sortedPolicyEntries = rbacConfig.getPoliciesMap().entrySet()
         .stream()
-        .sorted((a,b)->a.getKey().compareTo(b.getKey()))
+        .sorted((a,b) -> a.getKey().compareTo(b.getKey()))
         .collect(Collectors.toList());
     for (Map.Entry<String, Policy> entry: sortedPolicyEntries) {
       try {
