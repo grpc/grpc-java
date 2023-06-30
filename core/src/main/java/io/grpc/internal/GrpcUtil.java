@@ -96,7 +96,8 @@ public final class GrpcUtil {
       + "!$&'()*+,;=" // The subdelim characters
       + ":[]@"; // The gendelim characters permitted in authority.
 
-  private static final Escaper URL_AUTHORITY_ESCAPER = new PercentEscaper(URL_AUTHORITY_SAFE_CHARS, false);
+  private static final Escaper URL_AUTHORITY_ESCAPER = new PercentEscaper(URL_AUTHORITY_SAFE_CHARS,
+      false);
   
   /**
    * Percent encode the {@code authority} based on
@@ -106,15 +107,18 @@ public final class GrpcUtil {
    * When escaping a String, the following rules apply:
    *
    * <ul>
-   *  <li>The alphanumeric characters "a" through "z", "A" through "Z" and "0" through "9" remain the same.
+   *  <li>The alphanumeric characters "a" through "z", "A" through "Z" and "0" through "9" remain 
+   *      the same.
    *  <li>The unreserved characters ".", "-", "~", and "_" remain the same.
    *  <li>The general delimiters for authority, "[", "]", "@" and ":" remain the
    *      same.
-   *  <li>The subdelimiters "!", "$", "&amp;", "'", "(", ")", "*", "+", ",", ";", and "=" remain the same.
+   *  <li>The subdelimiters "!", "$", "&amp;", "'", "(", ")", "*", "+", ",", ";", and "=" remain
+   *      the same.
    *  <li>The space character " " is converted into %20.
-   *  <li>All other characters are converted into one or more bytes using UTF-8 encoding and each byte is then 
-   *      represented by the 3-character string "%XY", where "XY" is the two-digit, uppercase, hexadecimal 
-   *      representation of the byte value.
+   *  <li>All other characters are converted into one or more bytes using UTF-8 encoding and 
+   *      each byte is then represented by the 3-character string "%XY", where "XY" is the 
+   *      two-digit, uppercase, hexadecimal representation of the byte value.
+   * </ul>
    */
   public static Escaper urlAuthorityEscaper() {
     return URL_AUTHORITY_ESCAPER;
