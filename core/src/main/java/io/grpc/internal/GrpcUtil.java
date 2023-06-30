@@ -103,8 +103,7 @@ public final class GrpcUtil {
    * Percent encode the {@code authority} based on
    * https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
    * 
-   * <p>
-   * When escaping a String, the following rules apply:
+   * <p>When escaping a String, the following rules apply:
    *
    * <ul>
    *  <li>The alphanumeric characters "a" through "z", "A" through "Z" and "0" through "9" remain 
