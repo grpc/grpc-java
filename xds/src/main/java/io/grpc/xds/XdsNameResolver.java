@@ -26,7 +26,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import com.google.common.net.UrlEscapers;
 import com.google.gson.Gson;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
@@ -151,7 +150,7 @@ final class XdsNameResolver extends NameResolver {
 
     // The name might have multiple slashes so encode it before verifying.
     // If the encoding fails, fallback to the non-encoded string.
-    String authority = UrlEscapers.urlPathSegmentEscaper().escape(checkNotNull(name, "name"));
+    String authority = GrpcUtil.urlAuthorityEscaper().escape(checkNotNull(name, "name"));
     
     // Verify the authority using encoding, but use non-escaped version for
     // serviceAuthority.

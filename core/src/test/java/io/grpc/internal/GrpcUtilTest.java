@@ -164,6 +164,28 @@ public class GrpcUtilTest {
   }
 
   @Test
+  public void urlAuthorityEscape_ipv6Address() {
+    assertEquals(GrpcUtil.urlAuthorityEscaper().escape("[::1]"), "[::1]");
+  }
+
+  @Test
+  public void urlAuthorityEscape_userInAuthority() {
+    assertEquals(GrpcUtil.urlAuthorityEscaper().escape("user@host"), "user@host");
+  }
+
+  @Test
+  public void urlAuthorityEscape_slashesAreEncoded() {
+    assertEquals(GrpcUtil.urlAuthorityEscaper().escape("project/123/network/abc/service"),
+        "project%2F123%2Fnetwork%2Fabc%2Fservice");
+  }
+
+  @Test
+  public void urlAuthorityEscape_allowedCharsAreNotEncoded() {
+    assertEquals(GrpcUtil.urlAuthorityEscaper().escape("-._~!$&'()*+,;=@:[]"),
+        "-._~!$&'()*+,;=@:[]");
+  }
+
+  @Test
   public void checkAuthority_failsOnNull() {
     thrown.expect(NullPointerException.class);
 
