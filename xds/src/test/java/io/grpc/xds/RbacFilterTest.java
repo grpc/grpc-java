@@ -409,12 +409,13 @@ public class RbacFilterTest {
       ruleBuilder.putPolicies("list-policy", policy1);
     }
 
-    String base = "filterConfig\\u003dRbacConfig{authConfig\\u003dAuthConfig{policies\\u003d[PolicyMatcher{name\\u003dpsm-interop-authz-policy-20230514-0917-er2uh_td_rbac_rule_";
+    String base = "filterConfig\\u003dRbacConfig{authConfig\\u003dAuthConfig{policies\\u003d[Poli"
+        + "cyMatcher{name\\u003dpsm-interop-authz-policy-20230514-0917-er2uh_td_rbac_rule_";
 
     for (Integer id : ids) {
       // Policy policy = Policy.newBuilder().setCondition(Expr.newBuilder()
       //     .setIdentExpr(Ident.newBuilder().setName(policyName).build()).build()).build();
-      ruleBuilder.putPolicies(base+id, createSimplePolicyUsingLists(id));
+      ruleBuilder.putPolicies(base + id, createSimplePolicyUsingLists(id));
     }
 
     if (!listsFirst) {
@@ -440,7 +441,6 @@ public class RbacFilterTest {
             .build()).build());
 
     return Policy.newBuilder()
-        // .setCondition(Expr.newBuilder().setIdentExpr(Ident.newBuilder().setName(policyName).build()).build())
         .addAllPermissions(permissionList)
         .addAllPrincipals(principalList).build();
   }
