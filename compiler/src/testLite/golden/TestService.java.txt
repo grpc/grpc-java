@@ -581,7 +581,7 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full bidirectionality.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         fullBidiCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getFullBidiCallMethod(), getCallOptions());
@@ -595,7 +595,7 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         halfBidiCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getHalfBidiCallMethod(), getCallOptions());
@@ -607,7 +607,7 @@ public final class TestServiceGrpc {
      * method should have a '_' appended.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.testing.compiler.Test.StreamingInputCallRequest,io.grpc.testing.compiler.Test.StreamingInputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest,io.grpc.testing.compiler.Test.StreamingInputCallResponse>
         import_() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getImportMethod(), getCallOptions());

@@ -278,7 +278,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingBiDiStream<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
         deltaListeners() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDeltaListenersMethod(), getCallOptions());
@@ -286,7 +286,7 @@ public final class ListenerDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingBiDiStream<io.envoyproxy.envoy.api.v2.DiscoveryRequest,io.envoyproxy.envoy.api.v2.DiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest,io.envoyproxy.envoy.api.v2.DiscoveryResponse>
         streamListeners() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamListenersMethod(), getCallOptions());

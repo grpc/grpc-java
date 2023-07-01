@@ -398,7 +398,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is on each response
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamingCallMethod(), getCallOptions());
@@ -422,7 +422,7 @@ public final class BenchmarkServiceGrpc {
      * Both sides send the content of their own choice to the other
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingBothWays() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamingBothWaysMethod(), getCallOptions());

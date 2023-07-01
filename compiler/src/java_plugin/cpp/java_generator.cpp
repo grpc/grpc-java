@@ -697,7 +697,7 @@ static void PrintStub(
         if (client_streaming && server_streaming) {
           p->Print(
               *vars,
-              "$BlockingBiDiStream$<$input_type$,$output_type$>\n"
+              "$BlockingClientCall$<$input_type$,$output_type$>\n"
                "    $lower_method_name$()");
         } else if (server_streaming) {
           // Server streaming
@@ -1259,7 +1259,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["RpcMethod"] = "io.grpc.stub.annotations.RpcMethod";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
-  vars["BlockingBiDiStream"] = "io.grpc.stub.BlockingBiDiStream";
+  vars["BlockingClientCall"] = "io.grpc.stub.BlockingClientCall";
   vars["Iterator"] = "java.util.Iterator";
   vars["Generated"] = "javax.annotation.Generated";
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";

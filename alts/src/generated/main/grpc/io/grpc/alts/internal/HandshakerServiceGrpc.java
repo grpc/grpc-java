@@ -180,7 +180,7 @@ public final class HandshakerServiceGrpc {
      * response before sending next request.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.alts.internal.HandshakerReq,io.grpc.alts.internal.HandshakerResp>
+    public io.grpc.stub.BlockingClientCall<io.grpc.alts.internal.HandshakerReq,io.grpc.alts.internal.HandshakerResp>
         doHandshake() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDoHandshakeMethod(), getCallOptions());

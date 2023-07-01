@@ -165,7 +165,7 @@ public final class LoadBalancerGrpc {
      * Bidirectional rpc to get a list of servers.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.lb.v1.LoadBalanceRequest,io.grpc.lb.v1.LoadBalanceResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.lb.v1.LoadBalanceRequest,io.grpc.lb.v1.LoadBalanceResponse>
         balanceLoad() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getBalanceLoadMethod(), getCallOptions());

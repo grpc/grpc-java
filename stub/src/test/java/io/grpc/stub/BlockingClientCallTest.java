@@ -49,8 +49,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class BlockingBidiStreamTest {
-  private static final Logger logger = Logger.getLogger(BlockingBidiStreamTest.class.getName());
+public class BlockingClientCallTest {
+  private static final Logger logger = Logger.getLogger(BlockingClientCallTest.class.getName());
 
   public static final int DELAY_MILLIS = 1000;
   public static final long DELAY_NANOS = TimeUnit.MILLISECONDS.toNanos(DELAY_MILLIS);
@@ -67,7 +67,7 @@ public class BlockingBidiStreamTest {
   private ManagedChannel channel;
 
   private IntegerTestMethod testMethod;
-  private BlockingBiDiStream<Integer, Integer> biDiStream;
+  private BlockingClientCall<Integer, Integer> biDiStream;
 
   @Before
   public void setUp() throws Exception {
@@ -432,12 +432,12 @@ public class BlockingBidiStreamTest {
     delayedVoidMethod(delayMillis, testMethod::readValueFromClient);
   }
 
-  private void delayedCancel(BlockingBiDiStream<Integer, Integer> biDiStream, String message) {
+  private void delayedCancel(BlockingClientCall<Integer, Integer> biDiStream, String message) {
     new Thread("delayedCancel") {
       @Override
       public void run() {
         try {
-          Thread.sleep(BlockingBidiStreamTest.DELAY_MILLIS);
+          Thread.sleep(BlockingClientCallTest.DELAY_MILLIS);
           biDiStream.cancel(message, new RuntimeException("Test requested close"));
         } catch (InterruptedException e) {
           throw new RuntimeException(e);

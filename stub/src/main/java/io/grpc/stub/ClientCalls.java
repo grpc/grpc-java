@@ -223,32 +223,32 @@ public final class ClientCalls {
 
   /**
    * Initiate a bidirectional-streaming {@link ClientCall} and returning a stream object
-   * ({@link BlockingBiDiStream}) which can be used by the client to send and receive messages over
+   * ({@link BlockingClientCall}) which can be used by the client to send and receive messages over
    * the grpc channel.
    *
    * @return an object representing the call which can be used to read, write and terminate it.
    */
-  public static <ReqT, RespT> BlockingBiDiStream<ReqT, RespT> blockingBidiStreamingCall(
+  public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingBidiStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
     ThreadlessExecutor executor = new ThreadlessExecutor();
     ClientCall<ReqT, RespT> call = channel.newCall(method,
         callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING)
             .withExecutor(executor));
 
-    BlockingBiDiStream<ReqT, RespT> blockingBiDiStream = new BlockingBiDiStream<>(call, executor);
+    BlockingClientCall<ReqT, RespT> blockingClientCall = new BlockingClientCall<>(call, executor);
 
     CallToStreamObserverAdapter<ReqT> adapter = new CallToStreamObserverAdapter<>(call, true);
     adapter.setOnReadyHandler(new Runnable() {
       @Override
       public void run() {
-        blockingBiDiStream.handleReady();
+        blockingClientCall.handleReady();
       }
     });
 
     // Get the call started
-    startCall( call, blockingBiDiStream.getListener());
+    startCall( call, blockingClientCall.getListener());
 
-    return blockingBiDiStream;
+    return blockingClientCall;
   }
 
   /**

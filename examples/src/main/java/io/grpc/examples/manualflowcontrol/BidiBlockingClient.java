@@ -22,7 +22,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.manualflowcontrol.StreamingGreeterGrpc.StreamingGreeterBlockingStub;
-import io.grpc.stub.BlockingBiDiStream;
+import io.grpc.stub.BlockingClientCall;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -103,7 +103,7 @@ public class BidiBlockingClient {
     logMethodStart("Two Threads");
 
     List<String> readValues = new ArrayList<>();
-    final BlockingBiDiStream<HelloRequest, HelloReply> stream = blockingStub.sayHelloStreaming();
+    final BlockingClientCall<HelloRequest, HelloReply> stream = blockingStub.sayHelloStreaming();
 
     Thread reader = new Thread(null,
         new Runnable() {

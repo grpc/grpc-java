@@ -243,7 +243,7 @@ public final class LoadReportingServiceGrpc {
      *    assignment destined for each zone Envoys are located in. Goto 2.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest,io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest,io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse>
         streamLoadStats() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamLoadStatsMethod(), getCallOptions());

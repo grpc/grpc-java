@@ -168,7 +168,7 @@ public final class ServerReflectionGrpc {
      * all related requests go to a single server.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.reflection.v1alpha.ServerReflectionRequest,io.grpc.reflection.v1alpha.ServerReflectionResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.reflection.v1alpha.ServerReflectionRequest,io.grpc.reflection.v1alpha.ServerReflectionResponse>
         serverReflectionInfo() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getServerReflectionInfoMethod(), getCallOptions());

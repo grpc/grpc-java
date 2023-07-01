@@ -615,7 +615,7 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full duplexing.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
         fullDuplexCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getFullDuplexCallMethod(), getCallOptions());
@@ -629,7 +629,7 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
         halfDuplexCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getHalfDuplexCallMethod(), getCallOptions());

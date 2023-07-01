@@ -357,7 +357,7 @@ public final class SimpleServiceGrpc {
      * Simple bidirectional streaming RPC.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.testing.protobuf.SimpleRequest,io.grpc.testing.protobuf.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest,io.grpc.testing.protobuf.SimpleResponse>
         bidiStreamingRpc() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getBidiStreamingRpcMethod(), getCallOptions());

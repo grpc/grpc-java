@@ -251,7 +251,7 @@ public final class AggregatedDiscoveryServiceGrpc {
      * This is a gRPC-only API.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.envoyproxy.envoy.api.v2.DiscoveryRequest,io.envoyproxy.envoy.api.v2.DiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest,io.envoyproxy.envoy.api.v2.DiscoveryResponse>
         streamAggregatedResources() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamAggregatedResourcesMethod(), getCallOptions());
@@ -259,7 +259,7 @@ public final class AggregatedDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingBiDiStream<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
         deltaAggregatedResources() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDeltaAggregatedResourcesMethod(), getCallOptions());

@@ -37,9 +37,9 @@ import java.util.logging.Logger;
  * @param <ReqT> Type of the Request Message
  * @param <RespT> Type of the Response Message
  */
-public final class BlockingBiDiStream<ReqT, RespT> {
+public final class BlockingClientCall<ReqT, RespT> {
 
-  private static final Logger logger = Logger.getLogger(BlockingBiDiStream.class.getName());
+  private static final Logger logger = Logger.getLogger(BlockingClientCall.class.getName());
 
   private final BlockingQueue<RespT> buffer;
   private final StartableListener<RespT> listener;
@@ -50,7 +50,7 @@ public final class BlockingBiDiStream<ReqT, RespT> {
   private volatile boolean writeClosed;
   private Status closedStatus;
 
-  BlockingBiDiStream(ClientCall<ReqT, RespT> call, ThreadlessExecutor executor) {
+  BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadlessExecutor executor) {
     this.call = call;
     this.executor = executor;
     buffer = new ArrayBlockingQueue<>(1);

@@ -346,7 +346,7 @@ public final class WorkerServiceGrpc {
      * this RPC.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.benchmarks.proto.Control.ServerArgs,io.grpc.benchmarks.proto.Control.ServerStatus>
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Control.ServerArgs,io.grpc.benchmarks.proto.Control.ServerStatus>
         runServer() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getRunServerMethod(), getCallOptions());
@@ -362,7 +362,7 @@ public final class WorkerServiceGrpc {
      * this RPC.
      * </pre>
      */
-    public io.grpc.stub.BlockingBiDiStream<io.grpc.benchmarks.proto.Control.ClientArgs,io.grpc.benchmarks.proto.Control.ClientStatus>
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Control.ClientArgs,io.grpc.benchmarks.proto.Control.ClientStatus>
         runClient() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getRunClientMethod(), getCallOptions());
