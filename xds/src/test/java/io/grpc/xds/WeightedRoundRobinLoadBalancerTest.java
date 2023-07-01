@@ -1115,7 +1115,6 @@ public class WeightedRoundRobinLoadBalancerTest {
     @Override
     public int nextInt() {
       // return constant value to disable init deadline randomization in the scheduler
-      // sequence will be initialized to 0
       return nextInt;
     }
   }
