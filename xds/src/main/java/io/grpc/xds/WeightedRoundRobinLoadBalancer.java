@@ -330,7 +330,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   /*
    * The Static Stride Scheduler is an implementation of an earliest deadline first (EDF) scheduler
-   * in which each object is chosen periodically with frequency proportional to its weight.
+   * in which each object's deadline is the multiplicative inverse of the object's weight.
    * <p>
    * The way in which this is implemented is through a static stride scheduler. 
    * The Static Stride Scheduler works by iterating through the list of subchannel weights
@@ -397,6 +397,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       return Integer.toUnsignedLong(sequence.getAndIncrement());
     }
 
+    @VisibleForTesting
     long getSequence() {
       return Integer.toUnsignedLong(sequence.get());
     }
