@@ -46,6 +46,9 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "dns";
 
+  private static final boolean IS_ANDROID = InternalServiceProviders
+      .isAndroid(DnsNameResolverProvider.class.getClassLoader());
+
   @Override
   public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
@@ -60,7 +63,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
               args,
               GrpcUtil.SHARED_CHANNEL_EXECUTOR,
               Stopwatch.createUnstarted(),
-              InternalServiceProviders.isAndroid(getClass().getClassLoader())),
+              IS_ANDROID),
           new BackoffPolicyRetryScheduler(
               new ExponentialBackoffPolicy.Provider(),
               args.getScheduledExecutorService(),
