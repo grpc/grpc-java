@@ -10,7 +10,7 @@ plugins {
 description = "gRPC: GRPCLB LoadBalancer plugin"
 
 dependencies {
-    implementation project(':grpc-core'),
+    implementation project(':grpc-inprocess'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.protobuf.java,

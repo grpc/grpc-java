@@ -5,24 +5,8 @@ java_library(
 )
 
 java_library(
-    name = "inprocess",
-    srcs = glob([
-        "src/main/java/io/grpc/inprocess/*.java",
-    ]),
-    visibility = ["//visibility:public"],
-    deps = [
-        ":internal",
-        "//api",
-        "//context",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-    ],
-)
-
-java_library(
     name = "internal",
+    visibility = ["//visibility:public"],
     srcs = glob([
         "src/main/java/io/grpc/internal/*.java",
     ]),
@@ -30,7 +14,6 @@ java_library(
     resources = glob([
         "src/bazel-internal/resources/**",
     ]),
-    visibility = ["//:__subpackages__"],
     deps = [
         "//api",
         "//context",
@@ -45,25 +28,6 @@ java_library(
     ],
 )
 
-java_library(
-    name = "util",
-    srcs = glob([
-        "src/main/java/io/grpc/util/*.java",
-    ]),
-    resources = glob([
-        "src/bazel-util/resources/**",
-    ]),
-    visibility = ["//visibility:public"],
-    deps = [
-        ":internal",
-        "//api",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-        "@org_codehaus_mojo_animal_sniffer_annotations//jar",
-    ],
-)
-
 # Mirrors the dependencies included in the artifact on Maven Central for usage
 # with maven_install's override_targets. Should only be used as a dep for
 # pre-compiled binaries on Maven Central.
@@ -71,9 +35,7 @@ java_library(
     name = "core_maven",
     visibility = ["//visibility:public"],
     exports = [
-        ":inprocess",
         ":internal",
-        ":util",
         "//api",
     ],
 )

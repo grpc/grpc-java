@@ -19,7 +19,7 @@ tasks.named("compileJava").configure {
 dependencies {
     api project(':grpc-protobuf'),
             project(':grpc-stub'),
-            project(':grpc-core')
+            project(':grpc-util')
     implementation libraries.protobuf.java.util,
             libraries.guava.jre // JRE required by protobuf-java-util
 

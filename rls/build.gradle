@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
     id "com.google.protobuf"
     id "jacoco"
@@ -9,8 +9,8 @@ plugins {
 description = "gRPC: RouteLookupService Loadbalancing plugin"
 
 dependencies {
-    implementation project(':grpc-core'),
-            project(':grpc-protobuf'),
+    api project(':grpc-util')
+    implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.auto.value.annotations,
             libraries.guava
