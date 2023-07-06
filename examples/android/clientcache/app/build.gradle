@@ -6,7 +6,7 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    compileSdkVersion 33
+    compileSdkVersion 34
 
     defaultConfig {
         applicationId "io.grpc.clientcacheexample"
