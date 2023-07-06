@@ -199,15 +199,15 @@ public class LoadReportClientTest {
     for (int i = 0; i < 31; i++) {
       localityStats1.recordCallStarted();
     }
-    localityStats1.recordBackendLoadMetricStats("named1", 3.14159);
-    localityStats1.recordBackendLoadMetricStats("named1", 1.618);
-    localityStats1.recordBackendLoadMetricStats("named1", -2.718);
+    localityStats1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 3.14159));
+    localityStats1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.618));
+    localityStats1.recordBackendLoadMetricStats(ImmutableMap.of("named1", -2.718));
     ClusterLocalityStats localityStats2 =
         loadStatsManager.getClusterLocalityStats(CLUSTER2, EDS_SERVICE_NAME2, LOCALITY2);
     for (int i = 0; i < 45; i++) {
       localityStats2.recordCallStarted();
     }
-    localityStats2.recordBackendLoadMetricStats("named2", 1.414);
+    localityStats2.recordBackendLoadMetricStats(ImmutableMap.of("named2", 1.414));
     localityStats2.recordCallFinished(Status.OK);
   }
 

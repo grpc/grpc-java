@@ -117,17 +117,31 @@ final class Stats {
   /**
    * Load metric stats for multi-dimensional load balancing.
    */
-  @AutoValue
-  abstract static class BackendLoadMetricStats {
+  static final class BackendLoadMetricStats {
 
-    abstract long numRequestsFinishedWithMetric();
+    private long numRequestsFinishedWithMetric;
+    private double totalMetricValue;
 
-    abstract double totalMetricValue();
+    BackendLoadMetricStats(long numRequestsFinishedWithMetric, double totalMetricValue) {
+      this.numRequestsFinishedWithMetric = numRequestsFinishedWithMetric;
+      this.totalMetricValue = totalMetricValue;
+    }
 
-    static BackendLoadMetricStats create(long numRequestsFinishedWithMetric,
-        double totalMetricValue) {
-      return new AutoValue_Stats_BackendLoadMetricStats(numRequestsFinishedWithMetric,
-          totalMetricValue);
+    public long numRequestsFinishedWithMetric() {
+      return numRequestsFinishedWithMetric;
+    }
+
+    public double totalMetricValue() {
+      return totalMetricValue;
+    }
+
+    /**
+     * Adds the given {@code metricValue} and increments the number of requests finished counter for
+     * the existing {@link BackendLoadMetricStats}.
+     */
+    public void addMetricValueAndIncrementRequestsFinished(double metricValue) {
+      numRequestsFinishedWithMetric += 1;
+      totalMetricValue += metricValue;
     }
   }
 }

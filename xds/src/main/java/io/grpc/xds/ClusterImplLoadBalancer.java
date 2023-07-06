@@ -53,7 +53,6 @@ import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
@@ -407,9 +406,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
      */
     @Override
     public void onLoadReport(MetricReport report) {
-      for (Map.Entry<String, Double> entry : report.getNamedMetrics().entrySet()) {
-        stats.recordBackendLoadMetricStats(entry.getKey(), entry.getValue());
-      }
+      stats.recordBackendLoadMetricStats(report.getNamedMetrics());
     }
   }
 }

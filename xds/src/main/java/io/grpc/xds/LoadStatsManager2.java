@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import io.grpc.Status;
 import io.grpc.xds.Stats.BackendLoadMetricStats;
@@ -38,7 +39,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -324,8 +324,7 @@ final class LoadStatsManager2 {
     private final AtomicLong callsSucceeded = new AtomicLong();
     private final AtomicLong callsFailed = new AtomicLong();
     private final AtomicLong callsIssued = new AtomicLong();
-    private final AtomicReference<ConcurrentHashMap<String, BackendLoadMetricStats>>
-        loadMetricStatsMap = new AtomicReference<>(new ConcurrentHashMap<>());
+    private final Map<String, BackendLoadMetricStats> loadMetricStatsMap = new HashMap<>();
 
     private ClusterLocalityStats(
         String clusterName, @Nullable String edsServiceName, Locality locality,
@@ -358,19 +357,20 @@ final class LoadStatsManager2 {
     }
 
     /**
-     * Records a custom named backend load metric stat for per-call load reporting. For the metric
-     * key {@code name}, creates a new {@link BackendLoadMetricStats} with a finished requests
-     * counter of 1 and the {@code value} if the key is not present in the map. Otherwise,
+     * Records all custom named backend load metric stats for per-call load reporting. For each
+     * metric key {@code name}, creates a new {@link BackendLoadMetricStats} with a finished
+     * requests counter of 1 and the {@code value} if the key is not present in the map. Otherwise,
      * increments the finished requests counter and adds the {@code value} to the existing
-     * {@link BackendLoadMetricStats}. This entire method is performed atomically in one operation.
+     * {@link BackendLoadMetricStats}.
      */
-    void recordBackendLoadMetricStats(String name, double value) {
-      loadMetricStatsMap.get().merge(name, BackendLoadMetricStats.create(1, value),
-          (oldBackendLoadMetricStats, newBackendLoadMetricStats) -> BackendLoadMetricStats.create(
-              oldBackendLoadMetricStats.numRequestsFinishedWithMetric()
-                  + newBackendLoadMetricStats.numRequestsFinishedWithMetric(),
-              oldBackendLoadMetricStats.totalMetricValue()
-                  + newBackendLoadMetricStats.totalMetricValue()));
+    synchronized void recordBackendLoadMetricStats(Map<String, Double> namedMetrics) {
+      namedMetrics.forEach((name, value) -> {
+        if (!loadMetricStatsMap.containsKey(name)) {
+          loadMetricStatsMap.put(name, new BackendLoadMetricStats(1, value));
+        } else {
+          loadMetricStatsMap.get(name).addMetricValueAndIncrementRequestsFinished(value);
+        }
+      });
     }
 
     /**
@@ -387,9 +387,13 @@ final class LoadStatsManager2 {
     private ClusterLocalityStatsSnapshot snapshot() {
       long duration = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       stopwatch.reset().start();
+      ImmutableMap<String, BackendLoadMetricStats> loadMetricStatsMapCopy;
+      synchronized (this) {
+        loadMetricStatsMapCopy = ImmutableMap.copyOf(loadMetricStatsMap);
+        loadMetricStatsMap.clear();
+      }
       return new ClusterLocalityStatsSnapshot(callsSucceeded.getAndSet(0), callsInProgress.get(),
-          callsFailed.getAndSet(0), callsIssued.getAndSet(0), duration,
-          Collections.unmodifiableMap(loadMetricStatsMap.getAndSet(new ConcurrentHashMap<>())));
+          callsFailed.getAndSet(0), callsIssued.getAndSet(0), duration, loadMetricStatsMapCopy);
     }
   }
 
@@ -409,7 +413,8 @@ final class LoadStatsManager2 {
       this.callsFailed = callsFailed;
       this.callsIssued = callsIssued;
       this.durationNano = durationNano;
-      this.loadMetricStatsMap = checkNotNull(loadMetricStatsMap, "loadMetricStatsMap");
+      this.loadMetricStatsMap = Collections.unmodifiableMap(
+          checkNotNull(loadMetricStatsMap, "loadMetricStatsMap"));
     }
   }
 }

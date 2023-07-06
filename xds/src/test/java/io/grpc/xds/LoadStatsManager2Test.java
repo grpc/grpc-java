@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Status;
 import io.grpc.internal.FakeClock;
@@ -72,18 +73,17 @@ public class LoadStatsManager2Test {
     for (int i = 0; i < 19; i++) {
       loadCounter1.recordCallStarted();
     }
-    loadCounter1.recordBackendLoadMetricStats("named1", 3.14159);
-    loadCounter1.recordBackendLoadMetricStats("named1", 1.618);
-    loadCounter1.recordBackendLoadMetricStats("named1", 99);
-    loadCounter1.recordBackendLoadMetricStats("named1", -97.23);
-    loadCounter1.recordBackendLoadMetricStats("named2", -2.718);
+    loadCounter1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 3.14159));
+    loadCounter1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.618));
+    loadCounter1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 99.0));
+    loadCounter1.recordBackendLoadMetricStats(ImmutableMap.of("named1", -97.23, "named2", -2.718));
     fakeClock.forwardTime(5L, TimeUnit.SECONDS);
     dropCounter2.recordDroppedRequest();
     loadCounter1.recordCallFinished(Status.OK);
     for (int i = 0; i < 9; i++) {
       loadCounter2.recordCallStarted();
     }
-    loadCounter2.recordBackendLoadMetricStats("named3", 0.0009);
+    loadCounter2.recordBackendLoadMetricStats(ImmutableMap.of("named3", 0.0009));
     loadCounter2.recordCallFinished(Status.UNAVAILABLE);
     fakeClock.forwardTime(10L, TimeUnit.SECONDS);
     loadCounter3.recordCallStarted();
@@ -222,13 +222,12 @@ public class LoadStatsManager2Test {
     ClusterLocalityStats ref2 = loadStatsManager.getClusterLocalityStats(
         CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
     ref1.recordCallStarted();
-    ref1.recordBackendLoadMetricStats("named1", 1.618);
-    ref1.recordBackendLoadMetricStats("named1", 3.14159);
+    ref1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.618));
+    ref1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 3.14159));
     ref1.recordCallFinished(Status.OK);
     ref2.recordCallStarted();
     ref2.recordCallStarted();
-    ref2.recordBackendLoadMetricStats("named1", -1);
-    ref2.recordBackendLoadMetricStats("named2", 2.718);
+    ref2.recordBackendLoadMetricStats(ImmutableMap.of("named1", -1.0, "named2", 2.718));
     ref2.recordCallFinished(Status.UNAVAILABLE);
 
     ClusterStats stats = Iterables.getOnlyElement(
@@ -259,8 +258,8 @@ public class LoadStatsManager2Test {
         CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
     counter.recordCallStarted();
     counter.recordCallStarted();
-    counter.recordBackendLoadMetricStats("named1", 2.718);
-    counter.recordBackendLoadMetricStats("named1", 1.414);
+    counter.recordBackendLoadMetricStats(ImmutableMap.of("named1", 2.718));
+    counter.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.414));
 
     ClusterStats stats = Iterables.getOnlyElement(
         loadStatsManager.getClusterStatsReports(CLUSTER_NAME1));
