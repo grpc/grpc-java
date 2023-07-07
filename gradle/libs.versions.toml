@@ -8,12 +8,12 @@ netty = '4.1.94.Final'
 #   SECURITY.md
 nettytcnative = '2.0.61.Final'
 opencensus = "0.31.1"
-protobuf = "3.22.3"
+protobuf = "3.23.4"
 
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"
 androidx-annotation = "androidx.annotation:annotation:1.6.0"
-androidx-core = "androidx.core:core:1.10.0"
+androidx-core = "androidx.core:core:1.10.1"
 androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.6.1"
 androidx-lifecycle-service = "androidx.lifecycle:lifecycle-service:2.6.1"
 androidx-test-core = "androidx.test:core:1.5.0"
@@ -21,8 +21,8 @@ androidx-test-ext-junit = "androidx.test.ext:junit:1.1.5"
 androidx-test-rules = "androidx.test:rules:1.5.0"
 animalsniffer = "org.codehaus.mojo:animal-sniffer:1.23"
 animalsniffer-annotations = "org.codehaus.mojo:animal-sniffer-annotations:1.23"
-auto-value = "com.google.auto.value:auto-value:1.10.1"
-auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.10.1"
+auto-value = "com.google.auto.value:auto-value:1.10.2"
+auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.10.2"
 checker-qual = "org.checkerframework:checker-qual:3.33.0"
 checkstyle = "com.puppycrawl.tools:checkstyle:8.28"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
@@ -32,9 +32,10 @@ cronet-embedded = "org.chromium.net:cronet-embedded:108.5359.79"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.18.0"
 errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"
 errorprone-core = "com.google.errorprone:error_prone_core:2.18.0"
-google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.17.0"
+google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.22.0"
 google-auth-credentials = { module = "com.google.auth:google-auth-library-credentials", version.ref = "googleauth" }
 google-auth-oauth2Http = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleauth" }
+google-cloud-logging = "com.google.cloud:google-cloud-logging:3.15.5"
 gson = "com.google.code.gson:gson:2.10.1"
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
