@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import io.grpc.Status;
 import io.grpc.xds.Stats.BackendLoadMetricStats;
@@ -324,7 +323,7 @@ final class LoadStatsManager2 {
     private final AtomicLong callsSucceeded = new AtomicLong();
     private final AtomicLong callsFailed = new AtomicLong();
     private final AtomicLong callsIssued = new AtomicLong();
-    private final Map<String, BackendLoadMetricStats> loadMetricStatsMap = new HashMap<>();
+    private Map<String, BackendLoadMetricStats> loadMetricStatsMap = new HashMap<>();
 
     private ClusterLocalityStats(
         String clusterName, @Nullable String edsServiceName, Locality locality,
@@ -387,10 +386,10 @@ final class LoadStatsManager2 {
     private ClusterLocalityStatsSnapshot snapshot() {
       long duration = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       stopwatch.reset().start();
-      ImmutableMap<String, BackendLoadMetricStats> loadMetricStatsMapCopy;
+      Map<String, BackendLoadMetricStats> loadMetricStatsMapCopy;
       synchronized (this) {
-        loadMetricStatsMapCopy = ImmutableMap.copyOf(loadMetricStatsMap);
-        loadMetricStatsMap.clear();
+        loadMetricStatsMapCopy = Collections.unmodifiableMap(loadMetricStatsMap);
+        loadMetricStatsMap = new HashMap<>();
       }
       return new ClusterLocalityStatsSnapshot(callsSucceeded.getAndSet(0), callsInProgress.get(),
           callsFailed.getAndSet(0), callsIssued.getAndSet(0), duration, loadMetricStatsMapCopy);
