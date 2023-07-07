@@ -199,14 +199,13 @@ public class PickFirstLoadBalancerExperimentalTest {
     @Test
     public void requestConnectionPicker() throws Exception {
         loadBalancer.acceptResolvedAddresses(
-                ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+            ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
 
         InOrder inOrder = inOrder(mockHelper, mockSubchannel);
-        // inOrder.verify(mockSubchannel).start(stateListenerCaptor.capture());
-        // subchannel doesn't start until a connnection is requested!
-        inOrder.verify(mockSubchannel).requestConnection();
+        inOrder.verify(mockSubchannel).start(stateListenerCaptor.capture());
         SubchannelStateListener stateListener = stateListenerCaptor.getValue();
         inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+        inOrder.verify(mockSubchannel).requestConnection();
 
         stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
         inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());

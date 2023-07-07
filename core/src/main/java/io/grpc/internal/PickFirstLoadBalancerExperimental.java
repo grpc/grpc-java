@@ -16,7 +16,7 @@
 
 package io.grpc.internal;
 
-import com.google.common.base.Preconditions;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
@@ -24,8 +24,8 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import io.grpc.*;
-
 import java.net.SocketAddress;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,17 +38,15 @@ import javax.annotation.Nullable;
  */
 final class PickFirstLoadBalancerExperimental extends LoadBalancer {
     private final Helper helper;
-
-
     private volatile List<EquivalentAddressGroup> addressGroups;
     private volatile List<Subchannel> subchannels = new ArrayList<>(); // does this need to be thread-safe/volatile?
     private int index;
     private ConnectivityState currentState = IDLE;
 
-    /**
-     * All field must be mutated in the syncContext.
-     */
-    private final SynchronizationContext syncContext;
+//    /**
+//     * All field must be mutated in the syncContext.
+//     */
+//    private final SynchronizationContext syncContext;
 
     PickFirstLoadBalancerExperimental(Helper helper) {
         this.helper = checkNotNull(helper, "helper");
@@ -101,26 +99,50 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
     }
 
     public void updateAddresses(final List<EquivalentAddressGroup> newAddressGroups) {
-//        Preconditions.checkNotNull(newAddressGroups, "newAddressGroups");
-//        checkListHasNoNulls(newAddressGroups, "newAddressGroups contains null entry");
-//        Preconditions.checkArgument(!newAddressGroups.isEmpty(), "newAddressGroups is empty");
-//        final List<EquivalentAddressGroup> newImmutableAddressGroups =
-//            Collections.unmodifiableList(new ArrayList<>(newAddressGroups));
-//        syncContext.execute(new Runnable() {
-//          @Override
-//          public void run() {
-//            ManagedClientTransport savedTransport = null;
-//            InternalSubchannel previousChannel = subchannels.get(index).getInternalSubchannel();
-//            EquivalentAddressGroup previousAddress = subchannels.get(index).getAddresses();
-//            this.addressGroups = newImmutableAddressGroups;
-//            // assumes we only have one address in EAG according to new architectural changes
-//            Set<Subchannel> subchannelSet = new HashSet<>(subchannels);
-//            List<Subchannel> newSubchannels = new ArrayList<>();
-//            for (EquivalentAddressGroup addressGroup : newAddressGroups) {
-//                if (subchannelSet.contains(addressGroup))
-//            }
+//      Preconditions.checkNotNull(newAddressGroups, "newAddressGroups");
+//      checkListHasNoNulls(newAddressGroups, "newAddressGroups contains null entry");
+//      Preconditions.checkArgument(!newAddressGroups.isEmpty(), "newAddressGroups is empty");
+//      final List<EquivalentAddressGroup> newImmutableAddressGroups =
+//        Collections.unmodifiableList(new ArrayList<>(newAddressGroups));
+//      helper.getSynchronizationContext().execute(new Runnable() {
+//        @Override
+//        public void run() {
+//          for (int i = 0; i < newAddressGroups.size(); i++) {
+//            for (int j = 0; j < newAddressGroups.get(i).getAddresses().size(); j++) {
+//              if (subchannels. newAddressGroups.get(i).getAddresses().get(j)) {
 //
-//            if (state.getState() == READY || state.getState() == CONNECTING) {
+//              }
+//            }
+//          }
+//
+//          for (int i = 0; i < subchannels.size(); i++) {
+//
+//            if ()
+//          }
+//          For (old address: old address)
+//          	If (new addresses contains old address)
+//          		Add to new list
+//
+//
+//          For (new address : new addresses)
+//                If (new list doesn’t contain new address)
+//          		add to new list
+//        }
+//      }
+//            public void run() {
+//              ManagedClientTransport savedTransport = null;
+//              InternalSubchannel previousChannel = subchannels.get(index).getInternalSubchannel();
+//              EquivalentAddressGroup previousAddress = subchannels;
+//              this.addressGroups = newImmutableAddressGroups;
+//              // assumes we only have one address in EAG according to new architectural changes
+//              Set<Subchannel> subchannelSet = new HashSet<>(subchannels);
+//              List<Subchannel> newSubchannels = new ArrayList<>();
+//              for (EquivalentAddressGroup addressGroup : newAddressGroups) {
+//                if (subchannelSet.contains(addressGroup)) {
+//
+//                }
+//              }
+//              if (state.getState() == READY || state.getState() == CONNECTING) {
 //                if (newAddressGroups.contains(previousAddress));
 //              if (!addressIndex.seekTo(previousAddress)) {
 //                  // Forced to drop the connection
@@ -172,7 +194,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
 //            });
     }
     @Override
-    public void handleNameResolutionError(Status error) {
+    public void handleNameResolutionError(Status error) { // TODO: Verify if this should be all shutdown or just one channel
         if (subchannels != null) {
             for (Subchannel subchannel : subchannels) {
                 subchannel.shutdown();
@@ -250,14 +272,14 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
     @Override
     public void requestConnection() {
         if (index < subchannels.size() && subchannels.get(index) != null) {
-            updateBalancingState(CONNECTING,
-                    new Picker(PickResult.withSubchannel(subchannels.get(index))));
             subchannels.get(index).start(new SubchannelStateListener() {
                 @Override
                 public void onSubchannelState(ConnectivityStateInfo stateInfo) {
                     processSubchannelState(subchannels.get(index), stateInfo);
                 }
             });
+            updateBalancingState(CONNECTING,
+                new Picker(PickResult.withSubchannel(subchannels.get(index))));
             subchannels.get(index).requestConnection();
         }
     }

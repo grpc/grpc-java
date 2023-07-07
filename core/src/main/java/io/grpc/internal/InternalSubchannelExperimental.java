@@ -82,13 +82,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      */
     private final SynchronizationContext syncContext;
 
-    /**
-     * The index of the address corresponding to pendingTransport/activeTransport, or at beginning if
-     * both are null.
-     *
-     * <p>Note: any {@link Index#updateAddresses(List)} should also update {@link #addressGroups}.
-     */
-//  private final Index addressIndex;
+    private boolean isLast = false;
 
     /**
      * A volatile accessor to {@link Index#getAddressGroups()}. There are few methods ({@link
@@ -532,6 +526,10 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
         }
     }
 
+    void isLast() {
+      this.isLast = true;
+    }
+
     /** Listener for real transports. */
     private class TransportListener implements ManagedClientTransport.Listener {
         final ConnectionClientTransport transport;
@@ -587,6 +585,9 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
                                 "Expected state is CONNECTING, actual state is %s", state.getState());
 //            addressIndex.increment();
                         // Continue reconnect if there are still addresses to try.
+                    if (isLast) {
+                      scheduleBackoff(s);
+                    }
 //            if (!addressIndex.isValid()) {
 //              pendingTransport = null;
 //              addressIndex.reset();
