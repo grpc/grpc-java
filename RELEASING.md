@@ -172,6 +172,9 @@ Tagging the Release
     docker_image=gcr.io/grpc-testing/grpc_interop_java:v$MAJOR.$MINOR.$PATCH \
         tools/interop_matrix/testcases/java__master
 
+    # Commit the changes
+    git commit --all -m "Add grpc-java $MAJOR.$MINOR.$PATCH to client_matrix.py"
+
     # Create a PR and run ad-hoc test against your PR
     ```
 [gcr-image]: https://github.com/grpc/grpc/blob/master/tools/interop_matrix/README.md#step-by-step-instructions-for-adding-a-gcr-image-for-a-new-release-for-compatibility-test
