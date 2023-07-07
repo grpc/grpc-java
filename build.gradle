@@ -433,8 +433,8 @@ subprojects {
         // Add a japicmp task that compares the current .jar with baseline .jar
         tasks.register("japicmp", me.champeau.gradle.japicmp.JapicmpTask) {
             dependsOn jar
-            oldClasspath = files(baselineArtifact)
-            newClasspath = files(jar.archiveFile)
+            oldClasspath.from baselineArtifact
+            newClasspath.from jar.archiveFile
             onlyBinaryIncompatibleModified = false
             // Be quiet about things that did not change
             onlyModified = true
