@@ -238,8 +238,8 @@ public class ClientInterceptors {
         delegate = (ClientCall<ReqT, RespT>) NOOP_CALL;
         Metadata trailers = Status.trailersFromThrowable(e);
         responseListener.onClose(
-          Status.fromThrowable(e),
-          trailers != null ? trailers : new Metadata()
+            Status.fromThrowable(e),
+            trailers != null ? trailers : new Metadata()
         );
       }
     }
