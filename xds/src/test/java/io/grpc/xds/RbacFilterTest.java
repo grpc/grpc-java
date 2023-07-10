@@ -413,8 +413,6 @@ public class RbacFilterTest {
         + "cyMatcher{name\\u003dpsm-interop-authz-policy-20230514-0917-er2uh_td_rbac_rule_";
 
     for (Integer id : ids) {
-      // Policy policy = Policy.newBuilder().setCondition(Expr.newBuilder()
-      //     .setIdentExpr(Ident.newBuilder().setName(policyName).build()).build()).build();
       ruleBuilder.putPolicies(base + id, createSimplePolicyUsingLists(id));
     }
 
@@ -452,5 +450,4 @@ public class RbacFilterTest {
     Any proto = Any.pack(rbacPerRoute);
     return new RbacFilter().parseFilterConfigOverride(proto);
   }
-
 }
