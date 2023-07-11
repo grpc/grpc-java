@@ -23,6 +23,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
 import io.grpc.Status;
+import io.grpc.xds.Stats.BackendLoadMetricStats;
 import io.grpc.xds.Stats.ClusterStats;
 import io.grpc.xds.Stats.DroppedRequests;
 import io.grpc.xds.Stats.UpstreamLocalityStats;
@@ -197,7 +198,7 @@ final class LoadStatsManager2 {
           }
           UpstreamLocalityStats upstreamLocalityStats = UpstreamLocalityStats.create(
               locality, snapshot.callsIssued, snapshot.callsSucceeded, snapshot.callsFailed,
-              snapshot.callsInProgress);
+              snapshot.callsInProgress, snapshot.loadMetricStatsMap);
           builder.addUpstreamLocalityStats(upstreamLocalityStats);
           // Use the max (drops/loads) recording interval as the overall interval for the
           // cluster's stats. In general, they should be mostly identical.
@@ -322,6 +323,7 @@ final class LoadStatsManager2 {
     private final AtomicLong callsSucceeded = new AtomicLong();
     private final AtomicLong callsFailed = new AtomicLong();
     private final AtomicLong callsIssued = new AtomicLong();
+    private Map<String, BackendLoadMetricStats> loadMetricStatsMap = new HashMap<>();
 
     private ClusterLocalityStats(
         String clusterName, @Nullable String edsServiceName, Locality locality,
@@ -354,6 +356,23 @@ final class LoadStatsManager2 {
     }
 
     /**
+     * Records all custom named backend load metric stats for per-call load reporting. For each
+     * metric key {@code name}, creates a new {@link BackendLoadMetricStats} with a finished
+     * requests counter of 1 and the {@code value} if the key is not present in the map. Otherwise,
+     * increments the finished requests counter and adds the {@code value} to the existing
+     * {@link BackendLoadMetricStats}.
+     */
+    synchronized void recordBackendLoadMetricStats(Map<String, Double> namedMetrics) {
+      namedMetrics.forEach((name, value) -> {
+        if (!loadMetricStatsMap.containsKey(name)) {
+          loadMetricStatsMap.put(name, new BackendLoadMetricStats(1, value));
+        } else {
+          loadMetricStatsMap.get(name).addMetricValueAndIncrementRequestsFinished(value);
+        }
+      });
+    }
+
+    /**
      * Release the <i>hard</i> reference for this stats object (previously obtained via {@link
      * LoadStatsManager2#getClusterLocalityStats}). The object may still be
      * recording loads after this method, but there is no guarantee loads recorded after this
@@ -367,8 +386,13 @@ final class LoadStatsManager2 {
     private ClusterLocalityStatsSnapshot snapshot() {
       long duration = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       stopwatch.reset().start();
+      Map<String, BackendLoadMetricStats> loadMetricStatsMapCopy;
+      synchronized (this) {
+        loadMetricStatsMapCopy = Collections.unmodifiableMap(loadMetricStatsMap);
+        loadMetricStatsMap = new HashMap<>();
+      }
       return new ClusterLocalityStatsSnapshot(callsSucceeded.getAndSet(0), callsInProgress.get(),
-          callsFailed.getAndSet(0), callsIssued.getAndSet(0), duration);
+          callsFailed.getAndSet(0), callsIssued.getAndSet(0), duration, loadMetricStatsMapCopy);
     }
   }
 
@@ -378,15 +402,18 @@ final class LoadStatsManager2 {
     private final long callsFailed;
     private final long callsIssued;
     private final long durationNano;
+    private final Map<String, BackendLoadMetricStats> loadMetricStatsMap;
 
     private ClusterLocalityStatsSnapshot(
         long callsSucceeded, long callsInProgress, long callsFailed, long callsIssued,
-        long durationNano) {
+        long durationNano, Map<String, BackendLoadMetricStats> loadMetricStatsMap) {
       this.callsSucceeded = callsSucceeded;
       this.callsInProgress = callsInProgress;
       this.callsFailed = callsFailed;
       this.callsIssued = callsIssued;
       this.durationNano = durationNano;
+      this.loadMetricStatsMap = Collections.unmodifiableMap(
+          checkNotNull(loadMetricStatsMap, "loadMetricStatsMap"));
     }
   }
 }

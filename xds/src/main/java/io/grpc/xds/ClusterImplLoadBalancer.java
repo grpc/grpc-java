@@ -33,6 +33,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.ObjectPool;
+import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.util.GracefulSwitchLoadBalancer;
@@ -47,6 +48,8 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
+import io.grpc.xds.orca.OrcaPerRequestUtil;
+import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -329,7 +332,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           if (stats != null) {
             ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
                 stats, inFlights, result.getStreamTracerFactory());
-            return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
+            ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
+                .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
+            return PickResult.withSubchannel(result.getSubchannel(), orcaTracerFactory);
           }
         }
         return result;
@@ -384,6 +389,24 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           delegate().streamClosed(status);
         }
       };
+    }
+  }
+
+  private static final class OrcaPerRpcListener implements OrcaPerRequestReportListener {
+
+    private final ClusterLocalityStats stats;
+
+    private OrcaPerRpcListener(ClusterLocalityStats stats) {
+      this.stats = checkNotNull(stats, "stats");
+    }
+
+    /**
+     * Copies {@link MetricReport#getNamedMetrics()} to {@link ClusterLocalityStats} such that it is
+     * included in the snapshot for the LRS report sent to the LRS server.
+     */
+    @Override
+    public void onLoadReport(MetricReport report) {
+      stats.recordBackendLoadMetricStats(report.getNamedMetrics());
     }
   }
 }
