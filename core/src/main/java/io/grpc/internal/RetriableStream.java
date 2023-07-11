@@ -218,7 +218,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Runnable postCommitTask = commit(winningSubstream);
 
     if (postCommitTask != null) {
-      postCommitTask.run();
+      callExecutor.execute(postCommitTask);
     }
   }
 
