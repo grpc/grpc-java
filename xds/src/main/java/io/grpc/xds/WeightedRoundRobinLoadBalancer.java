@@ -373,7 +373,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (numWeightedChannels > 0) {
         meanWeight = (short) Math.round(scalingFactor * sumWeight / numWeightedChannels);
       } else {
-        meanWeight = 1;
+        meanWeight = (short) scalingFactor;
       }
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly

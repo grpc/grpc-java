@@ -330,11 +330,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 10000.0 - subchannel1PickRatio))
-        .isAtMost(0.001);
+        .isAtMost(0.0001);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 10000.0 - subchannel2PickRatio ))
-        .isAtMost(0.001);
+        .isAtMost(0.0001);
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 10000.0 - subchannel3PickRatio ))
-        .isAtMost(0.001);
+        .isAtMost(0.0001);
   }
 
   @Test
@@ -751,12 +751,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 4.0 / 9))
-            .isAtMost(0.002);
+            .isAtMost(0.001);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 2.0 / 9))
-            .isAtMost(0.002);
+            .isAtMost(0.001);
     // subchannel3's weight is average of subchannel1 and subchannel2
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 1000.0 - 3.0 / 9))
-            .isAtMost(0.002);
+            .isAtMost(0.001);
   }
 
   @Test
@@ -947,7 +947,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 3; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.01);
+          .isAtMost(0.001);
     }
   }
 
@@ -964,7 +964,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 3; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.01);
+          .isAtMost(0.001);
     }
   }
 
@@ -981,7 +981,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 2; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.01);
+          .isAtMost(0.001);
     }
   }
 
@@ -1015,7 +1015,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 8; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.01);
+          .isAtMost(0.002); // accommodates for floats, still has same precision
     }
   }
 
@@ -1069,7 +1069,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.0011);
+          .isAtMost(0.0011); // accommodates for floats, still has same precision
     }
   }
 
