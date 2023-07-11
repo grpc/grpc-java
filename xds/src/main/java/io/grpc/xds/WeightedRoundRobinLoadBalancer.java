@@ -433,7 +433,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      * an offset that varies per backend index is also included to the calculation.
      */
     int pick() {
-      while (true) {
+      for (int i = 0; i < this.scaledWeights.length; i++) {
         long sequence = this.nextSequence();
         int backendIndex = (int) (sequence % this.sizeDivisor);
         long generation = sequence / this.sizeDivisor;
@@ -444,6 +444,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         }
         return backendIndex;
       }
+      throw new RuntimeException("looping through addresses more than once");
     }
   }
 
