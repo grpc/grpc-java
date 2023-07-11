@@ -52,7 +52,7 @@ import org.junit.runners.JUnit4;
 public class BlockingClientCallTest {
   private static final Logger logger = Logger.getLogger(BlockingClientCallTest.class.getName());
 
-  public static final int DELAY_MILLIS = 1000;
+  public static final int DELAY_MILLIS = 2000;
   public static final long DELAY_NANOS = TimeUnit.MILLISECONDS.toNanos(DELAY_MILLIS);
   private static final MethodDescriptor<Integer, Integer> BIDI_STREAMING_METHOD =
       MethodDescriptor.<Integer, Integer>newBuilder()
@@ -157,7 +157,8 @@ public class BlockingClientCallTest {
     delayedAddValue(DELAY_MILLIS, 12);
     assertNotNull(biDiStream.read(DELAY_MILLIS * 2, TimeUnit.MILLISECONDS));
     long timeTaken = System.nanoTime() - start;
-    assertTrue(timeTaken > DELAY_NANOS && timeTaken < DELAY_NANOS * 2);
+    assertThat(timeTaken).isGreaterThan(DELAY_NANOS);
+    assertThat(timeTaken).isLessThan(DELAY_NANOS * 2);
 
     start = System.nanoTime();
     Integer[] values = {13, 14, 15, 16};
