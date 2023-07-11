@@ -90,6 +90,7 @@ import org.mockito.junit.MockitoRule;
 public class ClusterImplLoadBalancerTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
+  private static final double TOLERANCE = 1.0e-10;
   private static final String AUTHORITY = "api.google.com";
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
@@ -273,6 +274,7 @@ public class ClusterImplLoadBalancerTest {
     trailersWithOrcaLoadReport2.put(ORCA_ENDPOINT_LOAD_METRICS_KEY,
         OrcaLoadReport.newBuilder().setApplicationUtilization(0.99).setMemUtilization(0.123)
             .setRpsFractional(0.905).putNamedMetrics("named1", 2.718)
+            .putNamedMetrics("named2", 1.414)
             .putNamedMetrics("named3", 0.009).build());
     streamTracer2.inboundTrailers(trailersWithOrcaLoadReport2);
     streamTracer2.streamClosed(Status.UNAVAILABLE);
@@ -289,20 +291,20 @@ public class ClusterImplLoadBalancerTest {
     assertThat(
         localityStats.loadMetricStatsMap().get("named1").numRequestsFinishedWithMetric()).isEqualTo(
         2L);
-    assertThat(localityStats.loadMetricStatsMap().get("named1").totalMetricValue()).isEqualTo(
-        3.14159 + 2.718);
+    assertThat(localityStats.loadMetricStatsMap().get("named1").totalMetricValue()).isWithin(
+        TOLERANCE).of(3.14159 + 2.718);
     assertThat(localityStats.loadMetricStatsMap().containsKey("named2")).isTrue();
     assertThat(
         localityStats.loadMetricStatsMap().get("named2").numRequestsFinishedWithMetric()).isEqualTo(
-        1L);
-    assertThat(localityStats.loadMetricStatsMap().get("named2").totalMetricValue()).isEqualTo(
-        -1.618);
+        2L);
+    assertThat(localityStats.loadMetricStatsMap().get("named2").totalMetricValue()).isWithin(
+        TOLERANCE).of(-1.618 + 1.414);
     assertThat(localityStats.loadMetricStatsMap().containsKey("named3")).isTrue();
     assertThat(
         localityStats.loadMetricStatsMap().get("named3").numRequestsFinishedWithMetric()).isEqualTo(
         1L);
-    assertThat(localityStats.loadMetricStatsMap().get("named3").totalMetricValue()).isEqualTo(
-        0.009);
+    assertThat(localityStats.loadMetricStatsMap().get("named3").totalMetricValue()).isWithin(
+        TOLERANCE).of(0.009);
 
     streamTracer3.streamClosed(Status.OK);
     subchannel.shutdown();  // stats recorder released
