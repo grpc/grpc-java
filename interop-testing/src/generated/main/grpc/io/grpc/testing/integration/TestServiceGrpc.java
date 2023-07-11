@@ -16,7 +16,7 @@ public final class TestServiceGrpc {
 
   private TestServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.TestService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.TestService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
@@ -843,9 +843,9 @@ public final class TestServiceGrpc {
   private static final class TestServiceMethodDescriptorSupplier
       extends TestServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    TestServiceMethodDescriptorSupplier(String methodName) {
+    TestServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

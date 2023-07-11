@@ -2518,7 +2518,7 @@ public class RetriableStreamTest {
         Status.fromCode(NON_FATAL_STATUS_CODE_1), PROCESSED, headers);
 
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
-    inOrder.verifyNoMoreInteractions();
+    inOrder.verify(retriableStreamRecorder).newSubstream(anyInt());
 
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
     assertEquals(1, fakeClock.numPendingTasks());

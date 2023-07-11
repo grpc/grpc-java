@@ -9,21 +9,33 @@ plugins {
 
 description = 'gRPC: API'
 
+sourceSets {
+    context
+    main {
+        output.classesDirs.from(sourceSets.context.output.classesDirs)
+    }
+}
+
+compileContextJava {
+    sourceCompatibility = 1.7
+    targetCompatibility = 1.7
+}
+
+
 dependencies {
-    api project(':grpc-context'),
-            libraries.jsr305,
+    compileOnly sourceSets.context.output
+    api libraries.jsr305,
             libraries.errorprone.annotations
     implementation libraries.guava
 
+    testFixturesApi libraries.truth
+    testFixturesImplementation libraries.jsr305
     testFixturesImplementation libraries.guava,
             libraries.junit,
             libraries.mockito.core
-    testImplementation testFixtures(project(':grpc-context')),
-            project(':grpc-testing'),
+    testImplementation project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
     jmh project(':grpc-core')
 
     signature libraries.signature.java
@@ -31,8 +43,13 @@ dependencies {
 }
 
 tasks.named("javadoc").configure {
+    source sourceSets.context.allSource
     // We want io.grpc.Internal, but not io.grpc.Internal*
     exclude 'io/grpc/Internal?*.java'
+}
+
+tasks.named("sourcesJar").configure {
+    from sourceSets.context.allSource
 }
 
 components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }

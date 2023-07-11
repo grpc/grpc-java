@@ -15,7 +15,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
 
   private XdsUpdateClientConfigureServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.XdsUpdateClientConfigureService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.XdsUpdateClientConfigureService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.ClientConfigureRequest,
@@ -291,9 +291,9 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   private static final class XdsUpdateClientConfigureServiceMethodDescriptorSupplier
       extends XdsUpdateClientConfigureServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    XdsUpdateClientConfigureServiceMethodDescriptorSupplier(String methodName) {
+    XdsUpdateClientConfigureServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

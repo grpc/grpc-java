@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import android.content.Context;
+import android.os.UserHandle;
 import androidx.core.content.ContextCompat;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
@@ -71,7 +72,37 @@ public final class BinderChannelBuilder
   public static BinderChannelBuilder forAddress(
       AndroidComponentAddress directAddress, Context sourceContext) {
     return new BinderChannelBuilder(
-        checkNotNull(directAddress, "directAddress"), null, sourceContext);
+        checkNotNull(directAddress, "directAddress"),
+        null,
+        sourceContext,
+        BinderChannelCredentials.forDefault());
+  }
+
+  /**
+   * Creates a channel builder that will bind to a remote Android service with provided
+   * BinderChannelCredentials.
+   *
+   * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
+   * after 30 minutes without use by default but can be configured via {@link
+   * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
+   * ManagedChannel#enterIdle()}.
+   *
+   * <p>You the caller are responsible for managing the lifecycle of any channels built by the
+   * resulting builder. They will not be shut down automatically.
+   *
+   * @param directAddress the {@link AndroidComponentAddress} referencing the service to bind to.
+   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
+   * @param channelCredentials the arbitrary binder specific channel credentials to be used to
+   *     establish a binder connection.
+   * @return a new builder
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
+  public static BinderChannelBuilder forAddress(
+      AndroidComponentAddress directAddress,
+      Context sourceContext,
+      BinderChannelCredentials channelCredentials) {
+    return new BinderChannelBuilder(
+        checkNotNull(directAddress, "directAddress"), null, sourceContext, channelCredentials);
   }
 
   /**
@@ -92,7 +123,37 @@ public final class BinderChannelBuilder
    * @return a new builder
    */
   public static BinderChannelBuilder forTarget(String target, Context sourceContext) {
-    return new BinderChannelBuilder(null, checkNotNull(target, "target"), sourceContext);
+    return new BinderChannelBuilder(
+        null,
+        checkNotNull(target, "target"),
+        sourceContext,
+        BinderChannelCredentials.forDefault());
+  }
+
+  /**
+   * Creates a channel builder that will bind to a remote Android service, via a string target name
+   * which will be resolved.
+   *
+   * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
+   * after 30 minutes without use by default but can be configured via {@link
+   * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
+   * ManagedChannel#enterIdle()}.
+   *
+   * <p>You the caller are responsible for managing the lifecycle of any channels built by the
+   * resulting builder. They will not be shut down automatically.
+   *
+   * @param target A target uri which should resolve into an {@link AndroidComponentAddress}
+   *     referencing the service to bind to.
+   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
+   * @param channelCredentials the arbitrary binder specific channel credentials to be used to
+   *     establish a binder connection.
+   * @return a new builder
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
+  public static BinderChannelBuilder forTarget(
+      String target, Context sourceContext, BinderChannelCredentials channelCredentials) {
+    return new BinderChannelBuilder(
+        null, checkNotNull(target, "target"), sourceContext, channelCredentials);
   }
 
   /**
@@ -121,12 +182,14 @@ public final class BinderChannelBuilder
   private SecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private BindServiceFlags bindServiceFlags;
+  @Nullable private UserHandle targetUserHandle;
   private boolean strictLifecycleManagement;
 
   private BinderChannelBuilder(
       @Nullable AndroidComponentAddress directAddress,
       @Nullable String target,
-      Context sourceContext) {
+      Context sourceContext,
+      BinderChannelCredentials channelCredentials) {
     mainThreadExecutor =
         ContextCompat.getMainExecutor(checkNotNull(sourceContext, "sourceContext"));
     securityPolicy = SecurityPolicies.internalOnly();
@@ -139,10 +202,12 @@ public final class BinderChannelBuilder
       public ClientTransportFactory buildClientTransportFactory() {
         return new TransportFactory(
             sourceContext,
+            channelCredentials,
             mainThreadExecutor,
             schedulerPool,
             managedChannelImplBuilder.getOffloadExecutorPool(),
             securityPolicy,
+            targetUserHandle,
             bindServiceFlags,
             inboundParcelablePolicy);
       }
@@ -216,6 +281,23 @@ public final class BinderChannelBuilder
     return this;
   }
 
+/**
+   * Provides the target {@UserHandle} of the remote Android service.
+   *
+   * <p>When targetUserHandle is set, Context.bindServiceAsUser will used and additional Android
+   * permissions will be required. If your usage does not require cross-user communications, please
+   * do not set this field. It is the caller's responsibility to make sure that it holds the
+   * corresponding permissions.
+   *
+   * @param targetUserHandle the target user to bind into.
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
+  public BinderChannelBuilder bindAsUser(UserHandle targetUserHandle) {
+    this.targetUserHandle = targetUserHandle;
+    return this;
+  }
+
   /** Sets the policy for inbound parcelable objects. */
   public BinderChannelBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
@@ -245,12 +327,14 @@ public final class BinderChannelBuilder
   /** Creates new binder transports. */
   private static final class TransportFactory implements ClientTransportFactory {
     private final Context sourceContext;
+    private final BinderChannelCredentials channelCredentials;
     private final Executor mainThreadExecutor;
     private final ObjectPool<ScheduledExecutorService> scheduledExecutorPool;
     private final ObjectPool<? extends Executor> offloadExecutorPool;
     private final SecurityPolicy securityPolicy;
-    private final InboundParcelablePolicy inboundParcelablePolicy;
+    @Nullable private final UserHandle targetUserHandle;
     private final BindServiceFlags bindServiceFlags;
+    private final InboundParcelablePolicy inboundParcelablePolicy;
 
     private ScheduledExecutorService executorService;
     private Executor offloadExecutor;
@@ -258,17 +342,21 @@ public final class BinderChannelBuilder
 
     TransportFactory(
         Context sourceContext,
+        BinderChannelCredentials channelCredentials,
         Executor mainThreadExecutor,
         ObjectPool<ScheduledExecutorService> scheduledExecutorPool,
         ObjectPool<? extends Executor> offloadExecutorPool,
         SecurityPolicy securityPolicy,
+        @Nullable UserHandle targetUserHandle,
         BindServiceFlags bindServiceFlags,
         InboundParcelablePolicy inboundParcelablePolicy) {
       this.sourceContext = sourceContext;
+      this.channelCredentials = channelCredentials;
       this.mainThreadExecutor = mainThreadExecutor;
       this.scheduledExecutorPool = scheduledExecutorPool;
       this.offloadExecutorPool = offloadExecutorPool;
       this.securityPolicy = securityPolicy;
+      this.targetUserHandle = targetUserHandle;
       this.bindServiceFlags = bindServiceFlags;
       this.inboundParcelablePolicy = inboundParcelablePolicy;
 
@@ -284,7 +372,9 @@ public final class BinderChannelBuilder
       }
       return new BinderTransport.BinderClientTransport(
           sourceContext,
+          channelCredentials,
           (AndroidComponentAddress) addr,
+          targetUserHandle,
           bindServiceFlags,
           mainThreadExecutor,
           scheduledExecutorPool,

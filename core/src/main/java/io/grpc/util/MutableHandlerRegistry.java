@@ -31,13 +31,12 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Default implementation of {@link MutableHandlerRegistry}.
+ * Default implementation of {@link HandlerRegistry}.
  *
  * <p>Uses {@link ConcurrentHashMap} to avoid service registration excessively
  * blocking method lookup.
  */
 @ThreadSafe
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/933")
 public final class MutableHandlerRegistry extends HandlerRegistry {
   private final ConcurrentMap<String, ServerServiceDefinition> services
       = new ConcurrentHashMap<>();

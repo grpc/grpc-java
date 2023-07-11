@@ -52,10 +52,7 @@ dependencies {
 
     testImplementation libraries.junit
     testImplementation libraries.mockito.core
-    testImplementation (libraries.robolectric) {
-        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
-        exclude group: 'com.google.auto.service', module: 'auto-service'
-    }
+    testImplementation libraries.robolectric
 }
 
 task javadocs(type: Javadoc) {

@@ -23,7 +23,7 @@ cat <<EOF >> gradle.properties
 org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m
 EOF
 
-echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
+(yes || true) | "${ANDROID_HOME}/tools/bin/sdkmanager" --licenses
 
 # Proto deps
 buildscripts/make_dependencies.sh

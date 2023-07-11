@@ -85,7 +85,7 @@ REPOID="$(
       <description>Release upload</description>
     </data>
   </promoteRequest>"
-  curl -s -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
+  curl -f -s -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
     "$STAGING_URL/profiles/$PROFILE_ID/start" |
   grep stagedRepositoryId |
   sed 's/.*<stagedRepositoryId>\(.*\)<\/stagedRepositoryId>.*/\1/'
@@ -94,7 +94,7 @@ echo "Repository id: $REPOID"
 
 for X in $(cd "$DIR" && find -type f | cut -b 3-); do
   echo "Uploading $X"
-  curl -T "$DIR/$X" -u "$USERPASS" -H "Content-Type: application/octet-stream" \
+  curl --fail-with-body -T "$DIR/$X" -u "$USERPASS" -H "Content-Type: application/octet-stream" \
     "$STAGING_URL/deployByRepositoryId/$REPOID/$X"
 done
 
@@ -106,5 +106,5 @@ XML="
     <description>Auto-close via upload script</description>
   </data>
 </promoteRequest>"
-curl -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
+curl --fail-with-body -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
   "$STAGING_URL/profiles/$PROFILE_ID/finish"

@@ -24,6 +24,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BindServiceFlags;
+import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
@@ -95,7 +96,9 @@ public final class BinderTransportTest extends AbstractTransportTest {
     AndroidComponentAddress addr = (AndroidComponentAddress) server.getListenSocketAddress();
     return new BinderTransport.BinderClientTransport(
         appContext,
+        BinderChannelCredentials.forDefault(),
         addr,
+        null,
         BindServiceFlags.DEFAULTS,
         ContextCompat.getMainExecutor(appContext),
         executorServicePool,

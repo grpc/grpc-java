@@ -45,8 +45,7 @@ dependencies {
             libraries.netty.tcnative.classes,
             project(':grpc-grpclb'),
             project(':grpc-rls')
-    testImplementation testFixtures(project(':grpc-context')),
-            testFixtures(project(':grpc-api')),
+    testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
             libraries.mockito.core,
             libraries.okhttp

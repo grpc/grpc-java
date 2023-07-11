@@ -44,10 +44,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -120,7 +120,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     @Override
     public void run() {
       if (currentPicker != null && currentPicker instanceof WeightedRoundRobinPicker) {
-        ((WeightedRoundRobinPicker)currentPicker).updateWeight();
+        ((WeightedRoundRobinPicker) currentPicker).updateWeight();
       }
       weightUpdateTimer = syncContext.schedule(this, config.weightUpdatePeriodNanos,
           TimeUnit.NANOSECONDS, timeService);
@@ -258,7 +258,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         new HashMap<>();
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
-    private volatile EdfScheduler scheduler;
+    private volatile StaticStrideScheduler scheduler;
 
     WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
         float errorUtilizationPenalty) {
@@ -279,7 +279,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       Subchannel subchannel = list.get(scheduler.pick());
       if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
-            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
+                OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                 subchannelToReportListenerMap.getOrDefault(subchannel,
                     ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty))));
       } else {
@@ -288,26 +288,14 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
 
     private void updateWeight() {
-      int weightedChannelCount = 0;
-      double avgWeight = 0;
-      for (Subchannel value : list) {
-        double newWeight = ((WrrSubchannel) value).getWeight();
-        if (newWeight > 0) {
-          avgWeight += newWeight;
-          weightedChannelCount++;
-        }
-      }
-      EdfScheduler scheduler = new EdfScheduler(list.size(), random);
-      if (weightedChannelCount >= 1) {
-        avgWeight /= 1.0 * weightedChannelCount;
-      } else {
-        avgWeight = 1;
-      }
+      float[] newWeights = new float[list.size()];
       for (int i = 0; i < list.size(); i++) {
         WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
         double newWeight = subchannel.getWeight();
-        scheduler.add(i, newWeight > 0 ? newWeight : avgWeight);
+        newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
+
+      StaticStrideScheduler scheduler = new StaticStrideScheduler(newWeights, random);
       this.scheduler = scheduler;
     }
 
@@ -340,108 +328,122 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
   }
 
-  /**
-   * The earliest deadline first implementation in which each object is
-   * chosen deterministically and periodically with frequency proportional to its weight.
-   *
-   * <p>Specifically, each object added to chooser is given a deadline equal to the multiplicative
-   * inverse of its weight. The place of each object in its deadline is tracked, and each call to
-   * choose returns the object with the least remaining time in its deadline.
-   * (Ties are broken by the order in which the children were added to the chooser.) The deadline
-   * advances by the multiplicative inverse of the object's weight.
-   * For example, if items A and B are added with weights 0.5 and 0.2, successive chooses return:
-   *
-   * <ul>
-   *   <li>In the first call, the deadlines are A=2 (1/0.5) and B=5 (1/0.2), so A is returned.
-   *   The deadline of A is updated to 4.
-   *   <li>Next, the remaining deadlines are A=4 and B=5, so A is returned. The deadline of A (2) is
-   *       updated to A=6.
-   *   <li>Remaining deadlines are A=6 and B=5, so B is returned. The deadline of B is updated with
-   *       with B=10.
-   *   <li>Remaining deadlines are A=6 and B=10, so A is returned. The deadline of A is updated with
-   *        A=8.
-   *   <li>Remaining deadlines are A=8 and B=10, so A is returned. The deadline of A is updated with
-   *       A=10.
-   *   <li>Remaining deadlines are A=10 and B=10, so A is returned. The deadline of A is updated
-   *      with A=12.
-   *   <li>Remaining deadlines are A=12 and B=10, so B is returned. The deadline of B is updated
-   *      with B=15.
-   *   <li>etc.
-   * </ul>
-   *
-   * <p>In short: the entry with the highest weight is preferred.
+  /*
+   * The Static Stride Scheduler is an implementation of an earliest deadline first (EDF) scheduler
+   * in which each object's deadline is the multiplicative inverse of the object's weight.
+   * <p>
+   * The way in which this is implemented is through a static stride scheduler. 
+   * The Static Stride Scheduler works by iterating through the list of subchannel weights
+   * and using modular arithmetic to proportionally distribute picks, favoring entries 
+   * with higher weights. It is based on the observation that the intended sequence generated 
+   * from an EDF scheduler is a periodic one that can be achieved through modular arithmetic. 
+   * The Static Stride Scheduler is more performant than other implementations of the EDF
+   * Scheduler, as it removes the need for a priority queue (and thus mutex locks).
+   * <p>
+   * go/static-stride-scheduler
+   * <p>
    *
    * <ul>
-   *   <li>add() - O(lg n)
-   *   <li>pick() - O(lg n)
-   * </ul>
-   *
+   *  <li>nextSequence() - O(1)
+   *  <li>pick() - O(n)
    */
   @VisibleForTesting
-  static final class EdfScheduler {
-    private final PriorityQueue<ObjectState> prioQueue;
+  static final class StaticStrideScheduler {
+    private final short[] scaledWeights;
+    private final int sizeDivisor;
+    private final AtomicInteger sequence;
+    private static final int K_MAX_WEIGHT = 0xFFFF;
 
-    /**
-     * Weights below this value will be upped to this minimum weight.
-     */
-    private static final double MINIMUM_WEIGHT = 0.0001;
-
-    private final Object lock = new Object();
-
-    private final Random random;
-
-    /**
-     * Use the item's deadline as the order in the priority queue. If the deadlines are the same,
-     * use the index. Index should be unique.
-     */
-    EdfScheduler(int initialCapacity, Random random) {
-      this.prioQueue = new PriorityQueue<ObjectState>(initialCapacity, (o1, o2) -> {
-        if (o1.deadline == o2.deadline) {
-          return Integer.compare(o1.index, o2.index);
-        } else {
-          return Double.compare(o1.deadline, o2.deadline);
+    StaticStrideScheduler(float[] weights, Random random) {
+      checkArgument(weights.length >= 1, "Couldn't build scheduler: requires at least one weight");
+      int numChannels = weights.length;
+      int numWeightedChannels = 0;
+      double sumWeight = 0;
+      float maxWeight = 0;
+      short meanWeight = 0;
+      for (float weight : weights) {
+        if (weight > 0) {
+          sumWeight += weight;
+          maxWeight = Math.max(weight, maxWeight);
+          numWeightedChannels++;
         }
-      });
-      this.random = random;
+      }
+
+      double scalingFactor = K_MAX_WEIGHT / maxWeight;
+      if (numWeightedChannels > 0) {
+        meanWeight = (short) Math.round(scalingFactor * sumWeight / numWeightedChannels);
+      } else {
+        meanWeight = 1;
+      }
+
+      // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
+      short[] scaledWeights = new short[numChannels];
+      for (int i = 0; i < numChannels; i++) {
+        if (weights[i] <= 0) {
+          scaledWeights[i] = meanWeight;
+        } else {
+          scaledWeights[i] = (short) Math.round(weights[i] * scalingFactor);
+        }
+      }
+
+      this.scaledWeights = scaledWeights;
+      this.sizeDivisor = numChannels;
+      this.sequence = new AtomicInteger(random.nextInt());
+
     }
 
-    /**
-     * Adds the item in the scheduler. This is not thread safe.
-     *
-     * @param index The field {@link ObjectState#index} to be added
-     * @param weight positive weight for the added object
-     */
-    void add(int index, double weight) {
-      checkArgument(weight > 0.0, "Weights need to be positive.");
-      ObjectState state = new ObjectState(Math.max(weight, MINIMUM_WEIGHT), index);
-      // Randomize the initial deadline.
-      state.deadline = random.nextDouble() * (1 / state.weight);
-      prioQueue.add(state);
+    /** Returns the next sequence number and atomically increases sequence with wraparound. */
+    private long nextSequence() {
+      return Integer.toUnsignedLong(sequence.getAndIncrement());
     }
 
-    /**
-     * Picks the next WRR object.
+    @VisibleForTesting
+    long getSequence() {
+      return Integer.toUnsignedLong(sequence.get());
+    }
+
+    /*
+     * Selects index of next backend server.
+     * <p>
+     * A 2D array is compactly represented as a function of W(backend), where the row
+     * represents the generation and the column represents the backend index:
+     * X(backend,generation) | generation ∈ [0,kMaxWeight).
+     * Each element in the conceptual array is a boolean indicating whether the backend at
+     * this index should be picked now. If false, the counter is incremented again,
+     * and the new element is checked. An atomically incremented counter keeps track of our
+     * backend and generation through modular arithmetic within the pick() method.
+     * <p>
+     * Modular arithmetic allows us to evenly distribute picks and skips between
+     * generations based on W(backend).
+     * X(backend,generation) = (W(backend) * generation) % kMaxWeight >= kMaxWeight - W(backend)
+     * If we have the same three backends with weights:
+     * W(backend) = {2,3,6} scaled to max(W(backend)) = 6, then X(backend,generation) is:
+     * <p>
+     * B0    B1    B2
+     * T     T     T
+     * F     F     T
+     * F     T     T
+     * T     F     T
+     * F     T     T
+     * F     F     T
+     * The sequence of picked backend indices is given by
+     * walking across and down: {0,1,2,2,1,2,0,2,1,2,2}.
+     * <p>
+     * To reduce the variance and spread the wasted work among different picks,
+     * an offset that varies per backend index is also included to the calculation.
      */
     int pick() {
-      synchronized (lock) {
-        ObjectState minObject = prioQueue.remove();
-        minObject.deadline += 1.0 / minObject.weight;
-        prioQueue.add(minObject);
-        return minObject.index;
+      while (true) {
+        long sequence = this.nextSequence();
+        int backendIndex = (int) (sequence % this.sizeDivisor);
+        long generation = sequence / this.sizeDivisor;
+        int weight = Short.toUnsignedInt(this.scaledWeights[backendIndex]);
+        long offset = (long) K_MAX_WEIGHT / 2 * backendIndex;
+        if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) {
+          continue;
+        }
+        return backendIndex;
       }
-    }
-  }
-
-  /** Holds the state of the object. */
-  @VisibleForTesting
-  static class ObjectState {
-    private final double weight;
-    private final int index;
-    private volatile double deadline;
-
-    ObjectState(double weight, int index) {
-      this.weight = weight;
-      this.index = index;
     }
   }
 
