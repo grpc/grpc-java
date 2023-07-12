@@ -196,7 +196,7 @@ public class CommonTlsContextTestsUtil {
   public static X509Certificate getCertFromResourceName(String resourceName)
       throws IOException, CertificateException {
     try (ByteArrayInputStream bais =
-          new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8))) {
+        new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8))) {
       return CertificateUtils.toX509Certificate(bais);
     }
   }
