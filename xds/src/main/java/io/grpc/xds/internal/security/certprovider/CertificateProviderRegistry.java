@@ -59,7 +59,7 @@ public final class CertificateProviderRegistry {
    * Deregisters a provider.  No-op if the provider is not in the registry.
    *
    * @param certificateProviderProvider the provider that was added to the registry via
-   * {@link #register}.
+   *                                    {@link #register}.
    */
   public synchronized void deregister(CertificateProviderProvider certificateProviderProvider) {
     checkNotNull(certificateProviderProvider, "certificateProviderProvider");
