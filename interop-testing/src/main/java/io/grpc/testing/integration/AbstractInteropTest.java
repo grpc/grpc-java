@@ -1249,7 +1249,7 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
       assertThat(ex.getStatus().getDescription())
-        .startsWith("ClientCall started after CallOptions deadline was exceeded");
+          .startsWith("ClientCall started after CallOptions deadline was exceeded");
     }
 
     // CensusStreamTracerModule record final status in the interceptor, thus is guaranteed to be
@@ -1282,7 +1282,7 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
       assertThat(ex.getStatus().getDescription())
-        .startsWith("ClientCall started after CallOptions deadline was exceeded");
+          .startsWith("ClientCall started after CallOptions deadline was exceeded");
     }
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);

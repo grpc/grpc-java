@@ -179,8 +179,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
               return null;
             }
           })
-      .when(streamListener)
-      .messagesAvailable(any(StreamListener.MessageProducer.class));
+        .when(streamListener)
+        .messagesAvailable(any(StreamListener.MessageProducer.class));
   }
 
   @Override
