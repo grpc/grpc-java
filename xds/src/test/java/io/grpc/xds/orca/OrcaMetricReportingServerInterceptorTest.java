@@ -139,16 +139,17 @@ public class OrcaMetricReportingServerInterceptorTest {
     final CallMetricRecorder callMetricRecorder = new CallMetricRecorder();
     ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory =
         new ServerStreamTracer.Factory() {
-      @Override
-      public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-        return new ServerStreamTracer() {
           @Override
-          public Context filterContext(Context context) {
-            return context.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+          public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+            return new ServerStreamTracer() {
+              @Override
+              public Context filterContext(Context context) {
+                return context
+                    .withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+              }
+            };
           }
         };
-      }
-    };
 
     final AtomicReference<CallMetricRecorder> callMetricRecorderCapture = new AtomicReference<>();
     SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =

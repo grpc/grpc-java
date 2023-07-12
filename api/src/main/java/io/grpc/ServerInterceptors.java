@@ -291,23 +291,23 @@ public final class ServerInterceptors {
           final Metadata headers) {
         final ServerCall<OReqT, ORespT> unwrappedCall =
             new PartialForwardingServerCall<OReqT, ORespT>() {
-          @Override
-          protected ServerCall<WReqT, WRespT> delegate() {
-            return call;
-          }
+              @Override
+              protected ServerCall<WReqT, WRespT> delegate() {
+                return call;
+              }
 
-          @Override
-          public void sendMessage(ORespT message) {
-            final InputStream is = originalMethod.streamResponse(message);
-            final WRespT wrappedMessage = wrappedMethod.parseResponse(is);
-            delegate().sendMessage(wrappedMessage);
-          }
+              @Override
+              public void sendMessage(ORespT message) {
+                final InputStream is = originalMethod.streamResponse(message);
+                final WRespT wrappedMessage = wrappedMethod.parseResponse(is);
+                delegate().sendMessage(wrappedMessage);
+              }
 
-          @Override
-          public MethodDescriptor<OReqT, ORespT> getMethodDescriptor() {
-            return originalMethod;
-          }
-        };
+              @Override
+              public MethodDescriptor<OReqT, ORespT> getMethodDescriptor() {
+                return originalMethod;
+              }
+            };
 
         final ServerCall.Listener<OReqT> originalListener = originalHandler
             .startCall(unwrappedCall, headers);
