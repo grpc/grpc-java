@@ -47,8 +47,8 @@ j2objc-annotations = " com.google.j2objc:j2objc-annotations:2.8"
 jetty-alpn-agent = "org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.10"
 jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
 junit = "junit:junit:4.13.2"
-mockito-android = "org.mockito:mockito-android:3.12.4"
-mockito-core = "org.mockito:mockito-core:3.12.4"
+mockito-android = "org.mockito:mockito-android:4.11.0"
+mockito-core = "org.mockito:mockito-core:4.11.0"
 netty-codec-http2 = { module = "io.netty:netty-codec-http2", version.ref = "netty" }
 netty-handler-proxy = { module = "io.netty:netty-handler-proxy", version.ref = "netty" }
 netty-tcnative = { module = "io.netty:netty-tcnative-boringssl-static", version.ref = "nettytcnative" }
