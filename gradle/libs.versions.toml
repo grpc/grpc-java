@@ -69,9 +69,7 @@ protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", versio
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 re2j = "com.google.re2j:re2j:1.7"
-# Compilation failed with 4.10.2 due to native graphics, or something. We don't
-# use it, but it seemed the compiler felt it needed the definition
-robolectric = "org.robolectric:robolectric:4.9.2"
+robolectric = "org.robolectric:robolectric:4.10.3"
 signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 # 1.1+ requires Java 8, but we still use Java 7 with grpc-context
