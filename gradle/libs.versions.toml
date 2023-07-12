@@ -2,6 +2,8 @@
 # Compatibility problem with internal version getting onto 1.5.3.
 # https://github.com/grpc/grpc-java/pull/9118
 googleauth = "1.4.0"
+# TODO(any release manager): attempt removing runtimeOnly dependencies when guava upgraded:
+# - okhttp: errorprone.annotations
 guava = "32.0.1-android"
 netty = '4.1.94.Final'
 # Keep the following references of tcnative version in sync whenever it's updated:
@@ -29,9 +31,9 @@ commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 cronet-api = "org.chromium.net:cronet-api:108.5359.79"
 cronet-embedded = "org.chromium.net:cronet-embedded:108.5359.79"
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.18.0"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.20.0"
 errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"
-errorprone-core = "com.google.errorprone:error_prone_core:2.18.0"
+errorprone-core = "com.google.errorprone:error_prone_core:2.20.0"
 google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.22.0"
 google-auth-credentials = { module = "com.google.auth:google-auth-library-credentials", version.ref = "googleauth" }
 google-auth-oauth2Http = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleauth" }
