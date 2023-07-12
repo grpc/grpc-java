@@ -59,7 +59,6 @@ dependencies {
             libraries.guava.jre, // Use our newer version
             libraries.protobuf.java.util, // Use our newer version
             libraries.re2j, // Use our newer version
-            libraries.checker.qual, // Explicit dependency to keep in step with version used by guava
             libraries.j2objc.annotations // Explicit dependency to keep in step with version used by guava
 
     testImplementation testFixtures(project(':grpc-api')),
