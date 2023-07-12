@@ -164,7 +164,7 @@ public class BlockingClientCallTest {
     Integer[] values = {13, 14, 15, 16};
     delayedAddValue(DELAY_MILLIS, values);
     for (Integer value : values) {
-      Integer readValue = biDiStream.read(2, TimeUnit.SECONDS);
+      Integer readValue = biDiStream.read(DELAY_MILLIS * 2, TimeUnit.MILLISECONDS);
       assertEquals(value, readValue);
     }
     timeTaken = System.nanoTime() - start;
@@ -188,11 +188,11 @@ public class BlockingClientCallTest {
     long start = System.currentTimeMillis();
     delayedCancel(biDiStream, "cancel read");
     try {
-      assertNull(biDiStream.read(2, TimeUnit.SECONDS));
+      assertNull(biDiStream.read(2 * DELAY_MILLIS, TimeUnit.MILLISECONDS));
       fail("No exception thrown by read after cancel");
     } catch (StatusRuntimeException e) {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
-      assertThat(System.currentTimeMillis() - start).isLessThan(2000);
+      assertThat(System.currentTimeMillis() - start).isLessThan(2 * DELAY_MILLIS);
     }
 
     // write terminated
@@ -224,7 +224,7 @@ public class BlockingClientCallTest {
     start = System.currentTimeMillis();
     try {
       assertNull(biDiStream.read(2, TimeUnit.SECONDS));
-      assertThat(System.currentTimeMillis() - start).isLessThan(2000);
+      assertThat(System.currentTimeMillis() - start).isLessThan(2 * DELAY_MILLIS);
     } catch (StatusRuntimeException e) {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
     }
@@ -285,14 +285,14 @@ public class BlockingClientCallTest {
     testMethod.sendValueToClient(50);
     long start = System.currentTimeMillis();
     assertEquals(Integer.valueOf(50), biDiStream.read());
-    assertThat(System.currentTimeMillis() - start).isLessThan(1000L);
+    assertThat(System.currentTimeMillis() - start).isLessThan(DELAY_MILLIS);
 
     // Two values waiting
     start = System.currentTimeMillis();
     testMethod.sendValuesToClient(51, 52);
     assertEquals(Integer.valueOf(51), biDiStream.read());
     assertEquals(Integer.valueOf(52), biDiStream.read());
-    assertThat(System.currentTimeMillis() - start).isLessThan(1000L);
+    assertThat(System.currentTimeMillis() - start).isLessThan(DELAY_MILLIS);
   }
 
   @Test
@@ -338,7 +338,7 @@ public class BlockingClientCallTest {
       Thread.sleep(20);
     }
 
-    assertTrue(biDiStream.write(1000, 2, TimeUnit.SECONDS));
+    assertTrue(biDiStream.write(1000, 2 * DELAY_MILLIS, TimeUnit.MILLISECONDS));
 
     assertEquals(Integer.valueOf(20), biDiStream.read(200, TimeUnit.MILLISECONDS));
     assertEquals(Integer.valueOf(21), biDiStream.read(200, TimeUnit.MILLISECONDS));
@@ -376,7 +376,7 @@ public class BlockingClientCallTest {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
     delayedVoidMethod(DELAY_MILLIS, biDiStream::halfClose);
-    assertFalse(biDiStream.write(3, 2, TimeUnit.SECONDS));
+    assertFalse(biDiStream.write(3, 2 * DELAY_MILLIS, TimeUnit.MILLISECONDS));
   }
 
   @Test
