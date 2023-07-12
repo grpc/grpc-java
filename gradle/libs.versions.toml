@@ -27,8 +27,8 @@ checker-qual = "org.checkerframework:checker-qual:3.33.0"
 checkstyle = "com.puppycrawl.tools:checkstyle:8.28"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
-cronet-api = "org.chromium.net:cronet-api:113.5672.61"
-cronet-embedded = "org.chromium.net:cronet-embedded:113.5672.61"
+cronet-api = "org.chromium.net:cronet-api:108.5359.79"
+cronet-embedded = "org.chromium.net:cronet-embedded:108.5359.79"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.18.0"
 errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"
 errorprone-core = "com.google.errorprone:error_prone_core:2.18.0"
@@ -56,7 +56,7 @@ netty-tcnative-classes = { module = "io.netty:netty-tcnative-classes", version.r
 netty-transport-epoll = { module = "io.netty:netty-transport-native-epoll", version.ref = "netty" }
 netty-unix-common = { module = "io.netty:netty-transport-native-unix-common", version.ref = "netty" }
 okhttp = "com.squareup.okhttp:okhttp:2.7.5"
-okio = "com.squareup.okio:okio:1.17.5"
+okio = "com.squareup.okio:okio:2.10.0"
 opencensus-api = { module = "io.opencensus:opencensus-api", version.ref = "opencensus" }
 opencensus-contrib-grpc-metrics = { module = "io.opencensus:opencensus-contrib-grpc-metrics", version.ref = "opencensus" }
 opencensus-exporter-stats-stackdriver = { module = "io.opencensus:opencensus-exporter-stats-stackdriver", version.ref = "opencensus" }
