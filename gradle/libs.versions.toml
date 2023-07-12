@@ -72,5 +72,4 @@ re2j = "com.google.re2j:re2j:1.7"
 robolectric = "org.robolectric:robolectric:4.10.3"
 signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
-# 1.1+ requires Java 8, but we still use Java 7 with grpc-context
-truth = "com.google.truth:truth:1.0.1"
+truth = "com.google.truth:truth:1.1.5"
