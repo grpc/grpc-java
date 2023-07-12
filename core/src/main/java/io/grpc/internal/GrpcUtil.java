@@ -25,8 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.escape.Escaper;
-import com.google.common.net.PercentEscaper;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
@@ -57,9 +55,11 @@ import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -91,37 +91,6 @@ public final class GrpcUtil {
           Status.Code.ABORTED,
           Status.Code.OUT_OF_RANGE,
           Status.Code.DATA_LOSS));
-
-  private static final String URL_AUTHORITY_SAFE_CHARS = "-._~" // Unreserved characters.
-      + "!$&'()*+,;=" // The subdelim characters
-      + ":[]@"; // The gendelim characters permitted in authority.
-
-  private static final Escaper URL_AUTHORITY_ESCAPER = new PercentEscaper(URL_AUTHORITY_SAFE_CHARS,
-      false);
-  
-  /**
-   * Percent encode the {@code authority} based on
-   * https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
-   * 
-   * <p>When escaping a String, the following rules apply:
-   *
-   * <ul>
-   *  <li>The alphanumeric characters "a" through "z", "A" through "Z" and "0" through "9" remain 
-   *      the same.
-   *  <li>The unreserved characters ".", "-", "~", and "_" remain the same.
-   *  <li>The general delimiters for authority, "[", "]", "@" and ":" remain the
-   *      same.
-   *  <li>The subdelimiters "!", "$", "&amp;", "'", "(", ")", "*", "+", ",", ";", and "=" remain
-   *      the same.
-   *  <li>The space character " " is converted into %20.
-   *  <li>All other characters are converted into one or more bytes using UTF-8 encoding and 
-   *      each byte is then represented by the 3-character string "%XY", where "XY" is the 
-   *      two-digit, uppercase, hexadecimal representation of the byte value.
-   * </ul>
-   */
-  public static Escaper urlAuthorityEscaper() {
-    return URL_AUTHORITY_ESCAPER;
-  }
   
   public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
@@ -891,6 +860,75 @@ public final class GrpcUtil {
     }
     return false;
   }
+
+  /**
+   * Percent encode the {@code authority} based on
+   * https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
+   * 
+   * <p>When escaping a String, the following rules apply:
+   *
+   * <ul>
+   *   <li>The alphanumeric characters "a" through "z", "A" through "Z" and "0" through "9" remain 
+   *       the same.
+   *   <li>The unreserved characters ".", "-", "~", and "_" remain the same.
+   *   <li>The general delimiters for authority, "[", "]", "@" and ":" remain the same.
+   *   <li>The subdelimiters "!", "$", "&amp;", "'", "(", ")", "*", "+", ",", ";", and "=" remain
+   *       the same.
+   *   <li>The space character " " is converted into %20.
+   *   <li>All other characters are converted into one or more bytes using UTF-8 encoding and 
+   *       each byte is then represented by the 3-character string "%XY", where "XY" is the 
+   *       two-digit, uppercase, hexadecimal representation of the byte value.
+   * </ul>
+   */
+  public static class AuthorityEscaper {
+    // Escapers should output upper case hex digits.
+    private static final char[] UPPER_HEX_DIGITS = "0123456789ABCDEF".toCharArray();
+    private static final Set<Character> unreservedCharacters = new HashSet<>(Arrays.asList('-', '_', '.', '~'));
+    private static final Set<Character> subdelimiters = new HashSet<>(
+        Arrays.asList('!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '='));
+    private static final Set<Character> authorityDelims = new HashSet<>(Arrays.asList(':', '[', ']', '@'));
+
+    private static boolean shouldEscape(char c) {
+      if (Character.isLetterOrDigit(c)) {
+        return false;
+      }
+      if (unreservedCharacters.contains(c) || subdelimiters.contains(c) || authorityDelims.contains(c)) {
+        return false;
+      }
+      return true;
+    }
+
+  public static String encodeAuthority(String authority) {
+    Preconditions.checkNotNull(authority, "authority");
+    int authorityLength = authority.length();
+    int hexCount = 0;
+    // Calculate how many characters actually need escaping.
+    for (int index = 0; index < authorityLength; index++) {
+      char c = authority.charAt(index);
+      if (shouldEscape(c)) {
+        hexCount++;
+      }
+    }
+    // If no char need escaping, just return the original string back.
+    if (hexCount == 0) {
+      return authority;
+    }
+
+    // Allocate enough space as encoded characters need 2 extra chars.
+    StringBuilder encoded_authority = new StringBuilder( (2 * hexCount) + authorityLength);
+    for (int index = 0; index < authorityLength; index++) {
+      char c = authority.charAt(index);
+      if (shouldEscape(c)) {
+         encoded_authority.append('%');
+         encoded_authority.append(UPPER_HEX_DIGITS[c >>> 4]);
+         encoded_authority.append(UPPER_HEX_DIGITS[c & 0xF]);
+      } else {
+        encoded_authority.append(c);
+      }
+    }
+    return encoded_authority.toString();
+  }
+ }
 
   private GrpcUtil() {}
 }

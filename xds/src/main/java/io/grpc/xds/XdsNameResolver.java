@@ -150,7 +150,7 @@ final class XdsNameResolver extends NameResolver {
 
     // The name might have multiple slashes so encode it before verifying.
     // If the encoding fails, fallback to the non-encoded string.
-    String authority = GrpcUtil.urlAuthorityEscaper().escape(checkNotNull(name, "name"));
+    String authority = GrpcUtil.AuthorityEscaper.encodeAuthority(checkNotNull(name, "name"));
     
     // Verify the authority using encoding, but use non-escaped version for
     // serviceAuthority.
