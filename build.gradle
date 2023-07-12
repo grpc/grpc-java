@@ -245,16 +245,17 @@ subprojects {
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
-            // TODO(https://github.com/grpc/grpc-java/issues/10372): remove when fixed
-            options.errorprone.check("StringCaseLocaleUsage", CheckSeverity.OFF)
+
+            // TODO(https://github.com/grpc/grpc-java/issues/10372): remove when fixed.
+            if (JavaVersion.current().isJava11Compatible()) {
+              options.errorprone.check("StringCaseLocaleUsage", CheckSeverity.OFF)
+            }
         }
         tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
-            // TODO(https://github.com/grpc/grpc-java/issues/10372): remove when fixed
-            options.errorprone.check("StringCaseLocaleUsage", CheckSeverity.OFF)
         }
 
         plugins.withId("ru.vyarus.animalsniffer") {
