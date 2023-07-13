@@ -91,7 +91,7 @@ public final class GrpcUtil {
           Status.Code.ABORTED,
           Status.Code.OUT_OF_RANGE,
           Status.Code.DATA_LOSS));
-  
+
   public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
   /**
