@@ -895,9 +895,19 @@ public final class GrpcUtil {
         .unmodifiableSet(new HashSet<>(Arrays.asList(':', '[', ']', '@')));
 
     private static boolean shouldEscape(char c) {
-      if (Character.isLetterOrDigit(c)) {
+      // Only encode ASCII.
+      if (c > 127) {
         return false;
       }
+      // Letters don't need an escape.
+      if (((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) {
+        return false;
+      }
+      // Numbers don't need to be escaped.
+      if ((c >= '0' && c <= '9'))  {
+        return false;
+      }
+      // Don't escape allowed characters.
       if (UNRESERVED_CHARACTERS.contains(c)
           || SUB_DELIMS.contains(c)
           || AUTHORITY_DELIMS.contains(c)) {

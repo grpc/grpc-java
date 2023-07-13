@@ -187,6 +187,19 @@ public class GrpcUtilTest {
   }
 
   @Test
+  public void urlAuthorityEscape_allLettersAndNumbers() {
+    assertEquals(
+        "abcdefghijklmnopqrstuvwxyz0123456789",
+        GrpcUtil.AuthorityEscaper.encodeAuthority("abcdefghijklmnopqrstuvwxyz0123456789"));
+  }
+
+  @Test
+  public void urlAuthorityEscape_unicodeAreNotEncoded() {
+    assertEquals(
+        "\u00F6\u00AE", GrpcUtil.AuthorityEscaper.encodeAuthority("\u00F6\u00AE"));
+  }
+
+  @Test
   public void checkAuthority_failsOnNull() {
     thrown.expect(NullPointerException.class);
 
