@@ -433,16 +433,16 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     int pick() {
       int i = 0;
       while (true) {
+        i++;
         long sequence = this.nextSequence();
         int backendIndex = (int) (sequence % scaledWeights.length);
         long generation = sequence / scaledWeights.length;
         int weight = Short.toUnsignedInt(scaledWeights[backendIndex]);
         long offset = (long) K_MAX_WEIGHT / 2 * backendIndex;
-        assert i < scaledWeights.length : "scheduler has more than one pass through";
-        i++;
         if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) {
           continue;
         }
+        assert i < scaledWeights.length : "scheduler has more than one pass through";
         return backendIndex;
       }
     }
