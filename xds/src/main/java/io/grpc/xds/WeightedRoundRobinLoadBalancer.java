@@ -442,7 +442,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) {
           continue;
         }
-        assert i < scaledWeights.length : "scheduler has more than one pass through";
+        assert i <= scaledWeights.length : "scheduler has more than one pass through";
         return backendIndex;
       }
     }
