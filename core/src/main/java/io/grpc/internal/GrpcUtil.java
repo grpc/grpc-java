@@ -886,20 +886,21 @@ public final class GrpcUtil {
   public static class AuthorityEscaper {
     // Escapers should output upper case hex digits.
     private static final char[] UPPER_HEX_DIGITS = "0123456789ABCDEF".toCharArray();
-    private static final Set<Character> unreservedCharacters =
-        new HashSet<>(Arrays.asList('-', '_', '.', '~'));
-    private static final Set<Character> subdelimiters =
-        new HashSet<>(Arrays.asList('!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '='));
-    private static final Set<Character> authorityDelims =
-        new HashSet<>(Arrays.asList(':', '[', ']', '@'));
+    private static final Set<Character> UNRESERVED_CHARACTERS = Collections
+        .unmodifiableSet(new HashSet<>(Arrays.asList('-', '_', '.', '~')));
+    private static final Set<Character> SUB_DELIMS = Collections
+        .unmodifiableSet(new HashSet<>(
+            Arrays.asList('!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=')));
+    private static final Set<Character> AUTHORITY_DELIMS = Collections
+        .unmodifiableSet(new HashSet<>(Arrays.asList(':', '[', ']', '@')));
 
     private static boolean shouldEscape(char c) {
       if (Character.isLetterOrDigit(c)) {
         return false;
       }
-      if (unreservedCharacters.contains(c)
-          || subdelimiters.contains(c)
-          || authorityDelims.contains(c)) {
+      if (UNRESERVED_CHARACTERS.contains(c)
+          || SUB_DELIMS.contains(c)
+          || AUTHORITY_DELIMS.contains(c)) {
         return false;
       }
       return true;
