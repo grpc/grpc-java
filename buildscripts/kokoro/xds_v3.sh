@@ -16,6 +16,10 @@ git clone -b psm-interop-kokoro-2204-legacy --single-branch --depth=1 https://gi
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
 
+echo $PATH
+which python3
+which python
+
 JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
   python3 grpc/tools/run_tests/run_xds_tests.py \
     --test_case="ping_pong,circuit_breaking" \
