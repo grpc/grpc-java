@@ -42,6 +42,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
     private List<EquivalentAddressGroup> addressGroups;
     private List<Subchannel> subchannels = new ArrayList<>();
     private volatile int index;
+    private volatile Index addressIndex;
 
     private volatile ConnectivityState currentState = IDLE;
 
@@ -75,8 +76,10 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
                         config.randomSeed != null ? new Random(config.randomSeed) : new Random());
             }
         }
+        List<EquivalentAddressGroup> unmodifiableServers =
+            Collections.unmodifiableList(new ArrayList<>(servers));
         this.addressGroups = servers;
-
+        this.addressIndex = new Index(unmodifiableServers);
         if (subchannels.size() == 0) {
             index = 0;
             for (EquivalentAddressGroup server : addressGroups) {
@@ -100,6 +103,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
         return true;
     }
 
+    /** Replaces the existing addresses, avoiding unnecessary reconnects. */
     public void updateAddresses(final List<EquivalentAddressGroup> newAddressGroups) {
       Preconditions.checkNotNull(newAddressGroups, "newAddressGroups");
       checkListHasNoNulls(newAddressGroups, "newAddressGroups contains null entry");
@@ -109,83 +113,28 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
       helper.getSynchronizationContext().execute(new Runnable() {
         @Override
         public void run() {
-          SocketAddress previousAddress = subchannels.get(index).getAddresses().getAddresses().get(0);
+          SocketAddress previousAddress = addressIndex.getCurrentAddress();
           index = 0;
+          addressIndex.reset();
           addressGroups = newImmutableAddressGroups;
           if (currentState == READY || currentState == CONNECTING) {
-            if (seekTo(newAddressGroups, previousAddress) == -1) {
+            if (!addressIndex.seekTo(previousAddress)) {
               // forced to drop the connection
-                  if (currentState == READY) {
-                    // TODO: new state? how to handle
-                  } else {
-                    // TODO: shut everything down? aka just shut one down but with happy eyeballs
-                    // TODO: we would need to shut everything down
-                    shutdown();
-                    requestConnection();
-                  }
-            } else {
               shutdown();
+              addressIndex.reset();
+              index = 0;
+              if (currentState == READY) {
+                // READY subchannel, IDLE until prompted for a subchannel
+                updateBalancingState(IDLE, new RequestConnectionPicker(subchannels.get(index)));
+              } else {
+                // subchannel was connecting, want new connection
+                requestConnection();
+              }
             }
           }
         }
       });
     }
-//    syncContext.execute(new Runnable() {
-//      @Override
-//      public void run() {
-//        ManagedClientTransport savedTransport = null;
-//        SocketAddress previousAddress = addressIndex.getCurrentAddress();
-//        addressIndex.updateGroups(newImmutyncableAddressGroups);
-//        addressGroups = newImmutableAddressGroups;
-//        if (state.getState() == READY || state.getState() == CONNECTING) {
-//          if (!addressIndex.seekTo(previousAddress)) {
-//            // Forced to drop the connection
-//            if (state.getState() == READY) {
-//              savedTransport = activeTransport;
-//              activeTransport = null;
-//              addressIndex.reset();
-//              gotoNonErrorState(IDLE);
-//            } else {
-//              pendingTransport.shutdown(
-//                  Status.UNAVAILABLE.withDescription(
-//                    "InternalSubchannel closed pending transport due to address change"));
-//              pendingTransport = null;
-////              addressIndex.reset();
-//              startNewTransport();
-//            }
-//          }
-//        }
-//        if (savedTransport != null) {
-//          if (shutdownDueToUpdateTask != null) {
-//            // Keeping track of multiple shutdown tasks adds complexity, and shouldn't generally be
-//            // necessary. This transport has probably already had plenty of time.
-//            shutdownDueToUpdateTransport.shutdown(
-//                Status.UNAVAILABLE.withDescription(
-//                    "InternalSubchannel closed transport early due to address change"));
-//            shutdownDueToUpdateTask.cancel();
-//            shutdownDueToUpdateTask = null;
-//            shutdownDueToUpdateTransport = null;
-//          }
-//          // Avoid needless RPC failures by delaying the shutdown. See
-//          // https://github.com/grpc/grpc-java/issues/2562
-//          shutdownDueToUpdateTransport = savedTransport;
-//          shutdownDueToUpdateTask = syncContext.schedule(
-//              new Runnable() {
-//                @Override public void run() {
-//                  ManagedClientTransport transport = shutdownDueToUpdateTransport;
-//                  shutdownDueToUpdateTask = null;
-//                  shutdownDueToUpdateTransport = null;
-//                  transport.shutdown(
-//                      Status.UNAVAILABLE.withDescription(
-//                          "InternalSubchannel closed transport due to address change"));
-//                }
-//              },
-//              ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS,
-//              TimeUnit.SECONDS,
-//              scheduledExecutor);
-//        }
-//      }
-//    });
 
     @Override
     public void handleNameResolutionError(Status error) {
@@ -219,7 +168,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
                 return;
             } else if (newState == IDLE) {
                 index = 0;
-                requestConnection(); // TODO: next or current, confirm
+                requestConnection();
                 return;
             }
         }
@@ -247,6 +196,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
                   // scheduleBackoff(s);
                 } else {
                   index++;
+                  addressIndex.increment();
                   requestConnection();
                   picker = new Picker(PickResult.withNoResult());
                 }
@@ -264,11 +214,12 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
 
     @Override
     public void shutdown() {
-        if (subchannels != null) {
-            for (Subchannel subchannel : subchannels) {
-                subchannel.shutdown();
-            }
+      if (subchannels != null) {
+        for (int i = 0; i <= index; i++) {
+          subchannels.get(i).shutdown();
+          subchannels.remove(i);
         }
+      }
     }
 
     @Override
@@ -290,15 +241,6 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
       for (Object item : list) {
         Preconditions.checkNotNull(item, msg);
       }
-    }
-
-    private static int seekTo(List<EquivalentAddressGroup> newAddressGroups, SocketAddress needle) {
-      for (int i = 0; i < newAddressGroups.size(); i++) {
-        if (newAddressGroups.get(i).getAddresses().get(0).equals(needle)) {
-          return i;
-        }
-      }
-      return -1;
     }
 
     @VisibleForTesting
@@ -399,6 +341,10 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
 
         public List<EquivalentAddressGroup> getGroups() {
             return addressGroups;
+        }
+
+        public int getGroupIndex() {
+          return groupIndex;
         }
 
         /**

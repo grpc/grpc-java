@@ -589,14 +589,29 @@ public class PickFirstLoadBalancerExperimentalTest {
     }
 
     @Test
-    public void oneAddressConnectionSuccessful() {
-      // Setting up the Subchannel
+    public void firstAddressConnectionSuccessful() {
+      // Setting up the Subchannels
       mockSubchannel1 = mock(FakeSubchannel.class);
+      mockSubchannel2 = mock(FakeSubchannel.class);
+      mockSubchannel3 = mock(FakeSubchannel.class);
+      when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
+          .thenReturn(mockSubchannel1, mockSubchannel2, mockSubchannel3);
       when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
           .thenReturn(mockSubchannel1);
 
       // Starting first connection attempt
-      InOrder inOrder = inOrder(mockHelper, mockSubchannel1)
+      InOrder inOrder = inOrder(mockHelper, mockSubchannel1);
+      loadBalancer.acceptResolvedAddresses(
+          ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+      inOrder.verify(mockHelper, times(3)).createSubchannel(createArgsCaptor.capture());
+      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+      inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+      inOrder.verify(mockSubchannel1).requestConnection();
+
+      // First connection attempt is successful
+      loadBalancer.processSubchannelState(mockSubchannel1, ConnectivityStateInfo.forNonError(READY));
+      assertEquals(READY, loadBalancer.getCurrentState());
+      // verify that picker returns correct subchannel
 
     }
 
@@ -635,6 +650,7 @@ public class PickFirstLoadBalancerExperimentalTest {
       assertEquals(CONNECTING, loadBalancer.getCurrentState());
       loadBalancer.processSubchannelState(mockSubchannel2, ConnectivityStateInfo.forNonError(READY));
       assertEquals(READY, loadBalancer.getCurrentState());
+      // verify that picker returns correct subchannel
     }
 
     private static class FakeSocketAddress extends SocketAddress {

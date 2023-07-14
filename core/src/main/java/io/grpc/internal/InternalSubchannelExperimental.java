@@ -579,9 +579,9 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
                         Preconditions.checkState(state.getState() == CONNECTING,
                                 "Expected state is CONNECTING, actual state is %s", state.getState());
                         // Continue reconnect if there are still addresses to try.
-                      if (true) { // TODO: fix
-                        scheduleBackoff(s);
-                      }
+//                      if (true) { // TODO: fix
+//                        scheduleBackoff(s);
+//                      }
 //            if (!addressIndex.isValid()) {
 //              pendingTransport = null;
 //              addressIndex.reset();
