@@ -153,16 +153,6 @@ public class InternalSubchannelExperimentalTest {
         assertEquals(0, fakeExecutor.numPendingTasks());
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    public void constructor_emptyEagList_throws() {
-        createInternalSubchannelExperimental(new EquivalentAddressGroup[0]);
-    }
-
-    @Test(expected = NullPointerException.class)
-    public void constructor_eagListWithNull_throws() {
-        createInternalSubchannelExperimental(new EquivalentAddressGroup[] {null});
-    }
-
     @Test public void eagAttribute_propagatesToTransport() {
         SocketAddress addr = new SocketAddress() {};
         Attributes attr = Attributes.newBuilder().set(Attributes.Key.create("some-key"), "1").build();
@@ -488,23 +478,6 @@ public class InternalSubchannelExperimentalTest {
         verify(mockBackoffPolicy1, times(backoff1Consulted)).nextBackoffNanos();
         verify(mockBackoffPolicy2, times(backoff2Consulted)).nextBackoffNanos();
         verify(mockBackoffPolicy3, times(backoff3Consulted)).nextBackoffNanos();
-    }
-
-    @Test
-    public void updateAddresses_emptyEagList_throws() {
-        SocketAddress addr = new FakeSocketAddress();
-        createInternalSubchannelExperimental(addr);
-        thrown.expect(IllegalArgumentException.class);
-        InternalSubchannelExperimental.updateAddresses(Arrays.<EquivalentAddressGroup>asList());
-    }
-
-    @Test
-    public void updateAddresses_eagListWithNull_throws() {
-        SocketAddress addr = new FakeSocketAddress();
-        createInternalSubchannelExperimental(addr);
-        List<EquivalentAddressGroup> eags = Arrays.asList((EquivalentAddressGroup) null);
-        thrown.expect(NullPointerException.class);
-        InternalSubchannelExperimental.updateAddresses(eags);
     }
 
     @Test public void updateAddresses_intersecting_ready() {
@@ -1107,7 +1080,7 @@ public class InternalSubchannelExperimentalTest {
     public void transportStartReturnsRunnable() {
         SocketAddress addr1 = mock(SocketAddress.class);
         SocketAddress addr2 = mock(SocketAddress.class);
-        createInternalSubchannelExperimental(addr1, addr2);
+        createInternalSubchannelExperimental(addr1);
         final AtomicInteger runnableInvokes = new AtomicInteger(0);
         Runnable startRunnable = new Runnable() {
             @Override
@@ -1127,7 +1100,7 @@ public class InternalSubchannelExperimentalTest {
         t0.listener.transportShutdown(Status.UNAVAILABLE);
         assertEquals(2, runnableInvokes.get());
 
-        // 2nd address: reconnect immediatly
+        // 2nd address: reconnect immediately
         MockClientTransportInfo t1 = transports.poll();
         t1.listener.transportShutdown(Status.UNAVAILABLE);
 
