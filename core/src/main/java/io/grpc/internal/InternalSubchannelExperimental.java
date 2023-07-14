@@ -72,7 +72,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
     private final Callback callback;
     private final ClientTransportFactory transportFactory;
     private final ScheduledExecutorService scheduledExecutor;
-    private final InternalChannelz channelz;
+    private final InternalChannelz channelz; // TODO: we can probably leave this to be uninvasive
     private final CallTracer callsTracer;
     private final ChannelTracer channelTracer;
     private final ChannelLogger channelLogger;
@@ -82,8 +82,6 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      */
     private final SynchronizationContext syncContext;
 
-    private boolean isLast = false;
-
     /**
      * A volatile accessor to {@link Index#getAddressGroups()}. There are few methods ({@link
      * #getAddressGroups()} and {@link #toString()} access this value where they supposed to access
@@ -91,7 +89,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      * don't need to maintain this volatile accessor. Although, having this accessor can reduce
      * unnecessary volatile reads while it delivers clearer intention of why .
      */
-    private volatile List<EquivalentAddressGroup> addressGroups;
+    private volatile List<EquivalentAddressGroup> addressGroups; // TODO: remove
 
     /**
      * The policy to control back off between reconnects. Non-{@code null} when a reconnect task is
@@ -117,6 +115,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      * also be present.
      */
     private final Collection<ConnectionClientTransport> transports = new ArrayList<>();
+    // TODO: we can probably leave to be uninvasive? future optimization will be to change this to a singular transport
 
     // Must only be used from syncContext
     private final InUseStateAggregator<ConnectionClientTransport> inUseStateAggregator =
@@ -136,13 +135,13 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      * The to-be active transport, which is not ready yet.
      */
     @Nullable
-    private ConnectionClientTransport pendingTransport;
+    private ConnectionClientTransport pendingTransport; // TODO: remove
 
     /**
      * The transport for new outgoing requests. Non-null only in READY state.
      */
     @Nullable
-    private volatile ManagedClientTransport activeTransport;
+    private volatile ManagedClientTransport activeTransport; // TODO: remove
 
     private volatile ConnectivityStateInfo state = ConnectivityStateInfo.forNonError(IDLE);
 
@@ -218,7 +217,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
 
         Preconditions.checkState(reconnectTask == null, "Should have no reconnectTask scheduled");
 
-        // move connectingTimer to PFLB
+        // move connectingTimer to PFLB?
 //    if (addressIndex.isAtBeginning()) {
 //      connectingTimer.reset().start();
 //    }
@@ -264,7 +263,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      * @param status the causal status when the channel begins transition to
      *     TRANSIENT_FAILURE.
      */
-    void scheduleBackoff(final Status status) { // made package private to call from pick first
+    private void scheduleBackoff(final Status status) {
         syncContext.throwIfNotInThisSynchronizationContext();
 
         class EndOfCurrentBackoff implements Runnable {
@@ -357,7 +356,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
 //            } else {
 //              pendingTransport.shutdown(
 //                  Status.UNAVAILABLE.withDescription(
-//                    "InternalSubchannel closed pending transport due to address change"));
+//                    "InternalSubchannelExperimental closed pending transport due to address change"));
 //              pendingTransport = null;
 ////              addressIndex.reset();
 //              startNewTransport();
@@ -370,7 +369,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
 //            // necessary. This transport has probably already had plenty of time.
 //            shutdownDueToUpdateTransport.shutdown(
 //                Status.UNAVAILABLE.withDescription(
-//                    "InternalSubchannel closed transport early due to address change"));
+//                    "InternalSubchannelExperimental closed transport early due to address change"));
 //            shutdownDueToUpdateTask.cancel();
 //            shutdownDueToUpdateTask = null;
 //            shutdownDueToUpdateTransport = null;
@@ -386,7 +385,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
 //                  shutdownDueToUpdateTransport = null;
 //                  transport.shutdown(
 //                      Status.UNAVAILABLE.withDescription(
-//                          "InternalSubchannel closed transport due to address change"));
+//                          "InternalSubchannelExperimental closed transport due to address change"));
 //                }
 //              },
 //              ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS,
@@ -526,10 +525,6 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
         }
     }
 
-    void isLast() {
-      this.isLast = true;
-    }
-
     /** Listener for real transports. */
     private class TransportListener implements ManagedClientTransport.Listener {
         final ConnectionClientTransport transport;
@@ -577,17 +572,16 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
                         return;
                     }
                     if (activeTransport == transport) {
+                        // told to shutdown when ready
                         activeTransport = null;
-//            addressIndex.reset();
                         gotoNonErrorState(IDLE);
                     } else if (pendingTransport == transport) {
                         Preconditions.checkState(state.getState() == CONNECTING,
                                 "Expected state is CONNECTING, actual state is %s", state.getState());
-//            addressIndex.increment();
                         // Continue reconnect if there are still addresses to try.
-                    if (isLast) {
-                      scheduleBackoff(s);
-                    }
+                      if (true) { // TODO: fix
+                        scheduleBackoff(s);
+                      }
 //            if (!addressIndex.isValid()) {
 //              pendingTransport = null;
 //              addressIndex.reset();
