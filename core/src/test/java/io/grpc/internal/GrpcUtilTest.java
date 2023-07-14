@@ -196,7 +196,7 @@ public class GrpcUtilTest {
   @Test
   public void urlAuthorityEscape_unicodeAreNotEncoded() {
     assertEquals(
-        "\u00F6\u00AE", GrpcUtil.AuthorityEscaper.encodeAuthority("\u00F6\u00AE"));
+        "ö®", GrpcUtil.AuthorityEscaper.encodeAuthority("ö®"));
   }
 
   @Test
