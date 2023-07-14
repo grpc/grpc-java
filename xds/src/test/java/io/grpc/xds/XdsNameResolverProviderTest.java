@@ -114,7 +114,7 @@ public class XdsNameResolverProviderTest {
     XdsNameResolver resolver = 
         provider.newNameResolver(URI.create("xds:///1234/path/foo.googleapis.com:8080"), args);
     assertThat(resolver).isNotNull();
-    assertThat(resolver.getServiceAuthority()).isEqualTo("1234/path/foo.googleapis.com:8080");
+    assertThat(resolver.getServiceAuthority()).isEqualTo("1234%2Fpath%2Ffoo.googleapis.com:8080");
   }
 
   @Test
@@ -122,7 +122,7 @@ public class XdsNameResolverProviderTest {
     XdsNameResolver resolver = provider.newNameResolver(URI.create(
         "xds://trafficdirector.google.com/1234/path/foo.googleapis.com:8080"), args);
     assertThat(resolver).isNotNull();
-    assertThat(resolver.getServiceAuthority()).isEqualTo("1234/path/foo.googleapis.com:8080");
+    assertThat(resolver.getServiceAuthority()).isEqualTo("1234%2Fpath%2Ffoo.googleapis.com:8080");
   }
 
   @Test
