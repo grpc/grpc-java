@@ -4,7 +4,7 @@ java_library(
         "src/main/java/io/grpc/util/*.java",
     ]),
     resources = glob([
-        "src/bazel-util/resources/**",
+        "src/main/resources/**",
     ]),
     visibility = ["//visibility:public"],
     deps = [
@@ -14,17 +14,5 @@ java_library(
         "@com_google_guava_guava//jar",
         "@com_google_j2objc_j2objc_annotations//jar",
         "@org_codehaus_mojo_animal_sniffer_annotations//jar",
-    ],
-)
-
-# Mirrors the dependencies included in the artifact on Maven Central for usage
-# with maven_install's override_targets. Should only be used as a dep for
-# pre-compiled binaries on Maven Central.
-java_library(
-    name = "util_maven",
-    visibility = ["//visibility:public"],
-    exports = [
-        ":util",
-        "//api",
     ],
 )

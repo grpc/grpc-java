@@ -5,8 +5,13 @@ java_library(
 )
 
 java_library(
-    name = "internal",
+    name = "inprocess",
     visibility = ["//visibility:public"],
+    exports = ["//inprocess"],
+)
+
+java_library(
+    name = "internal",
     srcs = glob([
         "src/main/java/io/grpc/internal/*.java",
     ]),
@@ -14,6 +19,7 @@ java_library(
     resources = glob([
         "src/bazel-internal/resources/**",
     ]),
+    visibility = ["//:__subpackages__"],
     deps = [
         "//api",
         "//context",
@@ -28,6 +34,12 @@ java_library(
     ],
 )
 
+java_library(
+    name = "util",
+    visibility = ["//visibility:public"],
+    exports = ["//util"],
+)
+
 # Mirrors the dependencies included in the artifact on Maven Central for usage
 # with maven_install's override_targets. Should only be used as a dep for
 # pre-compiled binaries on Maven Central.
@@ -37,5 +49,6 @@ java_library(
     exports = [
         ":internal",
         "//api",
+        "//inprocess",
     ],
 )

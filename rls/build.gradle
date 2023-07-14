@@ -9,8 +9,8 @@ plugins {
 description = "gRPC: RouteLookupService Loadbalancing plugin"
 
 dependencies {
-    api project(':grpc-util')
-    implementation project(':grpc-protobuf'),
+    implementation project(':grpc-util'),
+            project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.auto.value.annotations,
             libraries.guava

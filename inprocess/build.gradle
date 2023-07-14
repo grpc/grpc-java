@@ -1,42 +1,19 @@
 plugins {
     id "java-library"
-    id "java-test-fixtures"
     id "maven-publish"
 
-    id "me.champeau.jmh"
     id "ru.vyarus.animalsniffer"
 }
-
-import static java.nio.charset.StandardCharsets.US_ASCII;
-
-import com.google.common.primitives.Bytes;
 
 description = 'gRPC: Inprocess'
 
 dependencies {
     api project(':grpc-core')
-    // force dependent jars to depend on latest grpc-context
-    runtimeOnly project(":grpc-context")
-    implementation libraries.gson,
-            libraries.android.annotations,
-            libraries.animalsniffer.annotations,
-            libraries.errorprone.annotations,
-            libraries.guava,
-            libraries.perfmark.api
-    testFixturesApi libraries.junit
-    testFixturesImplementation libraries.guava,
-            libraries.mockito.core,
-            libraries.truth,
-            project(':grpc-testing')
-    testImplementation testFixtures(project(':grpc-api')),
-            project(':grpc-testing'),
-            project(':grpc-grpclb'),
+
+    implementation libraries.guava
+    testImplementation project(':grpc-testing'),
             testFixtures(project(':grpc-core'))
     testImplementation libraries.guava.testlib
-
-    testRuntimeOnly project(':grpc-census')
-
-    jmh project(':grpc-testing')
 
     signature libraries.signature.java
     signature libraries.signature.android
@@ -44,22 +21,4 @@ dependencies {
 
 tasks.named("javadoc").configure {
     exclude 'io/grpc/inprocess/Internal*'
-}
-
-animalsniffer {
-    // Don't check sourceSets.jmh
-    sourceSets = [
-        sourceSets.main,
-        sourceSets.test
-    ]
-}
-
-components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
-components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }
-
-
-tasks.register("versionFile") {
-    doLast {
-        new File(buildDir, "version").write("${project.version}\n")
-    }
 }
