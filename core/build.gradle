@@ -24,7 +24,7 @@ dependencies {
     api project(':grpc-api')
     // force dependent jars to depend on latest grpc-context
     runtimeOnly project(":grpc-context"),
-            project(":grpc-util")
+            project(":grpc-util")  // need grpc-util to pull in round robin
     implementation libraries.gson,
             libraries.android.annotations,
             libraries.animalsniffer.annotations,

@@ -11,8 +11,7 @@ description = 'gRPC: Util'
 dependencies {
     api project(':grpc-core')
 
-    implementation libraries.gson,
-            libraries.animalsniffer.annotations,
+    implementation libraries.animalsniffer.annotations,
             libraries.guava
     testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
