@@ -1,15 +1,10 @@
 plugins {
     id "java-library"
-    id "java-test-fixtures"
     id "maven-publish"
 
     id "me.champeau.jmh"
     id "ru.vyarus.animalsniffer"
 }
-
-import static java.nio.charset.StandardCharsets.US_ASCII;
-
-import com.google.common.primitives.Bytes;
 
 description = 'gRPC: Util'
 
@@ -17,23 +12,12 @@ dependencies {
     api project(':grpc-core')
 
     implementation libraries.gson,
-            libraries.android.annotations,
             libraries.animalsniffer.annotations,
-            libraries.errorprone.annotations,
-            libraries.guava,
-            libraries.perfmark.api
-    testFixturesApi libraries.junit
-    testFixturesImplementation libraries.guava,
-            libraries.mockito.core,
-            libraries.truth,
-            project(':grpc-testing')
+            libraries.guava
     testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
-            project(':grpc-testing'),
-            project(':grpc-grpclb')
+            project(':grpc-testing')
     testImplementation libraries.guava.testlib
-
-    testRuntimeOnly project(':grpc-census')
 
     jmh project(':grpc-testing')
 
@@ -48,6 +32,3 @@ animalsniffer {
         sourceSets.test
     ]
 }
-
-components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
-components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }
