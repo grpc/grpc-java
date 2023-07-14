@@ -40,6 +40,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status.Code;
 import io.grpc.internal.PickFirstLoadBalancerExperimental.PickFirstLoadBalancerExperimentalConfig;
+import io.grpc.internal.PickFirstLoadBalancerExperimental.Index;
 import java.net.Socket;import java.net.SocketAddress;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
@@ -133,6 +134,8 @@ public class PickFirstLoadBalancerExperimentalTest {
     private FakeSubchannel mockSubchannel2;
     @Mock
     private FakeSubchannel mockSubchannel3;
+    @Mock
+    private FakeSubchannel mockSubchannel4;
     @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
     private PickSubchannelArgs mockArgs;
 
@@ -144,7 +147,6 @@ public class PickFirstLoadBalancerExperimentalTest {
             socketAddresses.add(addr);
         }
 
-        when(mockSubchannel1.getAllAddresses()).thenReturn(servers);
         when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
         when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class))).thenReturn(mockSubchannel1);
         when(mockBackoffPolicyProvider.get())
@@ -570,22 +572,46 @@ public class PickFirstLoadBalancerExperimentalTest {
 
     @Test
     public void updateAddresses_disjoint_connecting() {
-      assertEquals(IDLE, loadBalancer.getCurrentState());
-      loadBalancer.acceptResolvedAddresses(
-          ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-      assertEquals(CONNECTING, loadBalancer.getCurrentState());
-      verify(mockSubchannel1).requestConnection();
+      // set up
+      mockSubchannel1 = mock(FakeSubchannel.class);
+      mockSubchannel2 = mock(FakeSubchannel.class);
+      mockSubchannel3 = mock(FakeSubchannel.class);
+      mockSubchannel4 = mock(FakeSubchannel.class);
+      when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
+          .thenReturn(mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
+      InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
 
-      SocketAddress socketAddr = new FakeSocketAddress("newserver");
+      // Creating first set of endpoints/addresses
+      SocketAddress socketAddr1 = new FakeSocketAddress("newserver1");
       SocketAddress socketAddr2 = new FakeSocketAddress("newserver2");
-      List<EquivalentAddressGroup> newServers =
-          Lists.newArrayList(new EquivalentAddressGroup(socketAddr),
+      List<EquivalentAddressGroup> oldServers =
+          Lists.newArrayList(new EquivalentAddressGroup(socketAddr1),
           new EquivalentAddressGroup((socketAddr2)));
 
+      // Accept Addresses and verify proper connection flow
+      assertEquals(IDLE, loadBalancer.getCurrentState());
+      loadBalancer.acceptResolvedAddresses(
+          ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
+      inOrder.verify(mockHelper, times(2)).createSubchannel(createArgsCaptor.capture());
+      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+      inOrder.verify(mockSubchannel1).requestConnection();
+
+      // Creating second set of endpoints/addresses
+      SocketAddress socketAddr3 = new FakeSocketAddress("newserver3");
+      SocketAddress socketAddr4 = new FakeSocketAddress("newserver4");
+      List<EquivalentAddressGroup> newServers =
+          Lists.newArrayList(new EquivalentAddressGroup(socketAddr3),
+          new EquivalentAddressGroup((socketAddr4)));
+
+      // Accept new resolved addresses to update
       loadBalancer.acceptResolvedAddresses(
           ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
-      verify(mockSubchannel1).requestConnection();
       assertEquals(CONNECTING, loadBalancer.getCurrentState());
+      inOrder.verify(mockSubchannel1).shutdown();
+      inOrder.verify(mockHelper, times(2)).createSubchannel(createArgsCaptor.capture());
+      inOrder.verify(mockSubchannel3).requestConnection();
+      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
     }
 
     @Test
@@ -596,8 +622,6 @@ public class PickFirstLoadBalancerExperimentalTest {
       mockSubchannel3 = mock(FakeSubchannel.class);
       when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
           .thenReturn(mockSubchannel1, mockSubchannel2, mockSubchannel3);
-      when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
-          .thenReturn(mockSubchannel1);
 
       // Starting first connection attempt
       InOrder inOrder = inOrder(mockHelper, mockSubchannel1);
@@ -653,6 +677,105 @@ public class PickFirstLoadBalancerExperimentalTest {
       // verify that picker returns correct subchannel
     }
 
+    @Test public void index_looping() {
+      Attributes.Key<String> key = Attributes.Key.create("some-key");
+      Attributes attr1 = Attributes.newBuilder().set(key, "1").build();
+      Attributes attr2 = Attributes.newBuilder().set(key, "2").build();
+      Attributes attr3 = Attributes.newBuilder().set(key, "3").build();
+      SocketAddress addr1 = new FakeSocketAddress("addr1");
+      SocketAddress addr2 = new FakeSocketAddress("addr2");
+      SocketAddress addr3 = new FakeSocketAddress("addr3");
+      SocketAddress addr4 = new FakeSocketAddress("addr4");
+      SocketAddress addr5 = new FakeSocketAddress("addr5");
+      Index index = new Index(Arrays.asList(
+          new EquivalentAddressGroup(Arrays.asList(addr1, addr2), attr1),
+          new EquivalentAddressGroup(Arrays.asList(addr3), attr2),
+          new EquivalentAddressGroup(Arrays.asList(addr4, addr5), attr3)));
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr1);
+      assertThat(index.isAtBeginning()).isTrue();
+      assertThat(index.isValid()).isTrue();
+
+      index.increment();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr1);
+      assertThat(index.isAtBeginning()).isFalse();
+      assertThat(index.isValid()).isTrue();
+
+      index.increment();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr3);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr2);
+      assertThat(index.isAtBeginning()).isFalse();
+      assertThat(index.isValid()).isTrue();
+
+      index.increment();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr3);
+      assertThat(index.isAtBeginning()).isFalse();
+      assertThat(index.isValid()).isTrue();
+
+      index.increment();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr5);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr3);
+      assertThat(index.isAtBeginning()).isFalse();
+      assertThat(index.isValid()).isTrue();
+
+      index.increment();
+      assertThat(index.isAtBeginning()).isFalse();
+      assertThat(index.isValid()).isFalse();
+
+      index.reset();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr1);
+      assertThat(index.isAtBeginning()).isTrue();
+      assertThat(index.isValid()).isTrue();
+
+      // We want to make sure both groupIndex and addressIndex are reset
+      index.increment();
+      index.increment();
+      index.increment();
+      index.increment();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr5);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr3);
+      index.reset();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr1);
+    }
+
+    @Test public void index_updateGroups_resets() {
+      SocketAddress addr1 = new FakeSocketAddress("addr1");
+      SocketAddress addr2 = new FakeSocketAddress("addr2");
+      SocketAddress addr3 = new FakeSocketAddress("addr3");
+      Index index = new Index(Arrays.asList(
+          new EquivalentAddressGroup(Arrays.asList(addr1)),
+          new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
+      index.increment();
+      index.increment();
+      // We want to make sure both groupIndex and addressIndex are reset
+      index.updateGroups(Arrays.asList(
+          new EquivalentAddressGroup(Arrays.asList(addr1)),
+          new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1);
+    }
+
+    @Test public void index_seekTo() {
+      SocketAddress addr1 = new FakeSocketAddress("addr1");
+      SocketAddress addr2 = new FakeSocketAddress("addr2");
+      SocketAddress addr3 = new FakeSocketAddress("addr3");
+      Index index = new Index(Arrays.asList(
+          new EquivalentAddressGroup(Arrays.asList(addr1, addr2)),
+          new EquivalentAddressGroup(Arrays.asList(addr3))));
+      assertThat(index.seekTo(addr3)).isTrue();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr3);
+      assertThat(index.seekTo(addr1)).isTrue();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1);
+      assertThat(index.seekTo(addr2)).isTrue();
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2);
+      index.seekTo(new FakeSocketAddress("addr4"));
+      // Failed seekTo doesn't change the index
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2);
+    }
+    
     private static class FakeSocketAddress extends SocketAddress {
         final String name;
 

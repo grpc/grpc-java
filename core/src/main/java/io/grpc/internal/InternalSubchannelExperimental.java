@@ -72,7 +72,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
     private final Callback callback;
     private final ClientTransportFactory transportFactory;
     private final ScheduledExecutorService scheduledExecutor;
-    private final InternalChannelz channelz; // TODO: we can probably leave this to be uninvasive
+    private final InternalChannelz channelz;
     private final CallTracer callsTracer;
     private final ChannelTracer channelTracer;
     private final ChannelLogger channelLogger;
@@ -89,7 +89,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      * don't need to maintain this volatile accessor. Although, having this accessor can reduce
      * unnecessary volatile reads while it delivers clearer intention of why .
      */
-    private volatile List<EquivalentAddressGroup> addressGroups; // TODO: remove
+    private volatile List<EquivalentAddressGroup> addressGroups;
 
     /**
      * The policy to control back off between reconnects. Non-{@code null} when a reconnect task is
@@ -115,7 +115,6 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      * also be present.
      */
     private final Collection<ConnectionClientTransport> transports = new ArrayList<>();
-    // TODO: we can probably leave to be uninvasive? future optimization will be to change this to a singular transport
 
     // Must only be used from syncContext
     private final InUseStateAggregator<ConnectionClientTransport> inUseStateAggregator =
@@ -135,13 +134,13 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
      * The to-be active transport, which is not ready yet.
      */
     @Nullable
-    private ConnectionClientTransport pendingTransport; // TODO: remove
+    private ConnectionClientTransport pendingTransport;
 
     /**
      * The transport for new outgoing requests. Non-null only in READY state.
      */
     @Nullable
-    private volatile ManagedClientTransport activeTransport; // TODO: remove
+    private volatile ManagedClientTransport activeTransport;
 
     private volatile ConnectivityStateInfo state = ConnectivityStateInfo.forNonError(IDLE);
 

@@ -76,28 +76,30 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
                         config.randomSeed != null ? new Random(config.randomSeed) : new Random());
             }
         }
-        List<EquivalentAddressGroup> unmodifiableServers =
-            Collections.unmodifiableList(new ArrayList<>(servers));
-        this.addressGroups = servers;
-        this.addressIndex = new Index(unmodifiableServers);
         if (subchannels.size() == 0) {
-            index = 0;
-            for (EquivalentAddressGroup server : addressGroups) {
-                for (SocketAddress address : server.getAddresses()) {
-                    List<EquivalentAddressGroup> addresses = new ArrayList<>();
-                    addresses.add(new EquivalentAddressGroup(address));
-                    final Subchannel subchannel = helper.createSubchannel(
-                            CreateSubchannelArgs.newBuilder()
-                                    .setAddresses(addresses)
-                                    .build());
-                    subchannels.add(subchannel);
-                }
+          List<EquivalentAddressGroup> unmodifiableServers =
+              Collections.unmodifiableList(new ArrayList<>(servers));
+          this.addressGroups = unmodifiableServers;
+          this.addressIndex = new Index(unmodifiableServers);
+          index = 0;
+          addressIndex.reset();
+
+          for (EquivalentAddressGroup endpoint : addressGroups) {
+            for (SocketAddress address : endpoint.getAddresses()) {
+              List<EquivalentAddressGroup> addresses = new ArrayList<>();
+              addresses.add(new EquivalentAddressGroup(address));
+              final Subchannel subchannel = helper.createSubchannel(
+                  CreateSubchannelArgs.newBuilder()
+                      .setAddresses(addresses)
+                      .build());
+              subchannels.add(subchannel);
             }
-            // The channel state does not get updated when doing name resolving today, so for the moment
-            // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-            requestConnection();
+          }
+          // The channel state does not get updated when doing name resolving today, so for the moment
+          // let LB report CONNECTION and call subchannel.requestConnection() immediately.
+          requestConnection();
         } else {
-            updateAddresses(servers);
+          updateAddresses(servers);
         }
 
         return true;
@@ -115,19 +117,31 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
         public void run() {
           SocketAddress previousAddress = addressIndex.getCurrentAddress();
           index = 0;
-          addressIndex.reset();
+          addressIndex.updateGroups(newImmutableAddressGroups);
           addressGroups = newImmutableAddressGroups;
           if (currentState == READY || currentState == CONNECTING) {
             if (!addressIndex.seekTo(previousAddress)) {
               // forced to drop the connection
               shutdown();
-              addressIndex.reset();
-              index = 0;
               if (currentState == READY) {
                 // READY subchannel, IDLE until prompted for a subchannel
                 updateBalancingState(IDLE, new RequestConnectionPicker(subchannels.get(index)));
               } else {
                 // subchannel was connecting, want new connection
+                index = addressIndex.getGroupIndex();
+                System.out.println(subchannels.size());
+                System.out.println(index);
+                for (EquivalentAddressGroup endpoint : addressGroups) {
+                  for (SocketAddress address : endpoint.getAddresses()) {
+                    List<EquivalentAddressGroup> addresses = new ArrayList<>();
+                    addresses.add(new EquivalentAddressGroup(address));
+                    final Subchannel subchannel = helper.createSubchannel(
+                        CreateSubchannelArgs.newBuilder()
+                            .setAddresses(addresses)
+                            .build());
+                    subchannels.add(subchannel);
+                  }
+                }
                 requestConnection();
               }
             }
@@ -217,8 +231,8 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
       if (subchannels != null) {
         for (int i = 0; i <= index; i++) {
           subchannels.get(i).shutdown();
-          subchannels.remove(i);
         }
+        subchannels = new ArrayList<>();
       }
     }
 
