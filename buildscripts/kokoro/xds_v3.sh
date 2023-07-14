@@ -18,6 +18,7 @@ grpc/tools/run_tests/helper_scripts/prep_xds.sh
 
 echo $PATH
 which python3
+python3 -m pip list
 which python
 
 JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
