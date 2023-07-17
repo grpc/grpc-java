@@ -26,9 +26,13 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import io.grpc.*;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
 import java.util.*;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -37,21 +41,30 @@ import javax.annotation.Nullable;
  * io.grpc.NameResolver}.  The channel's default behavior is used, which is walking down the address
  * list and sticking to the first that works.
  */
-final class PickFirstLoadBalancerExperimental extends LoadBalancer {
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10383")
+final class PickFirstLeafLoadBalancer extends LoadBalancer {
     private final Helper helper;
     private List<EquivalentAddressGroup> addressGroups;
     private List<Subchannel> subchannels = new ArrayList<>();
     private volatile int index;
     private volatile Index addressIndex;
+    private volatile boolean firstConnection = true;
 
     private volatile ConnectivityState currentState = IDLE;
+//    private final Stopwatch connectingTimer;
+//    private final ScheduledExecutorService scheduledExecutor;
 
-//    /**
-//     * All field must be mutated in the syncContext.
-//     */
-//    private final SynchronizationContext syncContext;
 
-    PickFirstLoadBalancerExperimental(Helper helper) {
+    @Nullable
+    private ScheduledHandle reconnectTask;
+
+    /**
+     * The policy to control back off between reconnects. Non-{@code null} when a reconnect task is
+     * scheduled.
+     */
+    private BackoffPolicy reconnectPolicy;
+
+    PickFirstLeafLoadBalancer(Helper helper) {
         this.helper = checkNotNull(helper, "helper");
     }
 
@@ -67,9 +80,9 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
 
         // We can optionally be configured to shuffle the address list. This can help better distribute
         // the load.
-        if (resolvedAddresses.getLoadBalancingPolicyConfig() instanceof PickFirstLoadBalancerExperimentalConfig) {
-            PickFirstLoadBalancerExperimentalConfig config
-                    = (PickFirstLoadBalancerExperimentalConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+        if (resolvedAddresses.getLoadBalancingPolicyConfig() instanceof PickFirstLeafLoadBalancerConfig) {
+            PickFirstLeafLoadBalancerConfig config
+                    = (PickFirstLeafLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
             if (config.shuffleAddressList != null && config.shuffleAddressList) {
                 servers = new ArrayList<EquivalentAddressGroup>(servers);
                 Collections.shuffle(servers,
@@ -120,7 +133,6 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
           addressIndex.updateGroups(newImmutableAddressGroups);
           addressGroups = newImmutableAddressGroups;
           if (!addressIndex.seekTo(previousAddress)) {
-            System.out.println("disjoint");
             // disjoint: forced to drop connection and replace subchannels
             shutdown();
             for (EquivalentAddressGroup endpoint : addressGroups) {
@@ -214,14 +226,18 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
         SubchannelPicker picker;
         switch (newState) {
             case IDLE:
-                // shutdown when ready
-                index = 0;
-                picker = new RequestConnectionPicker(subchannel); // TODO: should we request for connection directly?
+                // we enter this case if a subchannel was shutdown when ready
+                if (subchannel.equals(subchannels.get(0))) {
+                  index = 0;
+                  picker = new RequestConnectionPicker(subchannel); // TODO: this may be subchannels.get(0)
+                  updateBalancingState(IDLE, picker);
+                }
                 break;
             case CONNECTING:
                 // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could leave
                 // the current picker in-place. But ignoring the potential optimization is simpler.
                 picker = new Picker(PickResult.withNoResult());
+                updateBalancingState(CONNECTING, picker);
                 break;
             case READY:
                 picker = new Picker(PickResult.withSubchannel(subchannel));
@@ -231,7 +247,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
                 if (index == subchannels.size() - 1) {
                   picker = new Picker(PickResult.withError(stateInfo.getStatus()));
                   updateBalancingState(TRANSIENT_FAILURE, picker);
-                  // scheduleBackoff(s);
+                  scheduleBackoff(Status.UNAVAILABLE); // TODO: FIX ME
                 } else {
                   index++;
                   addressIndex.increment();
@@ -250,6 +266,33 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
         helper.updateBalancingState(state, picker);
     }
 
+    private void scheduleBackoff(Status s) { // TODO: FIX ME
+//      helper.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
+//
+//      class EndOfCurrentBackoff implements Runnable {
+//        @Override
+//        public void run() {
+//          reconnectTask = null;
+//          index = 0;
+//          requestConnection();
+//        }
+//      }
+//      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withNoResult()));
+//      long delayNanos =
+//          reconnectPolicy.nextBackoffNanos() - connectingTimer.elapsed(TimeUnit.NANOSECONDS);
+////      channelLogger.log(
+////          ChannelLogger.ChannelLogLevel.INFO,
+////          "TRANSIENT_FAILURE ({0}). Will reconnect after {1} ns",
+////          printShortStatus(status), delayNanos);
+//      Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
+//      reconnectTask = helper.getSynchronizationContext().schedule(
+//          new EndOfCurrentBackoff(),
+//          delayNanos,
+//          TimeUnit.NANOSECONDS,
+//          scheduledExecutor);
+
+    }
+
     @Override
     public void shutdown() {
       if (subchannels != null) {
@@ -262,17 +305,23 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
 
     @Override
     public void requestConnection() { // TODO: only start subchannel if it is new connection
-        if (index < subchannels.size() && subchannels.get(index) != null) {
-            subchannels.get(index).start(new SubchannelStateListener() {
-                @Override
-                public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-                    processSubchannelState(subchannels.get(index), stateInfo);
-                }
-            });
-            updateBalancingState(CONNECTING,
-                new Picker(PickResult.withNoResult()));
-            subchannels.get(index).requestConnection();
+      if (index < subchannels.size() && subchannels.get(index) != null) {
+        if (firstConnection) {
+          firstConnection = false;
+          subchannels.get(index).start(new SubchannelStateListener() {
+            @Override
+            public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+              processSubchannelState(subchannels.get(index), stateInfo);
+            }
+          });
         }
+        // The channel state does not get updated when doing name resolving today, so for the moment
+        // let LB report CONNECTION and call subchannel.requestConnection() immediately.
+        updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannels.get(index)))); // TODO: confirm desired behavior
+        subchannels.get(index).requestConnection();
+        // TODO: when coming out of backoff, what does this achieve? "asks to create connection if there isn't an active one
+        //  if this does not properly reinitialize, we need to recreate a subchannel
+      }
     }
 
     private static void checkListHasNoNulls(List<?> list, String msg) {
@@ -325,7 +374,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
                 helper.getSynchronizationContext().execute(new Runnable() {
                     @Override
                     public void run() {
-                      PickFirstLoadBalancerExperimental.super.requestConnection(); // TODO: this cannot be subchannel.requestConnection()
+                      PickFirstLeafLoadBalancer.super.requestConnection(); // TODO: this cannot be subchannel.requestConnection()
                     }
                 });
             }
@@ -337,7 +386,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
      * Index as in 'i', the pointer to an entry. Not a "search index."
      */
     @VisibleForTesting
-    static final class Index {
+    static final class Index { // TODO: redesigning index class
         private List<EquivalentAddressGroup> addressGroups;
         private int groupIndex;
         private int addressIndex;
@@ -411,7 +460,7 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
         }
     }
 
-    public static final class PickFirstLoadBalancerExperimentalConfig {
+    public static final class PickFirstLeafLoadBalancerConfig {
 
         @Nullable
         public final Boolean shuffleAddressList;
@@ -420,10 +469,10 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
         @Nullable
         final Long randomSeed;
 
-        public PickFirstLoadBalancerExperimentalConfig(@Nullable Boolean shuffleAddressList) {
+        public PickFirstLeafLoadBalancerConfig(@Nullable Boolean shuffleAddressList) {
             this(shuffleAddressList, null);
         }
-        PickFirstLoadBalancerExperimentalConfig(@Nullable Boolean shuffleAddressList, @Nullable Long randomSeed) {
+        PickFirstLeafLoadBalancerConfig(@Nullable Boolean shuffleAddressList, @Nullable Long randomSeed) {
             this.shuffleAddressList = shuffleAddressList;
             this.randomSeed = randomSeed;
         }
