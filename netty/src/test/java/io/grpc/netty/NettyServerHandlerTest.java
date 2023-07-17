@@ -635,7 +635,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void headersWithoutContentTypeShouldFailButNotThrowNPE() throws Exception {
+  public void headersWithErrAndEndStreamReturnErrorButNotThrowNpe() throws Exception {
     manualSetUp();
     Http2Headers headers = new DefaultHttp2Headers()
         .method(HTTP_METHOD)
