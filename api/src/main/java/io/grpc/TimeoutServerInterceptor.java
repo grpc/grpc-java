@@ -18,8 +18,9 @@ package io.grpc;
 
 /**
  * An optional ServerInterceptor that can interrupt server calls that are running for too long time.
+ * In this way, it prevents problematic code from using up all threads.
  *
- * <p>You can add it to your server using the ServerBuilder#intercept(ServerInterceptor) method.
+ * <p>How to use: you can add it to your server using the ServerBuilder#intercept(ServerInterceptor) method.
  *
  * <p>Limitation: it only applies the timeout to unary calls (streaming calls will run without timeout).
  */
@@ -36,38 +37,35 @@ public class TimeoutServerInterceptor implements ServerInterceptor {
       ServerCall<ReqT, RespT> serverCall,
       Metadata metadata,
       ServerCallHandler<ReqT, RespT> serverCallHandler) {
-    return new TimeoutServerCallListener<>(
-        serverCallHandler.startCall(serverCall, metadata), serverCall, serverTimeoutManager);
+    // Only intercepts unary calls because the timeout is inapplicable to streaming calls.
+    if (serverCall.getMethodDescriptor().getType().clientSendsOneMessage()) {
+      return new TimeoutServerCallListener<>(
+              serverCallHandler.startCall(serverCall, metadata), serverTimeoutManager);
+    } else {
+      return serverCallHandler.startCall(serverCall, metadata);
+    }
   }
 
   /** A listener that intercepts the RPC method invocation for timeout control. */
   private static class TimeoutServerCallListener<ReqT>
       extends ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT> {
 
-    private final ServerCall<?, ?> serverCall;
     private final ServerTimeoutManager serverTimeoutManager;
 
     private TimeoutServerCallListener(
         ServerCall.Listener<ReqT> delegate,
-        ServerCall<?, ?> serverCall,
         ServerTimeoutManager serverTimeoutManager) {
       super(delegate);
-      this.serverCall = serverCall;
       this.serverTimeoutManager = serverTimeoutManager;
     }
 
     /**
-     * Only intercepts unary calls because the timeout is inapplicable to streaming calls.
      * Intercepts onHalfClose() because the RPC method is called in it. See
      * io.grpc.stub.ServerCalls.UnaryServerCallHandler.UnaryServerCallListener
      */
     @Override
     public void onHalfClose() {
-      if (serverCall.getMethodDescriptor().getType().clientSendsOneMessage()) {
-        serverTimeoutManager.intercept(super::onHalfClose);
-      } else {
-        super.onHalfClose();
-      }
+      serverTimeoutManager.intercept(super::onHalfClose);
     }
   }
 }
