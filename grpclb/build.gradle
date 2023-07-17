@@ -19,6 +19,7 @@ dependencies {
     runtimeOnly libraries.errorprone.annotations
     compileOnly libraries.javax.annotation
     testImplementation libraries.truth,
+            project(':grpc-inprocess'),
             testFixtures(project(':grpc-core'))
 
     signature libraries.signature.java

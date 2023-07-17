@@ -271,7 +271,7 @@ subprojects {
                 requireUpperBoundDepsMatch(configurations.runtimeClasspath, project)
             }
         }
-        tasks.named('compileJava').configure {
+        tasks.named('assemble').configure {
             dependsOn checkUpperBoundDeps
         }
     }

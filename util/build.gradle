@@ -1,0 +1,34 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC: Util'
+
+dependencies {
+    api project(':grpc-core')
+
+    implementation libraries.animalsniffer.annotations,
+            libraries.guava
+    runtimeOnly libraries.gson  // to fix checkUpperBoundDeps error in services
+    testImplementation testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-core')),
+            project(':grpc-testing')
+    testImplementation libraries.guava.testlib
+
+    jmh project(':grpc-testing')
+
+    signature libraries.signature.java
+    signature libraries.signature.android
+}
+
+animalsniffer {
+    // Don't check sourceSets.jmh
+    sourceSets = [
+        sourceSets.main,
+        sourceSets.test
+    ]
+}

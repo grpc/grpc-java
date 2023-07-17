@@ -9,7 +9,7 @@ plugins {
 description = "gRPC: OkHttp"
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-util')
     implementation libraries.okio,
             libraries.guava,
             libraries.perfmark.api

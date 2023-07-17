@@ -34,7 +34,7 @@ dependencies {
     compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
             libraries.javax.annotation // java 9, 10 needs it
 
-    implementation project(':grpc-core'),
+    implementation project(':grpc-util'),
             libraries.guava
 
     testImplementation 'javax.servlet:javax.servlet-api:4.0.1',
@@ -43,6 +43,7 @@ dependencies {
     itImplementation project(':grpc-servlet'),
             project(':grpc-netty'),
             project(':grpc-core').sourceSets.test.runtimeClasspath,
+            project(':grpc-util').sourceSets.test.runtimeClasspath,
             libraries.junit
     itImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency

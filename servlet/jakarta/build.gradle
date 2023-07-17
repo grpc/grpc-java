@@ -74,12 +74,13 @@ dependencies {
     compileOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0',
             libraries.javax.annotation
 
-    implementation project(':grpc-core'),
+    implementation project(':grpc-util'),
             libraries.guava
 
     itImplementation project(':grpc-servlet-jakarta'),
             project(':grpc-netty'),
             project(':grpc-core').sourceSets.test.runtimeClasspath,
+            project(':grpc-util').sourceSets.test.runtimeClasspath,
             libraries.junit
     itImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency
