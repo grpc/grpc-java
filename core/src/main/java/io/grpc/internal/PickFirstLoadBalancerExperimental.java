@@ -119,32 +119,56 @@ final class PickFirstLoadBalancerExperimental extends LoadBalancer {
           index = 0;
           addressIndex.updateGroups(newImmutableAddressGroups);
           addressGroups = newImmutableAddressGroups;
-          if (currentState == READY || currentState == CONNECTING) {
-            if (!addressIndex.seekTo(previousAddress)) {
-              // forced to drop the connection
-              shutdown();
-              if (currentState == READY) {
-                // READY subchannel, IDLE until prompted for a subchannel
-                updateBalancingState(IDLE, new RequestConnectionPicker(subchannels.get(index)));
-              } else {
-                // subchannel was connecting, want new connection
-                index = addressIndex.getGroupIndex();
-                System.out.println(subchannels.size());
-                System.out.println(index);
-                for (EquivalentAddressGroup endpoint : addressGroups) {
-                  for (SocketAddress address : endpoint.getAddresses()) {
-                    List<EquivalentAddressGroup> addresses = new ArrayList<>();
-                    addresses.add(new EquivalentAddressGroup(address));
-                    final Subchannel subchannel = helper.createSubchannel(
-                        CreateSubchannelArgs.newBuilder()
-                            .setAddresses(addresses)
-                            .build());
-                    subchannels.add(subchannel);
-                  }
-                }
-                requestConnection();
+          if (!addressIndex.seekTo(previousAddress)) {
+            System.out.println("disjoint");
+            // disjoint: forced to drop connection and replace subchannels
+            shutdown();
+            for (EquivalentAddressGroup endpoint : addressGroups) {
+              for (SocketAddress address : endpoint.getAddresses()) {
+                List<EquivalentAddressGroup> addresses = new ArrayList<>();
+                addresses.add(new EquivalentAddressGroup(address));
+                final Subchannel subchannel = helper.createSubchannel(
+                    CreateSubchannelArgs.newBuilder()
+                        .setAddresses(addresses)
+                        .build());
+                subchannels.add(subchannel);
               }
             }
+            if (currentState == READY) {
+              // subchannel was READY, IDLE until prompted for a subchannel
+              updateBalancingState(IDLE, new RequestConnectionPicker(subchannels.get(index)));
+            } else if (currentState == CONNECTING) {
+              // subchannel was connecting, want new connection
+              index = addressIndex.getGroupIndex();
+              requestConnection();
+            }
+          } else {
+            // intersecting: keep current subchannel and replace all others
+            index = addressIndex.getGroupIndex();
+            Subchannel currentSubchannel = subchannels.get(index);
+            // shutdown all except current subchannel
+            for (int i = 0; i < subchannels.size(); i++) {
+              if (i != index) {
+                subchannels.get(i).shutdown();
+              }
+            }
+            subchannels = new ArrayList<>();
+
+            // lazily create subchannels with new addresses
+            for (EquivalentAddressGroup endpoint : addressGroups) {
+              for (SocketAddress address : endpoint.getAddresses()) {
+                List<EquivalentAddressGroup> addresses = new ArrayList<>();
+                addresses.add(new EquivalentAddressGroup(address));
+                final Subchannel subchannel = helper.createSubchannel(
+                    CreateSubchannelArgs.newBuilder()
+                        .setAddresses(addresses)
+                        .build());
+                subchannels.add(subchannel);
+              }
+            }
+
+            // replace with current subchannel
+            subchannels.set(index, currentSubchannel);
           }
         }
       });

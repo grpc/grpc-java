@@ -330,6 +330,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
     }
 
     /** Replaces the existing addresses, avoiding unnecessary reconnects. */
+    @Deprecated
     public void updateAddresses(final List<EquivalentAddressGroup> newAddressGroups) {
 //    Preconditions.checkNotNull(newAddressGroups, "newAddressGroups");
 //    checkListHasNoNulls(newAddressGroups, "newAddressGroups contains null entry");
@@ -357,7 +358,7 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
 //                  Status.UNAVAILABLE.withDescription(
 //                    "InternalSubchannelExperimental closed pending transport due to address change"));
 //              pendingTransport = null;
-////              addressIndex.reset();
+//              addressIndex.reset();
 //              startNewTransport();
 //            }
 //          }
