@@ -20,9 +20,10 @@ package io.grpc;
  * An optional ServerInterceptor that can interrupt server calls that are running for too long time.
  * In this way, it prevents problematic code from using up all threads.
  *
- * <p>How to use: you can add it to your server using the ServerBuilder#intercept(ServerInterceptor) method.
+ * <p>How to use: you can add it to your server using ServerBuilder#intercept(ServerInterceptor).
  *
- * <p>Limitation: it only applies the timeout to unary calls (streaming calls will run without timeout).
+ * <p>Limitation: it only applies the timeout to unary calls
+ * (streaming calls will still run without timeout).
  */
 public class TimeoutServerInterceptor implements ServerInterceptor {
 

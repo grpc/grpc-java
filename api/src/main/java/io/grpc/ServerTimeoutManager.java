@@ -17,6 +17,7 @@
 package io.grpc;
 
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -63,25 +64,26 @@ public class ServerTimeoutManager {
       return;
     }
 
-    TimeoutTask timeoutTask = schedule(Thread.currentThread());
+    Future<?> timeoutFuture = schedule(Thread.currentThread());
     try {
       invocation.run();
     } finally {
-      // If it completes in time, invalidate the timeout.
-      timeoutTask.invalidate();
+      // If it completes in time, cancel the timeout.
+      if (timeoutFuture != null) {
+        timeoutFuture.cancel(false);
+      }
     }
   }
 
-  private TimeoutTask schedule(Thread thread) {
+  private Future<?> schedule(Thread thread) {
     TimeoutTask timeoutTask = new TimeoutTask(thread);
-    if (!scheduler.isShutdown()) {
-      scheduler.schedule(timeoutTask, timeout, unit);
+    if (scheduler.isShutdown()) {
+      return null;
     }
-    return timeoutTask;
+    return scheduler.schedule(timeoutTask, timeout, unit);
   }
 
   private class TimeoutTask implements Runnable {
-    /** null thread means the task is invalid and will do nothing */
     private final AtomicReference<Thread> threadReference = new AtomicReference<>();
 
     private TimeoutTask(Thread thread) {
@@ -104,10 +106,6 @@ public class ServerTimeoutManager {
                           + unit);
         }
       }
-    }
-
-    private void invalidate() {
-      threadReference.set(null);
     }
   }
 }
