@@ -300,7 +300,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void requestConnection() { // TODO: only start subchannel if it is new connection
+    public void requestConnection() {
       if (index < subchannels.size() && subchannels.get(index) != null) {
         if (firstConnection) {
           subchannels.get(index).start(new SubchannelStateListener() {
@@ -312,10 +312,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         }
         // The channel state does not get updated when doing name resolving today, so for the moment
         // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-        updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannels.get(index)))); // TODO: confirm desired behavior
+        updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannels.get(index))));
         subchannels.get(index).requestConnection();
-        // TODO: when coming out of backoff, what does this achieve? "asks to create connection if there isn't an active one
-        //  if this does not properly reinitialize, we need to recreate a subchannel
       }
     }
 
