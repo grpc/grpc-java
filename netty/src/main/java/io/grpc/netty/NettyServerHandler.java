@@ -389,15 +389,14 @@ class NettyServerHandler extends AbstractNettyHandler {
     super.handlerAdded(ctx);
   }
 
-  // @return true if completed without calling respondWithHttpError, false if called that method.
-  private boolean onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
+  private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
       throws Http2Exception {
     try {
       // Connection-specific header fields makes a request malformed. Ideally this would be handled
       // by Netty. RFC 7540 section 8.1.2.2
       if (!DISABLE_CONNECTION_HEADER_CHECK && headers.contains(CONNECTION)) {
         resetStream(ctx, streamId, Http2Error.PROTOCOL_ERROR.code(), ctx.newPromise());
-        return false;
+        return;
       }
 
       if (headers.authority() == null) {
@@ -406,7 +405,7 @@ class NettyServerHandler extends AbstractNettyHandler {
           // RFC 7230 section 5.4
           respondWithHttpError(ctx, streamId, 400, Status.Code.INTERNAL,
               "Multiple host headers");
-          return false;
+          return;
         }
         if (!hosts.isEmpty()) {
           headers.add(AUTHORITY.value(), hosts.get(0));
@@ -420,13 +419,13 @@ class NettyServerHandler extends AbstractNettyHandler {
       if (path == null) {
         respondWithHttpError(ctx, streamId, 404, Status.Code.UNIMPLEMENTED,
             "Expected path but is missing");
-        return false;
+        return;
       }
 
       if (path.charAt(0) != '/') {
         respondWithHttpError(ctx, streamId, 404, Status.Code.UNIMPLEMENTED,
             String.format("Expected path to start with /: %s", path));
-        return false;
+        return;
       }
 
       String method = path.subSequence(1, path.length()).toString();
@@ -436,19 +435,19 @@ class NettyServerHandler extends AbstractNettyHandler {
       if (contentType == null) {
         respondWithHttpError(
             ctx, streamId, 415, Status.Code.INTERNAL, "Content-Type is missing from the request");
-        return false;
+        return;
       }
       String contentTypeString = contentType.toString();
       if (!GrpcUtil.isGrpcContentType(contentTypeString)) {
         respondWithHttpError(ctx, streamId, 415, Status.Code.INTERNAL,
             String.format("Content-Type '%s' is not supported", contentTypeString));
-        return false;
+        return;
       }
 
       if (!HTTP_METHOD.contentEquals(headers.method())) {
         respondWithHttpError(ctx, streamId, 405, Status.Code.INTERNAL,
             String.format("Method '%s' is not supported", headers.method()));
-        return false;
+        return;
       }
 
       if (!teWarningLogged && !TE_TRAILERS.contentEquals(headers.get(TE_HEADER))) {
@@ -494,8 +493,6 @@ class NettyServerHandler extends AbstractNettyHandler {
       // Throw an exception that will get handled by onStreamError.
       throw newStreamException(streamId, e);
     }
-
-    return true;
   }
 
   private String getOrUpdateAuthority(AsciiString authority) {
@@ -856,9 +853,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       if (keepAliveManager != null) {
         keepAliveManager.onDataReceived();
       }
-      if (!NettyServerHandler.this.onHeadersRead(ctx, streamId, headers)) {
-        return;
-      }
+      NettyServerHandler.this.onHeadersRead(ctx, streamId, headers);
       if (endStream) {
         NettyServerHandler.this.onDataRead(streamId, Unpooled.EMPTY_BUFFER, 0, endStream);
       }
