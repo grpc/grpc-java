@@ -51,8 +51,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     private volatile boolean firstConnection = true;
 
     private volatile ConnectivityState currentState = IDLE;
-//    private final Stopwatch connectingTimer;
-//    private final ScheduledExecutorService scheduledExecutor;
+    private final Stopwatch connectingTimer;
 
 
     @Nullable
@@ -66,6 +65,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     PickFirstLeafLoadBalancer(Helper helper) {
         this.helper = checkNotNull(helper, "helper");
+        connectingTimer = null;
     }
 
     @Override
@@ -267,30 +267,25 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     private void scheduleBackoff(Status s) { // TODO: FIX ME
-//      helper.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
-//
-//      class EndOfCurrentBackoff implements Runnable {
-//        @Override
-//        public void run() {
-//          reconnectTask = null;
-//          index = 0;
-//          requestConnection();
-//        }
-//      }
-//      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withNoResult()));
-//      long delayNanos =
-//          reconnectPolicy.nextBackoffNanos() - connectingTimer.elapsed(TimeUnit.NANOSECONDS);
-////      channelLogger.log(
-////          ChannelLogger.ChannelLogLevel.INFO,
-////          "TRANSIENT_FAILURE ({0}). Will reconnect after {1} ns",
-////          printShortStatus(status), delayNanos);
-//      Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
-//      reconnectTask = helper.getSynchronizationContext().schedule(
-//          new EndOfCurrentBackoff(),
-//          delayNanos,
-//          TimeUnit.NANOSECONDS,
-//          scheduledExecutor);
+      helper.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
 
+      class EndOfCurrentBackoff implements Runnable {
+        @Override
+        public void run() {
+          reconnectTask = null;
+          index = 0;
+          requestConnection();
+        }
+      }
+      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withNoResult()));
+      long delayNanos =
+          reconnectPolicy.nextBackoffNanos() - connectingTimer.elapsed(TimeUnit.NANOSECONDS);
+      Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
+      reconnectTask = helper.getSynchronizationContext().schedule(
+          new EndOfCurrentBackoff(),
+          delayNanos,
+          TimeUnit.NANOSECONDS,
+          helper.getScheduledExecutorService());
     }
 
     @Override

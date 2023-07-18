@@ -172,11 +172,12 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
         syncContext.execute(new Runnable() {
             @Override
             public void run() {
-                if (state.getState() == IDLE) {
-                    channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
-                    gotoNonErrorState(CONNECTING);
-                    startNewTransport();
-                }
+              // TODO: verify that we only have this in IDLE and TF
+              if (state.getState() == IDLE || state.getState() == TRANSIENT_FAILURE) {
+              channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
+              gotoNonErrorState(CONNECTING);
+              startNewTransport();
+              }
             }
         });
         return null;
@@ -548,37 +549,29 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
 
         @Override
         public void transportShutdown(final Status s) {
-            channelLogger.log(
-                    ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
-            shutdownInitiated = true;
-            syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                    if (state.getState() == SHUTDOWN) {
-                        return;
-                    }
-                    if (activeTransport == transport) {
-                        // told to shutdown when ready
-                        activeTransport = null;
-                        gotoNonErrorState(IDLE);
-                    } else if (pendingTransport == transport) {
-                        Preconditions.checkState(state.getState() == CONNECTING,
-                                "Expected state is CONNECTING, actual state is %s", state.getState());
-                        // Continue reconnect if there are still addresses to try.
-//                      if (true) { // TODO: fix
-//                        scheduleBackoff(s);
-//                      }
-//            if (!addressIndex.isValid()) {
-//              pendingTransport = null;
-//              addressIndex.reset();
-//              // Initiate backoff
-//              // Transition to TRANSIENT_FAILURE
-//              scheduleBackoff(s); backoff should be scheduled from PFLB
-//            } else {
-//              startNewTransport();
-                    }
-                }
-            });
+          channelLogger.log(
+              ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
+          shutdownInitiated = true;
+          syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              if (state.getState() == SHUTDOWN) {
+                return;
+              }
+              if (activeTransport == transport) {
+                // told to shutdown when READY
+                activeTransport = null;
+                gotoNonErrorState(IDLE);
+              } else if (pendingTransport == transport) {
+                // told to shutdown when CONNECTING
+                Preconditions.checkState(state.getState() == CONNECTING,
+                    "Expected state is CONNECTING, actual state is %s", state.getState());
+                gotoState(ConnectivityStateInfo.forTransientFailure(s));
+              } else { // TODO: may not be needed--verify cases
+                gotoState(ConnectivityStateInfo.forTransientFailure(s));
+              }
+            }
+          });
         }
 
         @Override
