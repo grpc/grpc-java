@@ -42,8 +42,7 @@ dependencies {
 
     itImplementation project(':grpc-servlet'),
             project(':grpc-netty'),
-            project(':grpc-core').sourceSets.test.runtimeClasspath,
-            project(':grpc-util').sourceSets.test.runtimeClasspath,
+            testFixtures(project(':grpc-core')),
             libraries.junit
     itImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency
