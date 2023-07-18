@@ -71,7 +71,7 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 def replaceBytes(byte[] haystack, byte[] needle, byte[] replacement) {
     int i = Bytes.indexOf(haystack, needle);
-git     assert i != -1;
+    assert i != -1;
     byte[] result = new byte[haystack.length - needle.length + replacement.length];
     System.arraycopy(haystack, 0, result, 0, i);
     System.arraycopy(replacement, 0, result, i, replacement.length);

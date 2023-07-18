@@ -51,21 +51,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     private volatile boolean firstConnection = true;
 
     private volatile ConnectivityState currentState = IDLE;
-    private final Stopwatch connectingTimer;
-
-
-    @Nullable
-    private ScheduledHandle reconnectTask;
-
-    /**
-     * The policy to control back off between reconnects. Non-{@code null} when a reconnect task is
-     * scheduled.
-     */
-    private BackoffPolicy reconnectPolicy;
 
     PickFirstLeafLoadBalancer(Helper helper) {
         this.helper = checkNotNull(helper, "helper");
-        connectingTimer = null;
     }
 
     @Override
@@ -248,7 +236,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                   helper.refreshNameResolution();
                   picker = new Picker(PickResult.withError(stateInfo.getStatus()));
                   updateBalancingState(TRANSIENT_FAILURE, picker);
-                  scheduleBackoff(Status.UNAVAILABLE); // TODO: FIX ME
+                  scheduleBackoff(Status.UNAVAILABLE);
                 } else {
                   index++;
                   addressIndex.increment();
@@ -267,26 +255,28 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         helper.updateBalancingState(state, picker);
     }
 
-    private void scheduleBackoff(Status s) { // TODO: FIX ME
-      helper.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
-
-      class EndOfCurrentBackoff implements Runnable {
-        @Override
-        public void run() {
-          reconnectTask = null;
-          index = 0;
-          requestConnection();
-        }
-      }
-      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withNoResult()));
-      long delayNanos =
-          reconnectPolicy.nextBackoffNanos() - connectingTimer.elapsed(TimeUnit.NANOSECONDS);
-      Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
-      reconnectTask = helper.getSynchronizationContext().schedule(
-          new EndOfCurrentBackoff(),
-          delayNanos,
-          TimeUnit.NANOSECONDS,
-          helper.getScheduledExecutorService());
+    private void scheduleBackoff(Status s) {
+      // TODO: As Happy Eyeballs does not need the previous backoff method, there is no need for
+      // TODO: this method. A backoff will be scheduled individually by the subchannel.
+//      helper.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
+//
+//      class EndOfCurrentBackoff implements Runnable {
+//        @Override
+//        public void run() {
+//          reconnectTask = null;
+//          index = 0;
+//          requestConnection();
+//        }
+//      }
+//      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withNoResult()));
+//      long delayNanos =
+//          reconnectPolicy.nextBackoffNanos() - connectingTimer.elapsed(TimeUnit.NANOSECONDS);
+//      Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
+//      reconnectTask = helper.getSynchronizationContext().schedule(
+//          new EndOfCurrentBackoff(),
+//          delayNanos,
+//          TimeUnit.NANOSECONDS,
+//          helper.getScheduledExecutorService());
     }
 
     @Override
@@ -370,7 +360,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                       updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
                       // TODO: when we are shutdown when ready, we go into an idle state
                       // TODO: a connection attempt does not update the balancing from idle to connecting
-                      // TODO: unless this is added.
+                      // TODO: unless this is added. (VERIFY BEHAVIOR)
                       subchannel.requestConnection();
                     }
                 });

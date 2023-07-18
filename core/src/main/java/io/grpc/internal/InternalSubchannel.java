@@ -195,7 +195,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        if (state.getState() == IDLE || state.getState() == TRANSIENT_FAILURE) {
+        if (state.getState() == IDLE) {
           channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
           gotoNonErrorState(CONNECTING);
           startNewTransport();
