@@ -116,7 +116,6 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
             "-Xlint:-cast",
-            "-Xlint:-deprecation", // https://github.com/grpc/grpc-java/issues/10298
     ]
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
     appendToProperty(
