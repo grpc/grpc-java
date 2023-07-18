@@ -206,11 +206,16 @@ public class InternalSubchannelExperimentalTest {
                         eq(createClientTransportOptions()),
                         isA(TransportLogger.class));
 
-        // Fail this one. Because there is only one address to try, enter TRANSIENT_FAILURE.
+        // Fail this one. Enter TRANSIENT_FAILURE.
         assertNoCallbackInvoke();
         transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
         assertEquals(TRANSIENT_FAILURE, InternalSubchannelExperimental.getState());
         assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
+        verify(mockTransportFactory, times(transportsCreated))
+                .newClientTransport(
+                        eq(addr),
+                        eq(createClientTransportOptions()),
+                        isA(TransportLogger.class));
 
         // Second attempt
         // Transport creation doesn't happen due to backoff
@@ -222,7 +227,16 @@ public class InternalSubchannelExperimentalTest {
                         isA(TransportLogger.class));
         assertEquals(TRANSIENT_FAILURE, InternalSubchannelExperimental.getState());
 
-        // transport creation only happens when requested (from PFLB)
+        // Transport creation still does not happen, even when supposed backoff period is over
+        fakeClock.forwardNanos(1);
+        verify(mockTransportFactory, times(transportsCreated))
+                .newClientTransport(
+                        eq(addr),
+                        eq(createClientTransportOptions()),
+                        isA(TransportLogger.class));
+        assertEquals(TRANSIENT_FAILURE, InternalSubchannelExperimental.getState());
+
+        // Transport creation only happens when requested (from PFLB)
         assertNull(InternalSubchannelExperimental.obtainActiveTransport());
         verify(mockTransportFactory, times(++transportsCreated))
                 .newClientTransport(
@@ -230,15 +244,7 @@ public class InternalSubchannelExperimentalTest {
                         eq(createClientTransportOptions()),
                         isA(TransportLogger.class));
         assertEquals(CONNECTING, InternalSubchannelExperimental.getState());
-
-        fakeClock.forwardNanos(1);
-        assertExactCallbackInvokes("onStateChange:CONNECTING");
-        assertEquals(CONNECTING, InternalSubchannelExperimental.getState());
-        verify(mockTransportFactory, times(transportsCreated))
-                .newClientTransport(
-                        eq(addr),
-                        eq(createClientTransportOptions()),
-                        isA(TransportLogger.class));
+        assertExactCallbackInvokes("onStateChange:" + CONNECTING);
 
         // Fail this one too
         // Here we use a different status from the first failure, and verify that it's passed to
@@ -447,7 +453,7 @@ public class InternalSubchannelExperimentalTest {
         // Entering TRANSIENT_FAILURE, waiting for back-off
         assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
 
-        // Save the reconnectTask before shutting down
+        // Save the reconnectTask before shutting down if it exists
         FakeClock.ScheduledTask reconnectTask = null;
         for (FakeClock.ScheduledTask task : fakeClock.getPendingTasks()) {
             if (task.command.toString().contains("EndOfCurrentBackoff")) {
@@ -456,6 +462,7 @@ public class InternalSubchannelExperimentalTest {
                 reconnectTask = task;
             }
         }
+
         assertNull("There should be no reconnectTask. " +
             "This logic has been moved to PickFirstLeafLoadBalancer", reconnectTask);
 
