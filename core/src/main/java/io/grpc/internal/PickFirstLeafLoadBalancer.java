@@ -204,7 +204,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         if (newState == SHUTDOWN) {
             return;
         }
-        if (newState == TRANSIENT_FAILURE || newState == IDLE) {
+        if (newState == IDLE) {
             helper.refreshNameResolution();
         }
 
@@ -227,11 +227,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         switch (newState) {
             case IDLE:
                 // we enter this case if a subchannel was shutdown when ready
-                if (subchannel.equals(subchannels.get(0))) {
-                  index = 0;
-                  picker = new RequestConnectionPicker(subchannel); // TODO: this may be subchannels.get(0)
-                  updateBalancingState(IDLE, picker);
-                }
+                index = 0;
+                picker = new RequestConnectionPicker(subchannels.get(index));
+                // TODO: verify--do we want to start from top if we were shutdown when ready
+                updateBalancingState(IDLE, picker);
                 break;
             case CONNECTING:
                 // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could leave
@@ -245,6 +244,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                 break;
             case TRANSIENT_FAILURE:
                 if (index == subchannels.size() - 1) {
+                  firstConnection = false;
+                  helper.refreshNameResolution();
                   picker = new Picker(PickResult.withError(stateInfo.getStatus()));
                   updateBalancingState(TRANSIENT_FAILURE, picker);
                   scheduleBackoff(Status.UNAVAILABLE); // TODO: FIX ME
@@ -302,7 +303,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     public void requestConnection() { // TODO: only start subchannel if it is new connection
       if (index < subchannels.size() && subchannels.get(index) != null) {
         if (firstConnection) {
-          firstConnection = false;
           subchannels.get(index).start(new SubchannelStateListener() {
             @Override
             public void onSubchannelState(ConnectivityStateInfo stateInfo) {
@@ -369,7 +369,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                 helper.getSynchronizationContext().execute(new Runnable() {
                     @Override
                     public void run() {
-                      PickFirstLeafLoadBalancer.super.requestConnection(); // TODO: this cannot be subchannel.requestConnection()
+                      updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+                      // TODO: when we are shutdown when ready, we go into an idle state
+                      // TODO: a connection attempt does not update the balancing from idle to connecting
+                      // TODO: unless this is added.
+                      subchannel.requestConnection();
                     }
                 });
             }

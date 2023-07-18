@@ -660,11 +660,19 @@ public class PickFirstLeafLoadBalancerTest {
       // Accept new resolved addresses to update
       loadBalancer.acceptResolvedAddresses(
           ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
-      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+      assertEquals(IDLE, loadBalancer.getCurrentState());
       inOrder.verify(mockSubchannel1).shutdown();
       inOrder.verify(mockHelper, times(2)).createSubchannel(createArgsCaptor.capture());
+      inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+      SubchannelPicker picker = pickerCaptor.getValue();
+
+      // Calling pickSubchannel() twice gave the same result
+      assertEquals(picker.pickSubchannel(mockArgs), picker.pickSubchannel(mockArgs));
+
+      // But the picker calls requestConnection() only once
       inOrder.verify(mockSubchannel3).requestConnection();
       assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
     }
 
     @Test
@@ -762,7 +770,55 @@ public class PickFirstLeafLoadBalancerTest {
     }
 
     @Test
-    public void updateAddresses_overlapping_but_disjoint() {
+    public void updateAddresses_overlapping_but_disjoint_idle() {
+
+    }
+
+    @Test
+    public void updateAddresses_overlapping_but_disjoint_connecting() {
+      // overlapping address not on the current connection attempting subchannel is considered disjoint
+      // set up
+      mockSubchannel1 = mock(FakeSubchannel.class);
+      mockSubchannel2 = mock(FakeSubchannel.class);
+      mockSubchannel3 = mock(FakeSubchannel.class);
+      mockSubchannel4 = mock(FakeSubchannel.class);
+      when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
+          .thenReturn(mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
+      InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
+
+      // Creating first set of endpoints/addresses
+      SocketAddress socketAddr1 = new FakeSocketAddress("newserver1");
+      SocketAddress socketAddr2 = new FakeSocketAddress("newserver2");
+      List<EquivalentAddressGroup> oldServers =
+          Lists.newArrayList(new EquivalentAddressGroup(socketAddr1),
+          new EquivalentAddressGroup((socketAddr2)));
+
+      // Accept Addresses and verify proper connection flow
+      assertEquals(IDLE, loadBalancer.getCurrentState());
+      loadBalancer.acceptResolvedAddresses(
+          ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
+      inOrder.verify(mockHelper, times(2)).createSubchannel(createArgsCaptor.capture());
+      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+      inOrder.verify(mockSubchannel1).requestConnection();
+
+      // Creating second set of endpoints/addresses
+      SocketAddress socketAddr3 = new FakeSocketAddress("newserver3");
+      List<EquivalentAddressGroup> newServers =
+          Lists.newArrayList(new EquivalentAddressGroup(socketAddr2),
+          new EquivalentAddressGroup((socketAddr3)));
+
+      // Accept new resolved addresses to update
+      loadBalancer.acceptResolvedAddresses(
+          ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
+      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+      inOrder.verify(mockSubchannel1).shutdown();
+      inOrder.verify(mockHelper, times(2)).createSubchannel(createArgsCaptor.capture());
+      inOrder.verify(mockSubchannel3).requestConnection();
+      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+    }
+
+    @Test
+    public void updateAddresses_overlapping_but_disjoint_ready() {
       // overlapping address not on the current connection attempting subchannel is considered disjoint
       // set up
       mockSubchannel1 = mock(FakeSubchannel.class);
@@ -801,11 +857,10 @@ public class PickFirstLeafLoadBalancerTest {
       // Accept new resolved addresses to update
       loadBalancer.acceptResolvedAddresses(
           ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
-      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+      assertEquals(IDLE, loadBalancer.getCurrentState());
       inOrder.verify(mockSubchannel1).shutdown();
       inOrder.verify(mockHelper, times(2)).createSubchannel(createArgsCaptor.capture());
-      inOrder.verify(mockSubchannel3).requestConnection();
-      assertEquals(CONNECTING, loadBalancer.getCurrentState());
+      assertEquals(IDLE, loadBalancer.getCurrentState());
     }
 
 
@@ -849,7 +904,6 @@ public class PickFirstLeafLoadBalancerTest {
       loadBalancer.acceptResolvedAddresses(
           ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
       inOrder.verify(mockHelper, times(3)).createSubchannel(createArgsCaptor.capture());
-//      inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
       assertEquals(CONNECTING, loadBalancer.getCurrentState());
       inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
 //      SubchannelStateListener stateListener = stateListenerCaptor.getValue();
