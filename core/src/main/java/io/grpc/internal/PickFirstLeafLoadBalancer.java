@@ -98,6 +98,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
           // The channel state does not get updated when doing name resolving today, so for the moment
           // let LB report CONNECTION and call subchannel.requestConnection() immediately.
+          updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannels.get(index))));
           requestConnection();
         } else {
           updateAddresses(servers);
@@ -205,9 +206,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             if (newState == CONNECTING) {
                 return;
             } else if (newState == IDLE) {
-                index = 0;
-                requestConnection();
-                return;
+              // coming out of backoff
+              index = 0;
+              requestConnection();
+              return;
             }
         }
 
@@ -233,13 +235,15 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             case TRANSIENT_FAILURE:
                 if (index == subchannels.size() - 1) {
                   firstConnection = false;
+                  index = 0;
+                  addressIndex.reset();
                   helper.refreshNameResolution();
                   picker = new Picker(PickResult.withError(stateInfo.getStatus()));
                   updateBalancingState(TRANSIENT_FAILURE, picker);
                   scheduleBackoff(Status.UNAVAILABLE);
                 } else {
                   index++;
-                  addressIndex.increment();
+                  addressIndex.increment(); // TODO: state should still be connecting, if not update balancing state
                   requestConnection();
                   picker = new Picker(PickResult.withNoResult());
                 }
@@ -300,9 +304,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             }
           });
         }
-        // The channel state does not get updated when doing name resolving today, so for the moment
-        // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-        updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannels.get(index))));
         subchannels.get(index).requestConnection();
       }
     }
