@@ -504,6 +504,11 @@ def requireUpperBoundDepsMatch(Configuration conf, Project project) {
                 + "to diagnose")
         }
         result.selected.dependencies.each {
+            // Category.CATEGORY_ATTRIBUTE is the inappropriate Attribute because it is "desugared".
+            // https://github.com/gradle/gradle/issues/8854
+            Attribute<String> category = Attribute.of('org.gradle.category', String)
+            if (it.resolvedVariant.attributes.getAttribute(category) != Category.LIBRARY)
+                return
             queue.add(new DepAndParents(
                 dep: it, parents: depAndParents.parents + [artifact + ":" + version]))
         }
