@@ -48,8 +48,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     private List<Subchannel> subchannels = new ArrayList<>();
     private volatile int index;
     private volatile Index addressIndex;
-    private volatile boolean firstConnection = true;
-
     private volatile ConnectivityState currentState = IDLE;
 
     PickFirstLeafLoadBalancer(Helper helper) {
@@ -84,21 +82,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           this.addressIndex = new Index(unmodifiableServers);
           index = 0;
           addressIndex.reset();
-
-          for (EquivalentAddressGroup endpoint : addressGroups) {
-            for (SocketAddress address : endpoint.getAddresses()) {
-              List<EquivalentAddressGroup> addresses = new ArrayList<>();
-              addresses.add(new EquivalentAddressGroup(address));
-              final Subchannel subchannel = helper.createSubchannel(
-                  CreateSubchannelArgs.newBuilder()
-                      .setAddresses(addresses)
-                      .build());
-              subchannels.add(subchannel);
-            }
-          }
+          createSubchannels();
           // The channel state does not get updated when doing name resolving today, so for the moment
           // let LB report CONNECTION and call subchannel.requestConnection() immediately.
           updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannels.get(index))));
+          // TODO: shouldn't this be withNoResult()?
           requestConnection();
         } else {
           updateAddresses(servers);
@@ -124,29 +112,19 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           if (!addressIndex.seekTo(previousAddress)) {
             // disjoint: forced to drop connection and replace subchannels
             shutdown();
-            for (EquivalentAddressGroup endpoint : addressGroups) {
-              for (SocketAddress address : endpoint.getAddresses()) {
-                List<EquivalentAddressGroup> addresses = new ArrayList<>();
-                addresses.add(new EquivalentAddressGroup(address));
-                final Subchannel subchannel = helper.createSubchannel(
-                    CreateSubchannelArgs.newBuilder()
-                        .setAddresses(addresses)
-                        .build());
-                subchannels.add(subchannel);
-              }
-            }
+            createSubchannels();
             if (currentState == READY) {
               // subchannel was READY, IDLE until prompted for a subchannel
               updateBalancingState(IDLE, new RequestConnectionPicker(subchannels.get(index)));
             } else if (currentState == CONNECTING) {
               // subchannel was connecting, want new connection
-              index = addressIndex.getGroupIndex();
               requestConnection();
             }
           } else {
             // intersecting: keep current subchannel and replace all others
             index = addressIndex.getGroupIndex();
             Subchannel currentSubchannel = subchannels.get(index);
+
             // shutdown all except current subchannel
             for (int i = 0; i < subchannels.size(); i++) {
               if (i != index) {
@@ -154,21 +132,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
               }
             }
             subchannels = new ArrayList<>();
-
-            // lazily create subchannels with new addresses
-            for (EquivalentAddressGroup endpoint : addressGroups) {
-              for (SocketAddress address : endpoint.getAddresses()) {
-                List<EquivalentAddressGroup> addresses = new ArrayList<>();
-                addresses.add(new EquivalentAddressGroup(address));
-                final Subchannel subchannel = helper.createSubchannel(
-                    CreateSubchannelArgs.newBuilder()
-                        .setAddresses(addresses)
-                        .build());
-                subchannels.add(subchannel);
-              }
-            }
+            createSubchannels();
 
             // replace with current subchannel
+            subchannels.get(index).shutdown();
             subchannels.set(index, currentSubchannel);
           }
         }
@@ -219,7 +186,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                 // we enter this case if a subchannel was shutdown when ready
                 index = 0;
                 picker = new RequestConnectionPicker(subchannels.get(index));
-                // TODO: verify--do we want to start from top if we were shutdown when ready
                 updateBalancingState(IDLE, picker);
                 break;
             case CONNECTING:
@@ -234,13 +200,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                 break;
             case TRANSIENT_FAILURE:
                 if (index == subchannels.size() - 1) {
-                  firstConnection = false;
                   index = 0;
                   addressIndex.reset();
                   helper.refreshNameResolution();
                   picker = new Picker(PickResult.withError(stateInfo.getStatus()));
                   updateBalancingState(TRANSIENT_FAILURE, picker);
-                  scheduleBackoff(Status.UNAVAILABLE);
                 } else {
                   index++;
                   addressIndex.increment(); // TODO: state should still be connecting, if not update balancing state
@@ -259,34 +223,30 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         helper.updateBalancingState(state, picker);
     }
 
-    private void scheduleBackoff(Status s) {
-      // TODO: As Happy Eyeballs does not need the previous backoff method, there is no need for
-      // TODO: this method. A backoff will be scheduled individually by the subchannel.
-//      helper.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
-//
-//      class EndOfCurrentBackoff implements Runnable {
-//        @Override
-//        public void run() {
-//          reconnectTask = null;
-//          index = 0;
-//          requestConnection();
-//        }
-//      }
-//      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withNoResult()));
-//      long delayNanos =
-//          reconnectPolicy.nextBackoffNanos() - connectingTimer.elapsed(TimeUnit.NANOSECONDS);
-//      Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
-//      reconnectTask = helper.getSynchronizationContext().schedule(
-//          new EndOfCurrentBackoff(),
-//          delayNanos,
-//          TimeUnit.NANOSECONDS,
-//          helper.getScheduledExecutorService());
+    private void createSubchannels() {
+      for (EquivalentAddressGroup endpoint : addressGroups) {
+        for (SocketAddress address : endpoint.getAddresses()) {
+          List<EquivalentAddressGroup> addresses = new ArrayList<>();
+          addresses.add(new EquivalentAddressGroup(address));
+          final Subchannel subchannel = helper.createSubchannel(
+              CreateSubchannelArgs.newBuilder()
+              .setAddresses(addresses)
+              .build());
+          subchannels.add(subchannel);
+          subchannel.start(new SubchannelStateListener() {
+            @Override
+            public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+              processSubchannelState(subchannel, stateInfo);
+            }
+          });
+        }
+      }
     }
 
     @Override
     public void shutdown() {
       if (subchannels != null) {
-        for (int i = 0; i <= index; i++) {
+        for (int i = 0; i < subchannels.size(); i++) {
           subchannels.get(i).shutdown();
         }
         subchannels = new ArrayList<>();
@@ -295,15 +255,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     @Override
     public void requestConnection() {
-      if (index < subchannels.size() && subchannels.get(index) != null) {
-        if (firstConnection) {
-          subchannels.get(index).start(new SubchannelStateListener() {
-            @Override
-            public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-              processSubchannelState(subchannels.get(index), stateInfo);
-            }
-          });
-        }
+      if (index < subchannels.size()) {
         subchannels.get(index).requestConnection();
       }
     }
@@ -358,10 +310,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                 helper.getSynchronizationContext().execute(new Runnable() {
                     @Override
                     public void run() {
+                      subchannels.get(index).start(new SubchannelStateListener() {
+                        @Override
+                        public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+                          processSubchannelState(subchannels.get(index), stateInfo);
+                        }
+                      });
                       updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
-                      // TODO: when we are shutdown when ready, we go into an idle state
-                      // TODO: a connection attempt does not update the balancing from idle to connecting
-                      // TODO: unless this is added. (VERIFY BEHAVIOR)
                       subchannel.requestConnection();
                     }
                 });

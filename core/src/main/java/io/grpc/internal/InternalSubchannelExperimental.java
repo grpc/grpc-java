@@ -566,9 +566,9 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
                 // told to shutdown when CONNECTING
                 Preconditions.checkState(state.getState() == CONNECTING,
                     "Expected state is CONNECTING, actual state is %s", state.getState());
-                gotoState(ConnectivityStateInfo.forTransientFailure(s));
+                scheduleBackoff(s);
               } else { // TODO: may not be needed--verify cases
-                gotoState(ConnectivityStateInfo.forTransientFailure(s));
+                scheduleBackoff(s);
               }
             }
           });
