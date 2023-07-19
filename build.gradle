@@ -579,7 +579,7 @@ tasks.register('checkForUpdates') {
             if (oldResolved != newResolved) {
                 def oldId = oldResolved.id.componentIdentifier
                 def newId = newResolved.id.componentIdentifier
-                println("${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
+                println("libs.${name} = ${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
             }
         }
     }
