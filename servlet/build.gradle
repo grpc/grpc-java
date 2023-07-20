@@ -56,8 +56,10 @@ dependencies {
 
     jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
             "org.eclipse.jetty.http2:http2-server:${jettyVersion}",
-            "org.eclipse.jetty:jetty-client:${jettyVersion}"
-            project(':grpc-testing')
+            "org.eclipse.jetty:jetty-client:${jettyVersion}",
+            project(':grpc-testing'),
+            libraries.truth,
+            libraries.protobuf.java
 }
 
 test {
