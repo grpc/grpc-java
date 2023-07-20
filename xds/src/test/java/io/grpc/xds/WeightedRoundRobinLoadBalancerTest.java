@@ -943,7 +943,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       int result = sss.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+      pickCount.merge(result, 1, (o, v) -> o + v);
     }
     for (int i = 0; i < 3; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
