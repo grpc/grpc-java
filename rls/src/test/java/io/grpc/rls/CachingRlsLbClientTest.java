@@ -405,6 +405,7 @@ public class CachingRlsLbClientTest {
 
     // valid channel
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isFalse();
     fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
