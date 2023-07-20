@@ -49,6 +49,6 @@ java_library(
     exports = [
         ":internal",
         "//api",
-        "//inprocess",
+        "//util",
     ],
 )

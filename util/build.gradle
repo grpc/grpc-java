@@ -13,7 +13,6 @@ dependencies {
 
     implementation libraries.animalsniffer.annotations,
             libraries.guava
-    runtimeOnly libraries.gson  // to fix checkUpperBoundDeps error in services
     testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
             project(':grpc-testing')
