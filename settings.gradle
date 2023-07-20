@@ -1,17 +1,26 @@
 pluginManagement {
     plugins {
+        // https://developer.android.com/build/releases/gradle-plugin
         id "com.android.application" version "7.4.0"
         id "com.android.library" version "7.4.0"
-        id "com.github.johnrengelman.shadow" version "7.1.2"
+        // https://github.com/johnrengelman/shadow/releases
+        id "com.github.johnrengelman.shadow" version "8.1.1"
         id "com.github.kt3k.coveralls" version "2.12.2"
-        id "com.google.cloud.tools.appengine" version "2.4.4"
-        id "com.google.cloud.tools.jib" version "3.3.1"
+        // https://github.com/GoogleCloudPlatform/app-gradle-plugin/releases
+        id "com.google.cloud.tools.appengine" version "2.4.5"
+        // https://github.com/GoogleContainerTools/jib/blob/master/jib-gradle-plugin/CHANGELOG.md
+        id "com.google.cloud.tools.jib" version "3.3.2"
         id "com.google.osdetector" version "1.7.3"
-        id "com.google.protobuf" version "0.9.3"
+        // https://github.com/google/protobuf-gradle-plugin/releases
+        id "com.google.protobuf" version "0.9.4"
+        // https://github.com/melix/japicmp-gradle-plugin/blob/master/CHANGELOG.txt
         id "me.champeau.gradle.japicmp" version "0.4.1"
+        // https://github.com/melix/jmh-gradle-plugin/releases
         id "me.champeau.jmh" version "0.7.1"
+        // https://github.com/tbroyer/gradle-errorprone-plugin/releases
         id "net.ltgt.errorprone" version "3.1.0"
-        id "ru.vyarus.animalsniffer" version "1.7.0"
+        // https://github.com/xvik/gradle-animalsniffer-plugin/releases
+        id "ru.vyarus.animalsniffer" version "1.7.1"
     }
     resolutionStrategy {
         eachPlugin {

@@ -158,22 +158,24 @@ def xds_federation_test_client = tasks.register("xds_federation_test_client", Cr
     classpath = startScripts.classpath
 }
 
-applicationDistribution.into("bin") {
-    from(test_client)
-    from(test_server)
-    from(reconnect_test_client)
-    from(stresstest_client)
-    from(http2_client)
-    from(grpclb_long_lived_affinity_test_client)
-    from(grpclb_fallback_test_client)
-    from(xds_test_client)
-    from(xds_test_server)
-    from(xds_federation_test_client)
-    fileMode = 0755
-}
+application {
+    applicationDistribution.into("bin") {
+        from(test_client)
+        from(test_server)
+        from(reconnect_test_client)
+        from(stresstest_client)
+        from(http2_client)
+        from(grpclb_long_lived_affinity_test_client)
+        from(grpclb_fallback_test_client)
+        from(xds_test_client)
+        from(xds_test_server)
+        from(xds_federation_test_client)
+        fileMode = 0755
+    }
 
-applicationDistribution.into("lib") {
-    from(configurations.alpnagent)
+    applicationDistribution.into("lib") {
+        from(configurations.alpnagent)
+    }
 }
 
 publishing {

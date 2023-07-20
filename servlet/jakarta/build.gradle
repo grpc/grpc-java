@@ -6,13 +6,6 @@ plugins {
 description = "gRPC: Jakarta Servlet"
 
 // Set up classpaths and source directories for different servlet tests
-configurations {
-    itImplementation.extendsFrom(implementation)
-    jettyTestImplementation.extendsFrom(itImplementation)
-    tomcatTestImplementation.extendsFrom(itImplementation)
-    undertowTestImplementation.extendsFrom(itImplementation)
-}
-
 sourceSets {
     undertowTest {
         java {
@@ -32,6 +25,18 @@ sourceSets {
             }
         }
     }
+}
+
+configurations {
+    itImplementation.extendsFrom(implementation)
+    jettyTestImplementation.extendsFrom(itImplementation)
+    tomcatTestImplementation.extendsFrom(itImplementation)
+    undertowTestImplementation.extendsFrom(itImplementation)
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 // Mechanically transform sources from grpc-servlet to use the corrected packages

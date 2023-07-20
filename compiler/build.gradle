@@ -137,8 +137,10 @@ model {
     }
 }
 
-configurations {
-    testLiteImplementation
+sourceSets {
+    testLite {
+        proto { setSrcDirs(['src/test/proto']) }
+    }
 }
 
 dependencies {
@@ -148,12 +150,6 @@ dependencies {
     testLiteImplementation project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             libraries.javax.annotation
-}
-
-sourceSets {
-    testLite {
-        proto { setSrcDirs(['src/test/proto']) }
-    }
 }
 
 tasks.named("compileTestJava").configure {
@@ -215,7 +211,9 @@ tasks.register("buildArtifacts", Copy) {
     into artifactStagingPath
 }
 
-archivesBaseName = "$protocPluginBaseName"
+base {
+    archivesName = "$protocPluginBaseName"
+}
 
 def checkArtifacts = tasks.register("checkArtifacts") {
     dependsOn buildArtifacts
