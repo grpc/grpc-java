@@ -7,13 +7,6 @@ description = "gRPC: Servlet"
 
 def jettyVersion = '10.0.7'
 
-configurations {
-    itImplementation.extendsFrom(implementation)
-    undertowTestImplementation.extendsFrom(itImplementation)
-    tomcatTestImplementation.extendsFrom(itImplementation)
-    jettyTestImplementation.extendsFrom(itImplementation)
-}
-
 sourceSets {
     // Create a test sourceset for each classpath - could be simplified if we made new test directories
     undertowTest {}
@@ -23,6 +16,13 @@ sourceSets {
     if (JavaVersion.current().isJava11Compatible()) {
         jettyTest {}
     }
+}
+
+configurations {
+    itImplementation.extendsFrom(implementation)
+    undertowTestImplementation.extendsFrom(itImplementation)
+    tomcatTestImplementation.extendsFrom(itImplementation)
+    jettyTestImplementation.extendsFrom(itImplementation)
 }
 
 tasks.named("jar").configure {

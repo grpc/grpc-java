@@ -241,8 +241,8 @@ subprojects {
             if (JavaVersion.current().isJava9Compatible()) {
                 options.release = 8
             } else {
-                sourceCompatibility = 1.8
-                targetCompatibility = 1.8
+                sourceCompatibility = JavaVersion.VERSION_1_8
+                targetCompatibility = JavaVersion.VERSION_1_8
             }
         }
         tasks.named("compileJava").configure {
