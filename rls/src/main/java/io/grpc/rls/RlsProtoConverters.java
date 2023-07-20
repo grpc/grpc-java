@@ -153,7 +153,7 @@ final class RlsProtoConverters {
         maxAge = MAX_AGE_NANOS;
       }
       if (staleAge == null) {
-        staleAge = maxAge >= MINUTES.toNanos(2) ? maxAge - MINUTES.toNanos(1) : maxAge;
+        staleAge = MAX_AGE_NANOS;
       }
       maxAge = Math.min(maxAge, MAX_AGE_NANOS);
       staleAge = Math.min(staleAge, maxAge);
