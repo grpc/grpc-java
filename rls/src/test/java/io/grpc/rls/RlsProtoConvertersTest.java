@@ -354,7 +354,7 @@ public class RlsProtoConvertersTest {
             .lookupService("service1")
             .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(10))
             .maxAgeInNanos(TimeUnit.MINUTES.toNanos(5))
-            .staleAgeInNanos(TimeUnit.MINUTES.toNanos(4))
+            .staleAgeInNanos(TimeUnit.MINUTES.toNanos(5))
             .cacheSizeBytes(5 * 1024 * 1024)
             .defaultTarget("us_east_1.cloudbigtable.googleapis.com")
             .build();
