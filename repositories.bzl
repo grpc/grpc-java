@@ -11,20 +11,20 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # )
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.17.0",
+    "com.google.api.grpc:proto-google-common-protos:2.22.0",
     "com.google.auth:google-auth-library-credentials:1.4.0",
     "com.google.auth:google-auth-library-oauth2-http:1.4.0",
-    "com.google.auto.value:auto-value-annotations:1.10.1",
-    "com.google.auto.value:auto-value:1.10.1",
+    "com.google.auto.value:auto-value-annotations:1.10.2",
+    "com.google.auto.value:auto-value:1.10.2",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:2.10.1",
-    "com.google.errorprone:error_prone_annotations:2.18.0",
+    "com.google.errorprone:error_prone_annotations:2.20.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:32.0.1-android",
     "com.google.re2j:re2j:1.7",
-    "com.google.truth:truth:1.0.1",
+    "com.google.truth:truth:1.1.5",
     "com.squareup.okhttp:okhttp:2.7.5",
-    "com.squareup.okio:okio:1.17.5",
+    "com.squareup.okio:okio:2.10.0",
     "io.netty:netty-buffer:4.1.94.Final",
     "io.netty:netty-codec-http2:4.1.94.Final",
     "io.netty:netty-codec-http:4.1.94.Final",
@@ -143,18 +143,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "5d0f05587aa3ad56079b4c4481dcb462267e5f1075d905c321f8ed6339e74ab0",
-        strip_prefix = "protobuf-22.3",
-        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v22.3/protobuf-22.3.zip"],
+        sha256 = "ac3fd4e97af55405d8bfba43c22d8a7e464a371bb6bc9e706627b745c1022dbf",
+        strip_prefix = "protobuf-23.4",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v23.4/protobuf-23.4.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "5d0f05587aa3ad56079b4c4481dcb462267e5f1075d905c321f8ed6339e74ab0",
-        strip_prefix = "protobuf-22.3",
-        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v22.3/protobuf-22.3.zip"],
+        sha256 = "ac3fd4e97af55405d8bfba43c22d8a7e464a371bb6bc9e706627b745c1022dbf",
+        strip_prefix = "protobuf-23.4",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v23.4/protobuf-23.4.zip"],
     )
 
 def io_grpc_grpc_proto():
