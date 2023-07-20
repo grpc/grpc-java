@@ -711,7 +711,6 @@ public class PickFirstLeafLoadBalancerTest {
     @Test
     public void updateAddresses_disjoint_ready_twice() {
       InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
-
       // Creating first set of endpoints/addresses
       SocketAddress socketAddr1 = new FakeSocketAddress("newserver1");
       SocketAddress socketAddr2 = new FakeSocketAddress("newserver2");

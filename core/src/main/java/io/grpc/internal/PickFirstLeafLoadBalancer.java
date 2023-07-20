@@ -97,15 +97,42 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       Preconditions.checkArgument(!newAddressGroups.isEmpty(), "newAddressGroups is empty");
       final List<EquivalentAddressGroup> newImmutableAddressGroups =
         Collections.unmodifiableList(new ArrayList<>(newAddressGroups));
-      addressIndex.reset();
       helper.getSynchronizationContext().execute(new Runnable() {
         @Override
         public void run() {
-          SocketAddress previousAddress = addressIndex.getCurrentAddress();
+          addressIndex.reset();
           addressIndex.updateGroups(newImmutableAddressGroups);
-          createSubchannels(newImmutableAddressGroups);
+          Set<SocketAddress> newAddrs = new HashSet<>();
+          for (EquivalentAddressGroup endpoint : newImmutableAddressGroups) {
+            for (SocketAddress addr : endpoint.getAddresses()) {
+              newAddrs.add(addr);
+              if (!subchannels.containsKey(addr)) {
+                List<EquivalentAddressGroup> addrs = new ArrayList<>();
+                addrs.add(new EquivalentAddressGroup(addr));
+                final Subchannel subchannel = helper.createSubchannel(
+                    CreateSubchannelArgs.newBuilder()
+                    .setAddresses(addrs)
+                    .build());
+                subchannels.put(addr, subchannel);
+                subchannel.start(new SubchannelStateListener() {
+                  @Override
+                  public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+                    processSubchannelState(subchannel, stateInfo);
+                  }
+                });
+              }
+            }
+          }
+
+          // remove old subchannels that were not in new address list
+          for (SocketAddress addr : subchannels.keySet()) {
+            if (!newAddrs.contains(addr)) {
+              subchannels.get(addr).shutdown();
+              subchannels.remove(addr);
+            }
+          }
         }
-      }
+      });
     }
 
     @Override
@@ -126,7 +153,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         // from subchannels. To prevent pickers from returning these obselete subchannels, this logic
         // is included to check if the current list of active subchannels includes the current one.
         if (!subchannels.containsValue(subchannel)) {
-          return; // TODO: verify that containsValue() works (should work as equals is overrided)
+          return; // TODO: test that containsValue() works (should work as equals is overrided)
         }
         if (newState == SHUTDOWN) {
           return;
@@ -144,6 +171,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         // With the new pick first implementation, iterative requests for connections will not be
         // requested once the first pass through is complete. This means that individual subchannels
         // are responsible for coming out of backoff and requesting a connection.
+        // However, if the first pass through is complete, we report TRANSIENT_FAILURE, and an address
+        // update occurs, the iterative logic will still be present for the first pass through for
+        // the new address list even though we are in a state of TRANSIENT_FAILURE.
         if (currentState == TRANSIENT_FAILURE) {
           if (newState == CONNECTING) {
             return;
@@ -211,21 +241,19 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     private void createSubchannels(List<EquivalentAddressGroup> newAddressGroup) {
       for (EquivalentAddressGroup endpoint : newAddressGroup) {
         for (SocketAddress addr : endpoint.getAddresses()) {
-          if (!subchannels.containsKey(addr)) {
-            List<EquivalentAddressGroup> addrs = new ArrayList<>();
-            addrs.add(new EquivalentAddressGroup(addr));
-            final Subchannel subchannel = helper.createSubchannel(
-                CreateSubchannelArgs.newBuilder()
-                .setAddresses(addrs)
-                .build());
-            subchannels.put(addr, subchannel);
-            subchannel.start(new SubchannelStateListener() {
-              @Override
-              public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-                processSubchannelState(subchannel, stateInfo);
-              }
-            });
-          }
+          List<EquivalentAddressGroup> addrs = new ArrayList<>();
+          addrs.add(new EquivalentAddressGroup(addr));
+          final Subchannel subchannel = helper.createSubchannel(
+              CreateSubchannelArgs.newBuilder()
+              .setAddresses(addrs)
+              .build());
+          subchannels.put(addr, subchannel);
+          subchannel.start(new SubchannelStateListener() {
+            @Override
+            public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+              processSubchannelState(subchannel, stateInfo);
+            }
+          });
         }
       }
     }

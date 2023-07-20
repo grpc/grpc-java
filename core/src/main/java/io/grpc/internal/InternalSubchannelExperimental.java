@@ -172,11 +172,10 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
         syncContext.execute(new Runnable() {
             @Override
             public void run() {
-              // TODO: verify that we only have this in IDLE and TF
-              if (state.getState() == IDLE || state.getState() == TRANSIENT_FAILURE) {
-              channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
-              gotoNonErrorState(CONNECTING);
-              startNewTransport();
+              if (state.getState() == IDLE) {
+                channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
+                gotoNonErrorState(CONNECTING);
+                startNewTransport();
               }
             }
         });
@@ -202,21 +201,16 @@ final class InternalSubchannelExperimental implements InternalInstrumented<Chann
         syncContext.throwIfNotInThisSynchronizationContext();
 
         Preconditions.checkState(reconnectTask == null, "Should have no reconnectTask scheduled");
-
-        // move connectingTimer to PFLB?
-//    if (addressIndex.isAtBeginning()) {
-//      connectingTimer.reset().start();
-//    }
-//    SocketAddress address = addressIndex.getCurrentAddress();
+        connectingTimer.reset().start();
 
         SocketAddress address = addressGroups.get(0).getAddresses().get(0);
+
         HttpConnectProxiedSocketAddress proxiedAddr = null;
         if (address instanceof HttpConnectProxiedSocketAddress) {
             proxiedAddr = (HttpConnectProxiedSocketAddress) address;
             address = proxiedAddr.getTargetAddress();
         }
 
-//    Attributes currentEagAttributes = addressIndex.getCurrentEagAttributes();
         Attributes currentEagAttributes = addressGroups.get(0).getAttributes();
         String eagChannelAuthority = currentEagAttributes
                 .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE);
