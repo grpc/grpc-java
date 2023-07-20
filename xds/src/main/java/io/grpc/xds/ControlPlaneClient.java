@@ -383,59 +383,61 @@ final class ControlPlaneClient {
     void start() {
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
           AggregatedDiscoveryServiceGrpc.newStub(channel);
-      StreamObserver<DiscoveryResponse> responseReader =
-          new ClientResponseObserver<DiscoveryRequest,DiscoveryResponse>() {
 
-            @Override
-            public void beforeStart(ClientCallStreamObserver<DiscoveryRequest> requestStream) {
-              requestStream.setOnReadyHandler(ControlPlaneClient.this::readyHandler);
-            }
+      final class AdsClientResponseObserver
+          implements ClientResponseObserver<DiscoveryRequest, DiscoveryResponse> {
 
-            @Override
-            public void onNext(final DiscoveryResponse response) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
-                  if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-                    logger.log(
-                        XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
-                        MessagePrinter.print(response));
-                  }
-                  if (type == null) {
-                    logger.log(
-                        XdsLogLevel.WARNING,
-                        "Ignore an unknown type of DiscoveryResponse: {0}",
-                        response.getTypeUrl());
-                    return;
-                  }
-                  handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
-                      response.getNonce());
-                }
-              });
-            }
+        @Override
+        public void beforeStart(ClientCallStreamObserver<DiscoveryRequest> requestStream) {
+          requestStream.setOnReadyHandler(ControlPlaneClient.this::readyHandler);
+        }
 
+        @Override
+        public void onNext(final DiscoveryResponse response) {
+          syncContext.execute(new Runnable() {
             @Override
-            public void onError(final Throwable t) {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcError(t);
-                }
-              });
+            public void run() {
+              XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
+              if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+                logger.log(
+                    XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
+                    MessagePrinter.print(response));
+              }
+              if (type == null) {
+                logger.log(
+                    XdsLogLevel.WARNING,
+                    "Ignore an unknown type of DiscoveryResponse: {0}",
+                    response.getTypeUrl());
+                return;
+              }
+              handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
+                  response.getNonce());
             }
+          });
+        }
 
+        @Override
+        public void onError(final Throwable t) {
+          syncContext.execute(new Runnable() {
             @Override
-            public void onCompleted() {
-              syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleRpcCompleted();
-                }
-              });
+            public void run() {
+              handleRpcError(t);
             }
-          };
-      requestWriter = stub.streamAggregatedResources(responseReader);
+          });
+        }
+
+        @Override
+        public void onCompleted() {
+          syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              handleRpcCompleted();
+            }
+          });
+        }
+      }
+
+      requestWriter = stub.streamAggregatedResources(new AdsClientResponseObserver());
     }
 
     @Override

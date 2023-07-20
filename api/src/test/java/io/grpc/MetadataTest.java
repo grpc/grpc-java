@@ -313,7 +313,7 @@ public class MetadataTest {
   }
 
   @Test
-  @SuppressWarnings("StringCaseLocaleUsage")
+  @SuppressWarnings("StringCaseLocaleUsage")  // System locale is exactly what we're testing.
   public void testKeyCaseHandling() {
     Locale originalLocale = Locale.getDefault();
     Locale.setDefault(new Locale("tr", "TR"));

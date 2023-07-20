@@ -122,63 +122,63 @@ final class XdsTestControlPlaneService extends
   @Override
   public StreamObserver<DiscoveryRequest> streamAggregatedResources(
       final StreamObserver<DiscoveryResponse> responseObserver) {
-    final StreamObserver<DiscoveryRequest> requestObserver =
-        new StreamObserver<DiscoveryRequest>() {
-          @Override
-          public void onNext(final DiscoveryRequest value) {
-            syncContext.execute(new Runnable() {
-              @Override
-              public void run() {
-                logger.log(Level.FINEST, "control plane received request {0}", value);
-                if (value.hasErrorDetail()) {
-                  logger.log(Level.FINE, "control plane received nack resource {0}, error {1}",
-                      new Object[]{value.getResourceNamesList(), value.getErrorDetail()});
-                  return;
-                }
-                String resourceType = value.getTypeUrl();
-                if (!value.getResponseNonce().isEmpty()
-                    && !String.valueOf(xdsNonces.get(resourceType))
-                          .equals(value.getResponseNonce())) {
-                  logger.log(Level.FINE, "Resource nonce does not match, ignore.");
-                  return;
-                }
-                Set<String> requestedResourceNames = new HashSet<>(value.getResourceNamesList());
-                if (subscribers.get(resourceType).containsKey(responseObserver)
-                    && subscribers.get(resourceType).get(responseObserver)
-                        .equals(requestedResourceNames)) {
-                  logger.log(Level.FINEST, "control plane received ack for resource: {0}",
-                      value.getResourceNamesList());
-                  return;
-                }
-                if (!xdsNonces.get(resourceType).containsKey(responseObserver)) {
-                  xdsNonces.get(resourceType).put(responseObserver, new AtomicInteger(0));
-                }
-                DiscoveryResponse response = generateResponse(resourceType,
-                    String.valueOf(xdsVersions.get(resourceType)),
-                    String.valueOf(xdsNonces.get(resourceType).get(responseObserver)),
-                    requestedResourceNames);
-                responseObserver.onNext(response);
-                subscribers.get(resourceType).put(responseObserver, requestedResourceNames);
-              }
-            });
-          }
 
+    final class AdsStreamObserver implements StreamObserver<DiscoveryRequest> {
+      @Override
+      public void onNext(final DiscoveryRequest value) {
+        syncContext.execute(new Runnable() {
           @Override
-          public void onError(Throwable t) {
-            logger.log(Level.FINE, "Control plane error: {0} ", t);
-            onCompleted();
-          }
-
-          @Override
-          public void onCompleted() {
-            responseObserver.onCompleted();
-            for (String type : subscribers.keySet()) {
-              subscribers.get(type).remove(responseObserver);
-              xdsNonces.get(type).remove(responseObserver);
+          public void run() {
+            logger.log(Level.FINEST, "control plane received request {0}", value);
+            if (value.hasErrorDetail()) {
+              logger.log(Level.FINE, "control plane received nack resource {0}, error {1}",
+                  new Object[]{value.getResourceNamesList(), value.getErrorDetail()});
+              return;
             }
+            String resourceType = value.getTypeUrl();
+            if (!value.getResponseNonce().isEmpty()
+                && !String.valueOf(xdsNonces.get(resourceType)).equals(value.getResponseNonce())) {
+              logger.log(Level.FINE, "Resource nonce does not match, ignore.");
+              return;
+            }
+            Set<String> requestedResourceNames = new HashSet<>(value.getResourceNamesList());
+            if (subscribers.get(resourceType).containsKey(responseObserver)
+                && subscribers.get(resourceType).get(responseObserver)
+                    .equals(requestedResourceNames)) {
+              logger.log(Level.FINEST, "control plane received ack for resource: {0}",
+                  value.getResourceNamesList());
+              return;
+            }
+            if (!xdsNonces.get(resourceType).containsKey(responseObserver)) {
+              xdsNonces.get(resourceType).put(responseObserver, new AtomicInteger(0));
+            }
+            DiscoveryResponse response = generateResponse(resourceType,
+                String.valueOf(xdsVersions.get(resourceType)),
+                String.valueOf(xdsNonces.get(resourceType).get(responseObserver)),
+                requestedResourceNames);
+            responseObserver.onNext(response);
+            subscribers.get(resourceType).put(responseObserver, requestedResourceNames);
           }
-        };
-    return requestObserver;
+        });
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        logger.log(Level.FINE, "Control plane error: {0} ", t);
+        onCompleted();
+      }
+
+      @Override
+      public void onCompleted() {
+        responseObserver.onCompleted();
+        for (String type : subscribers.keySet()) {
+          subscribers.get(type).remove(responseObserver);
+          xdsNonces.get(type).remove(responseObserver);
+        }
+      }
+    }
+
+    return new AdsStreamObserver();
   }
 
   //must run in syncContext
