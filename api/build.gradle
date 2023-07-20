@@ -20,8 +20,8 @@ tasks.named("compileContextJava").configure {
     if (JavaVersion.current().isJava9Compatible()) {
         options.release = 7
     } else {
-        sourceCompatibility = 1.7
-        targetCompatibility = 1.7
+        sourceCompatibility = JavaVersion.VERSION_1_7
+        targetCompatibility = JavaVersion.VERSION_1_7
     }
 }
 

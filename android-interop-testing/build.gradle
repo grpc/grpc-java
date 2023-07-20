@@ -122,4 +122,16 @@ tasks.withType(JavaCompile).configureEach {
             "|")
 }
 
+afterEvaluate {
+    // Hack to workaround "Task ':grpc-android-interop-testing:extractIncludeDebugProto' uses this
+    // output of task ':grpc-context:jar' without declaring an explicit or implicit dependency." The
+    // issue started when grpc-context became empty.
+    tasks.named('extractIncludeDebugProto').configure {
+        dependsOn project(':grpc-context').tasks.named('jar')
+    }
+    tasks.named('extractIncludeReleaseProto').configure {
+        dependsOn project(':grpc-context').tasks.named('jar')
+    }
+}
+
 configureProtoCompilation()
