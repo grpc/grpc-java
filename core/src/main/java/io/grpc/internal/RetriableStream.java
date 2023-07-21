@@ -212,13 +212,23 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   abstract void postCommit();
 
   /**
-   * Calls commit() and if successful runs the post commit task.
+   * Calls commit() and if successful runs the post commit task. Post commit task will be non-null
+   * for only once. The post commit task cancels other non-winning streams on separate transport
+   * threads, thus it must be run on the callExecutor to prevent deadlocks between multiple stream
+   * transports.(issues/10314)
+   * This method should be called only in subListener callbacks. This guarantees callExecutor
+   * schedules tasks before master listener closes, which is protected by the inFlightSubStreams
+   * decorative. That is because:
+   * For a successful winning stream, other streams won't attempt to close master listener.
+   * For a cancelled winning stream (noop), other stream won't attempt to close master listener.
+   * For a failed/closed winning stream, the last closed stream closes the master listener, and
+   * callExecutor scheduling happens-before that.
    */
   private void commitAndRun(Substream winningSubstream) {
     Runnable postCommitTask = commit(winningSubstream);
 
     if (postCommitTask != null) {
-      postCommitTask.run();
+      callExecutor.execute(postCommitTask);
     }
   }
 
