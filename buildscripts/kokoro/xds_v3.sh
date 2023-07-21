@@ -14,7 +14,7 @@ popd
 
 git clone -b psm-interop-kokoro-2204-legacy --single-branch --depth=1 https://github.com/sergiitk/grpc.git
 
-source grpc/tools/run_tests/helper_scripts/prep_xds.sh
+grpc/tools/run_tests/helper_scripts/prep_xds.sh
 
 JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
   python3 grpc/tools/run_tests/run_xds_tests.py \
