@@ -354,12 +354,7 @@ public class CachingRlsLbClientTest {
     assertThat(stateCaptor.getAllValues())
         .containsExactly(ConnectivityState.CONNECTING, ConnectivityState.READY);
     Metadata headers = new Metadata();
-    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
-        new PickSubchannelArgsImpl(
-            TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("service1/create")
-                .build(),
-            headers,
-            CallOptions.DEFAULT));
+    PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
     assertThat(pickResult.getStatus().isOk()).isTrue();
     assertThat(pickResult.getSubchannel()).isNotNull();
     assertThat(headers.get(RLS_DATA_KEY)).isEqualTo("header-rls-data-value");
@@ -393,6 +388,57 @@ public class CachingRlsLbClientTest {
     assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
     assertThat(fakeThrottler.getNumThrottled()).isEqualTo(1);
     assertThat(fakeThrottler.getNumUnthrottled()).isEqualTo(1);
+  }
+
+  @Test
+  public void timeout_not_changing_picked_subchannel() throws Exception {
+    setUpRlsLbClient();
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "service1", "method-key", "create"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequest,
+            RouteLookupResponse.create(
+                ImmutableList.of("primary.cloudbigtable.googleapis.com", "target2", "target3"),
+                "header-rls-data-value")));
+
+    // valid channel
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isFalse();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isTrue();
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
+    ArgumentCaptor<ConnectivityState> stateCaptor =
+        ArgumentCaptor.forClass(ConnectivityState.class);
+    verify(helper, times(4)).updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
+
+    Metadata headers = new Metadata();
+    PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
+    assertThat(pickResult.getStatus().isOk()).isTrue();
+    assertThat(pickResult.getSubchannel().toString())
+        .isEqualTo("primary.cloudbigtable.googleapis.com");
+
+    fakeClock.forwardTime(5, TimeUnit.MINUTES);
+    PickResult pickResult2 = getPickResultForCreate(pickerCaptor, headers);
+    assertThat(pickResult2.getSubchannel()).isNull();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    PickResult pickResult3 = getPickResultForCreate(pickerCaptor, headers);
+    assertThat(pickResult3.getSubchannel()).isNotNull();
+    assertThat(pickResult3.getSubchannel().toString())
+        .isEqualTo(pickResult.getSubchannel().toString());
+  }
+
+  private static PickResult getPickResultForCreate(ArgumentCaptor<SubchannelPicker> pickerCaptor,
+      Metadata headers) {
+    return pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("service1/create")
+                .build(),
+            headers,
+            CallOptions.DEFAULT));
   }
 
   @Test
@@ -440,12 +486,7 @@ public class CachingRlsLbClientTest {
         .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
 
     Metadata headers = new Metadata();
-    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
-        new PickSubchannelArgsImpl(
-            TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("service1/create")
-                .build(),
-            headers,
-            CallOptions.DEFAULT));
+    PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
     assertThat(pickResult.getSubchannel()).isNotNull();
     assertThat(headers.get(RLS_DATA_KEY)).isEqualTo("header-rls-data-value");
 
@@ -680,7 +721,8 @@ public class CachingRlsLbClientTest {
                 new SubchannelPicker() {
                   @Override
                   public PickResult pickSubchannel(PickSubchannelArgs args) {
-                    return PickResult.withSubchannel(mock(Subchannel.class));
+                    return PickResult.withSubchannel(
+                        mock(Subchannel.class, config.get("target").toString()));
                   }
                 });
           }
