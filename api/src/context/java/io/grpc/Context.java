@@ -808,7 +808,7 @@ public class Context {
      * <p>Calling {@code cancel(null)} is the same as calling {@link #close}.
      *
      * @return {@code true} if this context cancelled the context and notified listeners,
-     *    {@code false} if the context was already cancelled.
+     *         {@code false} if the context was already cancelled.
      */
     @CanIgnoreReturnValue
     public boolean cancel(Throwable cause) {

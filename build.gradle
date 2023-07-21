@@ -162,7 +162,8 @@ subprojects {
 
     checkstyle {
         configDirectory = file("$rootDir/buildscripts")
-        toolVersion = libs.checkstyle.get().version
+        toolVersion = JavaVersion.current().isJava11Compatible() ? libs.checkstyle.get().version : libs.checkstylejava8.get().version 
+
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
@@ -245,6 +246,11 @@ subprojects {
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
+
+            // TODO(https://github.com/grpc/grpc-java/issues/10372): remove when fixed.
+            if (JavaVersion.current().isJava11Compatible()) {
+              options.errorprone.check("StringCaseLocaleUsage", CheckSeverity.OFF)
+            }
         }
         tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
@@ -573,7 +579,7 @@ tasks.register('checkForUpdates') {
             if (oldResolved != newResolved) {
                 def oldId = oldResolved.id.componentIdentifier
                 def newId = newResolved.id.componentIdentifier
-                println("${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
+                println("libs.${name} = ${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
             }
         }
     }

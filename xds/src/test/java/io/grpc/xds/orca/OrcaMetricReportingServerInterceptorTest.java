@@ -137,8 +137,8 @@ public class OrcaMetricReportingServerInterceptorTest {
   @Test
   public void shareCallMetricRecorderInContext() throws IOException {
     final CallMetricRecorder callMetricRecorder = new CallMetricRecorder();
-    ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory =
-        new ServerStreamTracer.Factory() {
+    ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory;
+    callMetricRecorderSharingStreamTracerFactory = new ServerStreamTracer.Factory() {
       @Override
       public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
         return new ServerStreamTracer() {

@@ -571,10 +571,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *   return o;
    * }}</pre>
    *
+   * @return this
    * @throws IllegalArgumentException When the given serviceConfig is invalid or the current version
    *         of grpc library can not parse it gracefully. The state of the builder is unchanged if
    *         an exception is thrown.
-   * @return this
    * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
