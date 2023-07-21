@@ -103,9 +103,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         public void run() {
           SocketAddress previousAddress = addressIndex.getCurrentAddress();
           addressIndex.updateGroups(newImmutableAddressGroups);
-          Set<SocketAddress> oldAddrs = new HashSet<>();
+          Set<SocketAddress> oldAddrs = new HashSet<>(subchannels.keySet());
+          Set<SocketAddress> newAddrs = new HashSet<>();
           for (EquivalentAddressGroup endpoint : newImmutableAddressGroups) {
             for (SocketAddress addr : endpoint.getAddresses()) {
+              newAddrs.add(addr);
               if (!subchannels.containsKey(addr)) {
                 System.out.println("adding: " + addr);
                 List<EquivalentAddressGroup> addrs = new ArrayList<>();
@@ -121,16 +123,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                     processSubchannelState(subchannel, stateInfo);
                   }
                 });
-              } else {
-                System.out.println("removing: " + addr);
-                oldAddrs.add(addr);
               }
             }
           }
 
           // remove old subchannels that were not in new address list
           for (SocketAddress oldAddr : oldAddrs) {
-            if (subchannels.containsKey(oldAddr)) {
+            System.out.println("all old addresses: " + oldAddr);
+            if (!newAddrs.contains(oldAddr)) {
               System.out.println("removed: " + oldAddr);
               subchannels.get(oldAddr).shutdown();
               subchannels.remove(oldAddr);
@@ -287,7 +287,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     @Override
     public void requestConnection() {
-      subchannels.get(addressIndex.getCurrentAddress()).requestConnection();
+      if (subchannels.size() > 0) {
+        subchannels.get(addressIndex.getCurrentAddress()).requestConnection();
+      }
     }
 
     private static void checkListHasNoNulls(List<?> list, String msg) {
