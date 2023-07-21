@@ -393,7 +393,6 @@ public class CachingRlsLbClientTest {
   @Test
   public void timeout_not_changing_picked_subchannel() throws Exception {
     setUpRlsLbClient();
-    InOrder inOrder = inOrder(helper);
     RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "service1", "method-key", "create"));
     rlsServerImpl.setLookupTable(
