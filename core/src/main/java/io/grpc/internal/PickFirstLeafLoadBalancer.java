@@ -97,16 +97,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       Preconditions.checkArgument(!newAddressGroups.isEmpty(), "newAddressGroups is empty");
       final List<EquivalentAddressGroup> newImmutableAddressGroups =
         Collections.unmodifiableList(new ArrayList<>(newAddressGroups));
+
       helper.getSynchronizationContext().execute(new Runnable() {
         @Override
         public void run() {
-          addressIndex.reset();
+          SocketAddress previousAddress = addressIndex.getCurrentAddress();
           addressIndex.updateGroups(newImmutableAddressGroups);
-          Set<SocketAddress> newAddrs = new HashSet<>();
+          Set<SocketAddress> oldAddrs = new HashSet<>();
           for (EquivalentAddressGroup endpoint : newImmutableAddressGroups) {
             for (SocketAddress addr : endpoint.getAddresses()) {
-              newAddrs.add(addr);
               if (!subchannels.containsKey(addr)) {
+                System.out.println("adding: " + addr);
                 List<EquivalentAddressGroup> addrs = new ArrayList<>();
                 addrs.add(new EquivalentAddressGroup(addr));
                 final Subchannel subchannel = helper.createSubchannel(
@@ -120,16 +121,33 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                     processSubchannelState(subchannel, stateInfo);
                   }
                 });
+              } else {
+                System.out.println("removing: " + addr);
+                oldAddrs.add(addr);
               }
             }
           }
 
           // remove old subchannels that were not in new address list
-          for (SocketAddress addr : subchannels.keySet()) {
-            if (!newAddrs.contains(addr)) {
-              subchannels.get(addr).shutdown();
-              subchannels.remove(addr);
+          for (SocketAddress oldAddr : oldAddrs) {
+            if (subchannels.containsKey(oldAddr)) {
+              System.out.println("removed: " + oldAddr);
+              subchannels.get(oldAddr).shutdown();
+              subchannels.remove(oldAddr);
             }
+          }
+
+          if (currentState == READY && !addressIndex.seekTo(previousAddress)) {
+            SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
+            updateBalancingState(IDLE, picker);
+          } else if (currentState == CONNECTING && !addressIndex.seekTo(previousAddress)) {
+            requestConnection();
+          } else if (currentState == CONNECTING && addressIndex.seekTo(previousAddress)) {
+            addressIndex.reset();
+            requestConnection();
+          } else if (currentState == TRANSIENT_FAILURE) {
+            addressIndex.reset();
+            requestConnection();
           }
         }
       });
@@ -203,6 +221,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           case READY:
             picker = new Picker(PickResult.withSubchannel(subchannel));
             updateBalancingState(READY, picker);
+            // TODO: shutdown rest of subchannels?
             break;
           case TRANSIENT_FAILURE:
             // If we are looking at current channel ...
@@ -291,6 +310,23 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       List<SocketAddress> addresses = subchannel.getAddresses().getAddresses();
       Preconditions.checkState(addresses.size() == 1, "%s does not have exactly address", addresses);
       return addresses.get(0);
+    }
+
+    /**
+     * Converts list of {@link EquivalentAddressGroup} to {@link EquivalentAddressGroup} set and
+     * remove all attributes. The values are the original EAGs.
+     */
+    private static Map<EquivalentAddressGroup, EquivalentAddressGroup> stripAttrs(
+        List<EquivalentAddressGroup> groupList) {
+      Map<EquivalentAddressGroup, EquivalentAddressGroup> addrs = new HashMap<>(groupList.size() * 2);
+      for (EquivalentAddressGroup group : groupList) {
+        addrs.put(stripAttrs(group), group);
+      }
+      return addrs;
+    }
+
+    private static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
+      return new EquivalentAddressGroup(eag.getAddresses());
     }
 
     @VisibleForTesting

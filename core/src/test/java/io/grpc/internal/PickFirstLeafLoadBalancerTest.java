@@ -33,7 +33,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.Lists;
-import io.grpc.*;
+import com.google.common.collect.Maps;import io.grpc.*;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -56,8 +56,8 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.*;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoRule;
+import org.mockito.invocation.InvocationOnMock;import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;import org.mockito.stubbing.Answer;
 
 
 /** Unit test for {@link PickFirstLeafLoadBalancer}. */
@@ -144,19 +144,31 @@ public class PickFirstLeafLoadBalancerTest {
     @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
     private PickSubchannelArgs mockArgs;
 
+    private final Map<SocketAddress, Subchannel> subchannels = Maps.newLinkedHashMap();
+    private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
+        Maps.newLinkedHashMap();
+
+
     @Before
     public void setUp() {
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             SocketAddress addr = new FakeSocketAddress("server" + i);
             servers.add(new EquivalentAddressGroup(addr));
             socketAddresses.add(addr);
+            subchannels.put(addr, mock(Subchannel.class));
         }
+
         mockSubchannel1 = mock(FakeSubchannel.class);
         mockSubchannel2 = mock(FakeSubchannel.class);
         mockSubchannel3 = mock(FakeSubchannel.class);
         mockSubchannel4 = mock(FakeSubchannel.class);
         when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
             .thenReturn(mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
+
+        when(mockSubchannel1.getAllAddresses()).thenReturn(Lists.newArrayList(new EquivalentAddressGroup(socketAddresses.get(0))));
+        when(mockSubchannel2.getAllAddresses()).thenReturn(Lists.newArrayList(new EquivalentAddressGroup(socketAddresses.get(1))));
+        when(mockSubchannel3.getAllAddresses()).thenReturn(Lists.newArrayList(new EquivalentAddressGroup(socketAddresses.get(2))));
+        when(mockSubchannel4.getAllAddresses()).thenReturn(Lists.newArrayList(new EquivalentAddressGroup(socketAddresses.get(3))));
 
         when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
         when(mockBackoffPolicyProvider.get())
@@ -249,8 +261,14 @@ public class PickFirstLeafLoadBalancerTest {
     @Test
     public void requestConnectionPicker() throws Exception {
         assertEquals(IDLE, loadBalancer.getCurrentState());
+        SocketAddress socketAddr1 = new FakeSocketAddress("newserver");
+        SocketAddress socketAddr2 = new FakeSocketAddress("newserver");
+        SocketAddress socketAddr3 = new FakeSocketAddress("newserver");
+        List<EquivalentAddressGroup> newServers =
+          Lists.newArrayList(new EquivalentAddressGroup(socketAddr1),
+          new EquivalentAddressGroup(socketAddr2), new EquivalentAddressGroup(socketAddr3));
         loadBalancer.acceptResolvedAddresses(
-            ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+            ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
 
         InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3); // captor: captures
         inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
@@ -712,11 +730,13 @@ public class PickFirstLeafLoadBalancerTest {
     public void updateAddresses_disjoint_ready_twice() {
       InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
       // Creating first set of endpoints/addresses
-      SocketAddress socketAddr1 = new FakeSocketAddress("newserver1");
-      SocketAddress socketAddr2 = new FakeSocketAddress("newserver2");
+      SocketAddress socketAddr1 = new FakeSocketAddress("server1");
+      SocketAddress socketAddr2 = new FakeSocketAddress("server2");
+      subchannels.put(socketAddr1, mockSubchannel1);
+      subchannels.put(socketAddr2, mockSubchannel2);
       List<EquivalentAddressGroup> oldServers =
-          Lists.newArrayList(new EquivalentAddressGroup(socketAddr1),
-          new EquivalentAddressGroup((socketAddr2)));
+          Lists.newArrayList(new EquivalentAddressGroup(socketAddresses.get(0)),
+          new EquivalentAddressGroup(socketAddresses.get(1)));
 
       // Accept Addresses and verify proper connection flow
       assertEquals(IDLE, loadBalancer.getCurrentState());
@@ -744,11 +764,11 @@ public class PickFirstLeafLoadBalancerTest {
       assertNotEquals(PickResult.withSubchannel(mockSubchannel4), pickerCaptor.getValue().pickSubchannel(mockArgs));
 
       // Creating second set of endpoints/addresses
-      SocketAddress socketAddr3 = new FakeSocketAddress("newserver3");
-      SocketAddress socketAddr4 = new FakeSocketAddress("newserver4");
+      SocketAddress socketAddr3 = new FakeSocketAddress("server3");
+      SocketAddress socketAddr4 = new FakeSocketAddress("server4");
       List<EquivalentAddressGroup> newServers =
-          Lists.newArrayList(new EquivalentAddressGroup(socketAddr3),
-          new EquivalentAddressGroup((socketAddr4)));
+          Lists.newArrayList(new EquivalentAddressGroup(socketAddresses.get(2)),
+          new EquivalentAddressGroup((socketAddresses.get(3))));
 
       // Accept new resolved addresses to update
       loadBalancer.acceptResolvedAddresses(
@@ -1354,6 +1374,7 @@ public class PickFirstLeafLoadBalancerTest {
         public String toString() {
             return "FakeSocketAddress-" + name;
         }
+
     }
 
     private static class FakeSubchannel extends Subchannel {
