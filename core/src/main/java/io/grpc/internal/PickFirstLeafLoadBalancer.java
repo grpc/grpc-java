@@ -81,7 +81,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           // The channel state does not get updated when doing name resolving today, so for the moment
           // let LB report CONNECTION and call subchannel.requestConnection() immediately.
           updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannels.get(addressIndex.getCurrentAddress()))));
-          // TODO: shouldn't this be withNoResult()?
+          // TODO: this is incorrect?
           requestConnection();
         } else {
           updateAddresses(servers);
@@ -109,7 +109,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             for (SocketAddress addr : endpoint.getAddresses()) {
               newAddrs.add(addr);
               if (!subchannels.containsKey(addr)) {
-                System.out.println("adding: " + addr);
                 List<EquivalentAddressGroup> addrs = new ArrayList<>();
                 addrs.add(new EquivalentAddressGroup(addr));
                 final Subchannel subchannel = helper.createSubchannel(
@@ -129,14 +128,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
           // remove old subchannels that were not in new address list
           for (SocketAddress oldAddr : oldAddrs) {
-            System.out.println("all old addresses: " + oldAddr);
             if (!newAddrs.contains(oldAddr)) {
-              System.out.println("removed: " + oldAddr);
               subchannels.get(oldAddr).shutdown();
               subchannels.remove(oldAddr);
             }
           }
 
+          // TODO: clean up logic to be more efficient (don't call seekTo() more times than necessary)
           if (currentState == READY && !addressIndex.seekTo(previousAddress)) {
             SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
             updateBalancingState(IDLE, picker);
@@ -145,6 +143,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           } else if (currentState == CONNECTING && addressIndex.seekTo(previousAddress)) {
             addressIndex.reset();
             requestConnection();
+          } else if (currentState == IDLE && !addressIndex.seekTo(previousAddress)) {
+            addressIndex.reset();
+            SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
+            updateBalancingState(IDLE, picker);
+          } else if (currentState == IDLE && addressIndex.seekTo(previousAddress)) {
+            SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
+            updateBalancingState(IDLE, picker);
           } else if (currentState == TRANSIENT_FAILURE) {
             addressIndex.reset();
             requestConnection();
