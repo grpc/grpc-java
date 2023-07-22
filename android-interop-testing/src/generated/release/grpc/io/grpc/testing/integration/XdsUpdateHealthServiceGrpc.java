@@ -93,6 +93,21 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static XdsUpdateHealthServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<XdsUpdateHealthServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<XdsUpdateHealthServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public XdsUpdateHealthServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new XdsUpdateHealthServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return XdsUpdateHealthServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static XdsUpdateHealthServiceBlockingStub newBlockingStub(
@@ -196,6 +211,40 @@ public final class XdsUpdateHealthServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service XdsUpdateHealthService.
+   * <pre>
+   * A service to remotely control health status of an xDS test server.
+   * </pre>
+   */
+  public static final class XdsUpdateHealthServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<XdsUpdateHealthServiceBlockingV2Stub> {
+    private XdsUpdateHealthServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected XdsUpdateHealthServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new XdsUpdateHealthServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.testing.integration.EmptyProtos.Empty setServing(io.grpc.testing.integration.EmptyProtos.Empty request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getSetServingMethod(), getCallOptions(), request);
+    }
+
+    /**
+     */
+    public io.grpc.testing.integration.EmptyProtos.Empty setNotServing(io.grpc.testing.integration.EmptyProtos.Empty request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getSetNotServingMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>

@@ -63,6 +63,21 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static XdsUpdateClientConfigureServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<XdsUpdateClientConfigureServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<XdsUpdateClientConfigureServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public XdsUpdateClientConfigureServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new XdsUpdateClientConfigureServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return XdsUpdateClientConfigureServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static XdsUpdateClientConfigureServiceBlockingStub newBlockingStub(
@@ -157,6 +172,36 @@ public final class XdsUpdateClientConfigureServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service XdsUpdateClientConfigureService.
+   * <pre>
+   * A service to dynamically update the configuration of an xDS test client.
+   * </pre>
+   */
+  public static final class XdsUpdateClientConfigureServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingV2Stub> {
+    private XdsUpdateClientConfigureServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected XdsUpdateClientConfigureServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new XdsUpdateClientConfigureServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Update the tes client's configuration.
+     * </pre>
+     */
+    public io.grpc.testing.integration.Messages.ClientConfigureResponse configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getConfigureMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
