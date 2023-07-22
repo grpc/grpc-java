@@ -185,6 +185,21 @@ public final class BenchmarkServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static BenchmarkServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public BenchmarkServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new BenchmarkServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return BenchmarkServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static BenchmarkServiceBlockingStub newBlockingStub(
@@ -367,17 +382,17 @@ public final class BenchmarkServiceGrpc {
   /**
    * A stub to allow clients to do synchronous rpc calls to service BenchmarkService.
    */
-  public static final class BenchmarkServiceBlockingStub
-      extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingStub> {
-    private BenchmarkServiceBlockingStub(
+  public static final class BenchmarkServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingV2Stub> {
+    private BenchmarkServiceBlockingV2Stub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected BenchmarkServiceBlockingStub build(
+    protected BenchmarkServiceBlockingV2Stub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new BenchmarkServiceBlockingStub(channel, callOptions);
+      return new BenchmarkServiceBlockingV2Stub(channel, callOptions);
     }
 
     /**
@@ -406,14 +421,30 @@ public final class BenchmarkServiceGrpc {
 
     /**
      * <pre>
+     * Single-sided unbounded streaming from client to server
+     * The server returns the client payload as-is once the client does WritesDone
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
+        streamingFromClient() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getStreamingFromClientMethod(), getCallOptions());
+    }
+
+    /**
+     * <pre>
      * Single-sided unbounded streaming from server to client
      * The server repeatedly returns the client payload as-is
      * </pre>
      */
-    public java.util.Iterator<io.grpc.benchmarks.proto.Messages.SimpleResponse> streamingFromServer(
-        io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
-      return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
-          getChannel(), getStreamingFromServerMethod(), getCallOptions(), request);
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
+        streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request) throws java.lang.InterruptedException {
+      io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse> call =
+          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+              getChannel(), getStreamingFromServerMethod(), getCallOptions());
+      call.write(request);
+      call.halfClose();
+      return call;
     }
 
     /**
@@ -426,6 +457,46 @@ public final class BenchmarkServiceGrpc {
         streamingBothWays() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamingBothWaysMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service BenchmarkService.
+   */
+  public static final class BenchmarkServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingStub> {
+    private BenchmarkServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected BenchmarkServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new BenchmarkServiceBlockingStub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
+    public io.grpc.benchmarks.proto.Messages.SimpleResponse unaryCall(io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getUnaryCallMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Single-sided unbounded streaming from server to client
+     * The server repeatedly returns the client payload as-is
+     * </pre>
+     */
+    public java.util.Iterator<io.grpc.benchmarks.proto.Messages.SimpleResponse> streamingFromServer(
+        io.grpc.benchmarks.proto.Messages.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
+          getChannel(), getStreamingFromServerMethod(), getCallOptions(), request);
     }
   }
 

@@ -283,6 +283,21 @@ public final class TestServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static TestServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<TestServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<TestServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public TestServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new TestServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return TestServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static TestServiceBlockingStub newBlockingStub(
@@ -546,17 +561,17 @@ public final class TestServiceGrpc {
    * Test service that supports all call types.
    * </pre>
    */
-  public static final class TestServiceBlockingStub
-      extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub> {
-    private TestServiceBlockingStub(
+  public static final class TestServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingV2Stub> {
+    private TestServiceBlockingV2Stub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected TestServiceBlockingStub build(
+    protected TestServiceBlockingV2Stub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new TestServiceBlockingStub(channel, callOptions);
+      return new TestServiceBlockingV2Stub(channel, callOptions);
     }
 
     /**
@@ -576,10 +591,26 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
-    public java.util.Iterator<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> streamingOutputCall(
-        io.grpc.testing.compiler.Test.StreamingOutputCallRequest request) {
-      return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
-          getChannel(), getStreamingOutputCallMethod(), getCallOptions(), request);
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
+        streamingOutputCall(io.grpc.testing.compiler.Test.StreamingOutputCallRequest request) throws java.lang.InterruptedException {
+      io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse> call =
+          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+              getChannel(), getStreamingOutputCallMethod(), getCallOptions());
+      call.write(request);
+      call.halfClose();
+      return call;
+    }
+
+    /**
+     * <pre>
+     * A sequence of requests followed by one response (streamed upload).
+     * The server returns the aggregated size of client payload as the result.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest,io.grpc.testing.compiler.Test.StreamingInputCallResponse>
+        streamingInputCall() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getStreamingInputCallMethod(), getCallOptions());
     }
 
     /**
@@ -619,6 +650,69 @@ public final class TestServiceGrpc {
         import_() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getImportMethod(), getCallOptions());
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Safe.
+     * </pre>
+     */
+    public io.grpc.testing.compiler.Test.SimpleResponse safeCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getSafeCallMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Idempotent.
+     * </pre>
+     */
+    public io.grpc.testing.compiler.Test.SimpleResponse idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getIdempotentCallMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service TestService.
+   * <pre>
+   * Test service that supports all call types.
+   * </pre>
+   */
+  public static final class TestServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub> {
+    private TestServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected TestServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new TestServiceBlockingStub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * The server returns the client payload as-is.
+     * </pre>
+     */
+    public io.grpc.testing.compiler.Test.SimpleResponse unaryCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getUnaryCallMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * One request followed by a sequence of responses (streamed download).
+     * The server returns the payload with client desired type and sizes.
+     * </pre>
+     */
+    public java.util.Iterator<io.grpc.testing.compiler.Test.StreamingOutputCallResponse> streamingOutputCall(
+        io.grpc.testing.compiler.Test.StreamingOutputCallRequest request) {
+      return io.grpc.stub.ClientCalls.blockingServerStreamingCall(
+          getChannel(), getStreamingOutputCallMethod(), getCallOptions(), request);
     }
 
     /**

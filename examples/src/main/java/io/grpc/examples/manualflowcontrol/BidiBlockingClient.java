@@ -21,7 +21,7 @@ import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
-import io.grpc.examples.manualflowcontrol.StreamingGreeterGrpc.StreamingGreeterBlockingStub;
+import io.grpc.examples.manualflowcontrol.StreamingGreeterGrpc.StreamingGreeterBlockingV2Stub;
 import io.grpc.stub.BlockingClientCall;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -68,7 +68,7 @@ public class BidiBlockingClient {
     // use TLS, use TlsChannelCredentials instead.
     ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .build();
-    StreamingGreeterBlockingStub blockingStub = StreamingGreeterGrpc.newBlockingStub(channel);
+    StreamingGreeterBlockingV2Stub blockingStub = StreamingGreeterGrpc.newBlockingV2Stub(channel);
     List<String> echoInput = names();
     try {
       long start = System.currentTimeMillis();
@@ -98,7 +98,7 @@ public class BidiBlockingClient {
   /**
    *  Create 2 threads, one that writes all values, and one that reads until the stream closes.
    */
-  private static List<String> useTwoThreads(StreamingGreeterBlockingStub blockingStub,
+  private static List<String> useTwoThreads(StreamingGreeterBlockingV2Stub blockingStub,
       List<String> valuesToWrite) throws InterruptedException {
     logMethodStart("Two Threads");
 

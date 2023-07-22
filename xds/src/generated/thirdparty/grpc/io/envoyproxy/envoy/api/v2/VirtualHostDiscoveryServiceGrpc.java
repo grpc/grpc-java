@@ -73,6 +73,21 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static VirtualHostDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public VirtualHostDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new VirtualHostDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return VirtualHostDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static VirtualHostDiscoveryServiceBlockingStub newBlockingStub(
@@ -201,6 +216,43 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
+  public static final class VirtualHostDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingV2Stub> {
+    private VirtualHostDiscoveryServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected VirtualHostDiscoveryServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new VirtualHostDiscoveryServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+        deltaVirtualHosts() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getDeltaVirtualHostsMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service VirtualHostDiscoveryService.
+   * <pre>
+   * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
+   * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
+   * during the processing of an HTTP request if a route for the request cannot be resolved. The
+   * :ref:`resource_names_subscribe &lt;envoy_api_field_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
+   * field contains a list of virtual host names or aliases to track. The contents of an alias would
+   * be the contents of a *host* or *authority* header used to make an http request. An xDS server
+   * will match an alias to a virtual host based on the content of :ref:`domains'
+   * &lt;envoy_api_field_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field
+   * contains a list of virtual host names that have been :ref:`unsubscribed
+   * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
+   * </pre>
+   */
   public static final class VirtualHostDiscoveryServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
     private VirtualHostDiscoveryServiceBlockingStub(
@@ -212,14 +264,6 @@ public final class VirtualHostDiscoveryServiceGrpc {
     protected VirtualHostDiscoveryServiceBlockingStub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new VirtualHostDiscoveryServiceBlockingStub(channel, callOptions);
-    }
-
-    /**
-     */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
-        deltaVirtualHosts() {
-      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-          getChannel(), getDeltaVirtualHostsMethod(), getCallOptions());
     }
   }
 

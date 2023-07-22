@@ -129,6 +129,21 @@ public final class ListenerDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ListenerDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public ListenerDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ListenerDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ListenerDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ListenerDiscoveryServiceBlockingStub newBlockingStub(
@@ -263,17 +278,17 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public static final class ListenerDiscoveryServiceBlockingStub
-      extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub> {
-    private ListenerDiscoveryServiceBlockingStub(
+  public static final class ListenerDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingV2Stub> {
+    private ListenerDiscoveryServiceBlockingV2Stub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ListenerDiscoveryServiceBlockingStub build(
+    protected ListenerDiscoveryServiceBlockingV2Stub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new ListenerDiscoveryServiceBlockingStub(channel, callOptions);
+      return new ListenerDiscoveryServiceBlockingV2Stub(channel, callOptions);
     }
 
     /**
@@ -290,6 +305,36 @@ public final class ListenerDiscoveryServiceGrpc {
         streamListeners() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamListenersMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchListeners(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getFetchListenersMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service ListenerDiscoveryService.
+   * <pre>
+   * The Envoy instance initiates an RPC at startup to discover a list of
+   * listeners. Updates are delivered via streaming from the LDS server and
+   * consist of a complete update of all listeners. Existing connections will be
+   * allowed to drain from listeners that are no longer present.
+   * </pre>
+   */
+  public static final class ListenerDiscoveryServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub> {
+    private ListenerDiscoveryServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ListenerDiscoveryServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ListenerDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
     /**

@@ -61,6 +61,21 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static LoadReportingServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public LoadReportingServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadReportingServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return LoadReportingServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static LoadReportingServiceBlockingStub newBlockingStub(
@@ -199,17 +214,17 @@ public final class LoadReportingServiceGrpc {
   /**
    * A stub to allow clients to do synchronous rpc calls to service LoadReportingService.
    */
-  public static final class LoadReportingServiceBlockingStub
-      extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
-    private LoadReportingServiceBlockingStub(
+  public static final class LoadReportingServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingV2Stub> {
+    private LoadReportingServiceBlockingV2Stub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected LoadReportingServiceBlockingStub build(
+    protected LoadReportingServiceBlockingV2Stub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new LoadReportingServiceBlockingStub(channel, callOptions);
+      return new LoadReportingServiceBlockingV2Stub(channel, callOptions);
     }
 
     /**
@@ -247,6 +262,23 @@ public final class LoadReportingServiceGrpc {
         streamLoadStats() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamLoadStatsMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service LoadReportingService.
+   */
+  public static final class LoadReportingServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
+    private LoadReportingServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected LoadReportingServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new LoadReportingServiceBlockingStub(channel, callOptions);
     }
   }
 

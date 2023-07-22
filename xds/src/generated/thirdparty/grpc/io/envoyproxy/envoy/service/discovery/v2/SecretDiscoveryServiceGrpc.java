@@ -123,6 +123,21 @@ public final class SecretDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static SecretDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<SecretDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<SecretDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public SecretDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new SecretDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return SecretDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static SecretDiscoveryServiceBlockingStub newBlockingStub(
@@ -233,17 +248,17 @@ public final class SecretDiscoveryServiceGrpc {
   /**
    * A stub to allow clients to do synchronous rpc calls to service SecretDiscoveryService.
    */
-  public static final class SecretDiscoveryServiceBlockingStub
-      extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
-    private SecretDiscoveryServiceBlockingStub(
+  public static final class SecretDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingV2Stub> {
+    private SecretDiscoveryServiceBlockingV2Stub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SecretDiscoveryServiceBlockingStub build(
+    protected SecretDiscoveryServiceBlockingV2Stub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new SecretDiscoveryServiceBlockingStub(channel, callOptions);
+      return new SecretDiscoveryServiceBlockingV2Stub(channel, callOptions);
     }
 
     /**
@@ -260,6 +275,30 @@ public final class SecretDiscoveryServiceGrpc {
         streamSecrets() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamSecretsMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchSecrets(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getFetchSecretsMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service SecretDiscoveryService.
+   */
+  public static final class SecretDiscoveryServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
+    private SecretDiscoveryServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected SecretDiscoveryServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new SecretDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
     /**

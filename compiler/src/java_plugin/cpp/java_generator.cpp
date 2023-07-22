@@ -355,13 +355,15 @@ enum StubType {
   BLOCKING_CLIENT_IMPL = 5,
   FUTURE_CLIENT_IMPL = 6,
   ABSTRACT_CLASS = 7,
-  NONE = 8,
+  BLOCKING_V2_CLIENT_IMPL = 8,
+  NONE = 999,
 };
 
 enum CallType {
   ASYNC_CALL = 0,
   BLOCKING_CALL = 1,
-  FUTURE_CALL = 2
+  FUTURE_CALL = 2,
+  BLOCKING_V2_CALL = 3,
 };
 
 // TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
@@ -410,6 +412,9 @@ static void GrpcWriteServiceDocComment(Printer* printer,
       printer->Print(vars, " * A stub to allow clients to do asynchronous rpc calls to service $service$.\n");
       break;
     case BLOCKING_CLIENT_IMPL:
+      printer->Print(vars, " * A stub to allow clients to do llimited synchronous rpc calls to service $service$.\n");
+      break;
+    case BLOCKING_V2_CLIENT_IMPL:
       printer->Print(vars, " * A stub to allow clients to do synchronous rpc calls to service $service$.\n");
       break;
     case FUTURE_CLIENT_IMPL:
@@ -555,6 +560,9 @@ static void PrintStubFactory(
     case BLOCKING_CLIENT_IMPL:
       stub_type_name = "Blocking";
       break;
+    case BLOCKING_V2_CLIENT_IMPL:
+      stub_type_name = "BlockingV2";
+      break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot generate StubFactory for StubType: " << type;
   }
@@ -595,6 +603,11 @@ static void PrintStub(
     case BLOCKING_CLIENT_IMPL:
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
+      stub_base_class_name = "AbstractBlockingStub";
+      break;
+    case BLOCKING_V2_CLIENT_IMPL:
+      call_type = BLOCKING_V2_CALL;
+      stub_name += "BlockingV2Stub";
       stub_base_class_name = "AbstractBlockingStub";
       break;
     case FUTURE_CLIENT_IMPL:
@@ -667,7 +680,7 @@ static void PrintStub(
     bool client_streaming = method->client_streaming();
     bool server_streaming = method->server_streaming();
 
-    if (call_type == BLOCKING_CALL && client_streaming && !server_streaming) {
+    if (call_type == BLOCKING_CALL && client_streaming) {
       // Blocking client interface with client streaming is not available
       continue;
     }
@@ -692,7 +705,7 @@ static void PrintStub(
     }
     switch (call_type) {
       case BLOCKING_CALL:
-        GRPC_CODEGEN_CHECK(!client_streaming || server_streaming)
+        GRPC_CODEGEN_CHECK(!client_streaming)
             << "Blocking client interface with client streaming is unavailable";
         if (client_streaming && server_streaming) {
           p->Print(
@@ -706,6 +719,25 @@ static void PrintStub(
               "$Iterator$<$output_type$> $lower_method_name$(\n"
               "    $input_type$ request)");
         } else {
+          // Simple RPC
+          p->Print(
+              *vars,
+              "$output_type$ $lower_method_name$($input_type$ request)");
+        }
+        break;
+      case BLOCKING_V2_CALL:
+        if (client_streaming) { // Both Bidi and Client Streaming
+          p->Print(
+              *vars,
+              "$BlockingClientCall$<$input_type$,$output_type$>\n"
+               "    $lower_method_name$()");
+        } else if (server_streaming) {
+          // Server streaming
+          p->Print(
+              *vars,
+              "$BlockingClientCall$<$input_type$,$output_type$>\n"
+              "    $lower_method_name$($input_type$ request) throws java.lang.InterruptedException");
+       } else {
           // Simple RPC
           p->Print(
               *vars,
@@ -759,8 +791,8 @@ static void PrintStub(
     } else if (!interface) {
       switch (call_type) {
         case BLOCKING_CALL:
-          GRPC_CODEGEN_CHECK(!client_streaming || server_streaming)
-              << "Blocking client streaming interface is not available";
+          GRPC_CODEGEN_CHECK(!client_streaming)
+              << "Blocking client and bidi streaming interface are not available";
           if (client_streaming && server_streaming) {
             p->Print(
                 *vars,
@@ -774,6 +806,31 @@ static void PrintStub(
               (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingUnaryCall";
               (*vars)["params"] = "request";
             }
+            p->Print(
+                *vars,
+                "return $calls_method$(\n"
+                "    getChannel(), $method_method_name$(), getCallOptions(), $params$);\n");
+          }
+          break;
+        case BLOCKING_V2_CALL:
+          if (client_streaming) {
+            p->Print(
+                *vars,
+                "return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(\n"
+                "    getChannel(), $method_method_name$(), getCallOptions());\n");
+          } else if (server_streaming) {
+            p->Print(
+                *vars,
+                "$BlockingClientCall$<$input_type$,$output_type$> call =\n"
+                "    io.grpc.stub.ClientCalls.blockingBidiStreamingCall(\n"
+                "        getChannel(), $method_method_name$(), getCallOptions());\n"
+                "call.write(request);\n"
+                "call.halfClose();\n"
+                "return call;\n");
+          } else {
+            (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingUnaryCall";
+            (*vars)["params"] = "request";
+
             p->Print(
                 *vars,
                 "return $calls_method$(\n"
@@ -1177,6 +1234,21 @@ static void PrintService(const ServiceDescriptor* service,
   p->Print("}\n\n");
 
   // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
+  GrpcWriteDocComment(p, " Creates a new blocking-style stub that supports all types of calls "
+                         "on the service");
+  p->Print(
+      *vars,
+      "public static $service_name$BlockingV2Stub newBlockingV2Stub(\n"
+      "    $Channel$ channel) {\n");
+  p->Indent();
+  PrintStubFactory(service, vars, p, BLOCKING_V2_CLIENT_IMPL);
+  p->Print(
+      *vars,
+      "return $service_name$BlockingV2Stub.newStub(factory, channel);\n");
+  p->Outdent();
+  p->Print("}\n\n");
+
+  // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
   GrpcWriteDocComment(p, " Creates a new blocking-style stub that supports unary and streaming "
                          "output calls on the service");
   p->Print(
@@ -1209,6 +1281,7 @@ static void PrintService(const ServiceDescriptor* service,
   PrintStub(service, vars, p, ASYNC_INTERFACE);
   PrintAbstractClassStub(service, vars, p);
   PrintStub(service, vars, p, ASYNC_CLIENT_IMPL);
+  PrintStub(service, vars, p, BLOCKING_V2_CLIENT_IMPL);
   PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL);
   PrintStub(service, vars, p, FUTURE_CLIENT_IMPL);
 

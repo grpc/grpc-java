@@ -100,6 +100,21 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static AggregatedDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<AggregatedDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AggregatedDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public AggregatedDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AggregatedDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return AggregatedDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static AggregatedDiscoveryServiceBlockingStub newBlockingStub(
@@ -233,17 +248,17 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
-  public static final class AggregatedDiscoveryServiceBlockingStub
-      extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
-    private AggregatedDiscoveryServiceBlockingStub(
+  public static final class AggregatedDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingV2Stub> {
+    private AggregatedDiscoveryServiceBlockingV2Stub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected AggregatedDiscoveryServiceBlockingStub build(
+    protected AggregatedDiscoveryServiceBlockingV2Stub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new AggregatedDiscoveryServiceBlockingStub(channel, callOptions);
+      return new AggregatedDiscoveryServiceBlockingV2Stub(channel, callOptions);
     }
 
     /**
@@ -263,6 +278,31 @@ public final class AggregatedDiscoveryServiceGrpc {
         deltaAggregatedResources() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDeltaAggregatedResourcesMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service AggregatedDiscoveryService.
+   * <pre>
+   * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
+   * ADS and how it is intended to be used by a management server. ADS requests
+   * have the same structure as their singleton xDS counterparts, but can
+   * multiplex many resource types on a single stream. The type_url in the
+   * DiscoveryRequest/DiscoveryResponse provides sufficient information to recover
+   * the multiplexed singleton APIs at the Envoy instance and management server.
+   * </pre>
+   */
+  public static final class AggregatedDiscoveryServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
+    private AggregatedDiscoveryServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected AggregatedDiscoveryServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new AggregatedDiscoveryServiceBlockingStub(channel, callOptions);
     }
   }
 

@@ -32,7 +32,8 @@ import java.util.logging.Logger;
 
 /**
  * Represents a bidirectional streaming call from a client.  Allows in a blocking manner, sending
- * over the stream and receiving from the stream.  Also supports terminating the call. Handles
+ * over the stream and receiving from the stream.  Also supports terminating the call.
+ * Wraps a ClientCall and converts from async communication to the public sync paradigm.
  *
  * @param <ReqT> Type of the Request Message
  * @param <RespT> Type of the Response Message
@@ -117,10 +118,10 @@ public final class BlockingClientCall<ReqT, RespT> {
   }
 
   /**
-   * Wait with timeout, if necessary, for a value to be available from the server. If there is an
+   * Wait for a value to be available from the server. If there is an
    * available value, return true immediately.  If the stream was closed with Status.OK, return
    * false.  If the stream was closed with an error status, throw a StatusException. Otherwise, wait
-   * for a value to be available, the stream to be closed or the timeout to expire.
+   * for a value to be available or the stream to be closed.
    *
    * @return True when there is a value to read.  Return false if stream closed cleanly.
    * @throws io.grpc.StatusRuntimeException If the stream was closed in an error state
@@ -128,15 +129,15 @@ public final class BlockingClientCall<ReqT, RespT> {
   public boolean hasNext() throws InterruptedException {
     executor.drain();
 
+    if (!buffer.isEmpty()) {
+      return true;
+    }
+
     if (closedStatus != null) {
       if (!closedStatus.isOk()) {
         throw closedStatus.asRuntimeException();
       }
       return false;
-    }
-
-    if (!buffer.isEmpty()) {
-      return true;
     }
 
     while (!isReadReady() && closedStatus == null) {
@@ -204,31 +205,21 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public boolean write(ReqT request, long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
-    executor.drain();
-
-    if (getClosedStatus() != null && !getClosedStatus().isOk()) {
-      throw getClosedStatus().asRuntimeException();
-    }
 
     if (writeClosed) {
       throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
-    } else if (!isWriteLegal()) {
-      return false;
     }
 
     boolean writeDone = false;
-
     long start = System.nanoTime();
     long duration = unit.toNanos(timeout);
 
-    while (!writeDone && !writeClosed) {
+    while (!writeDone && isWriteLegal()) {
       if (call.isReady()) {
         call.sendMessage(request);
         writeDone = true;
-      } else if (getClosedStatus() == null) {
-        waitAndDrainExecutorOrTimeout(start, duration);
       } else {
-        break;
+        waitAndDrainExecutorOrTimeout(start, duration);
       }
     }
 
@@ -239,6 +230,7 @@ public final class BlockingClientCall<ReqT, RespT> {
     if (getClosedStatus().isOk()) {
       return false;
     } else {
+      // Propagate any errors returned from the server
       throw getClosedStatus().asRuntimeException();
     }
   }
@@ -268,7 +260,7 @@ public final class BlockingClientCall<ReqT, RespT> {
     boolean origWriteClosed = writeClosed;
     writeClosed = true;
 
-    if (!origWriteClosed && closedStatus == null) {
+    if (!origWriteClosed && getClosedStatus() == null) {
       call.halfClose();
     } else if (origWriteClosed) {
       throw new IllegalStateException("halfClose cannot be called after stream terminated");

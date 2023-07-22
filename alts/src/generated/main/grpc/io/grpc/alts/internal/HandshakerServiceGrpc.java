@@ -61,6 +61,21 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static HandshakerServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<HandshakerServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HandshakerServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public HandshakerServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HandshakerServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return HandshakerServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static HandshakerServiceBlockingStub newBlockingStub(
@@ -157,17 +172,17 @@ public final class HandshakerServiceGrpc {
   /**
    * A stub to allow clients to do synchronous rpc calls to service HandshakerService.
    */
-  public static final class HandshakerServiceBlockingStub
-      extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
-    private HandshakerServiceBlockingStub(
+  public static final class HandshakerServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingV2Stub> {
+    private HandshakerServiceBlockingV2Stub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected HandshakerServiceBlockingStub build(
+    protected HandshakerServiceBlockingV2Stub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new HandshakerServiceBlockingStub(channel, callOptions);
+      return new HandshakerServiceBlockingV2Stub(channel, callOptions);
     }
 
     /**
@@ -184,6 +199,23 @@ public final class HandshakerServiceGrpc {
         doHandshake() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDoHandshakeMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service HandshakerService.
+   */
+  public static final class HandshakerServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
+    private HandshakerServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected HandshakerServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new HandshakerServiceBlockingStub(channel, callOptions);
     }
   }
 
