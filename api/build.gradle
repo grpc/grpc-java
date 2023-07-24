@@ -21,6 +21,12 @@ compileContextJava {
     targetCompatibility = 1.7
 }
 
+// override default module name assigned
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc')
+    }
+}
 
 dependencies {
     compileOnly sourceSets.context.output

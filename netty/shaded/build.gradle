@@ -70,6 +70,9 @@ dependencies {
 tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.netty.shaded')
+    }
 }
 
 tasks.named("shadowJar").configure {

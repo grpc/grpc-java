@@ -19,6 +19,12 @@ tasks.named("compileJava").configure {
             "|")
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.gcp.observability')
+    }
+}
+
 dependencies {
     annotationProcessor libraries.auto.value
     api project(':grpc-api')

@@ -201,7 +201,8 @@ subprojects {
         tasks.named("jar").configure {
             manifest {
                 attributes('Implementation-Title': name,
-                        'Implementation-Version': project.version)
+                        'Implementation-Version': project.version,
+                        'Automatic-Module-Name': 'io.grpc.' + project.name.substring(5)) // default name inferred from artifact
             }
         }
 
