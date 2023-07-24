@@ -1140,7 +1140,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
      */
     @SuppressWarnings("GuardedBy")
     @Override
-    public void data(boolean inFinished, int streamId, BufferedSource in, int length)
+    public void data(boolean inFinished, int streamId, BufferedSource in, int length,
+                     int paddedLength)
         throws IOException {
       logger.logData(OkHttpFrameLogger.Direction.INBOUND,
           streamId, in.getBuffer(), length, inFinished);
@@ -1171,7 +1172,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
 
       // connection window update
-      connectionUnacknowledgedBytesRead += length;
+      connectionUnacknowledgedBytesRead += paddedLength;
       if (connectionUnacknowledgedBytesRead >= initialWindowSize * DEFAULT_WINDOW_UPDATE_RATIO) {
         synchronized (lock) {
           frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);

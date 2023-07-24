@@ -135,7 +135,8 @@ public class OkHttpServerTransportTest {
       Buffer buf = new Buffer();
       buf.write(in.getBuffer(), length);
       clientDataFrames.data(outDone, streamId, buf);
-    })).when(clientFramesRead).data(anyBoolean(), anyInt(), any(BufferedSource.class), anyInt());
+    })).when(clientFramesRead).data(anyBoolean(), anyInt(), any(BufferedSource.class), anyInt(),
+        anyInt());
   }
 
   @After
@@ -379,7 +380,8 @@ public class OkHttpServerTransportTest {
     Buffer responseMessageFrame = createMessageFrame("Howdy client");
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
-        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()));
+        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()),
+            eq((int) responseMessageFrame.size()));
     verify(clientDataFrames).data(false, 1, responseMessageFrame);
 
     List<Header> responseTrailers = Arrays.asList(
@@ -440,7 +442,8 @@ public class OkHttpServerTransportTest {
     Buffer responseMessageFrame = createMessageFrame("Howdy client");
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
-        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()));
+        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()),
+            eq((int) responseMessageFrame.size()));
     verify(clientDataFrames).data(false, 1, responseMessageFrame);
     pingPong();
     assertThat(serverTransport.getActiveStreams().length).isEqualTo(1);
@@ -975,7 +978,8 @@ public class OkHttpServerTransportTest {
     Buffer responseDataFrame = new Buffer().writeUtf8(errorDescription.substring(0, 1));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(false), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(false), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()),
+        eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(false, 1, responseDataFrame);
 
     clientFrameWriter.windowUpdate(1, 1000);
@@ -984,7 +988,8 @@ public class OkHttpServerTransportTest {
     responseDataFrame = new Buffer().writeUtf8(errorDescription.substring(1));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(true), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(true), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()),
+        eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(true, 1, responseDataFrame);
 
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
@@ -1279,7 +1284,8 @@ public class OkHttpServerTransportTest {
     Buffer responseDataFrame = new Buffer().writeUtf8(errorDescription);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(true), eq(streamId), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(true), eq(streamId), any(BufferedSource.class),
+        eq((int) responseDataFrame.size()), eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(true, streamId, responseDataFrame);
 
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();

@@ -819,7 +819,8 @@ final class OkHttpServerTransport implements ServerTransport,
      * Handle an HTTP2 DATA frame.
      */
     @Override
-    public void data(boolean inFinished, int streamId, BufferedSource in, int length)
+    public void data(boolean inFinished, int streamId, BufferedSource in, int length,
+                     int paddedLength)
         throws IOException {
       frameLogger.logData(
           OkHttpFrameLogger.Direction.INBOUND, streamId, in.getBuffer(), length, inFinished);
@@ -865,7 +866,7 @@ final class OkHttpServerTransport implements ServerTransport,
       }
 
       // connection window update
-      connectionUnacknowledgedBytesRead += length;
+      connectionUnacknowledgedBytesRead += paddedLength;
       if (connectionUnacknowledgedBytesRead
           >= config.flowControlWindow * Utils.DEFAULT_WINDOW_UPDATE_RATIO) {
         synchronized (lock) {
