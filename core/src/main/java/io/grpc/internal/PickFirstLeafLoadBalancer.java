@@ -81,7 +81,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           // The channel state does not get updated when doing name resolving today, so for the moment
           // let LB report CONNECTION and call subchannel.requestConnection() immediately.
           updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannels.get(addressIndex.getCurrentAddress()))));
-          // TODO: this is incorrect?
+          // TODO: this is incorrect? why was a subchannel supplied with a picker before?
           requestConnection();
         } else {
           updateAddresses(servers);
@@ -134,14 +134,15 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             }
           }
 
-          // start connection attempt at first address
           if (addressIndex.seekTo(previousAddress)) {
             // start connection attempt at first address
             if (currentState == CONNECTING || currentState == TRANSIENT_FAILURE) {
               addressIndex.reset();
               requestConnection();
             // TODO: verify desired behavior (ideally, we should restart at first address)
+            // start connection attempt at first address when requested
             } else if (currentState == IDLE) {
+              addressIndex.reset();
               SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
               updateBalancingState(IDLE, picker);
             }
@@ -149,33 +150,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             // start connection attempt at first address
             if (currentState == CONNECTING || currentState == TRANSIENT_FAILURE) {
               requestConnection();
-            // start connection attempt at first address when prompted
+            // start connection attempt at first address when requested
             } else if (currentState == IDLE || currentState == READY) {
               SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
               updateBalancingState(IDLE, picker);
             }
           }
-
-          // previous logic: replaced but this previous logic is more legible
-//          if (currentState == READY && !addressIndex.seekTo(previousAddress)) {
-//            SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
-//            updateBalancingState(IDLE, picker);
-//          } else if (currentState == CONNECTING && !addressIndex.seekTo(previousAddress)) {
-//            requestConnection();
-//          } else if (currentState == CONNECTING && addressIndex.seekTo(previousAddress)) {
-//            addressIndex.reset();
-//            requestConnection();
-//          } else if (currentState == IDLE && !addressIndex.seekTo(previousAddress)) {
-//            addressIndex.reset();
-//            SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
-//            updateBalancingState(IDLE, picker);
-//          } else if (currentState == IDLE && addressIndex.seekTo(previousAddress)) {
-//            SubchannelPicker picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
-//            updateBalancingState(IDLE, picker);
-//          } else if (currentState == TRANSIENT_FAILURE) {
-//            addressIndex.reset();
-//            requestConnection();
-//          }
         }
       });
     }
@@ -198,7 +178,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         // from subchannels. To prevent pickers from returning these obselete subchannels, this logic
         // is included to check if the current list of active subchannels includes the current one.
         if (!subchannels.containsValue(subchannel)) {
-          return; // TODO: test that containsValue() works (should work as equals is overrided)
+          return;
         }
         if (newState == SHUTDOWN) {
           return;
@@ -215,10 +195,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
         // With the new pick first implementation, iterative requests for connections will not be
         // requested once the first pass through is complete. This means that individual subchannels
-        // are responsible for coming out of backoff and requesting a connection.
-        // However, if the first pass through is complete, we report TRANSIENT_FAILURE, and an address
+        // are responsible for coming out of backoff and starting a transport.
+        // However, if the first pass through is complete and we report TRANSIENT_FAILURE but an address
         // update occurs, the iterative logic will still be present for the first pass through for
         // the new address list even though we are in a state of TRANSIENT_FAILURE.
+        // TODO: this logic has to be implemented, we can just keep a bit that tells us to iterate or not
         if (currentState == TRANSIENT_FAILURE) {
           if (newState == CONNECTING || newState == TRANSIENT_FAILURE) {
             // each subchannel is responsible for its own backoff
@@ -233,7 +214,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         SubchannelPicker picker;
         switch (newState) {
           case IDLE:
-            // subchannel was shutdown when ready: connect from beginning when prompted
+            // Subchannel was shutdown when ready: connect from beginning when prompted
             addressIndex.reset();
             picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
             updateBalancingState(IDLE, picker);
@@ -252,15 +233,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           case TRANSIENT_FAILURE:
             // If we are looking at current channel ...
             if (subchannels.get(addressIndex.getCurrentAddress()).equals(subchannel)) {
-              // ... and if it is for the last address, report TRANSIENT_FAILURE.
+              // ... and it is the last address, report TRANSIENT_FAILURE.
               // Sticky TRANSIENT_FAILURE will only allow this to happen once.
               if (addressIndex.isAtEnd()) {
                 addressIndex.reset();
                 helper.refreshNameResolution();
                 picker = new Picker(PickResult.withError(stateInfo.getStatus()));
                 updateBalancingState(TRANSIENT_FAILURE, picker);
-              // If we are not at the last address, increment and try a connection attempt
-              // to the next address.
+              // If we are not at the last address, try a connection attempt to the next address.
               } else {
                 addressIndex.increment();
                 // TODO: remove precondition after testing
@@ -269,7 +249,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
                 picker = new Picker(PickResult.withNoResult());
               }
               // If we are looking at another address that retried after backoff
-              // and entered TRANSIENT_FAILURE, do not do any incrementing logic,
+              // and entered TRANSIENT_FAILURE, we do not do any incrementing logic,
               // as individual subchannels will perform their own backoffs.
             }
             break;
