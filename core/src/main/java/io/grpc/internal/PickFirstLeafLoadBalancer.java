@@ -25,7 +25,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -56,6 +55,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     private final Map<SocketAddress, Subchannel> subchannels = new HashMap<>();
     private Index addressIndex;
     private volatile ConnectivityState currentState = IDLE;
+    private volatile boolean passThrough = true;
 
     PickFirstLeafLoadBalancer(Helper helper) {
         this.helper = checkNotNull(helper, "helper");
