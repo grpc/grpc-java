@@ -56,6 +56,12 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/perfmark/**'
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.internal')
+    }
+}
+
 animalsniffer {
     // Don't check sourceSets.jmh
     sourceSets = [

@@ -16,6 +16,12 @@ tasks.named("compileJava").configure {
     ]
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.services')
+    }
+}
+
 dependencies {
     api project(':grpc-protobuf'),
             project(':grpc-stub'),

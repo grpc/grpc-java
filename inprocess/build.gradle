@@ -7,6 +7,12 @@ plugins {
 
 description = 'gRPC: Inprocess'
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.inprocess')
+    }
+}
+
 dependencies {
     api project(':grpc-core')
 

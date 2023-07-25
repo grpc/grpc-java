@@ -65,6 +65,9 @@ tasks.named("javadoc").configure {
 tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.alts')
+    }
 }
 
 // We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
