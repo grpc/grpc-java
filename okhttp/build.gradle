@@ -8,6 +8,12 @@ plugins {
 
 description = "gRPC: OkHttp"
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.okhttp')
+    }
+}
+
 dependencies {
     api project(':grpc-util')
     implementation libraries.okio,

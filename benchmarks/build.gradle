@@ -18,6 +18,12 @@ configurations {
     alpnagent
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.benchmarks')
+    }
+}
+
 dependencies {
     implementation project(':grpc-core'),
             project(':grpc-netty'),

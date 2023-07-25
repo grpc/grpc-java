@@ -140,6 +140,9 @@ tasks.named("compileJava").configure {
 
 tasks.named("jar").configure {
     archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.xds')
+    }
 }
 
 tasks.named("sourcesJar").configure {

@@ -8,7 +8,6 @@ plugins {
 
 description = "gRPC: Testing Protos"
 
-// override default module name assigned
 tasks.named("jar").configure {
     manifest {
         attributes('Automatic-Module-Name': 'io.grpc.testing.protobuf')

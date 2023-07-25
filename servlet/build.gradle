@@ -29,6 +29,12 @@ sourceSets {
     }
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.servlet')
+    }
+}
+
 dependencies {
     api project(':grpc-api')
     compileOnly 'javax.servlet:javax.servlet-api:4.0.1',

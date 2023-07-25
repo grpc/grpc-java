@@ -9,6 +9,12 @@ plugins {
 
 description = 'gRPC: Protobuf'
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.protobuf')
+    }
+}
+
 dependencies {
     api project(':grpc-api'),
             libraries.jsr305,

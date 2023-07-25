@@ -8,6 +8,12 @@ plugins {
 
 description = 'gRPC: Util'
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.util')
+    }
+}
+
 dependencies {
     api project(':grpc-core')
 

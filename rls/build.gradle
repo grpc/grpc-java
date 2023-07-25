@@ -8,6 +8,12 @@ plugins {
 
 description = "gRPC: RouteLookupService Loadbalancing plugin"
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.rls')
+    }
+}
+
 dependencies {
     implementation project(':grpc-util'),
             project(':grpc-protobuf'),
