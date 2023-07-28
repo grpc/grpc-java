@@ -998,7 +998,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isLessThan(0.0021);
+          .isLessThan(0.002);
     }
   }
 
@@ -1069,7 +1069,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isLessThan(0.0021);
+          .isLessThan(0.002);
     }
   }
 
