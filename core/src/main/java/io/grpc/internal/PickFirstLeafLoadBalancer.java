@@ -106,18 +106,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
       for (EquivalentAddressGroup endpoint : unmodifiableServers) {
         for (SocketAddress addr : endpoint.getAddresses()) {
-          final Subchannel subchannel = helper.createSubchannel(
-              CreateSubchannelArgs.newBuilder()
-              .setAddresses(Lists.newArrayList(new EquivalentAddressGroup(addr)))
-              .build());
-          subchannels.put(addr, subchannel);
-          states.put(subchannel, IDLE);
-          subchannel.start(new SubchannelStateListener() {
-            @Override
-            public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-              processSubchannelState(subchannel, stateInfo);
-            }
-          });
+          createNewSubchannel(addr);
         }
       }
       // The channel state does not get updated when doing name resolving today, so for the moment
@@ -129,7 +118,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     } else {
       final List<EquivalentAddressGroup> newImmutableAddressGroups =
           Collections.unmodifiableList(new ArrayList<>(servers));
-
       Set<SocketAddress> oldAddrs = new HashSet<>(subchannels.keySet());
       Set<SocketAddress> newAddrs = new HashSet<>();
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
@@ -138,18 +126,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         for (SocketAddress addr : endpoint.getAddresses()) {
           newAddrs.add(addr);
           if (!subchannels.containsKey(addr)) {
-            final Subchannel subchannel = helper.createSubchannel(
-                CreateSubchannelArgs.newBuilder()
-                .setAddresses(Lists.newArrayList(new EquivalentAddressGroup(addr)))
-                .build());
-            subchannels.put(addr, subchannel);
-            states.put(subchannel, IDLE);
-            subchannel.start(new SubchannelStateListener() {
-              @Override
-              public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-                processSubchannelState(subchannel, stateInfo);
-              }
-            });
+            createNewSubchannel(addr);
+            iterate = true; // iterate again if there is least one new address
           }
         }
       }
@@ -160,11 +138,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           subchannels.get(oldAddr).shutdown();
           subchannels.remove(oldAddr);
         }
-      }
-
-      // iterate again on address updates
-      if (newAddrs.size() > 0) {
-        iterate = true;
       }
 
       // start connection attempt at first address but stay in transient failure
@@ -235,7 +208,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     // update subchannel state unless it was in transient failure
-    if (!(states.get(subchannel) == TRANSIENT_FAILURE && newState == CONNECTING)) {
+    if (states.get(subchannel) != TRANSIENT_FAILURE || newState != CONNECTING) {
       states.put(subchannel, newState);
     }
 
@@ -335,20 +308,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       subchannels.get(addressIndex.getCurrentAddress()).requestConnection();
     // subchannel has not been created due a ready connection previously shutting it down
     } else if (currSubchannelState == null) {
-      final Subchannel subchannel = helper.createSubchannel(
-          CreateSubchannelArgs.newBuilder()
-          .setAddresses(Lists.newArrayList(
-              new EquivalentAddressGroup(addressIndex.getCurrentAddress())))
-          .build());
-      subchannels.put(addressIndex.getCurrentAddress(), subchannel);
-      states.put(subchannel, IDLE);
-      subchannel.start(new SubchannelStateListener() {
-        @Override
-        public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-          processSubchannelState(subchannel, stateInfo);
-        }
-      });
-      subchannel.requestConnection();
+      createNewSubchannel(addressIndex.getCurrentAddress()).requestConnection();
     // subchannel has already been created and attempted, try the next one
     } else {
       addressIndex.increment();
@@ -365,6 +325,23 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
     return true;
+  }
+
+  private Subchannel createNewSubchannel(SocketAddress addr) {
+    final Subchannel subchannel = helper.createSubchannel(
+        CreateSubchannelArgs.newBuilder()
+        .setAddresses(Lists.newArrayList(
+            new EquivalentAddressGroup(addr)))
+            .build());
+    subchannels.put(addr, subchannel);
+    states.put(subchannel, IDLE);
+    subchannel.start(new SubchannelStateListener() {
+      @Override
+      public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+        processSubchannelState(subchannel, stateInfo);
+      }
+    });
+    return subchannel;
   }
 
   @VisibleForTesting
