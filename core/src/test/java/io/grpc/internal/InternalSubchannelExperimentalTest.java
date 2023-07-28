@@ -713,7 +713,7 @@ public class InternalSubchannelExperimentalTest {
         channelz, CallTracer.getDefaultFactory().create(),
         subchannelTracer,
         logId,
-        new ChannelLoggerImpl(subchannelTracer, fakeClock.getTimeProvider()));
+            new ChannelLoggerImpl(subchannelTracer, fakeClock.getTimeProvider()));
   }
 
   private void assertNoCallbackInvoke() {

@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.Lists;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -99,17 +100,15 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     // first address list
     if (subchannels.size() == 0) {
-      List<EquivalentAddressGroup> unmodifiableServers =
+      final List<EquivalentAddressGroup> unmodifiableServers =
           Collections.unmodifiableList(new ArrayList<>(servers));
       this.addressIndex = new Index(unmodifiableServers);
 
       for (EquivalentAddressGroup endpoint : unmodifiableServers) {
         for (SocketAddress addr : endpoint.getAddresses()) {
-          List<EquivalentAddressGroup> addrs = new ArrayList<>();
-          addrs.add(new EquivalentAddressGroup(addr));
           final Subchannel subchannel = helper.createSubchannel(
               CreateSubchannelArgs.newBuilder()
-              .setAddresses(addrs)
+              .setAddresses(Lists.newArrayList(new EquivalentAddressGroup(addr)))
               .build());
           subchannels.put(addr, subchannel);
           states.put(subchannel, IDLE);
@@ -131,19 +130,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       final List<EquivalentAddressGroup> newImmutableAddressGroups =
           Collections.unmodifiableList(new ArrayList<>(servers));
 
-      SocketAddress previousAddress = addressIndex.getCurrentAddress();
-      addressIndex.updateGroups(newImmutableAddressGroups);
       Set<SocketAddress> oldAddrs = new HashSet<>(subchannels.keySet());
       Set<SocketAddress> newAddrs = new HashSet<>();
+      SocketAddress previousAddress = addressIndex.getCurrentAddress();
+      addressIndex.updateGroups(newImmutableAddressGroups);
       for (EquivalentAddressGroup endpoint : newImmutableAddressGroups) {
         for (SocketAddress addr : endpoint.getAddresses()) {
           newAddrs.add(addr);
           if (!subchannels.containsKey(addr)) {
-            List<EquivalentAddressGroup> addrs = new ArrayList<>();
-            addrs.add(new EquivalentAddressGroup(addr));
             final Subchannel subchannel = helper.createSubchannel(
                 CreateSubchannelArgs.newBuilder()
-                .setAddresses(addrs)
+                .setAddresses(Lists.newArrayList(new EquivalentAddressGroup(addr)))
                 .build());
             subchannels.put(addr, subchannel);
             states.put(subchannel, IDLE);
@@ -338,11 +335,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       subchannels.get(addressIndex.getCurrentAddress()).requestConnection();
     // subchannel has not been created due a ready connection previously shutting it down
     } else if (currSubchannelState == null) {
-      List<EquivalentAddressGroup> addrs = new ArrayList<>();
-      addrs.add(new EquivalentAddressGroup(addressIndex.getCurrentAddress()));
       final Subchannel subchannel = helper.createSubchannel(
           CreateSubchannelArgs.newBuilder()
-          .setAddresses(addrs)
+          .setAddresses(Lists.newArrayList(
+              new EquivalentAddressGroup(addressIndex.getCurrentAddress())))
           .build());
       subchannels.put(addressIndex.getCurrentAddress(), subchannel);
       states.put(subchannel, IDLE);
