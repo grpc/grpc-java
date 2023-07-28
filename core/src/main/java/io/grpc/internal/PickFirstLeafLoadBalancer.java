@@ -362,24 +362,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
-  private Subchannel createNewSubchannel(SocketAddress addr) {
-    List<EquivalentAddressGroup> addrs = new ArrayList<>();
-    addrs.add(new EquivalentAddressGroup(addr));
-    final Subchannel subchannel = helper.createSubchannel(
-        CreateSubchannelArgs.newBuilder()
-        .setAddresses(addrs)
-        .build());
-    subchannels.put(addressIndex.getCurrentAddress(), subchannel);
-    states.put(subchannel, IDLE);
-    subchannel.start(new SubchannelStateListener() {
-      @Override
-      public void onSubchannelState(ConnectivityStateInfo stateInfo) {
-        processSubchannelState(subchannel, stateInfo);
-      }
-    });
-    return subchannel;
-  }
-
   private boolean enterTransientFailure() {
     for (ConnectivityState state : states.values()) {
       if (state != TRANSIENT_FAILURE) {
