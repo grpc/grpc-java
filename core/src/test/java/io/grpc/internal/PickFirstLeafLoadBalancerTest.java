@@ -300,14 +300,15 @@ public class PickFirstLeafLoadBalancerTest {
   public void pickAfterResolvedAndUnchanged() throws Exception {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-    verify(mockSubchannel1).start(any(SubchannelStateListener.class));
+    verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     verify(mockSubchannel1).requestConnection();
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
 
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-    // TODO: this practically achieves nothing, but still happens. Verify that it is okay.
-    verify(mockSubchannel1, times(2)).requestConnection();
+    verify(mockSubchannel1).requestConnection();
     verifyNoMoreInteractions(mockSubchannel1);
 
     verify(mockHelper, times(4)).createSubchannel(createArgsCaptor.capture());
