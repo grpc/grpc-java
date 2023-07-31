@@ -141,7 +141,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       // start connection attempt at first address when requested
       } else if (currentState == IDLE) {
         SubchannelPicker picker =
-            new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
+            new RequestConnectionPicker(this);
         updateBalancingState(IDLE, picker);
       // start connection attempt at first address
       } else if (currentState == CONNECTING
@@ -195,10 +195,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       if (!iterate && (newState == CONNECTING || newState == TRANSIENT_FAILURE)) {
         // each subchannel is responsible for its own backoff
         return;
-      } else if (newState == IDLE) {
-        // coming out of backoff
-        subchannel.requestConnection();
-        return;
       }
     }
 
@@ -212,7 +208,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       case IDLE:
         // Subchannel was shutdown when ready: connect from beginning when prompted
         addressIndex.reset();
-        picker = new RequestConnectionPicker(subchannels.get(addressIndex.getCurrentAddress()));
+        picker = new RequestConnectionPicker(this);
         updateBalancingState(IDLE, picker);
         break;
       case CONNECTING:
@@ -232,7 +228,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         // If we are looking at current channel ...
         if (subchannels.get(addressIndex.getCurrentAddress()).equals(subchannel)) {
           // ... and it is the last address, report TRANSIENT_FAILURE.
-          // Sticky TRANSIENT_FAILURE will only allow this to happen once per address update.
+          // Only happens once per address update.
           addressIndex.increment();
           if (enterTransientFailure()) {
             iterate = false;
@@ -278,10 +274,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     for (Subchannel subchannel : subchannels.values()) {
       if (!subchannel.equals(activeSubchannel)) {
         subchannel.shutdown();
-        states.put(subchannel, null);
       }
     }
+    iterate = true;
     subchannels.clear();
+    states.clear();
+    states.put(activeSubchannel, READY);
     subchannels.put(activeAddr, activeSubchannel);
   }
 
@@ -301,10 +299,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // subchannel has been created but connection hasn't been attempted
     if (currSubchannelState == IDLE) {
       subchannels.get(addressIndex.getCurrentAddress()).requestConnection();
-    // subchannel has not been created due a ready connection previously shutting it down
+    // subchannel must be created due a ready connection previously shutting it down
     } else if (currSubchannelState == null) {
       createNewSubchannel(addressIndex.getCurrentAddress()).requestConnection();
-    // subchannel has already been created and attempted, try the next one
+    // subchannel has already been created and attempted a connection, try the next one
     } else {
       addressIndex.increment();
       if (addressIndex.isValid()) {
@@ -313,6 +311,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
+  /**
+  * Returns true if all other subchannels have already attempted and failed a connection so that
+  * the load balancer can report a state of TRANSIENT_FAILURE and stop serial connection attempts.
+*/
   private boolean enterTransientFailure() {
     for (ConnectivityState state : states.values()) {
       if (state != TRANSIENT_FAILURE) {
@@ -370,11 +372,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    * Picker that requests connection during the first pick, and returns noResult.
    */
   private final class RequestConnectionPicker extends SubchannelPicker {
-    private final Subchannel subchannel;
+    private final PickFirstLeafLoadBalancer pickFirstLeafLoadBalancer;
     private final AtomicBoolean connectionRequested = new AtomicBoolean(false);
 
-    RequestConnectionPicker(Subchannel subchannel) {
-      this.subchannel = checkNotNull(subchannel, "subchannel");
+    RequestConnectionPicker(PickFirstLeafLoadBalancer pickFirstLeafLoadBalancer) {
+      this.pickFirstLeafLoadBalancer =
+          checkNotNull(pickFirstLeafLoadBalancer, "pickFirstLeafLoadBalancer");
     }
 
     @Override
@@ -383,7 +386,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         helper.getSynchronizationContext().execute(new Runnable() {
           @Override
           public void run() {
-            subchannel.requestConnection();
+            pickFirstLeafLoadBalancer.updateBalancingState(CONNECTING,
+                new Picker(PickResult.withNoResult()));
+            pickFirstLeafLoadBalancer.requestConnection();
           }
         });
       }
