@@ -352,6 +352,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * small of a value as necessary.
    *
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.7.0
    */
   public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
@@ -366,6 +368,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This value should be at least multiple times the RTT to allow for lost packets.
    *
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.7.0
    */
   public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
@@ -383,6 +387,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * @throws UnsupportedOperationException if unsupported
    * @see #keepAliveTime(long, TimeUnit)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.7.0
    */
   public T keepAliveWithoutCalls(boolean enable) {
