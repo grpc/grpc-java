@@ -66,23 +66,18 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
-    if (servers == null) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned null address list."));
-      return false;
-    } else if (servers.isEmpty()) {
+    if (servers.isEmpty()) {
       handleNameResolutionError(Status.UNAVAILABLE.withDescription(
           "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
           + ", attrs=" + resolvedAddresses.getAttributes()));
       return false;
-    } else {
-      for (EquivalentAddressGroup eag : servers) {
-        if (eag == null) {
-          handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-              "NameResolver returned address list with null endpoint. addrs="
-              + resolvedAddresses.getAddresses() + ", attrs=" + resolvedAddresses.getAttributes()));
-          return false;
-        }
+    }
+    for (EquivalentAddressGroup eag : servers) {
+      if (eag == null) {
+        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+            "NameResolver returned address list with null endpoint. addrs="
+            + resolvedAddresses.getAddresses() + ", attrs=" + resolvedAddresses.getAttributes()));
+        return false;
       }
     }
     // We can optionally be configured to shuffle the address list. This can help better distribute
@@ -442,10 +437,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     public List<EquivalentAddressGroup> getGroups() {
       return addressGroups;
-    }
-
-    public int getGroupIndex() {
-      return groupIndex;
     }
 
     /**
