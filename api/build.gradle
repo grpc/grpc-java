@@ -21,6 +21,11 @@ compileContextJava {
     targetCompatibility = 1.7
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc')
+    }
+}
 
 dependencies {
     compileOnly sourceSets.context.output

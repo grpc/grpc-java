@@ -66,7 +66,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
      $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-5. Continue with Google-internal steps at go/grpc/java/releasing, but stop
+5. Continue with Google-internal steps at go/grpc-java/releasing, but stop
    before `Auto releasing using kokoro`.
 6. Create a milestone for the next release.
 7. Move items out of the release milestone that didn't make the cut. Issues that
@@ -91,7 +91,8 @@ Tagging the Release
    either be deferred or resolved and the fix backported. Verify there are no
    [TODO:release blocker][] nor [TODO:backport][] issues (open or closed), or
    that they are tracking an issue for a different branch.
-2. Ensure that Google-internal steps completed at go/grpc/java/releasing#before-tagging-a-release.
+2. Ensure that the Google-internal steps  
+   at go/grpc-java/releasing#before-tagging-a-release are completed.
 3. For vMajor.Minor.x branch, change `README.md` to refer to the next release
    version. _Also_ update the version numbers for protoc if the protobuf library
    version was updated since the last release.
@@ -142,7 +143,7 @@ Tagging the Release
 7. Close the release milestone.
 
 8. Trigger build as described in "Auto releasing using kokoro" at
-   go/grpc/java/releasing.
+   go/grpc-java/releasing.
 
     It runs three jobs on Kokoro, one on each platform. See their scripts:
     `linux_artifacts.sh`, `windows.bat`, and `macos.sh`. The mvn-artifacts/
@@ -175,7 +176,7 @@ Tagging the Release
     # Commit the changes
     git commit --all -m "Add grpc-java $MAJOR.$MINOR.$PATCH to client_matrix.py"
 
-    # Create a PR and run ad-hoc test against your PR
+    # Create a PR with the `release notes: no` label and run ad-hoc test against your PR
     ```
 [gcr-image]: https://github.com/grpc/grpc/blob/master/tools/interop_matrix/README.md#step-by-step-instructions-for-adding-a-gcr-image-for-a-new-release-for-compatibility-test
 

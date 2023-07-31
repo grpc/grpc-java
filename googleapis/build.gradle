@@ -7,6 +7,12 @@ plugins {
 
 description = 'gRPC: googleapis'
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.googleapis')
+    }
+}
+
 dependencies {
     api project(':grpc-api')
     implementation project(path: ':grpc-alts', configuration: 'shadow'),

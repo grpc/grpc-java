@@ -69,17 +69,23 @@ tasks.withType(Checkstyle) {
     enabled = false
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.servlet.jakarta')
+    }
+}
+
 dependencies {
     api project(':grpc-api')
     compileOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0',
             libraries.javax.annotation
 
-    implementation project(':grpc-core'),
+    implementation project(':grpc-util'),
             libraries.guava
 
     itImplementation project(':grpc-servlet-jakarta'),
             project(':grpc-netty'),
-            project(':grpc-core').sourceSets.test.runtimeClasspath,
+            testFixtures(project(':grpc-core')),
             libraries.junit
     itImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency

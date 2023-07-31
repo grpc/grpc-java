@@ -350,7 +350,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @VisibleForTesting
   static final class StaticStrideScheduler {
     private final short[] scaledWeights;
-    private final int sizeDivisor;
     private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 0xFFFF;
 
@@ -373,7 +372,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (numWeightedChannels > 0) {
         meanWeight = (short) Math.round(scalingFactor * sumWeight / numWeightedChannels);
       } else {
-        meanWeight = 1;
+        meanWeight = (short) Math.round(scalingFactor);
       }
 
       // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
@@ -387,7 +386,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
 
       this.scaledWeights = scaledWeights;
-      this.sizeDivisor = numChannels;
       this.sequence = new AtomicInteger(random.nextInt());
 
     }
@@ -433,15 +431,18 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      * an offset that varies per backend index is also included to the calculation.
      */
     int pick() {
+      int i = 0;
       while (true) {
+        i++;
         long sequence = this.nextSequence();
-        int backendIndex = (int) (sequence % this.sizeDivisor);
-        long generation = sequence / this.sizeDivisor;
-        int weight = Short.toUnsignedInt(this.scaledWeights[backendIndex]);
+        int backendIndex = (int) (sequence % scaledWeights.length);
+        long generation = sequence / scaledWeights.length;
+        int weight = Short.toUnsignedInt(scaledWeights[backendIndex]);
         long offset = (long) K_MAX_WEIGHT / 2 * backendIndex;
         if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) {
           continue;
         }
+        assert i <= scaledWeights.length : "scheduler has more than one pass through";
         return backendIndex;
       }
     }

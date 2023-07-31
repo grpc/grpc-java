@@ -12,7 +12,7 @@ java_library(
         "//api",
         "//core",
         "//core:internal",
-        "//core:util",
+        "//util",
         "//stub",
         "@com_google_auto_value_auto_value_annotations//jar",
         "@com_google_code_findbugs_jsr305//jar",

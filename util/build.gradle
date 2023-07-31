@@ -1,0 +1,39 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC: Util'
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.util')
+    }
+}
+
+dependencies {
+    api project(':grpc-core')
+
+    implementation libraries.animalsniffer.annotations,
+            libraries.guava
+    testImplementation testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-core')),
+            project(':grpc-testing')
+    testImplementation libraries.guava.testlib
+
+    jmh project(':grpc-testing')
+
+    signature libraries.signature.java
+    signature libraries.signature.android
+}
+
+animalsniffer {
+    // Don't check sourceSets.jmh
+    sourceSets = [
+        sourceSets.main,
+        sourceSets.test
+    ]
+}

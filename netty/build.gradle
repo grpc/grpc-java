@@ -13,6 +13,12 @@ configurations {
     alpnagent
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.netty')
+    }
+}
+
 dependencies {
     api project(':grpc-core'),
             libraries.netty.codec.http2

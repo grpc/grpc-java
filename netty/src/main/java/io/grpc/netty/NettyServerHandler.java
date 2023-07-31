@@ -512,6 +512,9 @@ class NettyServerHandler extends AbstractNettyHandler {
     flowControlPing().onDataRead(data.readableBytes(), padding);
     try {
       NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
+      if (stream == null) {
+        return;
+      }
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerHandler.onDataRead")) {
         PerfMark.attachTag(stream.tag());
         stream.inboundDataReceived(data, endOfStream);
@@ -679,12 +682,14 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void closeStreamWhenDone(ChannelPromise promise, int streamId) throws Http2Exception {
     final NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
-    promise.addListener(new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) {
-        stream.complete();
-      }
-    });
+    if (stream != null) {
+      promise.addListener(new ChannelFutureListener() {
+        @Override
+        public void operationComplete(ChannelFuture future) {
+          stream.complete();
+        }
+      });
+    }
   }
 
   /**

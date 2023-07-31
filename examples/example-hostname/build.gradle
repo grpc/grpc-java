@@ -21,8 +21,8 @@ targetCompatibility = 1.8
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.57.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.22.3'
+def grpcVersion = '1.58.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.23.4'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"

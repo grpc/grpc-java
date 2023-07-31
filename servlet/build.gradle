@@ -29,12 +29,18 @@ sourceSets {
     }
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.servlet')
+    }
+}
+
 dependencies {
     api project(':grpc-api')
     compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
             libraries.javax.annotation // java 9, 10 needs it
 
-    implementation project(':grpc-core'),
+    implementation project(':grpc-util'),
             libraries.guava
 
     testImplementation 'javax.servlet:javax.servlet-api:4.0.1',
@@ -42,7 +48,7 @@ dependencies {
 
     itImplementation project(':grpc-servlet'),
             project(':grpc-netty'),
-            project(':grpc-core').sourceSets.test.runtimeClasspath,
+            testFixtures(project(':grpc-core')),
             libraries.junit
     itImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency
@@ -56,8 +62,10 @@ dependencies {
 
     jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
             "org.eclipse.jetty.http2:http2-server:${jettyVersion}",
-            "org.eclipse.jetty:jetty-client:${jettyVersion}"
-            project(':grpc-testing')
+            "org.eclipse.jetty:jetty-client:${jettyVersion}",
+            project(':grpc-testing'),
+            libraries.truth,
+            libraries.protobuf.java
 }
 
 test {

@@ -330,11 +330,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 10000.0 - subchannel1PickRatio))
-        .isAtMost(0.001);
+        .isAtMost(0.0001);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 10000.0 - subchannel2PickRatio ))
-        .isAtMost(0.001);
+        .isAtMost(0.0001);
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 10000.0 - subchannel3PickRatio ))
-        .isAtMost(0.001);
+        .isAtMost(0.0001);
   }
 
   @Test
@@ -520,8 +520,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(2);
     // within blackout period, fallback to simple round robin
-    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5)).isAtMost(0.001);
-    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5)).isAtMost(0.001);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5)).isLessThan(0.002);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5)).isLessThan(0.002);
 
     assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
     pickCount = new HashMap<>();
@@ -532,9 +532,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(pickCount.size()).isEqualTo(2);
     // after blackout period
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
   }
 
   @Test
@@ -632,9 +632,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(2);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
 
     // weight expired, fallback to simple round robin
     assertThat(fakeClock.forwardTime(300, TimeUnit.SECONDS)).isEqualTo(1);
@@ -645,9 +645,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(2);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
   }
 
   @Test
@@ -751,12 +751,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 4.0 / 9))
-            .isAtMost(0.002);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 2.0 / 9))
-            .isAtMost(0.002);
+            .isLessThan(0.002);
     // subchannel3's weight is average of subchannel1 and subchannel2
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 1000.0 - 3.0 / 9))
-            .isAtMost(0.002);
+            .isLessThan(0.002);
   }
 
   @Test
@@ -817,9 +817,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(pickCount.size()).isEqualTo(2);
     // after blackout period
     assertThat(Math.abs(pickCount.get(weightedSubchannel1).get() / 2000.0 - 2.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2).get() / 2000.0 - 1.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
   }
 
   @Test(expected = NullPointerException.class)
@@ -943,11 +943,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       int result = sss.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+      pickCount.merge(result, 1, (o, v) -> o + v);
     }
     for (int i = 0; i < 3; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.01);
+          .isLessThan(0.002);
     }
   }
 
@@ -964,7 +964,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 3; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.01);
+          .isLessThan(0.002);
     }
   }
 
@@ -981,7 +981,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 2; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.01);
+          .isLessThan(0.002);
     }
   }
 
@@ -998,7 +998,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.0011);
+          .isLessThan(0.002);
     }
   }
 
@@ -1015,7 +1015,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 8; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.01);
+          .isAtMost(0.004);
     }
   }
 
@@ -1052,7 +1052,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.001);
+          .isLessThan(0.002);
     }
   }
   
@@ -1069,7 +1069,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.0011);
+          .isLessThan(0.002);
     }
   }
 

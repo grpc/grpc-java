@@ -9,6 +9,12 @@ plugins {
 
 description = "gRPC: GRPCLB LoadBalancer plugin"
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.grpclb')
+    }
+}
+
 dependencies {
     implementation project(':grpc-core'),
             project(':grpc-protobuf'),
@@ -19,6 +25,7 @@ dependencies {
     runtimeOnly libraries.errorprone.annotations
     compileOnly libraries.javax.annotation
     testImplementation libraries.truth,
+            project(':grpc-inprocess'),
             testFixtures(project(':grpc-core'))
 
     signature libraries.signature.java

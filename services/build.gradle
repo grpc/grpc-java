@@ -16,16 +16,22 @@ tasks.named("compileJava").configure {
     ]
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.services')
+    }
+}
+
 dependencies {
     api project(':grpc-protobuf'),
             project(':grpc-stub'),
-            project(':grpc-core')
+            project(':grpc-util')
     implementation libraries.protobuf.java.util,
             libraries.guava.jre // JRE required by protobuf-java-util
 
     runtimeOnly libraries.errorprone.annotations,
-            libraries.j2objc.annotations // Explicit dependency to keep in step with version used by guava
-
+            libraries.j2objc.annotations, // Explicit dependency to keep in step with version used by guava
+            libraries.gson  // to fix checkUpperBoundDeps error here
     compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),
             libraries.netty.transport.epoll, // for DomainSocketAddress

@@ -2,18 +2,28 @@
 # Compatibility problem with internal version getting onto 1.5.3.
 # https://github.com/grpc/grpc-java/pull/9118
 googleauth = "1.4.0"
-guava = "32.0.1-android"
-netty = '4.1.94.Final'
+# Update notes / 2023-07-19 sergiitk:
+#    Couldn't update to 32.1.1 because Guava 32.1.0 broke gradle metadata:
+#    https://github.com/google/guava/releases/tag/v32.1.0
+#    32.1.1 partially fixed this, but our build still breaks with:
+#    Could not resolve com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava.
+#
+# TODO(any release manager): attempt removing runtimeOnly dependencies when guava upgraded:
+# - okhttp: errorprone.annotations
+#
+# Allowed to be different from guava-jre.
+guava = '32.0.1-android'
+netty = '4.1.93.Final'
 # Keep the following references of tcnative version in sync whenever it's updated:
 #   SECURITY.md
 nettytcnative = '2.0.61.Final'
 opencensus = "0.31.1"
-protobuf = "3.22.3"
+protobuf = "3.23.4"
 
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"
 androidx-annotation = "androidx.annotation:annotation:1.6.0"
-androidx-core = "androidx.core:core:1.10.0"
+androidx-core = "androidx.core:core:1.10.1"
 androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.6.1"
 androidx-lifecycle-service = "androidx.lifecycle:lifecycle-service:2.6.1"
 androidx-test-core = "androidx.test:core:1.5.0"
@@ -21,24 +31,26 @@ androidx-test-ext-junit = "androidx.test.ext:junit:1.1.5"
 androidx-test-rules = "androidx.test:rules:1.5.0"
 animalsniffer = "org.codehaus.mojo:animal-sniffer:1.23"
 animalsniffer-annotations = "org.codehaus.mojo:animal-sniffer-annotations:1.23"
-auto-value = "com.google.auto.value:auto-value:1.10.1"
-auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.10.1"
-checker-qual = "org.checkerframework:checker-qual:3.33.0"
-checkstyle = "com.puppycrawl.tools:checkstyle:8.28"
+auto-value = "com.google.auto.value:auto-value:1.10.2"
+auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.10.2"
+checkstyle = "com.puppycrawl.tools:checkstyle:10.12.1"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 cronet-api = "org.chromium.net:cronet-api:108.5359.79"
 cronet-embedded = "org.chromium.net:cronet-embedded:108.5359.79"
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.18.0"
-errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"
-errorprone-core = "com.google.errorprone:error_prone_core:2.18.0"
-google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.17.0"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.20.0"
+errorprone-core = "com.google.errorprone:error_prone_core:2.20.0"
+google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.22.0"
 google-auth-credentials = { module = "com.google.auth:google-auth-library-credentials", version.ref = "googleauth" }
 google-auth-oauth2Http = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleauth" }
+# Release notes: https://cloud.google.com/logging/docs/release-notes
+google-cloud-logging = "com.google.cloud:google-cloud-logging:3.15.5"
 gson = "com.google.code.gson:gson:2.10.1"
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
 guava-testlib = { module = "com.google.guava:guava-testlib", version.ref = "guava" }
+# JRE version is needed for projects where its a transitive dependency, f.e. gcp-observability.
+# May be different from the -android version.
 guava-jre = "com.google.guava:guava:32.0.1-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.1.12"
 javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
@@ -46,8 +58,11 @@ j2objc-annotations = " com.google.j2objc:j2objc-annotations:2.8"
 jetty-alpn-agent = "org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.10"
 jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
 junit = "junit:junit:4.13.2"
-mockito-android = "org.mockito:mockito-android:3.12.4"
-mockito-core = "org.mockito:mockito-core:3.12.4"
+# Update notes / 2023-07-19 sergiitk:
+#    Couldn't update to 5.4.0, updated to the last in 4.x line. Version 5.x breaks some tests.
+#    Error log: https://github.com/grpc/grpc-java/pull/10359#issuecomment-1632834435
+mockito-android = "org.mockito:mockito-android:4.11.0"
+mockito-core = "org.mockito:mockito-core:4.11.0"
 netty-codec-http2 = { module = "io.netty:netty-codec-http2", version.ref = "netty" }
 netty-handler-proxy = { module = "io.netty:netty-handler-proxy", version.ref = "netty" }
 netty-tcnative = { module = "io.netty:netty-tcnative-boringssl-static", version.ref = "nettytcnative" }
@@ -55,7 +70,7 @@ netty-tcnative-classes = { module = "io.netty:netty-tcnative-classes", version.r
 netty-transport-epoll = { module = "io.netty:netty-transport-native-epoll", version.ref = "netty" }
 netty-unix-common = { module = "io.netty:netty-transport-native-unix-common", version.ref = "netty" }
 okhttp = "com.squareup.okhttp:okhttp:2.7.5"
-okio = "com.squareup.okio:okio:1.17.5"
+okio = "com.squareup.okio:okio:2.10.0"
 opencensus-api = { module = "io.opencensus:opencensus-api", version.ref = "opencensus" }
 opencensus-contrib-grpc-metrics = { module = "io.opencensus:opencensus-contrib-grpc-metrics", version.ref = "opencensus" }
 opencensus-exporter-stats-stackdriver = { module = "io.opencensus:opencensus-exporter-stats-stackdriver", version.ref = "opencensus" }
@@ -68,10 +83,13 @@ protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", versio
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 re2j = "com.google.re2j:re2j:1.7"
-# Compilation failed with 4.10.2 due to native graphics, or something. We don't
-# use it, but it seemed the compiler felt it needed the definition
-robolectric = "org.robolectric:robolectric:4.9.2"
+robolectric = "org.robolectric:robolectric:4.10.3"
 signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
-# 1.1+ requires Java 8, but we still use Java 7 with grpc-context
-truth = "com.google.truth:truth:1.0.1"
+truth = "com.google.truth:truth:1.1.5"
+
+# Do not update: Pinned to the last version supporting Java 8.
+# See https://checkstyle.sourceforge.io/releasenotes.html#Release_10.1
+checkstylejava8 = "com.puppycrawl.tools:checkstyle:9.3"
+# See https://github.com/google/error-prone/releases/tag/v2.11.0
+errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"

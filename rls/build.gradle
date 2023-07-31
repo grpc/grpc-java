@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
     id "com.google.protobuf"
     id "jacoco"
@@ -8,8 +8,14 @@ plugins {
 
 description = "gRPC: RouteLookupService Loadbalancing plugin"
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.rls')
+    }
+}
+
 dependencies {
-    implementation project(':grpc-core'),
+    implementation project(':grpc-util'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.auto.value.annotations,
