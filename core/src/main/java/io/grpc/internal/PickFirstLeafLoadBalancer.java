@@ -265,6 +265,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   public void shutdown() {
     for (Subchannel subchannel : subchannels.values()) {
       subchannel.shutdown();
+      states.put(subchannel, null);
     }
     subchannels.clear();
   }
@@ -282,7 +283,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
     subchannels.clear();
     subchannels.put(activeAddr, activeSubchannel);
-
   }
 
   /**
