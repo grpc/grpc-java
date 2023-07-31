@@ -431,9 +431,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      * an offset that varies per backend index is also included to the calculation.
      */
     int pick() {
-      int i = 0;
       while (true) {
-        i++;
         long sequence = this.nextSequence();
         int backendIndex = (int) (sequence % scaledWeights.length);
         long generation = sequence / scaledWeights.length;
@@ -442,7 +440,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) {
           continue;
         }
-        assert i <= scaledWeights.length : "scheduler has more than one pass through";
         return backendIndex;
       }
     }
