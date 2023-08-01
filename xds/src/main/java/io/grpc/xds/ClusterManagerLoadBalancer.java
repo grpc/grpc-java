@@ -16,30 +16,18 @@
 
 package io.grpc.xds;
 
-import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
-import static io.grpc.ConnectivityState.READY;
-import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.base.MoreObjects;
-import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
-import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 
 /**
  * The top-level load balancing policy.
