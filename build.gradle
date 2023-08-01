@@ -181,9 +181,6 @@ subprojects {
     }
 
     plugins.withId("java") {
-        sourceCompatibility = 1.8
-        targetCompatibility = 1.8
-
         dependencies {
             testImplementation libraries.junit,
                     libraries.mockito.core,
@@ -239,6 +236,14 @@ subprojects {
             }
         }
 
+        tasks.withType(JavaCompile).configureEach {
+            if (JavaVersion.current().isJava9Compatible()) {
+                options.release = 8
+            } else {
+                sourceCompatibility = 1.8
+                targetCompatibility = 1.8
+            }
+        }
         tasks.named("compileJava").configure {
             // This project targets Java 7 (no time.Duration class)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
@@ -279,10 +284,6 @@ subprojects {
     plugins.withId("me.champeau.jmh") {
         // invoke jmh on a single benchmark class like so:
         //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
-	tasks.named("compileJmhJava").configure {
-	    sourceCompatibility = 1.8
-	    targetCompatibility = 1.8
-	}
         tasks.named("jmh").configure {
             warmupIterations = 10
             iterations = 10
