@@ -186,6 +186,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       if (newState == CONNECTING) {
         // each subchannel is responsible for its own backoff
         return;
+      } else if (newState == IDLE) {
+        requestConnection();
       }
     }
 
