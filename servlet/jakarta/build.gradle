@@ -4,8 +4,6 @@ plugins {
 }
 
 description = "gRPC: Jakarta Servlet"
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
 
 // Set up classpaths and source directories for different servlet tests
 configurations {

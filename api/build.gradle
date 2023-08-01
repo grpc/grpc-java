@@ -16,9 +16,13 @@ sourceSets {
     }
 }
 
-compileContextJava {
-    sourceCompatibility = 1.7
-    targetCompatibility = 1.7
+tasks.named("compileContextJava").configure {
+    if (JavaVersion.current().isJava9Compatible()) {
+        options.release = 7
+    } else {
+        sourceCompatibility = 1.7
+        targetCompatibility = 1.7
+    }
 }
 
 tasks.named("jar").configure {
