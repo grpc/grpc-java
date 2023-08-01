@@ -90,9 +90,6 @@ appengine {
 group = 'io.grpc'   // Generated output GroupId
 version = '1.0-SNAPSHOT'          // Version in generated output
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
-
 /** Returns the service name. */
 String getGaeProject() {
     def stream = new ByteArrayOutputStream()
