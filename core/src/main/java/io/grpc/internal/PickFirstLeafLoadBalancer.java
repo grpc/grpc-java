@@ -194,7 +194,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       states.put(subchannel, newState);
     }
 
-    SubchannelPicker picker;
     switch (newState) {
       case IDLE:
         // Shutdown when ready: connect from beginning when prompted
@@ -220,12 +219,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           if (!addressIndex.isValid()) {
             addressIndex.reset();
             helper.refreshNameResolution();
-            updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(stateInfo.getStatus())));
+            updateBalancingState(TRANSIENT_FAILURE,
+                new Picker(PickResult.withError(stateInfo.getStatus())));
             // If we are not at the last address, try a connection attempt to the next address.
           } else {
             requestConnection();
             if (!addressIndex.isValid() && currentState != TRANSIENT_FAILURE) {
-              updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(stateInfo.getStatus())));
+              updateBalancingState(TRANSIENT_FAILURE,
+                  new Picker(PickResult.withError(stateInfo.getStatus())));
             }
           }
           // If we are looking at another address that retried after backoff
