@@ -39,24 +39,6 @@ public final class MetadataUtils {
   private MetadataUtils() {}
 
   /**
-   * Attaches a set of request headers to a stub.
-   *
-   * @param stub to bind the headers to.
-   * @param extraHeaders the headers to be passed by each call on the returned stub.
-   * @return an implementation of the stub with {@code extraHeaders} bound to each call.
-   * @deprecated Use {@code stub.withInterceptors(newAttachHeadersInterceptor(...))} instead.
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
-  @Deprecated
-  @InlineMe(
-      replacement =
-          "stub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(extraHeaders))",
-      imports = "io.grpc.stub.MetadataUtils")
-  public static <T extends AbstractStub<T>> T attachHeaders(T stub, Metadata extraHeaders) {
-    return stub.withInterceptors(newAttachHeadersInterceptor(extraHeaders));
-  }
-
-  /**
    * Returns a client interceptor that attaches a set of headers to requests.
    *
    * @param extraHeaders the headers to be passed by each call that is processed by the returned
@@ -95,31 +77,6 @@ public final class MetadataUtils {
         super.start(responseListener, headers);
       }
     }
-  }
-
-  /**
-   * Captures the last received metadata for a stub. Useful for testing
-   *
-   * @param stub to capture for
-   * @param headersCapture to record the last received headers
-   * @param trailersCapture to record the last received trailers
-   * @return an implementation of the stub that allows to access the last received call's
-   *         headers and trailers via {@code headersCapture} and {@code trailersCapture}.
-   * @deprecated Use {@code stub.withInterceptors(newCaptureMetadataInterceptor())} instead.
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
-  @Deprecated
-  @InlineMe(
-      replacement =
-          "stub.withInterceptors(MetadataUtils.newCaptureMetadataInterceptor(headersCapture,"
-              + " trailersCapture))",
-      imports = "io.grpc.stub.MetadataUtils")
-  public static <T extends AbstractStub<T>> T captureMetadata(
-      T stub,
-      AtomicReference<Metadata> headersCapture,
-      AtomicReference<Metadata> trailersCapture) {
-    return stub.withInterceptors(
-        newCaptureMetadataInterceptor(headersCapture, trailersCapture));
   }
 
   /**
