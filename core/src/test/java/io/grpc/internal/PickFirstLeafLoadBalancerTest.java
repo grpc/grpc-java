@@ -1371,6 +1371,73 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void updateAddresses_intersecting_enter_transient_failure() {
+    // after an address update occurs, verify that the client properly tries all
+    // addresses and only then enters transient failure.
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
+        mockSubchannel3, mockSubchannel4);
+
+    // Creating first set of endpoints/addresses
+    SocketAddress socketAddr1 = mock(SocketAddress.class);
+    SocketAddress socketAddr2 = mock(SocketAddress.class);
+    SocketAddress socketAddr3 = mock(SocketAddress.class);
+    List<EquivalentAddressGroup> oldServers =
+        Lists.newArrayList(new EquivalentAddressGroup(socketAddr1),
+            new EquivalentAddressGroup(socketAddr2));
+
+    // Accept Addresses and verify proper connection flow
+    assertEquals(IDLE, loadBalancer.getCurrentState());
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+    inOrder.verify(mockSubchannel1).requestConnection();
+
+    // callback from internal subchannel
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+
+    // Creating second set of endpoints/addresses
+    List<EquivalentAddressGroup> newServers =
+        Lists.newArrayList(new EquivalentAddressGroup(socketAddr1),
+            new EquivalentAddressGroup(socketAddr3));
+
+    // Accept new resolved addresses to update
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // We create new channels and remove old ones, keeping intersecting ones
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
+    inOrder.verify(mockSubchannel2).shutdown();
+
+    // If obselete subchannel becomes ready, the state should not be affected
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // we actually don't want to request a connection for subchannel 3 until subchannel 1 fails
+    inOrder.verifyNoMoreInteractions();
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // First connection attempt is unsuccessful
+    Status error = Status.UNAVAILABLE.withDescription("Simulated connection error");
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // Subchannel 3 attempt starts but fails
+    inOrder.verify(mockSubchannel3).requestConnection();
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+    stateListener3.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getCurrentState());
+  }
+
+  @Test
   public void updateAddresses_overlapping_on_others_idle() {
     // "Overlapping on others" refers to when we perform an address update where the intersecting
     // addresses are not the current addresses we are attempting a connection to.
