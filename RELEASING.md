@@ -174,7 +174,7 @@ Tagging the Release
         tools/interop_matrix/testcases/java__master
 
     # Commit the changes
-    git commit --all -m "Add grpc-java $MAJOR.$MINOR.$PATCH to client_matrix.py"
+    git commit --all -m "[interop] Add grpc-java $MAJOR.$MINOR.$PATCH to client_matrix.py"
 
     # Create a PR with the `release notes: no` label and run ad-hoc test against your PR
     ```
