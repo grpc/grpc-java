@@ -283,8 +283,21 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (subchannels.size() == 0) {
       return;
     }
-    Subchannel subchannel = subchannels.computeIfAbsent(addressIndex.getCurrentAddress(),
-        k -> createNewSubchannel(addressIndex.getCurrentAddress()));
+
+    while (addressIndex.isValid()) {
+      Subchannel subchannel = subchannels.computeIfAbsent(addressIndex.getCurrentAddress(),
+          k -> createNewSubchannel(addressIndex.getCurrentAddress()));
+      ConnectivityState subchannelState = states.get(subchannel);
+      if (subchannelState == IDLE) {
+        subchannel.requestConnection();
+        return;
+      }
+    }
+
+
+    Subchannel subchannel = subchannels.containsKey(addressIndex.getCurrentAddress())
+        ? subchannels.get(addressIndex.getCurrentAddress())
+        : createNewSubchannel(addressIndex.getCurrentAddress());
 
     ConnectivityState subchannelState = states.get(subchannel);
     if (subchannelState == IDLE) {
