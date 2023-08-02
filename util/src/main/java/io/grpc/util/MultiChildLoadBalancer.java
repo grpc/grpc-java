@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,10 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The top-level load balancing policy.
+ * A base load balancing policy for those policies which has multiple children such as
+ * ClusterManager or the petiole policies.
+ *
+ * @since 1.58
  */
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
@@ -60,9 +63,13 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     logger.log(Level.FINE, "Created");
   }
 
-  protected abstract SubchannelPicker getInitialPicker();
+  protected SubchannelPicker getInitialPicker() {
+    return EMPTY_PICKER;
+  }
 
-  protected abstract SubchannelPicker getErrorPicker(Status error);
+  protected SubchannelPicker getErrorPicker(Status error)  {
+    return new ErrorPicker(error);
+  }
 
   protected abstract Map<Object, PolicySelection> getPolicySelectionMap(
       ResolvedAddresses resolvedAddresses);

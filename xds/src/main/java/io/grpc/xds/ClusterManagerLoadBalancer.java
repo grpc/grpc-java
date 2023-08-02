@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
-
 import com.google.common.base.MoreObjects;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
@@ -25,7 +23,6 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,7 +42,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   protected SubchannelPicker getInitialPicker() {
-    return BUFFER_PICKER;
+    return EMPTY_PICKER;
   }
 
   @Override
