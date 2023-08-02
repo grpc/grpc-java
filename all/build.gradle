@@ -52,11 +52,10 @@ tasks.named("javadoc").configure {
 }
 
 tasks.named("jacocoTestReport").configure {
-    dependsOn(subprojects.jacocoTestReport.dependsOn)
-    dependsOn(project(':grpc-interop-testing').jacocoTestReport.dependsOn)
+    mustRunAfter(subprojects.jacocoTestReport.mustRunAfter)
+    mustRunAfter(project(':grpc-interop-testing').jacocoTestReport.mustRunAfter)
     executionData.from files(subprojects.jacocoTestReport.executionData)
             .plus(project(':grpc-interop-testing').jacocoTestReport.executionData)
-            .filter { f -> f.exists() }
     reports {
         xml.required = true
         html.required = true
