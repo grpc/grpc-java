@@ -1,9 +1,13 @@
 /*
 <<<<<<< HEAD
+<<<<<<< HEAD
  * Copyright 2023 The gRPC Authors
 =======
  * Copyright 2020 The gRPC Authors
 >>>>>>> 9b75daf57 (Create a shared LB base class for LBs with multiple children and change ClusgterManagerLoadBalancer to use it.)
+=======
+ * Copyright 2023 The gRPC Authors
+>>>>>>> 13d783bf9 (Response to code review)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
