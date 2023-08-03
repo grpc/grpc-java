@@ -50,13 +50,7 @@ public class DeterministicSubsettingLoadBalancerProviderTest {
 
     ConfigOrError configOrError;
     for (String config : configs) {
-      configOrError = null;
-      try {
-        configOrError = provider.parseLoadBalancingPolicyConfig((Map<String, ?>) JsonParser.parse(config));
-      } catch (IOException e) {
-        // if JsonParser.parse fails
-        throw new IOException(e);
-      }
+      configOrError = provider.parseLoadBalancingPolicyConfig(parseJsonObject(config));
       assertThat(configOrError.getError()).isNotNull();
     }
   }
@@ -67,13 +61,7 @@ public class DeterministicSubsettingLoadBalancerProviderTest {
       "{ \"clientIndex\" : 0, "
         + "\"childPolicy\" : [{\"round_robin\" : {}}], "
         + "\"sortAddresses\" : false }";
-    ConfigOrError configOrError = null;
-    try {
-      configOrError = provider.parseLoadBalancingPolicyConfig((Map<String, ?>) JsonParser.parse(lbConfig));
-    } catch (IOException e) {
-      // if JsonParser.parse fails
-      throw new IOException(e);
-    }
+    ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
     System.out.println(configOrError);
     assertThat(configOrError.getConfig()).isNotNull();
     DeterministicSubsettingLoadBalancerConfig config = (DeterministicSubsettingLoadBalancerConfig) configOrError.getConfig();
@@ -83,5 +71,10 @@ public class DeterministicSubsettingLoadBalancerProviderTest {
     assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
 
     assertThat(config.subsetSize).isEqualTo(10);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, ?> parseJsonObject(String json) throws IOException {
+    return (Map<String, ?>) JsonParser.parse(json);
   }
 }
