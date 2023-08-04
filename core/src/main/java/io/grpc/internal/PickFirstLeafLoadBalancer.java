@@ -32,7 +32,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
-import io.grpc.Status;import org.omg.CORBA.TRANSIENT;
+import io.grpc.Status;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
