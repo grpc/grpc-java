@@ -212,7 +212,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         addressIndex.reset();
         break;
       case TRANSIENT_FAILURE:
-         // If we are looking at current channel, request a connection if possible
+        // If we are looking at current channel, request a connection if possible
         if (addressIndex.isValid() && subchannels.get(addressIndex.getCurrentAddress()) != null
             && subchannels.get(addressIndex.getCurrentAddress()).equals(subchannel)) {
           addressIndex.increment();
