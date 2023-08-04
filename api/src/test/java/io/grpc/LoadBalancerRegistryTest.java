@@ -56,7 +56,13 @@ public class LoadBalancerRegistryTest {
         "outlier_detection_experimental");
     assertThat(outlierDetection.getClass().getName()).isEqualTo(
         "io.grpc.util.OutlierDetectionLoadBalancerProvider");
-    assertThat(roundRobin.getPriority()).isEqualTo(5);
+    assertThat(outlierDetection.getPriority()).isEqualTo(5);
+
+    LoadBalancerProvider deterministicSubsetting = defaultRegistry.getProvider(
+      "deterministic_subsetting");
+    assertThat(deterministicSubsetting.getClass().getName()).isEqualTo(
+      "io.grpc.util.DeterministicSubsettingLoadBalancerProvider");
+    assertThat(deterministicSubsetting.getPriority()).isEqualTo(5);
 
     LoadBalancerProvider grpclb = defaultRegistry.getProvider("grpclb");
     assertThat(grpclb).isInstanceOf(GrpclbLoadBalancerProvider.class);
