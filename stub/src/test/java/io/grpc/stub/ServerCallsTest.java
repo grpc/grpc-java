@@ -537,18 +537,19 @@ public class ServerCallsTest {
   public void callWithinTimeout() {
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
-            ServerCalls.asyncUnaryCall(
-                    new ServerCalls.UnaryMethod<Integer, Integer>() {
-                      @Override
-                      public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
-                        responseObserver.onNext(42);
-                        responseObserver.onCompleted();
-                      }
-                    });
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                responseObserver.onNext(42);
+                responseObserver.onCompleted();
+              }
+            });
 
-    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(100, TimeUnit.MILLISECONDS, null);
+    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
+        100, TimeUnit.MILLISECONDS, null);
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
-            .interceptCall(serverCall, new Metadata(), callHandler);
+        .interceptCall(serverCall, new Metadata(), callHandler);
     listener.onMessage(1);
     listener.onHalfClose();
 
@@ -560,23 +561,25 @@ public class ServerCallsTest {
   public void callExceedsTimeout() {
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
-            ServerCalls.asyncUnaryCall(
-                    new ServerCalls.UnaryMethod<Integer, Integer>() {
-                      @Override
-                      public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
-                        try {
-                          Thread.sleep(100);
-                          responseObserver.onNext(42);
-                          responseObserver.onCompleted();
-                        } catch (InterruptedException e) {
-                          Status status = Status.ABORTED.withDescription(e.getMessage());
-                          responseObserver.onError(new StatusRuntimeException(status));
-                        }
-                      }
-                    });
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                try {
+                  Thread.sleep(100);
+                  responseObserver.onNext(42);
+                  responseObserver.onCompleted();
+                } catch (InterruptedException e) {
+                  Status status = Status.ABORTED.withDescription(e.getMessage());
+                  responseObserver.onError(new StatusRuntimeException(status));
+                }
+              }
+            });
 
-    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(1, TimeUnit.MILLISECONDS, null);
-    ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager).interceptCall(serverCall, new Metadata(), callHandler);
+    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
+        1, TimeUnit.MILLISECONDS, null);
+    ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
+        .interceptCall(serverCall, new Metadata(), callHandler);
     listener.onMessage(1);
     listener.onHalfClose();
 
