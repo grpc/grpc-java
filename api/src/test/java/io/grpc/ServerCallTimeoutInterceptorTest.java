@@ -56,19 +56,26 @@ public class ServerCallTimeoutInterceptorTest {
             new ServerCalls.UnaryMethod<Integer, Integer>() {
               @Override
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
-                responseObserver.onNext(req);
-                responseObserver.onCompleted();
+                try {
+                  Thread.sleep(0);
+                  responseObserver.onNext(req);
+                  responseObserver.onCompleted();
+                } catch (InterruptedException e) {
+                  Status status = Status.ABORTED.withDescription(e.getMessage());
+                  responseObserver.onError(new StatusRuntimeException(status));
+                }
               }
             });
     StringBuffer logBuf = new StringBuffer();
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        10, TimeUnit.MILLISECONDS, logBuf::append);
+        100, TimeUnit.MILLISECONDS, logBuf::append);
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
     listener.onMessage(42);
     listener.onHalfClose();
     listener.onComplete();
+    serverTimeoutManager.shutdown();
 
     assertThat(serverCall.responses).isEqualTo(Collections.singletonList(42));
     assertEquals(Status.Code.OK, serverCall.status.getCode());
@@ -84,7 +91,7 @@ public class ServerCallTimeoutInterceptorTest {
               @Override
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
                 try {
-                  Thread.sleep(10);
+                  Thread.sleep(100);
                   responseObserver.onNext(req);
                   responseObserver.onCompleted();
                 } catch (InterruptedException e) {
@@ -102,6 +109,7 @@ public class ServerCallTimeoutInterceptorTest {
     listener.onMessage(42);
     listener.onHalfClose();
     listener.onComplete();
+    serverTimeoutManager.shutdown();
 
     assertThat(serverCall.responses).isEmpty();
     assertEquals(Status.Code.ABORTED, serverCall.status.getCode());
@@ -118,7 +126,7 @@ public class ServerCallTimeoutInterceptorTest {
               @Override
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
                 try {
-                  Thread.sleep(10);
+                  Thread.sleep(1);
                   responseObserver.onNext(req);
                   responseObserver.onCompleted();
                 } catch (InterruptedException e) {
@@ -127,14 +135,14 @@ public class ServerCallTimeoutInterceptorTest {
                 }
               }
             });
-    AtomicBoolean timeoutScheduled = new AtomicBoolean(false);
+    AtomicBoolean isTimeoutScheduled = new AtomicBoolean(false);
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
         0, TimeUnit.MILLISECONDS, null) {
       @Override
       public boolean withTimeout(Runnable invocation) {
         boolean result = super.withTimeout(invocation);
-        timeoutScheduled.set(result);
+        isTimeoutScheduled.set(result);
         return result;
       }
     };
@@ -143,10 +151,11 @@ public class ServerCallTimeoutInterceptorTest {
     listener.onMessage(42);
     listener.onHalfClose();
     listener.onComplete();
+    serverTimeoutManager.shutdown();
 
     assertThat(serverCall.responses).isEqualTo(Collections.singletonList(42));
     assertEquals(Status.Code.OK, serverCall.status.getCode());
-    assertFalse(timeoutScheduled.get());
+    assertFalse(isTimeoutScheduled.get());
   }
 
   @Test
@@ -159,13 +168,13 @@ public class ServerCallTimeoutInterceptorTest {
             return new EchoStreamObserver<>(responseObserver);
           }
         });
-    AtomicBoolean interceptMethodCalled = new AtomicBoolean(false);
+    AtomicBoolean isManagerCalled = new AtomicBoolean(false);
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        10, TimeUnit.MILLISECONDS, null) {
+        100, TimeUnit.MILLISECONDS, null) {
       @Override
       public boolean withTimeout(Runnable invocation) {
-        interceptMethodCalled.set(true);
+        isManagerCalled.set(true);
         return true;
       }
     };
@@ -174,10 +183,11 @@ public class ServerCallTimeoutInterceptorTest {
     listener.onMessage(42);
     listener.onHalfClose();
     listener.onComplete();
+    serverTimeoutManager.shutdown();
 
     assertThat(serverCall.responses).isEqualTo(Collections.singletonList(42));
     assertEquals(Status.Code.OK, serverCall.status.getCode());
-    assertFalse(interceptMethodCalled.get());
+    assertFalse(isManagerCalled.get());
   }
 
   private static class ServerCallRecorder extends ServerCall<Integer, Integer> {
