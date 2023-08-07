@@ -1151,10 +1151,6 @@ public class PickFirstLeafLoadBalancerTest {
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(CONNECTING, loadBalancer.getCurrentState());
 
-    // we actually don't want to request a connection for subchannel 3 until subchannel 1 fails
-    verifyNoMoreInteractions(mockSubchannel3);
-    assertEquals(CONNECTING, loadBalancer.getCurrentState());
-
     // First connection attempt is successful
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getCurrentState());
@@ -1348,10 +1344,6 @@ public class PickFirstLeafLoadBalancerTest {
 
     // If obselete subchannel becomes ready, the state should not be affected
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    assertEquals(CONNECTING, loadBalancer.getCurrentState());
-
-    // we actually don't want to request a connection for subchannel 3 until subchannel 1 fails
-    verifyNoMoreInteractions(mockSubchannel3);
     assertEquals(CONNECTING, loadBalancer.getCurrentState());
 
     // First connection attempt is unsuccessful

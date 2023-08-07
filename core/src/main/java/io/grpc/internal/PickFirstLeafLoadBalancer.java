@@ -281,7 +281,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       ConnectivityState subchannelState = states.get(subchannel);
       if (subchannelState == IDLE) {
         subchannel.requestConnection();
-      } else if (subchannelState != CONNECTING) {
+      } else {
         addressIndex.increment();
         requestConnection();
       }
