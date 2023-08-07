@@ -96,7 +96,7 @@ public class ServerCallTimeoutInterceptorTest {
     StringBuffer logBuf = new StringBuffer();
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        1, TimeUnit.MILLISECONDS, logBuf::append);
+        1, TimeUnit.NANOSECONDS, logBuf::append);
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
     listener.onMessage(42);
