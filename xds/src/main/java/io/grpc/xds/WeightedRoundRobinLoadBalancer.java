@@ -65,7 +65,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final ScheduledExecutorService timeService;
   private ScheduledHandle weightUpdateTimer;
   private final Runnable updateWeightTask;
-  private final Random random;
+  private final AtomicInteger sequence;
   private final long infTime;
   private final Ticker ticker;
 
@@ -81,7 +81,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.updateWeightTask = new UpdateWeightTask();
-    this.random = random;
+    this.sequence = new AtomicInteger(random.nextInt());
     log.log(Level.FINE, "weighted_round_robin LB created");
   }
 
@@ -294,7 +294,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         double newWeight = subchannel.getWeight();
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
-      this.scheduler = new StaticStrideScheduler(newWeights, new AtomicInteger(random.nextInt()));
+      this.scheduler = new StaticStrideScheduler(newWeights, sequence);
     }
 
     @Override
