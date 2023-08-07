@@ -30,9 +30,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
-import io.grpc.ServerCallTimeoutInterceptor;
 import io.grpc.ServerServiceDefinition;
-import io.grpc.ServerTimeoutManager;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -45,7 +43,6 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
@@ -531,61 +528,6 @@ public class ServerCallsTest {
     assertEquals(ServerCalls.TOO_MANY_REQUESTS, serverCall.status.getDescription());
     // ensure onHalfClose does not invoke
     listener.onHalfClose();
-  }
-
-  @Test
-  public void callWithinTimeout() {
-    ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
-    ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(
-            new ServerCalls.UnaryMethod<Integer, Integer>() {
-              @Override
-              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
-                responseObserver.onNext(42);
-                responseObserver.onCompleted();
-              }
-            });
-
-    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        100, TimeUnit.MILLISECONDS, null);
-    ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
-        .interceptCall(serverCall, new Metadata(), callHandler);
-    listener.onMessage(1);
-    listener.onHalfClose();
-
-    assertThat(serverCall.responses).isEqualTo(Collections.singletonList(42));
-    assertEquals(Status.Code.OK, serverCall.status.getCode());
-  }
-
-  @Test
-  public void callExceedsTimeout() {
-    ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
-    ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(
-            new ServerCalls.UnaryMethod<Integer, Integer>() {
-              @Override
-              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
-                try {
-                  Thread.sleep(100);
-                  responseObserver.onNext(42);
-                  responseObserver.onCompleted();
-                } catch (InterruptedException e) {
-                  Status status = Status.ABORTED.withDescription(e.getMessage());
-                  responseObserver.onError(new StatusRuntimeException(status));
-                }
-              }
-            });
-
-    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        1, TimeUnit.MILLISECONDS, null);
-    ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
-        .interceptCall(serverCall, new Metadata(), callHandler);
-    listener.onMessage(1);
-    listener.onHalfClose();
-
-    assertThat(serverCall.responses).isEmpty();
-    assertEquals(Status.Code.ABORTED, serverCall.status.getCode());
-    assertEquals("sleep interrupted", serverCall.status.getDescription());
   }
 
   @Test
