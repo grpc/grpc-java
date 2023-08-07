@@ -46,6 +46,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
@@ -96,6 +97,10 @@ public class OutlierDetectionLoadBalancerTest {
   private Helper mockHelper;
   @Mock
   private SocketAddress mockSocketAddress;
+  @Mock
+  private ClientStreamTracer.Factory mockStreamTracerFactory;
+  @Mock
+  private ClientStreamTracer mockStreamTracer;
 
   @Captor
   private ArgumentCaptor<ConnectivityState> connectivityStateCaptor;
@@ -192,6 +197,11 @@ public class OutlierDetectionLoadBalancerTest {
             return subchannel;
           }
         });
+
+    // when(mockStreamTracerFactory.newClientStreamTracer(isA(StreamInfo.class),
+    //     isA(Metadata.class))).thenReturn(mockStreamTracer);
+    when(mockStreamTracerFactory.newClientStreamTracer(any(),
+        any())).thenReturn(mockStreamTracer);
 
     loadBalancer = new OutlierDetectionLoadBalancer(mockHelper, fakeClock.getTimeProvider());
   }
@@ -353,6 +363,38 @@ public class OutlierDetectionLoadBalancerTest {
     PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate()).isEqualTo(
         readySubchannel);
+  }
+
+  /**
+   * Any ClientStreamTracer.Factory set by the delegate picker should still get used.
+   */
+  @Test
+  public void delegatePickTracerFactoryPreserved() throws Exception {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+
+    // Make one of the subchannels READY.
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(2)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+
+    // Make sure that we can pick the single READY subchannel.
+    SubchannelPicker picker = pickerCaptor.getAllValues().get(1);
+    PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    // Calls to a stream tracer created with the factory in the result should make it to a stream
+    // tracer the underlying LB/picker is using.
+    ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+        .newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+    clientStreamTracer.inboundHeaders();
+    // The underlying fake LB provider is configured with a factory that returns a mock stream
+    // tracer.
+    verify(mockStreamTracer).inboundHeaders();
   }
 
   /**
@@ -1121,7 +1163,7 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /** Round robin like fake load balancer. */
-  private static final class FakeLoadBalancer extends LoadBalancer {
+  private final class FakeLoadBalancer extends LoadBalancer {
     private final Helper helper;
 
     List<Subchannel> subchannelList;
@@ -1159,7 +1201,8 @@ public class OutlierDetectionLoadBalancerTest {
           if (lastPickIndex < 0 || lastPickIndex > subchannelList.size() - 1) {
             lastPickIndex = 0;
           }
-          return PickResult.withSubchannel(subchannelList.get(lastPickIndex++));
+          return PickResult.withSubchannel(subchannelList.get(lastPickIndex++),
+              mockStreamTracerFactory);
         }
       };
       helper.updateBalancingState(state, picker);
