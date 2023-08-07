@@ -18,6 +18,7 @@ package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -54,7 +56,7 @@ public class ServerCallTimeoutInterceptorTest {
             new ServerCalls.UnaryMethod<Integer, Integer>() {
               @Override
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
-                responseObserver.onNext(42);
+                responseObserver.onNext(req);
                 responseObserver.onCompleted();
               }
             });
@@ -64,8 +66,9 @@ public class ServerCallTimeoutInterceptorTest {
         10, TimeUnit.MILLISECONDS, logBuf::append);
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
-    listener.onMessage(1);
+    listener.onMessage(42);
     listener.onHalfClose();
+    listener.onComplete();
 
     assertThat(serverCall.responses).isEqualTo(Collections.singletonList(42));
     assertEquals(Status.Code.OK, serverCall.status.getCode());
@@ -82,7 +85,7 @@ public class ServerCallTimeoutInterceptorTest {
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
                 try {
                   Thread.sleep(10);
-                  responseObserver.onNext(42);
+                  responseObserver.onNext(req);
                   responseObserver.onCompleted();
                 } catch (InterruptedException e) {
                   Status status = Status.ABORTED.withDescription(e.getMessage());
@@ -96,8 +99,9 @@ public class ServerCallTimeoutInterceptorTest {
         1, TimeUnit.MILLISECONDS, logBuf::append);
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
-    listener.onMessage(1);
+    listener.onMessage(42);
     listener.onHalfClose();
+    listener.onComplete();
 
     assertThat(serverCall.responses).isEmpty();
     assertEquals(Status.Code.ABORTED, serverCall.status.getCode());
@@ -114,8 +118,8 @@ public class ServerCallTimeoutInterceptorTest {
               @Override
               public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
                 try {
-                  Thread.sleep(1);
-                  responseObserver.onNext(42);
+                  Thread.sleep(10);
+                  responseObserver.onNext(req);
                   responseObserver.onCompleted();
                 } catch (InterruptedException e) {
                   Status status = Status.ABORTED.withDescription(e.getMessage());
@@ -123,18 +127,57 @@ public class ServerCallTimeoutInterceptorTest {
                 }
               }
             });
-    StringBuffer logBuf = new StringBuffer();
+    AtomicBoolean timeoutScheduled = new AtomicBoolean(false);
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        0, TimeUnit.MILLISECONDS, logBuf::append);
+        0, TimeUnit.MILLISECONDS, null) {
+      @Override
+      public boolean withTimeout(Runnable invocation) {
+        boolean result = super.withTimeout(invocation);
+        timeoutScheduled.set(result);
+        return result;
+      }
+    };
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
-    listener.onMessage(1);
+    listener.onMessage(42);
     listener.onHalfClose();
+    listener.onComplete();
 
     assertThat(serverCall.responses).isEqualTo(Collections.singletonList(42));
     assertEquals(Status.Code.OK, serverCall.status.getCode());
-    assertThat(logBuf.toString()).isEmpty();
+    assertFalse(timeoutScheduled.get());
+  }
+
+  @Test
+  public void streamingServerCallIsNotIntercepted() {
+    ServerCallRecorder serverCall = new ServerCallRecorder(STREAMING_METHOD);
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncBidiStreamingCall(new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
+          @Override
+          public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+            return new EchoStreamObserver<>(responseObserver);
+          }
+        });
+    AtomicBoolean interceptMethodCalled = new AtomicBoolean(false);
+
+    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
+        10, TimeUnit.MILLISECONDS, null) {
+      @Override
+      public boolean withTimeout(Runnable invocation) {
+        interceptMethodCalled.set(true);
+        return true;
+      }
+    };
+    ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
+        .interceptCall(serverCall, new Metadata(), callHandler);
+    listener.onMessage(42);
+    listener.onHalfClose();
+    listener.onComplete();
+
+    assertThat(serverCall.responses).isEqualTo(Collections.singletonList(42));
+    assertEquals(Status.Code.OK, serverCall.status.getCode());
+    assertFalse(interceptMethodCalled.get());
   }
 
   private static class ServerCallRecorder extends ServerCall<Integer, Integer> {
@@ -181,6 +224,29 @@ public class ServerCallTimeoutInterceptorTest {
     @Override
     public MethodDescriptor<Integer, Integer> getMethodDescriptor() {
       return methodDescriptor;
+    }
+  }
+
+  private static class EchoStreamObserver<T> implements StreamObserver<T> {
+    private final StreamObserver<T> responseObserver;
+
+    public EchoStreamObserver(StreamObserver<T> responseObserver) {
+      this.responseObserver = responseObserver;
+    }
+
+    @Override
+    public void onNext(T value) {
+      responseObserver.onNext(value);
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      responseObserver.onError(t);
+    }
+
+    @Override
+    public void onCompleted() {
+      responseObserver.onCompleted();
     }
   }
 }

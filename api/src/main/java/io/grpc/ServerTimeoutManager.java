@@ -57,16 +57,18 @@ public class ServerTimeoutManager {
    * Invalidates the timeout if the invocation completes in time.
    *
    * @param invocation The RPC method invocation that processes a request.
+   * @return true if a timeout is scheduled
    */
-  public void intercept(Runnable invocation) {
+  public boolean withTimeout(Runnable invocation) {
     if (timeout <= 0) {
       invocation.run();
-      return;
+      return false;
     }
 
     Future<?> timeoutFuture = schedule(Thread.currentThread());
     try {
       invocation.run();
+      return true;
     } finally {
       // If it completes in time, cancel the timeout.
       if (timeoutFuture != null) {
