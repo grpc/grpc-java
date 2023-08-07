@@ -38,8 +38,11 @@ gcloud firebase test android run \
   --test build/outputs/apk/androidTest/debug/grpc-android-interop-testing-debug-androidTest.apk \
   --environment-variables \
       server_host=grpc-test.sandbox.googleapis.com,server_port=443,test_case=all \
-  --device model=Nexus6P,version=27,locale=en,orientation=portrait \
-  --device model=Nexus6P,version=26,locale=en,orientation=portrait \
+  --device model=Pixel3,version=30,locale=en,orientation=portrait \
+  --device model=Pixel2,version=29,locale=en,orientation=portrait \
+  --device model=Pixel2,version=28,locale=en,orientation=portrait \
+  --device model=Pixel2,version=27,locale=en,orientation=portrait \
+  --device model=Pixel2,version=26,locale=en,orientation=portrait \
   --device model=Nexus6P,version=25,locale=en,orientation=portrait \
   --device model=Nexus6P,version=24,locale=en,orientation=portrait \
   --device model=Nexus6P,version=23,locale=en,orientation=portrait \
@@ -53,8 +56,11 @@ gcloud firebase test android run \
   --type instrumentation \
   --app ../android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
   --test build/outputs/apk/androidTest/debug/grpc-binder-debug-androidTest.apk \
-  --device model=Nexus6P,version=27,locale=en,orientation=portrait \
-  --device model=Nexus6P,version=26,locale=en,orientation=portrait \
+  --device model=Pixel3,version=30,locale=en,orientation=portrait \
+  --device model=Pixel2,version=29,locale=en,orientation=portrait \
+  --device model=Pixel2,version=28,locale=en,orientation=portrait \
+  --device model=Pixel2,version=27,locale=en,orientation=portrait \
+  --device model=Pixel2,version=26,locale=en,orientation=portrait \
   --device model=Nexus6P,version=25,locale=en,orientation=portrait \
   --device model=Nexus6P,version=24,locale=en,orientation=portrait \
   --device model=Nexus6P,version=23,locale=en,orientation=portrait \
