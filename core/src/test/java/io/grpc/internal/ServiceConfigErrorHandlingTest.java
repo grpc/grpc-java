@@ -203,7 +203,7 @@ public class ServiceConfigErrorHandlingTest {
         new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
 
     channelBuilder
-        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
+        .nameResolverFactory_deprecated(new FakeNameResolverFactory.Builder(expectedUri).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .userAgent(USER_AGENT)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
@@ -238,7 +238,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.emptyList())
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
@@ -258,7 +258,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(new ArrayList<>(ImmutableList.of(addressGroup)))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"12\"}}]}");
@@ -296,7 +296,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.emptyList())
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"val\"}}]}");
@@ -322,7 +322,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"foo\"}}]}");
@@ -347,7 +347,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     nameResolverFactory.nextRawServiceConfig.set(null);
 
     createChannel();
@@ -369,7 +369,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     Map<String, Object> defaultServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"foo\"}}]}");
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
@@ -398,7 +398,7 @@ public class ServiceConfigErrorHandlingTest {
     nameResolverFactory.nextRawServiceConfig.set(
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"no_check\": \"foo\"}}]}"));
     nextLbPolicyConfigError.set(error);
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
     createChannel();
 
@@ -416,7 +416,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     Map<String, Object> defaultServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"mate\"}}]}");
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
@@ -441,7 +441,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"1st raw config\"}}]}");
@@ -486,7 +486,7 @@ public class ServiceConfigErrorHandlingTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     Map<String, Object> defaultServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"mate\"}}]}");
     channelBuilder.defaultServiceConfig(defaultServiceConfig);

@@ -226,7 +226,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    */
   @Deprecated
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  public abstract T nameResolverFactory(NameResolver.Factory resolverFactory);
+  public abstract T nameResolverFactory_deprecated(NameResolver.Factory resolverFactory);
 
   /**
    * Sets the default load-balancing policy that will be used if the service config doesn't specify

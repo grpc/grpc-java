@@ -1632,7 +1632,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       @SuppressWarnings("deprecation")
       ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder()
-          .nameResolverFactory(nameResolverFactory);
+          .nameResolverFactory_deprecated(nameResolverFactory);
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.

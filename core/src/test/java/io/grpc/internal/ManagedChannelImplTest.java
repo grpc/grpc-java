@@ -334,7 +334,7 @@ public class ManagedChannelImplTest {
 
   private void configureBuilder(ManagedChannelImplBuilder channelBuilder) {
     channelBuilder
-        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
+        .nameResolverFactory_deprecated(new FakeNameResolverFactory.Builder(expectedUri).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .userAgent(USER_AGENT)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
@@ -386,7 +386,7 @@ public class ManagedChannelImplTest {
         Attributes.newBuilder()
             .set(ATTR_AUTHORITY_OVERRIDE, "resolver.override.authority")
             .build());
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(addressGroup))
             .build());
@@ -412,7 +412,7 @@ public class ManagedChannelImplTest {
         Attributes.newBuilder()
             .set(ATTR_AUTHORITY_OVERRIDE, "resolver.override.authority")
             .build());
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(addressGroup))
             .build());
@@ -441,7 +441,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void idleModeDisabled() {
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build());
@@ -471,7 +471,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
@@ -533,7 +533,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
@@ -609,7 +609,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void shutdownWithNoTransportsEverCreated() {
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build());
@@ -624,7 +624,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void shutdownNow_pendingCallShouldFail() {
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri)
             .setResolvedAtStart(false)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
@@ -643,7 +643,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void shutdownWithNoNameResolution_newCallShouldFail() {
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri)
             .setResolvedAtStart(false)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
@@ -768,7 +768,7 @@ public class ManagedChannelImplTest {
   private void subtestCallsAndShutdown(boolean shutdownNow, boolean shutdownNowAfterShutdown) {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
     verify(executorPool).getObject();
     ClientStream mockStream = mock(ClientStream.class);
@@ -917,7 +917,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     Status resolutionError = Status.UNAVAILABLE.withDescription("Resolution failed");
     createChannel();
 
@@ -1064,7 +1064,7 @@ public class ManagedChannelImplTest {
             .setResolvedAtStart(false)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
@@ -1089,7 +1089,7 @@ public class ManagedChannelImplTest {
     };
     FakeNameResolverFactory nsFactory = new FakeNameResolverFactory.Builder(expectedUri)
         .setResolvedAtStart(false).build();
-    channelBuilder.nameResolverFactory(nsFactory);
+    channelBuilder.nameResolverFactory_deprecated(nsFactory);
     createChannel();
 
     CallOptions callOptions = CallOptions.DEFAULT.withStreamTracerFactory(factory);
@@ -1126,7 +1126,7 @@ public class ManagedChannelImplTest {
     // Delay the success of name resolution until allResolved() is called.
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     channel.shutdown();
@@ -1163,7 +1163,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(resolvedAddrs)))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     // Start the call
@@ -1308,7 +1308,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(resolvedAddrs)))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     // Start a wait-for-ready call
@@ -1712,7 +1712,7 @@ public class ManagedChannelImplTest {
 
     // Verify that resolving oob channel does not
     oob = helper.createResolvingOobChannelBuilder("oobauthority")
-        .nameResolverFactory(
+        .nameResolverFactory_deprecated(
             new FakeNameResolverFactory.Builder(URI.create("oobauthority")).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
@@ -1798,7 +1798,7 @@ public class ManagedChannelImplTest {
         new FakeCallCredentials(metadataKey, oobChannelCredValue));
     ManagedChannel oob = helper.createResolvingOobChannelBuilder(
             "fake://oobauthority/", oobChannelCreds)
-        .nameResolverFactory(
+        .nameResolverFactory_deprecated(
             new FakeNameResolverFactory.Builder(URI.create("fake://oobauthority/")).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
@@ -2059,7 +2059,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
     OobChannel oobChannel = (OobChannel) helper.createOobChannel(
         Collections.singletonList(addressGroup), "oobAuthority");
@@ -2321,7 +2321,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void getState_loadBalancerSupportsChannelState() {
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
@@ -2332,7 +2332,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void getState_withRequestConnect() {
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     requestConnection = false;
     createChannel();
@@ -2355,7 +2355,7 @@ public class ManagedChannelImplTest {
   @SuppressWarnings("deprecation")
   @Test
   public void getState_withRequestConnect_IdleWithLbRunning() {
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
@@ -2378,7 +2378,7 @@ public class ManagedChannelImplTest {
       }
     };
 
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
@@ -2411,7 +2411,7 @@ public class ManagedChannelImplTest {
       }
     };
 
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
@@ -2472,7 +2472,7 @@ public class ManagedChannelImplTest {
     long idleTimeoutMillis = 2000L;
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     channelBuilder.idleTimeout(idleTimeoutMillis, TimeUnit.MILLISECONDS);
     createChannel();
 
@@ -2600,7 +2600,7 @@ public class ManagedChannelImplTest {
 
       @Override public void shutdown() {}
     };
-    channelBuilder.nameResolverFactory(new NameResolver.Factory() {
+    channelBuilder.nameResolverFactory_deprecated(new NameResolver.Factory() {
       @Override public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
         return failingResolver;
       }
@@ -2676,7 +2676,7 @@ public class ManagedChannelImplTest {
     Status pickError = Status.UNAVAILABLE.withDescription("pick result error");
     long idleTimeoutMillis = 1000L;
     channelBuilder.idleTimeout(idleTimeoutMillis, TimeUnit.MILLISECONDS);
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build());
@@ -2766,7 +2766,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     // Start a call that will be buffered in delayedTransport
@@ -2895,7 +2895,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void updateBalancingStateWithShutdownShouldBeIgnored() {
-    channelBuilder.nameResolverFactory(
+    channelBuilder.nameResolverFactory_deprecated(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
@@ -2914,7 +2914,7 @@ public class ManagedChannelImplTest {
   public void balancerRefreshNameResolution() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
@@ -2927,7 +2927,7 @@ public class ManagedChannelImplTest {
   public void resetConnectBackoff_noOpWhenChannelShutdown() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     channel.shutdown();
@@ -2942,7 +2942,7 @@ public class ManagedChannelImplTest {
   public void resetConnectBackoff_noOpWhenNameResolverNotStarted() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     requestConnection = false;
     createChannel();
 
@@ -3004,7 +3004,7 @@ public class ManagedChannelImplTest {
     Status error = Status.UNAVAILABLE.withDescription("simulated error");
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel(true);
 
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
@@ -3022,7 +3022,7 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Address resolved: "
@@ -3040,7 +3040,7 @@ public class ManagedChannelImplTest {
     servers.add(new EquivalentAddressGroup(socketAddress));
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     int prevSize = getStats(channel).channelTrace.events.size();
@@ -3078,7 +3078,7 @@ public class ManagedChannelImplTest {
     servers.add(new EquivalentAddressGroup(socketAddress));
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     createChannel();
 
     int prevSize = getStats(channel).channelTrace.events.size();
@@ -3488,7 +3488,7 @@ public class ManagedChannelImplTest {
     nameResolverFactory.nextConfigOrError.set(
         ConfigOrError.fromConfig(managedChannelServiceConfig));
 
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     channelBuilder.executor(MoreExecutors.directExecutor());
     channelBuilder.enableRetry();
     RetriableStream.setRandom(
@@ -3603,7 +3603,7 @@ public class ManagedChannelImplTest {
     nameResolverFactory.nextConfigOrError.set(
         ConfigOrError.fromConfig(managedChannelServiceConfig));
 
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     channelBuilder.executor(MoreExecutors.directExecutor());
     channelBuilder.enableRetry();
 
@@ -3742,7 +3742,7 @@ public class ManagedChannelImplTest {
         null);
     customBuilder.executorPool = executorPool;
     customBuilder.channelz = channelz;
-    ManagedChannel mychannel = customBuilder.nameResolverFactory(factory).build();
+    ManagedChannel mychannel = customBuilder.nameResolverFactory_deprecated(factory).build();
 
     ClientCall<Void, Void> call1 =
         mychannel.newCall(TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT);
@@ -3823,7 +3823,7 @@ public class ManagedChannelImplTest {
           return "fakescheme";
         }
       };
-    channelBuilder.nameResolverFactory(factory).proxyDetector(neverProxy);
+    channelBuilder.nameResolverFactory_deprecated(factory).proxyDetector(neverProxy);
     createChannel();
 
     NameResolver.Args args = capturedArgs.get();
@@ -3923,7 +3923,7 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory nameResolverFactory =
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(ImmutableList.of(addressGroup)).build();
-      channelBuilder.nameResolverFactory(nameResolverFactory);
+      channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
       channelBuilder.disableServiceConfigLookUp();
 
       Map<String, Object> rawServiceConfig =
@@ -3959,7 +3959,7 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory nameResolverFactory =
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(ImmutableList.of(addressGroup)).build();
-      channelBuilder.nameResolverFactory(nameResolverFactory);
+      channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
       channelBuilder.disableServiceConfigLookUp();
       Map<String, Object> defaultServiceConfig =
           parseConfig("{\"methodConfig\":[{"
@@ -3997,7 +3997,7 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory nameResolverFactory =
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(ImmutableList.of(addressGroup)).build();
-      channelBuilder.nameResolverFactory(nameResolverFactory);
+      channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
       Map<String, Object> rawServiceConfig =
           parseConfig("{\"methodConfig\":[{"
@@ -4042,7 +4042,7 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory nameResolverFactory =
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(ImmutableList.of(addressGroup)).build();
-      channelBuilder.nameResolverFactory(nameResolverFactory);
+      channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
       Map<String, Object> defaultServiceConfig =
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService1\"}],"
@@ -4077,7 +4077,7 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory nameResolverFactory =
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(ImmutableList.of(addressGroup)).build();
-      channelBuilder.nameResolverFactory(nameResolverFactory);
+      channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
       Map<String, Object> defaultServiceConfig =
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService1\"}],"
@@ -4104,7 +4104,7 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory nameResolverFactory =
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(ImmutableList.of(addressGroup)).build();
-      channelBuilder.nameResolverFactory(nameResolverFactory);
+      channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
       Map<String, Object> rawServiceConfig = Collections.emptyMap();
       ManagedChannelServiceConfig managedChannelServiceConfig =
@@ -4128,7 +4128,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     channelBuilder.disableServiceConfigLookUp();
     Map<String, Object> defaultServiceConfig =
         parseConfig("{\"methodConfig\":[{"
@@ -4154,7 +4154,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
     Map<String, Object> defaultServiceConfig =
         parseConfig("{\"methodConfig\":[{"
             + "\"name\":[{\"service\":\"SimpleService1\"}],"
@@ -4182,7 +4182,7 @@ public class ManagedChannelImplTest {
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
               .build();
-      channelBuilder.nameResolverFactory(nameResolverFactory);
+      channelBuilder.nameResolverFactory_deprecated(nameResolverFactory);
 
       Map<String, Object> rawServiceConfig =
           parseConfig("{\"healthCheckConfig\": {\"serviceName\": \"service1\"}}");
@@ -4209,7 +4209,8 @@ public class ManagedChannelImplTest {
     String oobTarget = "fake://second.example.com";
     URI oobUri = new URI(oobTarget);
     channelBuilder
-        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri, oobUri).build());
+        .nameResolverFactory_deprecated(new FakeNameResolverFactory.Builder(expectedUri, oobUri)
+            .build());
     createChannel();
 
     ManagedChannel resolvedOobChannel = null;

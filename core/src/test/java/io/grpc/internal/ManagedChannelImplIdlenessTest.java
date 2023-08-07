@@ -167,7 +167,7 @@ public class ManagedChannelImplIdlenessTest {
         new UnsupportedClientTransportFactoryBuilder(), null);
 
     builder
-        .nameResolverFactory(mockNameResolverFactory)
+        .nameResolverFactory_deprecated(mockNameResolverFactory)
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(IDLE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .userAgent(USER_AGENT);

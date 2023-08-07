@@ -118,8 +118,8 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
 
   @Deprecated
   @Override
-  public T nameResolverFactory(NameResolver.Factory resolverFactory) {
-    delegate().nameResolverFactory(resolverFactory);
+  public T nameResolverFactory_deprecated(NameResolver.Factory resolverFactory) {
+    delegate().nameResolverFactory_deprecated(resolverFactory);
     return thisT();
   }
 

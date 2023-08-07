@@ -350,7 +350,8 @@ public final class ManagedChannelImplBuilder
 
   @Deprecated
   @Override
-  public ManagedChannelImplBuilder nameResolverFactory(NameResolver.Factory resolverFactory) {
+  public ManagedChannelImplBuilder nameResolverFactory_deprecated(
+      NameResolver.Factory resolverFactory) {
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
         directServerAddress);
