@@ -792,14 +792,14 @@ public class OkHttpClientTransportTest {
     frameHandler().data(false, 3, buffer, messageFrameLength, messageFrameLength);
 
     verify(frameWriter, timeout(TIME_OUT_MS))
-        .windowUpdate(eq(3), eq((long) 2 * messageFrameLength));
+        .windowUpdate(eq(3), eq((long) 2 * messageFrameLength + paddingLength));
 
     // Stream 2 receives another message
     buffer = createMessageFrame(fakeMessage);
     frameHandler().data(false, 5, buffer, messageFrameLength, messageFrameLength);
 
     verify(frameWriter, timeout(TIME_OUT_MS))
-        .windowUpdate(eq(5), eq((long) 2 * messageFrameLength));
+        .windowUpdate(eq(5), eq((long) 2 * messageFrameLength + paddingLength));
     verify(frameWriter, timeout(TIME_OUT_MS))
         .windowUpdate(eq(0), eq((long) 2 * messageFrameLength));
 

@@ -281,11 +281,10 @@ class OkHttpClientStream extends AbstractClientStream {
     @Override
     @GuardedBy("lock")
     public void bytesRead(int processedBytes) {
-      processedWindow -= processedBytes;
       if (processedWindow <= initialWindowSize * Utils.DEFAULT_WINDOW_UPDATE_RATIO) {
         int delta = initialWindowSize - processedWindow;
-        window += delta;
         processedWindow += delta;
+        window = initialWindowSize;
         frameWriter.windowUpdate(id(), delta);
       }
     }
@@ -321,11 +320,12 @@ class OkHttpClientStream extends AbstractClientStream {
      * Must be called with holding the transport lock.
      */
     @GuardedBy("lock")
-    public void transportDataReceived(okio.Buffer frame, boolean endOfStream) {
+    public void transportDataReceived(okio.Buffer frame, boolean endOfStream, int paddingLen) {
       // We only support 16 KiB frames, and the max permitted in HTTP/2 is 16 MiB. This is verified
       // in OkHttp's Http2 deframer. In addition, this code is after the data has been read.
       int length = (int) frame.size();
       window -= length;
+      processedWindow -= (length + paddingLen);
       if (window < 0) {
         frameWriter.rstStream(id(), ErrorCode.FLOW_CONTROL_ERROR);
         transport.finishStream(

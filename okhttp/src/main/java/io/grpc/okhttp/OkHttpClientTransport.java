@@ -1167,7 +1167,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         synchronized (lock) {
           // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock';
           // instead found: 'OkHttpClientTransport.this.lock'
-          stream.transportState().transportDataReceived(buf, inFinished);
+          stream.transportState().transportDataReceived(buf, inFinished, paddedLength - length);
         }
       }
 
