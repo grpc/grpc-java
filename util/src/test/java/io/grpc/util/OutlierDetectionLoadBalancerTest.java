@@ -24,6 +24,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -198,8 +199,6 @@ public class OutlierDetectionLoadBalancerTest {
           }
         });
 
-    // when(mockStreamTracerFactory.newClientStreamTracer(isA(StreamInfo.class),
-    //     isA(Metadata.class))).thenReturn(mockStreamTracer);
     when(mockStreamTracerFactory.newClientStreamTracer(any(),
         any())).thenReturn(mockStreamTracer);
 
@@ -395,6 +394,40 @@ public class OutlierDetectionLoadBalancerTest {
     // The underlying fake LB provider is configured with a factory that returns a mock stream
     // tracer.
     verify(mockStreamTracer).inboundHeaders();
+  }
+
+  /**
+   * Any ClientStreamTracer.Factory set by the delegate picker should still get used.
+   */
+  @Test
+  public void delegatePickTracerFactoryNotSet() throws Exception {
+    // We set the mock factory to null to indicate that the delegate does not have its own tracer.
+    mockStreamTracerFactory = null;
+
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+
+    // Make one of the subchannels READY.
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(2)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+
+    // Make sure that we can pick the single READY subchannel.
+    SubchannelPicker picker = pickerCaptor.getAllValues().get(1);
+    PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    // With no delegate tracers factory a call to the OD tracer should still work
+    ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+        .newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+    clientStreamTracer.inboundHeaders();
+
+    // Sanity check to make sure the delegate tracer does not get called.
+    verifyNoInteractions(mockStreamTracer);
   }
 
   /**
