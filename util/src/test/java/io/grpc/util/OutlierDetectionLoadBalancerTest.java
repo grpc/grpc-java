@@ -397,7 +397,7 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
-   * Any ClientStreamTracer.Factory set by the delegate picker should still get used.
+   * Assure the tracer works even when the underlying LB does not have a tracer to delegate to.
    */
   @Test
   public void delegatePickTracerFactoryNotSet() throws Exception {
