@@ -127,7 +127,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     for (SocketAddress oldAddr : oldAddrs) {
       if (!newAddrs.contains(oldAddr)) {
         subchannels.get(oldAddr).shutdown();
-        subchannels.remove(oldAddr);
+        states.remove(subchannels.remove(oldAddr));
       }
     }
 
@@ -209,7 +209,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       case READY:
         updateBalancingState(READY, new Picker(PickResult.withSubchannel(subchannel)));
         shutdownRemaining(subchannel.getAddresses().getAddresses().get(0), subchannel);
-        addressIndex.reset();
         break;
       case TRANSIENT_FAILURE:
         // If we are looking at current channel, request a connection if possible
