@@ -22,9 +22,10 @@ import android.net.LocalSocketAddress.Namespace;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.rule.ActivityTestRule;
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.android.UdsChannelBuilder;
-import io.grpc.netty.NettyServerBuilder;
 import io.grpc.testing.integration.TestServiceImpl;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
@@ -68,7 +69,7 @@ public class UdsChannelInteropTest {
 
     // Start local server.
     server =
-        NettyServerBuilder.forPort(0)
+        Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
             .maxInboundMessageSize(16 * 1024 * 1024)
             .addService(new TestServiceImpl(serverExecutor))
             .build();
