@@ -21,7 +21,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
+import static io.grpc.LoadBalancer.EMPTY_PICKER;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -41,6 +41,7 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.ErrorPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -55,7 +56,6 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.StandardLoadBalancerProvider;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -423,13 +423,13 @@ public class PriorityLoadBalancerTest {
     // p0 gets IDLE.
     helper0.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // p0 goes to CONNECTING
     helper0.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // no failover happened
@@ -459,15 +459,15 @@ public class PriorityLoadBalancerTest {
     // p0 gets IDLE.
     helper0.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // p0 goes to CONNECTING, reset failover timer
     fakeClock.forwardTime(5, TimeUnit.SECONDS);
     helper0.updateBalancingState(
         CONNECTING,
-        BUFFER_PICKER);
-    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+        EMPTY_PICKER);
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
 
     // failover happens
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
@@ -509,7 +509,7 @@ public class PriorityLoadBalancerTest {
     // p0 goes to CONNECTING
     helper0.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // no failover happened
@@ -560,7 +560,7 @@ public class PriorityLoadBalancerTest {
     // p0 gets IDLE.
     helper0.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // p0 fails over to p1 immediately.
@@ -581,13 +581,13 @@ public class PriorityLoadBalancerTest {
     // p2 gets IDLE
     helper2.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // p0 gets back to IDLE
     helper0.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // p2 fails but does not affect overall picker
@@ -614,13 +614,13 @@ public class PriorityLoadBalancerTest {
     // p2 gets back to IDLE
     helper2.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // p0 gets back to IDLE
     helper0.updateBalancingState(
         IDLE,
-        BUFFER_PICKER);
+        EMPTY_PICKER);
     assertCurrentPickerIsBufferPicker();
 
     // p0 fails over to p2 and picker is updated to p2's existing picker.
