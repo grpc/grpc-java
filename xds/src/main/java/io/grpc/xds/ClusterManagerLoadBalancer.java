@@ -41,16 +41,6 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected SubchannelPicker getInitialPicker() {
-    return EMPTY_PICKER;
-  }
-
-  @Override
-  protected SubchannelPicker getErrorPicker(Status error) {
-    return new ErrorPicker(error);
-  }
-
-  @Override
   protected Map<Object, PolicySelection> getPolicySelectionMap(
       ResolvedAddresses resolvedAddresses) {
     ClusterManagerConfig config = (ClusterManagerConfig)
