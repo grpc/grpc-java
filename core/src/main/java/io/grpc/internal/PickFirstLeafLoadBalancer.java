@@ -53,8 +53,7 @@ import javax.annotation.Nullable;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10383")
 final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Helper helper;
-  private final Map<SocketAddress, Subchannel> subchannels = new HashMap<>();
-  private final Map<Subchannel, ConnectivityState> states = new HashMap<>();
+  private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
   private volatile ConnectivityState currentState = IDLE;
 
@@ -125,8 +124,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // remove old subchannels that were not in new address list
     for (SocketAddress oldAddr : oldAddrs) {
       if (!newAddrs.contains(oldAddr)) {
-        subchannels.get(oldAddr).shutdown();
-        states.remove(subchannels.remove(oldAddr));
+        subchannels.get(oldAddr).getSubchannel().shutdown();
+        subchannels.remove(oldAddr);
       }
     }
 
@@ -150,8 +149,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    for (Subchannel subchannel : subchannels.values()) {
-      subchannel.shutdown();
+    for (SubchannelData subchannelData : subchannels.values()) {
+      subchannelData.getSubchannel().shutdown();
     }
     subchannels.clear();
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
@@ -184,7 +183,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // once the first pass through is complete.
     // However, every time there is an address update, we will perform a pass through for the new
     // addresses in the updated list.
-    states.put(subchannel, newState);
+    subchannels.get(getAddress(subchannel)).updateState(newState);
     if (currentState == TRANSIENT_FAILURE) {
       if (newState == CONNECTING) {
         // each subchannel is responsible for its own backoff
@@ -213,7 +212,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       case TRANSIENT_FAILURE:
         // If we are looking at current channel, request a connection if possible
         if (addressIndex.isValid()
-            && subchannels.get(addressIndex.getCurrentAddress()) == subchannel) {
+            && subchannels.get(addressIndex.getCurrentAddress()).getSubchannel() == subchannel) {
           addressIndex.increment();
           requestConnection();
 
@@ -239,11 +238,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   @Override
   public void shutdown() {
-    for (Subchannel subchannel : subchannels.values()) {
-      subchannel.shutdown();
+    for (SubchannelData subchannelData : subchannels.values()) {
+      subchannelData.getSubchannel().shutdown();
     }
     subchannels.clear();
-    states.clear();
   }
 
   /**
@@ -251,15 +249,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   * that all other subchannels must be shutdown.
   */
   private void shutdownRemaining(Subchannel activeSubchannel) {
-    for (Subchannel subchannel : subchannels.values()) {
-      if (!subchannel.equals(activeSubchannel)) {
-        subchannel.shutdown();
+    for (SubchannelData subchannelData : subchannels.values()) {
+      if (!subchannelData.getSubchannel().equals(activeSubchannel)) {
+        subchannelData.getSubchannel().shutdown();
       }
     }
     subchannels.clear();
-    subchannels.put(getAddress(activeSubchannel), activeSubchannel);
-    states.clear();
-    states.put(activeSubchannel, READY);
+    subchannels.put(getAddress(activeSubchannel), new SubchannelData(activeSubchannel, READY));
   }
 
   /**
@@ -274,10 +270,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
     if (addressIndex.isValid()) {
       Subchannel subchannel = subchannels.containsKey(addressIndex.getCurrentAddress())
-          ? subchannels.get(addressIndex.getCurrentAddress())
+          ? subchannels.get(addressIndex.getCurrentAddress()).getSubchannel()
           : createNewSubchannel(addressIndex.getCurrentAddress());
 
-      ConnectivityState subchannelState = states.get(subchannel);
+      ConnectivityState subchannelState =
+          subchannels.get(addressIndex.getCurrentAddress()).getState();
       if (subchannelState == IDLE) {
         subchannel.requestConnection();
       } else {
@@ -293,8 +290,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         .setAddresses(Lists.newArrayList(
             new EquivalentAddressGroup(addr)))
             .build());
-    subchannels.put(addr, subchannel);
-    states.put(subchannel, IDLE);
+    subchannels.put(addr, new SubchannelData(subchannel, IDLE));
     subchannel.start(new SubchannelStateListener() {
       @Override
       public void onSubchannelState(ConnectivityStateInfo stateInfo) {
@@ -432,6 +428,28 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         return true;
       }
       return false;
+    }
+  }
+
+  static final class SubchannelData {
+    final Subchannel subchannel;
+    ConnectivityState state;
+
+    public SubchannelData(Subchannel subchannel, ConnectivityState state) {
+      this.subchannel = subchannel;
+      this.state = state;
+    }
+
+    public Subchannel getSubchannel() {
+      return this.subchannel;
+    }
+
+    public ConnectivityState getState() {
+      return this.state;
+    }
+
+    void updateState(ConnectivityState newState) {
+      this.state = newState;
     }
   }
 
