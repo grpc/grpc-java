@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
@@ -60,6 +61,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
@@ -999,6 +1001,59 @@ public class OkHttpServerTransportTest {
   }
 
   @Test
+  public void windowUpdate() throws Exception {
+    initTransport();
+    handshake();
+    OkHttpServerTransport.FrameHandler handler = serverTransport.getHandler();
+    List<Header> headers = Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything"));
+
+    handler.headers(false, false, 1, 0, new ArrayList<>(headers), HeadersMode.HTTP_20_HEADERS);
+    MockStreamListener streamListener1 = mockTransportListener.newStreams.pop();
+    handler.headers(false, false, 3, 0, new ArrayList<>(headers), HeadersMode.HTTP_20_HEADERS);
+    MockStreamListener streamListener2 = mockTransportListener.newStreams.pop();
+    reset(clientFramesRead);
+
+    int messageSize = INITIAL_WINDOW_SIZE / 4 ;
+    int paddingLength = 10;
+    Buffer requestMessageFrame = createMessageFrame(new String(new char[messageSize]),
+        paddingLength);
+    int frameSize = (int) requestMessageFrame.size();
+    handler.data(false, 1, requestMessageFrame, frameSize - paddingLength, frameSize);
+    requestMessageFrame = createMessageFrame(new String(new char[messageSize]), paddingLength);
+    handler.data(false, 3, requestMessageFrame, frameSize - paddingLength, frameSize);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    // connection window update
+    verify(clientFramesRead).windowUpdate(0, frameSize * 2);
+
+    requestMessageFrame = createMessageFrame(new String(new char[messageSize]), 0);
+    handler.data(false, 3, requestMessageFrame, frameSize - paddingLength,
+        frameSize - paddingLength);
+    streamListener1.stream.request(1);
+    streamListener2.stream.request(2);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    // per stream window update
+    verify(clientFramesRead).windowUpdate(3, frameSize * 2 - paddingLength);
+
+    paddingLength = 2 * messageSize + 100;
+    requestMessageFrame = createMessageFrame(new String(new char[messageSize]), paddingLength);
+    frameSize = (int) requestMessageFrame.size();
+    handler.data(false, 1, requestMessageFrame, frameSize - paddingLength, frameSize);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    // not enough window for padded data length
+    verify(clientFramesRead).rstStream(eq(1), eq(ErrorCode.FLOW_CONTROL_ERROR));
+
+    handler.rstStream(3, ErrorCode.CANCEL);
+    shutdownAndTerminate(3);
+  }
+
+  @Test
   public void dataForStream0_failsWithGoAway() throws Exception {
     initTransport();
     handshake();
@@ -1220,11 +1275,16 @@ public class OkHttpServerTransportTest {
   }
 
   private static Buffer createMessageFrame(String stringMessage) {
+    return createMessageFrame(stringMessage, 0);
+  }
+
+  private static Buffer createMessageFrame(String stringMessage, int paddingLength) {
     byte[] message = stringMessage.getBytes(UTF_8);
     Buffer buffer = new Buffer();
     buffer.writeByte(0 /* UNCOMPRESSED */);
     buffer.writeInt(message.length);
     buffer.write(message);
+    buffer.write(new byte[paddingLength]);
     return buffer;
   }
 
