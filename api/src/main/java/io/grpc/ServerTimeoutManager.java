@@ -16,11 +16,10 @@
 
 package io.grpc;
 
+import com.google.common.util.concurrent.MoreExecutors;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /** A global instance that schedules the timeout tasks. */
@@ -47,7 +46,10 @@ public class ServerTimeoutManager {
     this.logFunction = logFunction;
   }
 
-  /** Please call shutdown() when the application exits. */
+  /**
+   *  Please call shutdown() when the application exits.
+   *  You can add a JVM shutdown hook.
+   */
   public void shutdown() {
     scheduler.shutdownNow();
   }
@@ -60,54 +62,33 @@ public class ServerTimeoutManager {
    * @return true if a timeout is scheduled
    */
   public boolean withTimeout(Runnable invocation) {
-    if (timeout <= 0) {
+    if (timeout <= 0 || scheduler.isShutdown()) {
       invocation.run();
       return false;
     }
 
-    Future<?> timeoutFuture = schedule(Thread.currentThread());
-    try {
-      invocation.run();
-      return true;
-    } finally {
-      // If it completes in time, cancel the timeout.
-      if (timeoutFuture != null) {
-        timeoutFuture.cancel(false);
-      }
-    }
-  }
-
-  private Future<?> schedule(Thread thread) {
-    TimeoutTask timeoutTask = new TimeoutTask(thread);
-    if (scheduler.isShutdown()) {
-      return null;
-    }
-    return scheduler.schedule(timeoutTask, timeout, unit);
-  }
-
-  private class TimeoutTask implements Runnable {
-    private final AtomicReference<Thread> threadReference = new AtomicReference<>();
-
-    private TimeoutTask(Thread thread) {
-      threadReference.set(thread);
-    }
-
-    @Override
-    public void run() {
-      // Ensure the reference is consumed only once.
-      Thread thread = threadReference.getAndSet(null);
-      if (thread != null) {
+    try (Context.CancellableContext context = Context.current()
+        .withDeadline(Deadline.after(timeout, unit), scheduler)) {
+      Thread thread = Thread.currentThread();
+      Context.CancellationListener cancelled = c -> {
+        if (c.cancellationCause() == null) {
+          return;
+        }
         thread.interrupt();
         if (logFunction != null) {
           logFunction.accept(
-                  "Interrupted RPC thread "
-                          + thread.getName()
-                          + " for timeout at "
-                          + timeout
-                          + " "
-                          + unit);
+              "Interrupted RPC thread "
+                  + thread.getName()
+                  + " for timeout at "
+                  + timeout
+                  + " "
+                  + unit);
         }
-      }
+      };
+      context.addListener(cancelled, MoreExecutors.directExecutor());
+      context.run(invocation);
+      return true;
     }
   }
+
 }
