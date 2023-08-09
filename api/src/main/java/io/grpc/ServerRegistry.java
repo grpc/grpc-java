@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -92,7 +93,7 @@ public final class ServerRegistry {
     if (instance == null) {
       List<ServerProvider> providerList = ServiceProviders.loadAll(
           ServerProvider.class,
-          Collections.<Class<?>>emptyList(),
+          getHardCodedClasses(),
           ServerProvider.class.getClassLoader(),
           new ServerPriorityAccessor());
       instance = new ServerRegistry();
@@ -117,6 +118,20 @@ public final class ServerRegistry {
   ServerProvider provider() {
     List<ServerProvider> providers = providers();
     return providers.isEmpty() ? null : providers.get(0);
+  }
+
+  @VisibleForTesting
+  static List<Class<?>> getHardCodedClasses() {
+    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
+    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
+    // https://sourceforge.net/p/proguard/bugs/418/
+    List<Class<?>> list = new ArrayList<>();
+    try {
+      list.add(Class.forName("io.grpc.okhttp.OkHttpServerProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find OkHttpServerProvider", e);
+    }
+    return Collections.unmodifiableList(list);
   }
 
   ServerBuilder<?> newServerBuilderForPort(int port, ServerCredentials creds) {
