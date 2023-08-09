@@ -435,30 +435,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
-  @VisibleForTesting
-  static final class SubchannelData {
-    final Subchannel subchannel;
-    ConnectivityState state;
-
-    public SubchannelData(Subchannel subchannel, ConnectivityState state) {
-      this.subchannel = subchannel;
-      this.state = state;
-    }
-
-    public Subchannel getSubchannel() {
-      return this.subchannel;
-    }
-
-    public ConnectivityState getState() {
-      return this.state;
-    }
-
-    public void updateState(ConnectivityState newState) {
-      this.state = newState;
-    }
-  }
-
-
   public static final class PickFirstLeafLoadBalancerConfig {
 
     @Nullable
