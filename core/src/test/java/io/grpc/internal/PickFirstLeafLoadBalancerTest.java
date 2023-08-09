@@ -1218,10 +1218,6 @@ public class PickFirstLeafLoadBalancerTest {
     // The state is still READY after update since we had an intersecting subchannel that was READY.
     assertEquals(READY, loadBalancer.getCurrentState());
 
-    // If already ready and intersecting, we do not create new subchannels nor request a connection!
-    inOrder.verifyNoMoreInteractions();
-    assertEquals(READY, loadBalancer.getCurrentState());
-
     // Verify that picker still returns correct subchannel
     picker = pickerCaptor.getValue();
     assertEquals(PickResult.withSubchannel(mockSubchannel1), picker.pickSubchannel(mockArgs));

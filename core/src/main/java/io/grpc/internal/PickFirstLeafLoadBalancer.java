@@ -97,13 +97,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     if (addressIndex == null) {
       addressIndex = new Index(newImmutableAddressGroups);
-    } else if (addressIndex.isValid()) {
-      // If a ready connection exists in new address list,
+    } else if (currentState == READY) {
+      // If a ready subchannel exists in new address list,
       // keep this connection and don't create new subchannels
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
       addressIndex.updateGroups(newImmutableAddressGroups);
-      if (addressIndex.seekTo(previousAddress)
-          && states.get(subchannels.get(previousAddress)) == READY) {
+      if (addressIndex.seekTo(previousAddress)) {
         return true;
       }
       addressIndex.reset();
@@ -165,7 +164,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // Shutdown channels/previously relevant subchannels can still callback with state updates.
     // To prevent pickers from returning these obselete subchannels, this logic
     // is included to check if the current list of active subchannels includes this subchannel.
-    if (!subchannel.equals(subchannels.get(subchannel.getAddresses().getAddresses().get(0)))) {
+    if (!subchannels.containsKey(getAddress(subchannel))) {
       return;
     }
     if (newState == SHUTDOWN) {
@@ -185,16 +184,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // once the first pass through is complete.
     // However, every time there is an address update, we will perform a pass through for the new
     // addresses in the updated list.
+    states.put(subchannel, newState);
     if (currentState == TRANSIENT_FAILURE) {
       if (newState == CONNECTING) {
         // each subchannel is responsible for its own backoff
         return;
       } else if (newState == IDLE) {
         requestConnection();
+        return;
       }
     }
 
-    states.put(subchannel, newState);
     switch (newState) {
       case IDLE:
         // Shutdown when ready: connect from beginning when prompted
@@ -208,12 +208,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         break;
       case READY:
         updateBalancingState(READY, new Picker(PickResult.withSubchannel(subchannel)));
-        shutdownRemaining(subchannel.getAddresses().getAddresses().get(0), subchannel);
+        shutdownRemaining(subchannel);
         break;
       case TRANSIENT_FAILURE:
         // If we are looking at current channel, request a connection if possible
-        if (addressIndex.isValid() && subchannels.get(addressIndex.getCurrentAddress()) != null
-            && subchannels.get(addressIndex.getCurrentAddress()).equals(subchannel)) {
+        if (addressIndex.isValid()
+            && subchannels.get(addressIndex.getCurrentAddress()) == subchannel) {
           addressIndex.increment();
           requestConnection();
 
@@ -250,14 +250,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   * Shuts down remaining subchannels. Called when a subchannel becomes ready, which means
   * that all other subchannels must be shutdown.
   */
-  private void shutdownRemaining(SocketAddress activeAddr, Subchannel activeSubchannel) {
+  private void shutdownRemaining(Subchannel activeSubchannel) {
     for (Subchannel subchannel : subchannels.values()) {
       if (!subchannel.equals(activeSubchannel)) {
         subchannel.shutdown();
       }
     }
     subchannels.clear();
-    subchannels.put(activeAddr, activeSubchannel);
+    subchannels.put(getAddress(activeSubchannel), activeSubchannel);
     states.clear();
     states.put(activeSubchannel, READY);
   }
@@ -302,6 +302,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     });
     return subchannel;
+  }
+
+  private SocketAddress getAddress(Subchannel subchannel) {
+    return subchannel.getAddresses().getAddresses().get(0);
   }
 
   @VisibleForTesting
@@ -430,6 +434,30 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return false;
     }
   }
+
+  @VisibleForTesting
+  static final class SubchannelData {
+    final Subchannel subchannel;
+    ConnectivityState state;
+
+    public SubchannelData(Subchannel subchannel, ConnectivityState state) {
+      this.subchannel = subchannel;
+      this.state = state;
+    }
+
+    public Subchannel getSubchannel() {
+      return this.subchannel;
+    }
+
+    public ConnectivityState getState() {
+      return this.state;
+    }
+
+    public void updateState(ConnectivityState newState) {
+      this.state = newState;
+    }
+  }
+
 
   public static final class PickFirstLeafLoadBalancerConfig {
 
