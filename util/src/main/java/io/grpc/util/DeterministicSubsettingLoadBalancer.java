@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.collect.Lists;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
@@ -15,7 +16,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
-import java.util.random.RandomGenerator;
 
 /**
  * Wraps a child {@code LoadBalancer}, separating the total set of backends
@@ -60,7 +60,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
     if (addresses.size() <= config.subsetSize) return allAddresses;
     if (config.sortAddresses) {
-      // if we sort, we do so via destination hashcode. this is deterministic but differs from the method used in golang.
+      // If we sort, we do so via destination hashcode. This is deterministic but differs from the goland instrumentation.
       addresses.sort(new AddressComparator());
     }
 
@@ -68,16 +68,16 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
     Integer subsetCount = backendCount / config.subsetSize;
 
     Integer round = config.clientIndex / subsetCount;
-
+    
     Integer excludedCount = backendCount % config.subsetSize;
     Integer excludedStart = (round * excludedCount) % backendCount;
     Integer excludedEnd = (excludedStart + excludedCount) % backendCount;
     if (excludedStart <= excludedEnd) {
-      List subList = addresses.subList(0, excludedStart);
-      subList.addAll(addresses.subList(excludedEnd, backendCount-1));
-      addresses = new ArrayList(subList);
+      List<SocketAddress> subList = addresses.subList(0, excludedStart);
+      subList.addAll(addresses.subList(excludedEnd, backendCount));
+      addresses = new ArrayList<>(subList);
     } else {
-      addresses = new ArrayList(addresses.subList(excludedEnd, excludedStart));
+      addresses = new ArrayList<>(addresses.subList(excludedEnd, excludedStart));
     }
 
     Random r = new Random(round);
@@ -90,14 +90,22 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
     List<SocketAddress> subset = addresses.subList(start, end);
 
-    // TODO: there is most certainly a cleaner way of doing this that retains the address groups
-    // one idea is that we return the full resolved list, but only connect to the relevant ones and disconnect
-    // to the others.
-    ArrayList<EquivalentAddressGroup>  list = new ArrayList<>();
-    list.add(new EquivalentAddressGroup(subset));
+    ArrayList<EquivalentAddressGroup>  eaglist = new ArrayList<>();
+
+    for (EquivalentAddressGroup eag : allAddresses.getAddresses()) {
+      List<SocketAddress> addrs = Lists.newArrayList();
+      for (SocketAddress addr :eag.getAddresses()) {
+        if (subset.contains(addr)) {
+          addrs.add(addr);
+        }
+      }
+      if (addrs.size() != 0) {
+        eaglist.add(new EquivalentAddressGroup(addrs));
+      }
+    }
 
     ResolvedAddresses.Builder builder = allAddresses.toBuilder();
-    return builder.setAddresses(list).build();
+    return builder.setAddresses(eaglist).build();
   }
 
   @Override
@@ -177,20 +185,25 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
 
     public static class Builder {
-      Integer clientIndex; // There's really no great way to set a default here.
+      Integer clientIndex;
       Integer subsetSize = 10;
 
       Boolean sortAddresses;
       PolicySelection childPolicy;
 
       public Builder setClientIndex (Integer clientIndex){
-        checkArgument(clientIndex != null);
+        checkState(clientIndex != null);
+        // Indices must be positive integers.
+        checkState(clientIndex >= 0);
         this.clientIndex = clientIndex;
         return this;
       }
 
       public Builder setSubsetSize (Integer subsetSize){
         checkArgument(subsetSize != null);
+        // subsetSize of 1 is equivalent to `pick_first`. Use that policy if that behavior is desired.
+        // Fallback to default of 10 of condition is not satisfied.
+        checkArgument(subsetSize > 1);
         this.subsetSize = subsetSize;
         return this;
       }

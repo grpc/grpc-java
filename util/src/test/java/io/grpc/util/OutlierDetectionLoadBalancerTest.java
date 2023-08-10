@@ -1037,7 +1037,7 @@ public class OutlierDetectionLoadBalancerTest {
     assertThat(stdev).isEqualTo(147.32277488562318);
   }
 
-  private static class FakeSocketAddress extends SocketAddress {
+  static class FakeSocketAddress extends SocketAddress {
 
     final String name;
 
