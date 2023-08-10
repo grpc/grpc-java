@@ -32,7 +32,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
-import io.grpc.Status;
+import io.grpc.Status;import org.omg.CORBA.TRANSIENT;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -55,7 +55,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
-  private volatile ConnectivityState currentState = IDLE;
+  private ConnectivityState currentState = IDLE;
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -208,6 +208,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       case READY:
         updateBalancingState(READY, new Picker(PickResult.withSubchannel(subchannel)));
         shutdownRemaining(subchannel);
+        addressIndex.seekTo(getAddress(subchannel));
         break;
       case TRANSIENT_FAILURE:
         // If we are looking at current channel, request a connection if possible
@@ -277,7 +278,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           subchannels.get(addressIndex.getCurrentAddress()).getState();
       if (subchannelState == IDLE) {
         subchannel.requestConnection();
-      } else {
+      } else if (subchannelState == CONNECTING || subchannelState == TRANSIENT_FAILURE) {
         addressIndex.increment();
         requestConnection();
       }
@@ -448,7 +449,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return this.state;
     }
 
-    void updateState(ConnectivityState newState) {
+    private void updateState(ConnectivityState newState) {
       this.state = newState;
     }
   }
