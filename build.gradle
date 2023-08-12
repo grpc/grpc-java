@@ -417,31 +417,25 @@ subprojects {
         def baselineGrpcVersion = '1.6.1'
 
         // Get the baseline version's jar for this subproject
-        File baselineArtifact = null
-        // Use a detached configuration, otherwise the current version's jar will take precedence
-        // over the baseline jar.
+        configurations {
+            baselineArtifact
+        }
         // A necessary hack, the intuitive thing does NOT work:
         // https://discuss.gradle.org/t/is-the-default-configuration-leaking-into-independent-configurations/2088/6
         def oldGroup = project.group
         try {
             project.group = 'virtual_group_for_japicmp'
-            String depModule = "io.grpc:${project.name}:${baselineGrpcVersion}@jar"
-            String depJar = "${project.name}-${baselineGrpcVersion}.jar"
-            Configuration configuration = configurations.detachedConfiguration(
-                    dependencies.create(depModule)
-                    )
-            baselineArtifact = files(configuration.files).filter {
-                it.name.equals(depJar)
-            }.singleFile
+            dependencies {
+                baselineArtifact "io.grpc:${project.name}:${baselineGrpcVersion}@jar"
+            }
         } finally {
             project.group = oldGroup
         }
 
         // Add a japicmp task that compares the current .jar with baseline .jar
         tasks.register("japicmp", me.champeau.gradle.japicmp.JapicmpTask) {
-            dependsOn jar
-            oldClasspath.from baselineArtifact
-            newClasspath.from jar.archiveFile
+            oldClasspath.from configurations.baselineArtifact
+            newClasspath.from tasks.named("jar")
             onlyBinaryIncompatibleModified = false
             // Be quiet about things that did not change
             onlyModified = true
@@ -454,12 +448,10 @@ subprojects {
 
             // Also break on source incompatible changes, not just binary.
             // Eg adding abstract method to public class.
-            // TODO(zpencer): enable after japicmp-gradle-plugin/pull/14
-            // breakOnSourceIncompatibility = true
+            failOnSourceIncompatibility = true
 
             // Ignore any classes or methods marked @ExperimentalApi
-            // TODO(zpencer): enable after japicmp-gradle-plugin/pull/15
-            // annotationExcludes = ['@io.grpc.ExperimentalApi']
+            annotationExcludes = ['@io.grpc.ExperimentalApi']
         }
     }
 }
