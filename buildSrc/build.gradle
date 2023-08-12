@@ -1,0 +1,5 @@
+tasks.withType(JavaCompile).configureEach {
+    it.options.compilerArgs += [
+        "-Xlint:all",
+    ]
+}

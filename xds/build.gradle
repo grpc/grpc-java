@@ -1,4 +1,4 @@
-import java.util.jar.JarFile
+import io.grpc.gradle.CheckPackageLeakageTask;
 
 plugins {
     id "java"
@@ -192,29 +192,9 @@ tasks.named("shadowJar").configure {
     exclude "**/*.proto"
 }
 
-def checkPackageLeakage = tasks.register("checkPackageLeakage") {
-    inputs.files(shadowJar).withNormalizer(CompileClasspathNormalizer)
-    outputs.file("${buildDir}/tmp/${name}") // Fake output for UP-TO-DATE checking
-    doLast {
-        def jarEntryPrefixName = prefixName.replaceAll('\\.', '/')
-        shadowJar.outputs.getFiles().each { jar ->
-            def package_leak_detected = false
-            JarFile jf = new JarFile(jar)
-            jf.entries().each { entry ->
-                if (entry.name.endsWith(".class") && !entry.name.startsWith(
-                        jarEntryPrefixName)) {
-                    package_leak_detected = true
-                    println "WARNING: package leaked, may need relocation: " +
-                            entry.name
-                }
-            }
-            jf.close()
-            if (package_leak_detected) {
-                throw new TaskExecutionException(shadowJar,
-                        new IllegalStateException("Resource leakage detected!"))
-            }
-        }
-    }
+def checkPackageLeakage = tasks.register("checkPackageLeakage", CheckPackageLeakageTask) {
+    files.from tasks.named('shadowJar')
+    prefix = prefixName
 }
 
 tasks.named("test").configure {
