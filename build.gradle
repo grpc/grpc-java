@@ -7,8 +7,9 @@ plugins {
     id 'com.google.cloud.tools.jib' apply false
 }
 
+import io.grpc.gradle.CheckForUpdatesTask
+import io.grpc.gradle.RequireUpperBoundDepsMatchTask
 import net.ltgt.gradle.errorprone.CheckSeverity
-import org.gradle.util.GUtil
 
 subprojects {
     apply plugin: "checkstyle"
@@ -275,15 +276,11 @@ subprojects {
     plugins.withId("java-library") {
         // Detect Maven Enforcer's dependencyConvergence failures. We only care
         // for artifacts used as libraries by others with Maven.
-        tasks.register('checkUpperBoundDeps') {
-            inputs.files(configurations.runtimeClasspath).withNormalizer(ClasspathNormalizer)
-            outputs.file("${buildDir}/tmp/${name}") // Fake output for UP-TO-DATE checking
-            doLast {
-                requireUpperBoundDepsMatch(configurations.runtimeClasspath, project)
-            }
+        tasks.register('checkUpperBoundDeps', RequireUpperBoundDepsMatchTask) {
+            configuration = configurations.getByName('runtimeClasspath')
         }
         tasks.named('assemble').configure {
-            dependsOn checkUpperBoundDeps
+            dependsOn tasks.named('checkUpperBoundDeps')
         }
     }
 
@@ -456,64 +453,6 @@ subprojects {
     }
 }
 
-class DepAndParents {
-    DependencyResult dep
-    List<String> parents
-}
-
-/**
- * Make sure that Maven would select the same versions as Gradle selected.
- * This is essentially the same as if we used Maven Enforcer's
- * requireUpperBoundDeps for our artifacts.
- */
-def requireUpperBoundDepsMatch(Configuration conf, Project project) {
-    // artifact name => version
-    Map<String,String> golden = conf.resolvedConfiguration.resolvedArtifacts.collectEntries {
-        ResolvedArtifact it ->
-            ModuleVersionIdentifier id = it.moduleVersion.id
-            [id.group + ":" + id.name, id.version]
-    }
-    // Breadth-first search like Maven for dependency resolution
-    Queue<DepAndParents> queue = new ArrayDeque<>()
-    conf.incoming.resolutionResult.root.dependencies.each {
-        queue.add(new DepAndParents(dep: it, parents: [project.displayName]))
-    }
-    Set<String> found = new HashSet<>()
-    while (!queue.isEmpty()) {
-        DepAndParents depAndParents = queue.remove()
-        ResolvedDependencyResult result = (ResolvedDependencyResult) depAndParents.dep
-        ModuleVersionIdentifier id = result.selected.moduleVersion
-        String artifact = id.group + ":" + id.name
-        if (found.contains(artifact))
-            continue
-        found.add(artifact)
-        String version
-        if (result.requested instanceof ProjectComponentSelector) {
-            ProjectComponentSelector selector = (ProjectComponentSelector) result.requested
-            version = project.findProject(selector.projectPath).version
-        } else {
-            version = ((ModuleComponentSelector) result.requested).version
-        }
-        String goldenVersion = golden[artifact]
-        if (goldenVersion != version && "[$goldenVersion]" != version) {
-            throw new RuntimeException(
-                "Maven version skew: $artifact ($version != $goldenVersion) "
-                + "Bad version dependency path: " + depAndParents.parents
-                + " Run './gradlew $project.path:dependencies --configuration $conf.name' "
-                + "to diagnose")
-        }
-        result.selected.dependencies.each {
-            // Category.CATEGORY_ATTRIBUTE is the inappropriate Attribute because it is "desugared".
-            // https://github.com/gradle/gradle/issues/8854
-            Attribute<String> category = Attribute.of('org.gradle.category', String)
-            if (it.resolvedVariant.attributes.getAttribute(category) != Category.LIBRARY)
-                return
-            queue.add(new DepAndParents(
-                dep: it, parents: depAndParents.parents + [artifact + ":" + version]))
-        }
-    }
-}
-
 repositories {
     mavenCentral()
     google()
@@ -546,34 +485,4 @@ configurations {
     }
 }
 
-// Checks every dependency in the version catalog to see if there is a newer
-// version available. The 'checkForUpdates' configuration restricts the
-// versions considered.
-tasks.register('checkForUpdates') {
-    doLast {
-        def updateConf = project.configurations.checkForUpdates
-        updateConf.setVisible(false)
-        updateConf.setTransitive(false)
-        def versionCatalog = project.extensions.getByType(VersionCatalogsExtension).named("libs")
-        versionCatalog.libraryAliases.each { name ->
-            def dep = versionCatalog.findLibrary(name).get().get()
-
-            def oldConf = updateConf.copy()
-            def oldDep = project.dependencies.create(
-                group: dep.group, name: dep.name, version: dep.versionConstraint, classifier: 'pom')
-            oldConf.dependencies.add(oldDep)
-            def oldResolved = oldConf.resolvedConfiguration.resolvedArtifacts.iterator().next()
-
-            def newConf = updateConf.copy()
-            def newDep = project.dependencies.create(
-                group: dep.group, name: dep.name, version: '+', classifier: 'pom')
-            newConf.dependencies.add(newDep)
-            def newResolved = newConf.resolvedConfiguration.resolvedArtifacts.iterator().next()
-            if (oldResolved != newResolved) {
-                def oldId = oldResolved.id.componentIdentifier
-                def newId = newResolved.id.componentIdentifier
-                println("libs.${name} = ${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
-            }
-        }
-    }
-}
+tasks.register('checkForUpdates', CheckForUpdatesTask, project.configurations.checkForUpdates, "libs")
