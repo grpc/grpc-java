@@ -163,7 +163,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // Shutdown channels/previously relevant subchannels can still callback with state updates.
     // To prevent pickers from returning these obselete subchannels, this logic
     // is included to check if the current list of active subchannels includes this subchannel.
-    if (!subchannels.containsKey(getAddress(subchannel))) {
+    if (!subchannels.containsKey(getAddress(subchannel))
+        || subchannels.get(getAddress(subchannel)).getSubchannel() != subchannel) {
       return;
     }
     if (newState == SHUTDOWN) {
@@ -432,9 +433,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
-  static final class SubchannelData {
-    final Subchannel subchannel;
-    ConnectivityState state;
+  private static final class SubchannelData {
+    private final Subchannel subchannel;
+    private ConnectivityState state;
 
     public SubchannelData(Subchannel subchannel, ConnectivityState state) {
       this.subchannel = subchannel;
