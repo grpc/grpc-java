@@ -39,7 +39,6 @@ import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
