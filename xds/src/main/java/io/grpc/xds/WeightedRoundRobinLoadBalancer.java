@@ -409,10 +409,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       double unscaledMeanWeight = numWeightedChannels > 0
           ? sumWeight / numWeightedChannels : 1;
+      System.out.println("unscaledMeanWeight: " + unscaledMeanWeight);
 
       // Adjust max value s.t. ratio does not exceed K_MAX_RATIO. This should
       // ensure that we on average do at most K_MAX_RATIO rounds for picks.
       double ratio = unscaledMaxWeight / unscaledMeanWeight;
+      System.out.println("ratio: " + ratio);
       if (ratio > K_MAX_RATIO) {
         unscaledMaxWeight = (float) (K_MAX_RATIO * unscaledMeanWeight);
       }
@@ -422,7 +424,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       // Note that, since we cap the weights to stay within K_MAX_RATIO, `meanWeight` might not
       // match the actual mean of the values that end up in the scheduler.
       double scalingFactor = K_MAX_WEIGHT / unscaledMaxWeight;
+      System.out.println("scalingFactor: " + scalingFactor);
       short meanWeight = (short) Math.round(scalingFactor * unscaledMeanWeight);
+      System.out.println("meanWeight: " + Short.toUnsignedInt(meanWeight));
 
       // We compute `weightLowerBound` and cap it to 1 from below so that in the
       // worst case we represent tiny weights as 1 but not as 0 (which would cause
@@ -436,6 +440,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         } else {
           double floatWeightCappedFromAbove = Math.min(weights[i], unscaledMaxWeight);
           short weight = (short) Math.round(floatWeightCappedFromAbove * scalingFactor);
+          System.out.println(Short.toUnsignedInt(weight));
           scaledWeights[i] = (short) Math.max(weight, weightLowerBound);
         }
       }
