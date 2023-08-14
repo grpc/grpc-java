@@ -426,14 +426,14 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       // worst case we represent tiny weights as 1 but not as 0 (which would cause
       // an infinite loop as in b/276292666). This capping to 1 is probably only
       // useful in case someone misconfigures kMinRatio to be very small.
-      int weightLowerBound = (short) Math.max(1, Math.round(K_MIN_RATIO * meanWeight));
+      int weightLowerBound = (int) Math.max(1, Math.round(K_MIN_RATIO * meanWeight));
       short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] <= 0) {
           scaledWeights[i] = (short) meanWeight;
         } else {
-          double floatWeightCappedFromAbove = Math.min(weights[i], unscaledMaxWeight);
-          int weight = (int) Math.round(floatWeightCappedFromAbove * scalingFactor);
+          double weightUpperBound = Math.min(weights[i], unscaledMaxWeight);
+          int weight = (int) Math.round(weightUpperBound * scalingFactor);
           scaledWeights[i] = (short) Math.max(weight, weightLowerBound);
         }
       }
