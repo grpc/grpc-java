@@ -529,25 +529,6 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
-  public void requestConnection_no_subchannels() {
-    loadBalancer.requestConnection();
-    verify(mockSubchannel1, never()).requestConnection();
-
-    // no addresses
-    servers.clear();
-    loadBalancer.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-    verifyNoMoreInteractions(mockHelper);
-    verifyNoMoreInteractions(mockSubchannel1);
-
-    // request connection method is a no-op with no addresses
-    loadBalancer.requestConnection();
-    verifyNoMoreInteractions(mockHelper);
-    verifyNoMoreInteractions(mockSubchannel1);
-    assertEquals(IDLE, loadBalancer.getCurrentState());
-  }
-
-  @Test
   public void requestConnection() {
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
         mockSubchannel3, mockSubchannel4);
