@@ -34,12 +34,6 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
     DeterministicSubsettingLoadBalancerConfig config
       = (DeterministicSubsettingLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
 
-    // The map should only retain entries for addresses in this latest update.
-    ArrayList<SocketAddress> allAddresses = new ArrayList<>();
-    for (EquivalentAddressGroup addressGroup : resolvedAddresses.getAddresses()){
-      allAddresses.addAll(addressGroup.getAddresses());
-    }
-
     switchLb.switchTo(config.childPolicy.getProvider());
 
     ResolvedAddresses subsetAddresses = buildSubsets(resolvedAddresses, config);
@@ -60,7 +54,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
     if (addresses.size() <= config.subsetSize) return allAddresses;
     if (config.sortAddresses) {
-      // If we sort, we do so via destination hashcode. This is deterministic but differs from the goland instrumentation.
+      // If we sort, we do so via destination hashcode. This is deterministic but differs from the golang instrumentation.
       addresses.sort(new AddressComparator());
     }
 
@@ -68,7 +62,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
     Integer subsetCount = backendCount / config.subsetSize;
 
     Integer round = config.clientIndex / subsetCount;
-    
+
     Integer excludedCount = backendCount % config.subsetSize;
     Integer excludedStart = (round * excludedCount) % backendCount;
     Integer excludedEnd = (excludedStart + excludedCount) % backendCount;
