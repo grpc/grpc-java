@@ -17,17 +17,20 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkElementIndex;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Deadline.Ticker;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -40,6 +43,7 @@ import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -91,6 +95,20 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
+  protected Map<Object, ChildLbState> getChildLbMap(ResolvedAddresses resolvedAddresses) {
+    Map<Object, ChildLbState> childLbMap = new HashMap<>();
+    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
+    Object policyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    for (EquivalentAddressGroup eag : addresses) {
+      EquivalentAddressGroup key = stripAttrs(eag);
+      ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
+          getInitialPicker());
+      childLbMap.put(key, childLbState);
+    }
+    return childLbMap;
+  }
+
+  @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getLoadBalancingPolicyConfig() == null) {
       handleNameResolutionError(Status.UNAVAILABLE.withDescription(
@@ -111,9 +129,32 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-  public RoundRobinPicker createReadyPicker(List<Subchannel> activeList) {
-    return new WeightedRoundRobinPicker(activeList, config.enableOobLoadReport,
-        config.errorUtilizationPenalty);
+  public RoundRobinPicker createReadyPicker(Collection<ChildLbState> activeList) {
+    return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
+        config.enableOobLoadReport, config.errorUtilizationPenalty);
+  }
+
+  private final class WeightedChildLbState extends ChildLbState {
+    WrrSubchannel subchannel;
+
+    public WeightedChildLbState(Object key, LoadBalancerProvider policyProvider, Object childConfig,
+        SubchannelPicker initialPicker) {
+      super(key, policyProvider, childConfig, initialPicker);
+    }
+
+    public double getWeight() {
+      return subchannel == null ? 0 : subchannel.getWeight();
+    }
+
+    @Override
+    public Subchannel getCurrentSubchannel(PickSubchannelArgs args) {
+      if (subchannel != null) {
+        return subchannel;
+      }
+
+      subchannel = (WrrSubchannel) super.getCurrentSubchannel(args);
+      return subchannel;
+    }
   }
 
   private final class UpdateWeightTask implements Runnable {
@@ -128,8 +169,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   private void afterAcceptAddresses() {
-    for (Subchannel subchannel : getSubchannels()) {
-      WrrSubchannel weightedSubchannel = (WrrSubchannel) subchannel;
+    for (ChildLbState child : getChildren()) {
+      WrrSubchannel weightedSubchannel =
+          (WrrSubchannel) child.getCurrentSubchannel(null);
       if (config.enableOobLoadReport) {
         OrcaOobUtil.setListener(weightedSubchannel,
             weightedSubchannel.new OrcaReportListener(config.errorUtilizationPenalty),
@@ -169,7 +211,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      return wrr.new WrrSubchannel(delegate().createSubchannel(args));
+      WrrSubchannel wrrSubchannel = wrr.new WrrSubchannel(delegate().createSubchannel(args));
+      checkElementIndex(0, args.getAddresses().size(), "Empty address group");
+      WeightedChildLbState childLbState =
+          (WeightedChildLbState) wrr.getChild(args.getAddresses().get(0));
+      childLbState.subchannel = wrrSubchannel;
+      return wrrSubchannel;
     }
   }
 
@@ -253,21 +300,22 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   @VisibleForTesting
   final class WeightedRoundRobinPicker extends RoundRobinPicker {
-    private final List<Subchannel> list;
+    private final List<ChildLbState> children;
     private final Map<Subchannel, OrcaPerRequestReportListener> subchannelToReportListenerMap =
         new HashMap<>();
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
     private volatile StaticStrideScheduler scheduler;
 
-    WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
+    WeightedRoundRobinPicker(List<ChildLbState> children, boolean enableOobLoadReport,
         float errorUtilizationPenalty) {
-      checkNotNull(list, "list");
-      Preconditions.checkArgument(!list.isEmpty(), "empty list");
-      this.list = list;
-      for (Subchannel subchannel : list) {
+      checkNotNull(children, "children");
+      Preconditions.checkArgument(!children.isEmpty(), "empty child list");
+      this.children = children;
+      for (ChildLbState child : children) {
+        WrrSubchannel subchannel = (WrrSubchannel) child.getCurrentSubchannel(null);
         this.subchannelToReportListenerMap.put(subchannel,
-            ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty));
+            subchannel.new OrcaReportListener(errorUtilizationPenalty));
       }
       this.enableOobLoadReport = enableOobLoadReport;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
@@ -276,7 +324,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      Subchannel subchannel = list.get(scheduler.pick());
+      ChildLbState childLbState = children.get(scheduler.pick());
+      Subchannel subchannel = childLbState.getCurrentSubchannel(args);
       if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
                 OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
@@ -288,10 +337,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
 
     private void updateWeight() {
-      float[] newWeights = new float[list.size()];
-      for (int i = 0; i < list.size(); i++) {
-        WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
-        double newWeight = subchannel.getWeight();
+      float[] newWeights = new float[children.size()];
+      for (int i = 0; i < children.size(); i++) {
+        double newWeight = ((WeightedChildLbState)children.get(i)).getWeight();
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
       this.scheduler = new StaticStrideScheduler(newWeights, sequence);
@@ -302,12 +350,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       return MoreObjects.toStringHelper(WeightedRoundRobinPicker.class)
           .add("enableOobLoadReport", enableOobLoadReport)
           .add("errorUtilizationPenalty", errorUtilizationPenalty)
-          .add("list", list).toString();
+          .add("list", children).toString();
     }
 
     @VisibleForTesting
-    List<Subchannel> getList() {
-      return list;
+    List<ChildLbState> getChildren() {
+      return children;
     }
 
     @Override
@@ -322,7 +370,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       // the lists cannot contain duplicate subchannels
       return enableOobLoadReport == other.enableOobLoadReport
           && Float.compare(errorUtilizationPenalty, other.errorUtilizationPenalty) == 0
-          && list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list);
+          && children.size() == other.children.size() && new HashSet<>(
+          children).containsAll(other.children);
     }
   }
 

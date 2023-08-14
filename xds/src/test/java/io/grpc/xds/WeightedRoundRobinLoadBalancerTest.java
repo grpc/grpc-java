@@ -202,16 +202,16 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(0);
-    assertThat(weightedPicker.getList().size()).isEqualTo(1);
+    assertThat(weightedPicker.getChildren().size()).isEqualTo(1);
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    assertThat(weightedPicker.getList().size()).isEqualTo(2);
+    assertThat(weightedPicker.getChildren().size()).isEqualTo(2);
     String weightedPickerStr = weightedPicker.toString();
     assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
     assertThat(weightedPickerStr).contains("errorUtilizationPenalty=1.0");
     assertThat(weightedPickerStr).contains("list=");
 
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
@@ -256,8 +256,8 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
@@ -313,9 +313,9 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(2);
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
+    WrrSubchannel weightedSubchannel3 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 2);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         r1);
     weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
@@ -335,6 +335,10 @@ public class WeightedRoundRobinLoadBalancerTest {
         .isLessThan(0.0002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 10000.0 - subchannel3PickRatio ))
         .isLessThan(0.0002);
+  }
+
+  private static Subchannel getCurrentSubchannel(WeightedRoundRobinPicker picker, int index) {
+    return picker.getChildren().get(index).getCurrentSubchannel(null);
   }
 
   @Test
@@ -507,8 +511,8 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
@@ -564,11 +568,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(0);
-    assertThat(weightedPicker.getList().size()).isEqualTo(1);
+    assertThat(weightedPicker.getChildren().size()).isEqualTo(1);
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    assertThat(weightedPicker.getList().size()).isEqualTo(2);
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    assertThat(weightedPicker.getChildren().size()).isEqualTo(2);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
@@ -619,8 +623,8 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
@@ -674,8 +678,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
     Map<WrrSubchannel, Integer> qpsByChannel = ImmutableMap.of(weightedSubchannel1, 2,
         weightedSubchannel2, 1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
@@ -737,9 +741,9 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(2);
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
+    WrrSubchannel weightedSubchannel3 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 2);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
@@ -782,8 +786,8 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
-    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) getCurrentSubchannel(weightedPicker, 1);
     weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
