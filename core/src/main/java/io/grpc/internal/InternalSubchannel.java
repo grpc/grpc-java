@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,7 +63,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * Transports for a single {@link SocketAddress}.
  */
 @ThreadSafe
-final class InternalSubchannel implements InternalInstrumented<ChannelStats>, TransportProvider {
+final class InternalSubchannel implements
+    InternalInstrumented<ChannelStats>, TransportProvider {
 
   private final InternalLogId logId;
   private final String authority;
@@ -81,14 +82,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
    * All field must be mutated in the syncContext.
    */
   private final SynchronizationContext syncContext;
-
-  /**
-   * The index of the address corresponding to pendingTransport/activeTransport, or at beginning if
-   * both are null.
-   *
-   * <p>Note: any {@link Index#updateAddresses(List)} should also update {@link #addressGroups}.
-   */
-  private final Index addressIndex;
 
   /**
    * A volatile accessor to {@link Index#getAddressGroups()}. There are few methods ({@link
@@ -154,19 +147,16 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
   private Status shutdownReason;
 
-  InternalSubchannel(List<EquivalentAddressGroup> addressGroups, String authority, String userAgent,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
-      Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext, Callback callback,
-      InternalChannelz channelz, CallTracer callsTracer, ChannelTracer channelTracer,
-      InternalLogId logId, ChannelLogger channelLogger) {
+  InternalSubchannel(List<EquivalentAddressGroup> addressGroups, String authority,
+             String userAgent, BackoffPolicy.Provider backoffPolicyProvider,
+             ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
+             Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext,
+             Callback callback, InternalChannelz channelz, CallTracer callsTracer,
+             ChannelTracer channelTracer, InternalLogId logId, ChannelLogger channelLogger) {
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
-    List<EquivalentAddressGroup> unmodifiableAddressGroups =
-        Collections.unmodifiableList(new ArrayList<>(addressGroups));
-    this.addressGroups = unmodifiableAddressGroups;
-    this.addressIndex = new Index(unmodifiableAddressGroups);
+    this.addressGroups = Collections.unmodifiableList(new ArrayList<>(addressGroups));;
     this.authority = authority;
     this.userAgent = userAgent;
     this.backoffPolicyProvider = backoffPolicyProvider;
@@ -224,11 +214,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     syncContext.throwIfNotInThisSynchronizationContext();
 
     Preconditions.checkState(reconnectTask == null, "Should have no reconnectTask scheduled");
+    connectingTimer.reset().start();
 
-    if (addressIndex.isAtBeginning()) {
-      connectingTimer.reset().start();
-    }
-    SocketAddress address = addressIndex.getCurrentAddress();
+    SocketAddress address = addressGroups.get(0).getAddresses().get(0);
 
     HttpConnectProxiedSocketAddress proxiedAddr = null;
     if (address instanceof HttpConnectProxiedSocketAddress) {
@@ -236,15 +224,15 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       address = proxiedAddr.getTargetAddress();
     }
 
-    Attributes currentEagAttributes = addressIndex.getCurrentEagAttributes();
+    Attributes currentEagAttributes = addressGroups.get(0).getAttributes();
     String eagChannelAuthority = currentEagAttributes
-            .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE);
+        .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE);
     ClientTransportFactory.ClientTransportOptions options =
         new ClientTransportFactory.ClientTransportOptions()
-          .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
-          .setEagAttributes(currentEagAttributes)
-          .setUserAgent(userAgent)
-          .setHttpConnectProxiedSocketAddress(proxiedAddr);
+            .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
+            .setEagAttributes(currentEagAttributes)
+            .setUserAgent(userAgent)
+            .setHttpConnectProxiedSocketAddress(proxiedAddr);
     TransportLogger transportLogger = new TransportLogger();
     // In case the transport logs in the constructor, use the subchannel logId
     transportLogger.logId = getLogId();
@@ -265,8 +253,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
   /**
    * Only called after all addresses attempted and failed (TRANSIENT_FAILURE).
-   * @param status the causal status when the channel begins transition to
-   *     TRANSIENT_FAILURE.
+   * @param status the causal status when the channel begins transition to TRANSIENT_FAILURE.
    */
   private void scheduleBackoff(final Status status) {
     syncContext.throwIfNotInThisSynchronizationContext();
@@ -335,72 +322,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     }
   }
 
-  /** Replaces the existing addresses, avoiding unnecessary reconnects. */
-  public void updateAddresses(final List<EquivalentAddressGroup> newAddressGroups) {
-    Preconditions.checkNotNull(newAddressGroups, "newAddressGroups");
-    checkListHasNoNulls(newAddressGroups, "newAddressGroups contains null entry");
-    Preconditions.checkArgument(!newAddressGroups.isEmpty(), "newAddressGroups is empty");
-    final List<EquivalentAddressGroup> newImmutableAddressGroups =
-        Collections.unmodifiableList(new ArrayList<>(newAddressGroups));
-
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        ManagedClientTransport savedTransport = null;
-        SocketAddress previousAddress = addressIndex.getCurrentAddress();
-        addressIndex.updateGroups(newImmutableAddressGroups);
-        addressGroups = newImmutableAddressGroups;
-        if (state.getState() == READY || state.getState() == CONNECTING) {
-          if (!addressIndex.seekTo(previousAddress)) {
-            // Forced to drop the connection
-            if (state.getState() == READY) {
-              savedTransport = activeTransport;
-              activeTransport = null;
-              addressIndex.reset();
-              gotoNonErrorState(IDLE);
-            } else {
-              pendingTransport.shutdown(
-                  Status.UNAVAILABLE.withDescription(
-                    "InternalSubchannel closed pending transport due to address change"));
-              pendingTransport = null;
-              addressIndex.reset();
-              startNewTransport();
-            }
-          }
-        }
-        if (savedTransport != null) {
-          if (shutdownDueToUpdateTask != null) {
-            // Keeping track of multiple shutdown tasks adds complexity, and shouldn't generally be
-            // necessary. This transport has probably already had plenty of time.
-            shutdownDueToUpdateTransport.shutdown(
-                Status.UNAVAILABLE.withDescription(
-                    "InternalSubchannel closed transport early due to address change"));
-            shutdownDueToUpdateTask.cancel();
-            shutdownDueToUpdateTask = null;
-            shutdownDueToUpdateTransport = null;
-          }
-          // Avoid needless RPC failures by delaying the shutdown. See
-          // https://github.com/grpc/grpc-java/issues/2562
-          shutdownDueToUpdateTransport = savedTransport;
-          shutdownDueToUpdateTask = syncContext.schedule(
-              new Runnable() {
-                @Override public void run() {
-                  ManagedClientTransport transport = shutdownDueToUpdateTransport;
-                  shutdownDueToUpdateTask = null;
-                  shutdownDueToUpdateTransport = null;
-                  transport.shutdown(
-                      Status.UNAVAILABLE.withDescription(
-                          "InternalSubchannel closed transport due to address change"));
-                }
-              },
-              ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS,
-              TimeUnit.SECONDS,
-              scheduledExecutor);
-        }
-      }
-    });
-  }
-
   public void shutdown(final Status reason) {
     syncContext.execute(new Runnable() {
       @Override
@@ -416,7 +337,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
         activeTransport = null;
         pendingTransport = null;
         gotoNonErrorState(SHUTDOWN);
-        addressIndex.reset();
         if (transports.isEmpty()) {
           handleTermination();
         }  // else: the callback will be run once all transports have been terminated
@@ -508,7 +428,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       @Override
       public void run() {
         ChannelStats.Builder builder = new ChannelStats.Builder();
-        List<EquivalentAddressGroup> addressGroupsSnapshot = addressIndex.getGroups();
+        List<EquivalentAddressGroup> addressGroupsSnapshot = addressGroups;
         List<InternalWithLogId> transportsSnapshot = new ArrayList<InternalWithLogId>(transports);
         builder.setTarget(addressGroupsSnapshot.toString()).setState(getState());
         builder.setSockets(transportsSnapshot);
@@ -577,23 +497,14 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             return;
           }
           if (activeTransport == transport) {
+            // told to shutdown when READY
             activeTransport = null;
-            addressIndex.reset();
             gotoNonErrorState(IDLE);
           } else if (pendingTransport == transport) {
+            // told to shutdown when CONNECTING
             Preconditions.checkState(state.getState() == CONNECTING,
                 "Expected state is CONNECTING, actual state is %s", state.getState());
-            addressIndex.increment();
-            // Continue reconnect if there are still addresses to try.
-            if (!addressIndex.isValid()) {
-              pendingTransport = null;
-              addressIndex.reset();
-              // Initiate backoff
-              // Transition to TRANSIENT_FAILURE
-              scheduleBackoff(s);
-            } else {
-              startNewTransport();
-            }
+            scheduleBackoff(s);
           }
         }
       });
@@ -693,74 +604,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           });
         }
       };
-    }
-  }
-
-  /** Index as in 'i', the pointer to an entry. Not a "search index." */
-  @VisibleForTesting
-  static final class Index {
-    private List<EquivalentAddressGroup> addressGroups;
-    private int groupIndex;
-    private int addressIndex;
-
-    public Index(List<EquivalentAddressGroup> groups) {
-      this.addressGroups = groups;
-    }
-
-    public boolean isValid() {
-      // addressIndex will never be invalid
-      return groupIndex < addressGroups.size();
-    }
-
-    public boolean isAtBeginning() {
-      return groupIndex == 0 && addressIndex == 0;
-    }
-
-    public void increment() {
-      EquivalentAddressGroup group = addressGroups.get(groupIndex);
-      addressIndex++;
-      if (addressIndex >= group.getAddresses().size()) {
-        groupIndex++;
-        addressIndex = 0;
-      }
-    }
-
-    public void reset() {
-      groupIndex = 0;
-      addressIndex = 0;
-    }
-
-    public SocketAddress getCurrentAddress() {
-      return addressGroups.get(groupIndex).getAddresses().get(addressIndex);
-    }
-
-    public Attributes getCurrentEagAttributes() {
-      return addressGroups.get(groupIndex).getAttributes();
-    }
-
-    public List<EquivalentAddressGroup> getGroups() {
-      return addressGroups;
-    }
-
-    /** Update to new groups, resetting the current index. */
-    public void updateGroups(List<EquivalentAddressGroup> newGroups) {
-      addressGroups = newGroups;
-      reset();
-    }
-
-    /** Returns false if the needle was not found and the current index was left unchanged. */
-    public boolean seekTo(SocketAddress needle) {
-      for (int i = 0; i < addressGroups.size(); i++) {
-        EquivalentAddressGroup group = addressGroups.get(i);
-        int j = group.getAddresses().indexOf(needle);
-        if (j == -1) {
-          continue;
-        }
-        this.groupIndex = i;
-        this.addressIndex = j;
-        return true;
-      }
-      return false;
     }
   }
 
