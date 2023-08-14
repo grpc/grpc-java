@@ -529,27 +529,51 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
-  public void requestConnection() {
+  public void requestConnection_no_subchannels() {
     loadBalancer.requestConnection();
-
     verify(mockSubchannel1, never()).requestConnection();
+
+    // no addresses
+    servers.clear();
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-    verify(mockSubchannel1).requestConnection();
+    verifyNoMoreInteractions(mockHelper);
+    verifyNoMoreInteractions(mockSubchannel1);
 
-    verify(mockHelper, times(4)).createSubchannel(createArgsCaptor.capture());
-    verify(mockSubchannel1).start(stateListenerCaptor.capture());
-    List<CreateSubchannelArgs> argsList = createArgsCaptor.getAllValues();
-    assertThat(argsList.get(0).getAddresses().get(0)).isEqualTo(servers.get(0));
-    assertThat(argsList.get(1).getAddresses().get(0)).isEqualTo(servers.get(1));
-    assertThat(argsList.get(2).getAddresses().get(0)).isEqualTo(servers.get(2));
-    assertThat(argsList.get(3).getAddresses().get(0)).isEqualTo(servers.get(3));
-    assertThat(argsList.get(0).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(3).getAddresses().size()).isEqualTo(1);
-    verify(mockSubchannel1).requestConnection();
-    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+    // request connection method is a no-op with no addresses
+    loadBalancer.requestConnection();
+    verifyNoMoreInteractions(mockHelper);
+    verifyNoMoreInteractions(mockSubchannel1);
+    assertEquals(IDLE, loadBalancer.getCurrentState());
+  }
+
+  @Test
+  public void requestConnection() {
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
+        mockSubchannel3, mockSubchannel4);
+    List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0), servers.get(1));
+
+    assertEquals(IDLE, loadBalancer.getCurrentState());
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    inOrder.verify(mockSubchannel1).requestConnection();
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+
+    // calling requestConnection() starts next subchannel
+    loadBalancer.requestConnection();
+    inOrder.verify(mockSubchannel2).requestConnection();
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+
+    // calling requestConnection is now a no-op
+    loadBalancer.requestConnection();
+    verifyNoMoreInteractions(mockHelper);
   }
 
   @Test
