@@ -205,7 +205,7 @@ public class InternalSubchannelTest {
             eq(createClientTransportOptions()),
             isA(TransportLogger.class));
 
-    // Fail this one. Enter TRANSIENT_FAILURE.
+    // Fail this one. Because there is only one address to try, enter TRANSIENT_FAILURE.
     assertNoCallbackInvoke();
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
     assertEquals(TRANSIENT_FAILURE, internalSubchannel.getState());
@@ -332,7 +332,7 @@ public class InternalSubchannelTest {
         .newClientTransport(
             eq(addr),
             eq(createClientTransportOptions()),
-            isA(InternalSubchannel.TransportLogger.class));
+            isA(TransportLogger.class));
 
     // Make this one proceed
     transports.peek().listener.transportReady();
@@ -388,7 +388,7 @@ public class InternalSubchannelTest {
             eq(addr),
             eq(createClientTransportOptions()),
             isA(TransportLogger.class));
-  
+
     // Fail this one
     MockClientTransportInfo transportInfo = transports.poll();
     transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
@@ -606,7 +606,7 @@ public class InternalSubchannelTest {
         .newClientTransport(
             eq(addr),
             eq(createClientTransportOptions()),
-            isA(InternalSubchannel.TransportLogger.class));
+            isA(TransportLogger.class));
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
     assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
 
@@ -627,7 +627,7 @@ public class InternalSubchannelTest {
         .newClientTransport(
             eq(addr),
             eq(createClientTransportOptions()),
-            isA(InternalSubchannel.TransportLogger.class));
+            isA(TransportLogger.class));
     assertExactCallbackInvokes("onStateChange:CONNECTING");
     assertTrue(reconnectTask.isCancelled());
 
@@ -638,7 +638,7 @@ public class InternalSubchannelTest {
         .newClientTransport(
             eq(addr),
             eq(createClientTransportOptions()),
-            isA(InternalSubchannel.TransportLogger.class));
+            isA(TransportLogger.class));
     verify(mockBackoffPolicyProvider, times(1)).get();
 
     // Fail the reconnect attempt to verify that a fresh reconnect policy is generated after
@@ -705,7 +705,7 @@ public class InternalSubchannelTest {
     InternalLogId logId = InternalLogId.allocate("Subchannel", /*details=*/ AUTHORITY);
     ChannelTracer subchannelTracer = new ChannelTracer(logId, 10,
         fakeClock.getTimeProvider().currentTimeNanos(), "Subchannel");
-    InternalSubchannel = new InternalSubchannel(addressGroups, AUTHORITY, USER_AGENT,
+    internalSubchannel = new InternalSubchannel(addressGroups, AUTHORITY, USER_AGENT,
         mockBackoffPolicyProvider, mockTransportFactory, fakeClock.getScheduledExecutorService(),
         fakeClock.getStopwatchSupplier(), syncContext, mockInternalSubchannelCallback,
         channelz, CallTracer.getDefaultFactory().create(),
