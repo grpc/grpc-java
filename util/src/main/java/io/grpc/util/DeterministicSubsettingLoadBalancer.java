@@ -113,26 +113,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
   }
 
   public DeterministicSubsettingLoadBalancer(Helper helper){
-    ChildHelper childHelper = new ChildHelper(checkNotNull(helper, "helper"));
-    switchLb = new GracefulSwitchLoadBalancer(childHelper);
-  }
-
-  class ChildHelper extends ForwardingLoadBalancerHelper {
-    private Helper delegate;
-
-    ChildHelper(Helper delegate){
-      this.delegate = delegate;
-    }
-
-    @Override
-    protected Helper delegate() {
-      return delegate;
-    }
-
-    @Override
-    public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      return delegate.createSubchannel(args);
-    }
+    switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
   }
 
   class AddressComparator implements Comparator<SocketAddress> {
