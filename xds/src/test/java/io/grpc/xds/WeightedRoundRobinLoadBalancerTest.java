@@ -338,51 +338,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void pickByWeight_largeWeight() {
-    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.1, 0, 0.1, 999, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.9, 0, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    double totalWeight = 999 / 0.1 + 2 / 0.9 + 100 / 0.86;
-
-    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, 2 / 0.9 / totalWeight,
-            100 / 0.86 / totalWeight);
-  }
-
-  @Test
-  public void pickByWeight_largeWeight_useApplicationUtilization() {
-    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.44, 0.1, 0.1, 999, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.12, 0.9, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.33, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    double totalWeight = 999 / 0.1 + 2 / 0.9 + 100 / 0.86;
-
-    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, 2 / 0.9 / totalWeight,
-        100 / 0.86 / totalWeight);
-  }
-
-  @Test
-  public void pickByWeight_largeWeight_withEps_defaultErrorUtilizationPenalty() {
-    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.1, 0, 0.1, 999, 13, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.9, 0, 0.1, 2, 1.8, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0, 0.1, 100, 3, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    double weight1 = 999 / (0.1 + 13 / 999F * weightedConfig.errorUtilizationPenalty);
-    double weight2 = 2 / (0.9 + 1.8 / 2F * weightedConfig.errorUtilizationPenalty);
-    double weight3 = 100 / (0.86 + 3 / 100F * weightedConfig.errorUtilizationPenalty);
-    double totalWeight = weight1 + weight2 + weight3;
-
-    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
-        weight3 / totalWeight);
-  }
-
-  @Test
   public void pickByWeight_normalWeight() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
         0.12, 0, 0.1, 22, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
@@ -1015,21 +970,38 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testManyComplexWeights() {
-    float[] weights = {1.2f, 2.4f, 222.56f, 1.1f, 15.0f, 226342.0f, 5123.0f, 532.2f};
-    Random random = new Random();
+  public void testMaxClamped() {
+    float[] weights = {81f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
+        1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
-    double totalWeight = 1.2 + 2.4 + 222.56 + 15.0 + 226342.0 + 5123.0 + 0.0001;
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = sss.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+        new AtomicInteger(0));
+    int[] picks = new int[weights.length];
+
+    // max gets clamped to mean*maxRatio = 50 for this set of weights. So if we
+    // pick 50 + 19 times we should get all possible picks.
+    for (int i = 1; i < 70; i++) {
+      picks[sss.pick()] += 1;
     }
-    for (int i = 0; i < 8; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.004);
+    int[] expectedPicks = new int[] {50, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testMinClamped() {
+    float[] weights = {100f, 1e-10f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
+        new AtomicInteger(0));
+    int[] picks = new int[weights.length];
+
+    // We pick 201 elements and ensure that the second channel (with epsilon
+    // weight) also gets picked. The math is: mean value of elements is ~50, so
+    // the first channel keeps its weight of 100, but the second element's weight
+    // gets capped from below to 50*0.01 = 0.5.
+    for (int i = 0; i < 201; i++) {
+      picks[sss.pick()] += 1;
     }
+    int[] expectedPicks = new int[] {200, 1};
+    assertThat(picks).isEqualTo(expectedPicks);
   }
 
   @Test
