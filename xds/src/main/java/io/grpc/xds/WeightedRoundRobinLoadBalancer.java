@@ -398,30 +398,45 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       int numChannels = weights.length;
       int numWeightedChannels = 0;
       double sumWeight = 0;
-      float maxWeight = 0;
-      short meanWeight = 0;
+      float unscaledMaxWeight = 0;
       for (float weight : weights) {
         if (weight > 0) {
           sumWeight += weight;
-          maxWeight = Math.max(weight, maxWeight);
+          unscaledMaxWeight = Math.max(weight, unscaledMaxWeight);
           numWeightedChannels++;
         }
       }
 
-      double scalingFactor = K_MAX_WEIGHT / maxWeight;
-      if (numWeightedChannels > 0) {
-        meanWeight = (short) Math.round(scalingFactor * sumWeight / numWeightedChannels);
-      } else {
-        meanWeight = (short) Math.round(scalingFactor);
+      double unscaledMeanWeight = numWeightedChannels > 0
+          ? sumWeight / numWeightedChannels : 1;
+
+      // Adjust max value s.t. ratio does not exceed K_MAX_RATIO. This should
+      // ensure that we on average do at most K_MAX_RATIO rounds for picks.
+      double ratio = unscaledMaxWeight / unscaledMeanWeight;
+      if (ratio > K_MAX_RATIO) {
+        unscaledMaxWeight = (float) (K_MAX_RATIO * unscaledMeanWeight);
       }
 
-      // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
+
+      // Scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly.
+      // Note that, since we cap the weights to stay within K_MAX_RATIO, `meanWeight` might not
+      // match the actual mean of the values that end up in the scheduler.
+      double scalingFactor = K_MAX_WEIGHT / unscaledMaxWeight;
+      short meanWeight = (short) Math.round(scalingFactor * unscaledMeanWeight);
+
+      // We compute `weightLowerBound` and cap it to 1 from below so that in the
+      // worst case we represent tiny weights as 1 but not as 0 (which would cause
+      // an infinite loop as in b/276292666). This capping to 1 is probably only
+      // useful in case someone misconfigures kMinRatio to be very small.
+      short weightLowerBound = (short) Math.max(1, Math.round(K_MIN_RATIO * meanWeight));
       short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] <= 0) {
           scaledWeights[i] = meanWeight;
         } else {
-          scaledWeights[i] = (short) Math.round(weights[i] * scalingFactor);
+          double floatWeightCappedFromAbove = Math.min(weights[i], unscaledMaxWeight);
+          short weight = (short) Math.round(floatWeightCappedFromAbove * scalingFactor);
+          scaledWeights[i] = (short) Math.max(weight, weightLowerBound);
         }
       }
 
