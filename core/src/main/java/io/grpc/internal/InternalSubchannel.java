@@ -147,12 +147,12 @@ final class InternalSubchannel implements
 
   private Status shutdownReason;
 
-  InternalSubchannel(List<EquivalentAddressGroup> addressGroups, String authority,
-             String userAgent, BackoffPolicy.Provider backoffPolicyProvider,
-             ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
-             Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext,
-             Callback callback, InternalChannelz channelz, CallTracer callsTracer,
-             ChannelTracer channelTracer, InternalLogId logId, ChannelLogger channelLogger) {
+  InternalSubchannel(List<EquivalentAddressGroup> addressGroups, String authority, String userAgent,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
+      Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext, Callback callback,
+      InternalChannelz channelz, CallTracer callsTracer, ChannelTracer channelTracer,
+      InternalLogId logId, ChannelLogger channelLogger) {
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
@@ -226,13 +226,13 @@ final class InternalSubchannel implements
 
     Attributes currentEagAttributes = addressGroups.get(0).getAttributes();
     String eagChannelAuthority = currentEagAttributes
-        .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE);
+            .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE);
     ClientTransportFactory.ClientTransportOptions options =
         new ClientTransportFactory.ClientTransportOptions()
-            .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
-            .setEagAttributes(currentEagAttributes)
-            .setUserAgent(userAgent)
-            .setHttpConnectProxiedSocketAddress(proxiedAddr);
+          .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
+          .setEagAttributes(currentEagAttributes)
+          .setUserAgent(userAgent)
+          .setHttpConnectProxiedSocketAddress(proxiedAddr);
     TransportLogger transportLogger = new TransportLogger();
     // In case the transport logs in the constructor, use the subchannel logId
     transportLogger.logId = getLogId();
@@ -253,7 +253,8 @@ final class InternalSubchannel implements
 
   /**
    * Only called after all addresses attempted and failed (TRANSIENT_FAILURE).
-   * @param status the causal status when the channel begins transition to TRANSIENT_FAILURE.
+   * @param status the causal status when the channel begins transition to
+   *     TRANSIENT_FAILURE.
    */
   private void scheduleBackoff(final Status status) {
     syncContext.throwIfNotInThisSynchronizationContext();
