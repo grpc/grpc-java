@@ -352,6 +352,46 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final short[] scaledWeights;
     private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 0xFFFF;
+    // Assuming the mean of all known weights is M, StaticStrideScheduler will cap
+    // from above all known weights that are bigger than M*kMaxRatio (to
+    // M*kMaxRatio).
+    //
+    // This is done to limit the number of rounds for picks.
+    private static final double K_MAX_RATIO = 10;
+
+    // Assuming the mean of all known weights is M, StaticStrideScheduler will cap
+    // from below all known weights to M*kMinRatio.
+    //
+    // This is done as a performance optimization for edge cases when channels with
+    // large weights are non-accepting (and thus WeightedRoundRobin will retry
+    // picking them over and over again), and there are also channels with near-zero
+    // weights that are possibly accepting. In this case, without kMinRatio, it
+    // would potentially require WeightedRoundRobin to perform thousands of picks
+    // until it gets a single channel with near-zero weight. This was a part of what
+    // happened in b/276292666.
+    //
+    // The current value of 0.01 was chosen without any experimenting. It should
+    // ensure that WeightedRoundRobin doesn't do much more than an order of 100
+    // picks of non-accepting channels with high weights in such corner cases. But
+    // it also makes WeightedRoundRobin to send slightly more requests to
+    // potentially very bad tasks (that would have near-zero weights) than zero.
+    // This is not necessarily a downside, though. Perhaps this is not a problem at
+    // all, and we should increase this value (to 0.05 or 0.1) to save CPU cycles.
+    //
+    // Note that this class treats weights that are exactly equal to zero as unknown
+    // and thus needing to be replaced with M. This behavior itself makes sense
+    // (fresh channels without feedback information will get an average flow of
+    // requests). However, it follows from this that this class will replace weight
+    // = 0 with M, but weight = epsilon with M*kMinRatio, and this step function is
+    // logically faulty. A demonstration of this is that the function that computes
+    // weights in WeightedRoundRobin
+    // (http://google3/production/rpc/stubs/core/loadbalancing/weightedroundrobin.cc;l=324-325;rcl=514986476)
+    // will cap some epsilon values to zero. There should be a clear distinction
+    // between "task is new, weight is unknown" and "task is unhealthy, weight is
+    // very low". A better solution would be to not mix "unknown" and "weight" into
+    // a single value but represent weights as std::optional<float> or, if memory
+    // usage is a concern, use NaN as the indicator of unknown weight.
+    private static final double K_MIN_RATIO = 0.01;
 
     StaticStrideScheduler(float[] weights, Random random) {
       checkArgument(weights.length >= 1, "Couldn't build scheduler: requires at least one weight");
