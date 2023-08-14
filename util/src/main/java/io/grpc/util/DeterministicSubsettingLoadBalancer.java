@@ -131,8 +131,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      DeterministicSubsettingSubchannel subchannel = new DeterministicSubsettingSubchannel(delegate.createSubchannel(args));
-      return subchannel;
+      return delegate.createSubchannel(args);
     }
   }
 
@@ -142,20 +141,6 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
       return o1.hashCode() - o2.hashCode();
     }
 
-  }
-
-  class DeterministicSubsettingSubchannel extends ForwardingSubchannel {
-
-    private final Subchannel delegate;
-
-    DeterministicSubsettingSubchannel(Subchannel delegate) {
-      this.delegate = delegate;
-    }
-
-    @Override
-    protected Subchannel delegate() {
-      return this.delegate;
-    }
   }
 
   public static final class DeterministicSubsettingLoadBalancerConfig {
