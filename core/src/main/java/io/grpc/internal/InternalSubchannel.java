@@ -63,8 +63,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Transports for a single {@link SocketAddress}.
  */
 @ThreadSafe
-final class InternalSubchannel implements
-    InternalInstrumented<ChannelStats>, TransportProvider {
+final class InternalSubchannel implements InternalInstrumented<ChannelStats>, TransportProvider {
 
   private final InternalLogId logId;
   private final String authority;

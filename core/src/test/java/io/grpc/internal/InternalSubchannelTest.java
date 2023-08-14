@@ -117,8 +117,7 @@ public class InternalSubchannelTest {
         }
 
         @Override
-        protected void onStateChange(InternalSubchannel is,
-            ConnectivityStateInfo newState) {
+        protected void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
           assertSame(internalSubchannel, is);
           callbackInvokes.add("onStateChange:" + newState);
         }
@@ -171,7 +170,7 @@ public class InternalSubchannelTest {
     SocketAddress addr = new SocketAddress() {};
     String overriddenAuthority = "authority-override";
     Attributes attr = Attributes.newBuilder()
-        .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, overriddenAuthority).build();
+            .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, overriddenAuthority).build();
     createInternalSubchannel(new EquivalentAddressGroup(Arrays.asList(addr), attr));
 
     // First attempt
@@ -214,7 +213,7 @@ public class InternalSubchannelTest {
     // Backoff reset and using first back-off value interval
     verify(mockBackoffPolicy1, times(++backoff1Consulted)).nextBackoffNanos();
     verify(mockBackoffPolicyProvider, times(++backoffReset)).get();
-    
+
     // Second attempt
     // Transport creation doesn't happen until time is due
     fakeClock.forwardNanos(9);
@@ -309,18 +308,18 @@ public class InternalSubchannelTest {
     // Won't connect until requested
     verify(mockTransportFactory, times(transportsCreated))
         .newClientTransport(
-            eq(addr),
-            eq(createClientTransportOptions()),
-            isA(TransportLogger.class));
+        eq(addr),
+        eq(createClientTransportOptions()),
+        isA(TransportLogger.class));
 
     // First attempt
     internalSubchannel.obtainActiveTransport();
     assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(
-            eq(addr),
-            eq(createClientTransportOptions()),
-            isA(TransportLogger.class));
+        eq(addr),
+        eq(createClientTransportOptions()),
+        isA(TransportLogger.class));
 
     // Fail this one
     transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
@@ -351,9 +350,9 @@ public class InternalSubchannelTest {
     assertExactCallbackInvokes("onStateChange:CONNECTING");
     verify(mockTransportFactory, times(++transportsCreated))
         .newClientTransport(
-            eq(addr),
-            eq(createClientTransportOptions()),
-            isA(TransportLogger.class));
+        eq(addr),
+        eq(createClientTransportOptions()),
+        isA(TransportLogger.class));
   }
 
   @Test
@@ -542,8 +541,8 @@ public class InternalSubchannelTest {
 
   @Test
   public void transportTerminateWithoutExitingInUse() {
-    // An imperfect transport that terminates without going out of in-use.
-    // InternalSubchannel will clear the in-use bit for it.
+    // An imperfect transport that terminates without going out of in-use. InternalSubchannel will
+    // clear the in-use bit for it.
     SocketAddress addr = mock(SocketAddress.class);
     createInternalSubchannel(addr);
 
@@ -566,11 +565,11 @@ public class InternalSubchannelTest {
     createInternalSubchannel(addr1);
     final AtomicInteger runnableInvokes = new AtomicInteger(0);
     Runnable startRunnable = new Runnable() {
-      @Override
-      public void run() {
-        runnableInvokes.incrementAndGet();
-      }
-    };
+        @Override
+        public void run() {
+          runnableInvokes.incrementAndGet();
+        }
+      };
     transports = TestUtils.captureTransports(mockTransportFactory, startRunnable);
 
     assertEquals(0, runnableInvokes.get());
