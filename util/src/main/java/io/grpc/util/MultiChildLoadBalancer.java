@@ -27,6 +27,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
@@ -43,13 +44,10 @@ import javax.annotation.Nullable;
 /**
  * A base load balancing policy for those policies which has multiple children such as
  * ClusterManager or the petiole policies.
- *
- * @since 1.58
  */
+@Internal
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
-  @VisibleForTesting
-  public static final int DELAYED_CHILD_DELETION_TIME_MINUTES = 15;
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
   private final Map<Object, ChildLbState> childLbStates = new HashMap<>();
   private final Helper helper;
@@ -70,6 +68,12 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return new EquivalentAddressGroup(eag.getAddresses());
   }
 
+  protected abstract SubchannelPicker getSubchannelPicker(
+      Map<Object, SubchannelPicker> childPickers);
+
+  protected abstract ResolvedAddresses getChildAddresses(Object key,
+      ResolvedAddresses resolvedAddresses, Object childConfig);
+
   protected SubchannelPicker getInitialPicker() {
     return EMPTY_PICKER;
   }
@@ -83,12 +87,12 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates.values();
   }
 
-  public ChildLbState getChild(EquivalentAddressGroup eag) {
+  protected ChildLbState getChild(EquivalentAddressGroup eag) {
     return childLbStates.get(eag);
   }
 
-  /*
-   Override to utilize parsing of the policy configuration or alternative helper/lb generation.
+  /**
+   * Override to utilize parsing of the policy configuration or alternative helper/lb generation.
    */
   protected Map<Object, ChildLbState> getChildLbMap(ResolvedAddresses resolvedAddresses) {
     Map<Object, ChildLbState> childLbMap = new HashMap<>();
@@ -103,9 +107,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbMap;
   }
 
-
-  protected abstract SubchannelPicker getSubchannelPicker(
-      Map<Object, SubchannelPicker> childPickers);
 
   protected static ResolvedAddresses pickResolvedAddress(EquivalentAddressGroup key,
       ResolvedAddresses resolvedAddresses, Object childConfig) {
@@ -174,9 +175,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     updateOverallBalancingState();
     return true;
   }
-
-  protected abstract ResolvedAddresses getChildAddresses(Object key,
-      ResolvedAddresses resolvedAddresses, Object childConfig);
 
   @Override
   public void handleNameResolutionError(Status error) {

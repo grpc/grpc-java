@@ -343,8 +343,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
 
-      StaticStrideScheduler scheduler = new StaticStrideScheduler(newWeights, random);
-      this.scheduler = scheduler;
+      this.scheduler = new StaticStrideScheduler(newWeights, random);
     }
 
     @Override
@@ -532,11 +531,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       }
 
+      @SuppressWarnings("UnusedReturnValue")
       Builder setBlackoutPeriodNanos(long blackoutPeriodNanos) {
         this.blackoutPeriodNanos = blackoutPeriodNanos;
         return this;
       }
 
+      @SuppressWarnings("UnusedReturnValue")
       Builder setWeightExpirationPeriodNanos(long weightExpirationPeriodNanos) {
         this.weightExpirationPeriodNanos = weightExpirationPeriodNanos;
         return this;

@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancerProvider;
@@ -40,6 +41,8 @@ import javax.annotation.Nullable;
  */
 class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
 
+  @VisibleForTesting
+  public static final int DELAYED_CHILD_DELETION_TIME_MINUTES = 15;
   protected final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final XdsLogger logger;
