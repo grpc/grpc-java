@@ -86,16 +86,9 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
     ArrayList<EquivalentAddressGroup>  eaglist = new ArrayList<>();
 
-    for (EquivalentAddressGroup eag : allAddresses.getAddresses()) {
-      List<SocketAddress> addrs = Lists.newArrayList();
-      for (SocketAddress addr :eag.getAddresses()) {
-        if (subset.contains(addr)) {
-          addrs.add(addr);
-        }
-      }
-      if (addrs.size() != 0) {
-        eaglist.add(new EquivalentAddressGroup(addrs));
-      }
+    // Create new EAGs per address
+    for (SocketAddress addr : subset) {
+      eaglist.add(new EquivalentAddressGroup(addr));
     }
 
     ResolvedAddresses.Builder builder = allAddresses.toBuilder();
