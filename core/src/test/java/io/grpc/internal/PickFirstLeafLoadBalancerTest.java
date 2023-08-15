@@ -59,7 +59,8 @@ import io.grpc.internal.PickFirstLeafLoadBalancer.PickFirstLeafLoadBalancerConfi
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;import java.util.concurrent.TimeUnit;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -1978,7 +1979,8 @@ public class PickFirstLeafLoadBalancerTest {
   @Test
   public void happy_eyeballs_trigger_connection_delay() {
     // Starting first connection attempt
-    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1,
+        mockSubchannel2, mockSubchannel3, mockSubchannel4);
     assertEquals(IDLE, loadBalancer.getCurrentState());
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
@@ -1991,15 +1993,17 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
     assertEquals(CONNECTING, loadBalancer.getCurrentState());
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     inOrder.verify(mockSubchannel1).requestConnection();
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     assertEquals(CONNECTING, loadBalancer.getCurrentState());
 
     // Until we hit the connection delay interval threshold, nothing should happen
-    verifyNoMoreInteractions(mockSubchannel1);
     verifyNoMoreInteractions(mockSubchannel2);
     fakeClock.forwardTime(249, TimeUnit.MILLISECONDS);
-    verifyNoMoreInteractions(mockSubchannel1);
     verifyNoMoreInteractions(mockSubchannel2);
 
     // After 250 ms, second connection attempt starts
@@ -2057,17 +2061,22 @@ public class PickFirstLeafLoadBalancerTest {
     // If a connection fails, the next scheduled conenction is reset to happen 250 ms later
     Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
     verify(mockSubchannel2, times(1)).requestConnection();
 
     // This time, after 1 ms, no connection attempt occurs
     fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
     verify(mockSubchannel1, times(1)).requestConnection();
     verify(mockSubchannel2, times(1)).requestConnection();
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(mockSubchannel3, times(0)).requestConnection();
 
     // After 250 ms, second connection attempt starts
+    // Skip subchannel 2 and request to address 3
     fakeClock.forwardTime(249, TimeUnit.MILLISECONDS);
     verify(mockSubchannel1, times(1)).requestConnection();
     verify(mockSubchannel2, times(1)).requestConnection();
+    verify(mockSubchannel3, times(1)).requestConnection();
     fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
     inOrder.verify(mockSubchannel2).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getCurrentState());
