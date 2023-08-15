@@ -25,6 +25,7 @@ import java.net.SocketAddress;
 import io.grpc.util.OutlierDetectionLoadBalancerTest.FakeSocketAddress;
 import io.grpc.util.DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -252,21 +253,29 @@ public class DeterministicSubsettingLoadBalancerTest {
 
   @Test
   public void backendsCanBeDistributedEvenly() {
+    // Backends can be distributed evenly, so they should be. Therefore, maxDiff = 0
     verifyCreatesSubsets(12, 8, 3, 0);
   }
 
   @Test
   public void backendsCanNotBeDistributedEvenly() {
+    // Backends can't be distributed evenly because there are excluded backends in every round and
+    // not enough clients to fill the last round. This provides 2 opportunities for an backend to be
+    // excluded, so the maxDiff is its maximum, 2
     verifyCreatesSubsets(37, 22, 5, 2);
   }
 
   @Test
-  public void notEnoughClientsForLastRoung() {
+  public void notEnoughClientsForLastRound() {
+    // There are no excluded backends in each round, but there are not enough clients for the last round,
+    // meaning there is only one chance for a backend to be excluded. Therefore, maxDiff =1
     verifyCreatesSubsets(20, 7, 5, 1);
   }
 
   @Test
   public void excludedBackendsInEveryRound() {
+    // There are enough clients to fill the last round, but there are excluded backends in every round,
+    // meaning there is only one chance for a backend to be excluded. Therefore, maxDiff =1
     verifyCreatesSubsets(21, 8, 5, 1);
   }
 
@@ -299,11 +308,9 @@ public class DeterministicSubsettingLoadBalancerTest {
           }
         }
       }
-    int conns = clients / (backends / subsetSize);
-    for(int subchannelConnections : subsetDistn.values()){
-      // Algorithm guarantees as close to a balance in connection count as it can.
-      assertThat(subchannelConnections).isAtLeast(conns - maxDiff);
-      assertThat(subchannelConnections).isAtMost(conns + maxDiff);
-    }
+    int maxConns = Collections.max(subsetDistn.values());
+    int minConns = Collections.min(subsetDistn.values());
+
+    assertThat(maxConns < minConns+maxConns).isTrue();
   }
 }
