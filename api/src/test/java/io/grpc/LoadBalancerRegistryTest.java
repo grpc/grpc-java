@@ -61,7 +61,7 @@ public class LoadBalancerRegistryTest {
     LoadBalancerProvider deterministicSubsetting = defaultRegistry.getProvider(
         "deterministic_subsetting");
     assertThat(deterministicSubsetting.getClass().getName()).isEqualTo(
-      "io.grpc.util.DeterministicSubsettingLoadBalancerProvider");
+        "io.grpc.util.DeterministicSubsettingLoadBalancerProvider");
     assertThat(deterministicSubsetting.getPriority()).isEqualTo(5);
 
     LoadBalancerProvider grpclb = defaultRegistry.getProvider("grpclb");
