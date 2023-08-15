@@ -553,11 +553,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       }
 
+      @SuppressWarnings("UnusedReturnValue")
       Builder setBlackoutPeriodNanos(long blackoutPeriodNanos) {
         this.blackoutPeriodNanos = blackoutPeriodNanos;
         return this;
       }
 
+      @SuppressWarnings("UnusedReturnValue")
       Builder setWeightExpirationPeriodNanos(long weightExpirationPeriodNanos) {
         this.weightExpirationPeriodNanos = weightExpirationPeriodNanos;
         return this;
