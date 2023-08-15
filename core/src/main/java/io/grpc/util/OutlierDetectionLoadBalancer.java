@@ -394,47 +394,55 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       Subchannel subchannel = pickResult.getSubchannel();
       if (subchannel != null) {
-        return PickResult.withSubchannel(subchannel,
-            new ResultCountingClientStreamTracerFactory(
-                subchannel.getAttributes().get(ADDRESS_TRACKER_ATTR_KEY)));
+        return PickResult.withSubchannel(subchannel, new ResultCountingClientStreamTracerFactory(
+            subchannel.getAttributes().get(ADDRESS_TRACKER_ATTR_KEY),
+            pickResult.getStreamTracerFactory()));
       }
 
       return pickResult;
     }
 
     /**
-     * Builds instances of {@link ResultCountingClientStreamTracer}.
+     * Builds instances of a {@link ClientStreamTracer} that increments the call count in the
+     * tracker for each closed stream.
      */
     class ResultCountingClientStreamTracerFactory extends ClientStreamTracer.Factory {
 
       private final AddressTracker tracker;
 
-      ResultCountingClientStreamTracerFactory(AddressTracker tracker) {
+      @Nullable
+      private final ClientStreamTracer.Factory delegateFactory;
+
+      ResultCountingClientStreamTracerFactory(AddressTracker tracker,
+          @Nullable ClientStreamTracer.Factory delegateFactory) {
         this.tracker = tracker;
+        this.delegateFactory = delegateFactory;
       }
 
       @Override
       public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-        return new ResultCountingClientStreamTracer(tracker);
-      }
-    }
+        if (delegateFactory != null) {
+          ClientStreamTracer delegateTracer = delegateFactory.newClientStreamTracer(info, headers);
+          return new ForwardingClientStreamTracer() {
+            @Override
+            protected ClientStreamTracer delegate() {
+              return delegateTracer;
+            }
 
-    /**
-     * Counts the results (successful/unsuccessful) of a particular {@link
-     * OutlierDetectionSubchannel}s streams and increments the counter in the associated {@link
-     * AddressTracker}.
-     */
-    class ResultCountingClientStreamTracer extends ClientStreamTracer {
-
-      AddressTracker tracker;
-
-      public ResultCountingClientStreamTracer(AddressTracker tracker) {
-        this.tracker = tracker;
-      }
-
-      @Override
-      public void streamClosed(Status status) {
-        tracker.incrementCallCount(status.isOk());
+            @Override
+            public void streamClosed(Status status) {
+              tracker.incrementCallCount(status.isOk());
+              delegate().streamClosed(status);
+            }
+          };
+        } else {
+          return new ClientStreamTracer() {
+            @Override
+            public void streamClosed(Status status) {
+              tracker.incrementCallCount(status.isOk());
+            }
+          };
+        }
       }
     }
   }
