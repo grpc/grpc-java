@@ -59,7 +59,7 @@ import io.grpc.internal.PickFirstLeafLoadBalancer.PickFirstLeafLoadBalancerConfi
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
+import java.util.List;import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -80,7 +80,9 @@ public class PickFirstLeafLoadBalancerTest {
   private PickFirstLeafLoadBalancer loadBalancer;
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private static final Attributes.Key<String> FOO = Attributes.Key.create("foo");
-
+  // For scheduled executor
+  private final FakeClock fakeClock = new FakeClock();
+  // For syncContext
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -133,6 +135,7 @@ public class PickFirstLeafLoadBalancerTest {
     when(mockSubchannel4.getAllAddresses()).thenReturn(Lists.newArrayList(servers.get(3)));
 
     when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
+    when(mockHelper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     loadBalancer = new PickFirstLeafLoadBalancer(mockHelper);
   }
 
@@ -1972,6 +1975,120 @@ public class PickFirstLeafLoadBalancerTest {
     assertNotEquals(PickResult.withSubchannel(mockSubchannel4), picker.pickSubchannel(mockArgs));
   }
 
+  @Test
+  public void happy_eyeballs_trigger_connection_delay() {
+    // Starting first connection attempt
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+    assertEquals(IDLE, loadBalancer.getCurrentState());
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+    inOrder.verify(mockSubchannel1).requestConnection();
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // Until we hit the connection delay interval threshold, nothing should happen
+    verifyNoMoreInteractions(mockSubchannel1);
+    verifyNoMoreInteractions(mockSubchannel2);
+    fakeClock.forwardTime(249, TimeUnit.MILLISECONDS);
+    verifyNoMoreInteractions(mockSubchannel1);
+    verifyNoMoreInteractions(mockSubchannel2);
+
+    // After 250 ms, second connection attempt starts
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    inOrder.verify(mockSubchannel2).requestConnection();
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // Second connection attempt is successful
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    assertEquals(READY, loadBalancer.getCurrentState());
+
+    // Verify that picker returns correct subchannel
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    inOrder.verify(mockSubchannel1).shutdown();
+    assertEquals(PickResult.withSubchannel(mockSubchannel2), picker.pickSubchannel(mockArgs));
+    assertNotEquals(PickResult.withSubchannel(mockSubchannel1), picker.pickSubchannel(mockArgs));
+    assertNotEquals(PickResult.withSubchannel(mockSubchannel3), picker.pickSubchannel(mockArgs));
+    assertNotEquals(PickResult.withSubchannel(mockSubchannel4), picker.pickSubchannel(mockArgs));
+  }
+
+  @Test
+  public void happy_eyeballs_fail_then_trigger_connection_delay() {
+    // Starting first connection attempt
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+    assertEquals(IDLE, loadBalancer.getCurrentState());
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // indicates scheduling a connection
+    inOrder.verify(mockSubchannel1).requestConnection();
+    inOrder.verify(mockHelper, times(1)).getSynchronizationContext();
+    inOrder.verify(mockHelper).getScheduledExecutorService();
+
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // Until we hit the connection delay interval threshold, no connections should be requested
+    verify(mockSubchannel1, times(1)).requestConnection();
+    verify(mockSubchannel2, times(0)).requestConnection();
+    fakeClock.forwardTime(249, TimeUnit.MILLISECONDS);
+    verify(mockSubchannel1, times(1)).requestConnection();
+    verify(mockSubchannel2, times(0)).requestConnection();
+
+    // If a connection fails, the next scheduled conenction is reset to happen 250 ms later
+    Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    verify(mockSubchannel2, times(1)).requestConnection();
+
+    // This time, after 1 ms, no connection attempt occurs
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    verify(mockSubchannel1, times(1)).requestConnection();
+    verify(mockSubchannel2, times(1)).requestConnection();
+
+    // After 250 ms, second connection attempt starts
+    fakeClock.forwardTime(249, TimeUnit.MILLISECONDS);
+    verify(mockSubchannel1, times(1)).requestConnection();
+    verify(mockSubchannel2, times(1)).requestConnection();
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    inOrder.verify(mockSubchannel2).requestConnection();
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // Simulate first connection attempt coming out of backoff
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    assertEquals(CONNECTING, loadBalancer.getCurrentState());
+
+    // Both subchnnels racing, second connection attempt is successful
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    assertEquals(READY, loadBalancer.getCurrentState());
+
+    // Verify that picker returns correct subchannel
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    inOrder.verify(mockSubchannel1).shutdown();
+    assertEquals(PickResult.withSubchannel(mockSubchannel2), picker.pickSubchannel(mockArgs));
+    assertNotEquals(PickResult.withSubchannel(mockSubchannel1), picker.pickSubchannel(mockArgs));
+    assertNotEquals(PickResult.withSubchannel(mockSubchannel3), picker.pickSubchannel(mockArgs));
+    assertNotEquals(PickResult.withSubchannel(mockSubchannel4), picker.pickSubchannel(mockArgs));
+  }
 
   @Test
   public void index_looping() {

@@ -33,6 +33,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -54,7 +56,10 @@ import javax.annotation.Nullable;
 final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
+  private final int CONNECTION_DELAY_INTERVAL_MS = 250;
   private Index addressIndex;
+  @Nullable
+  private ScheduledHandle scheduleConnectionTask;
   private ConnectivityState currentState = IDLE;
 
   PickFirstLeafLoadBalancer(Helper helper) {
@@ -216,6 +221,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         if (addressIndex.isValid()
             && subchannels.get(addressIndex.getCurrentAddress()).getSubchannel() == subchannel) {
           addressIndex.increment();
+          cancelScheduleTask();
           requestConnection();
 
           // If no addresses remaining, go into TRANSIENT_FAILURE
@@ -261,7 +267,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   /**
-  * Requests a connection to the next applicable address' subchannel, creating one if necessary
+  * Requests a connection to the next applicable address' subchannel, creating one if necessary.
+  * Schedules a connection to next address in list as well.
   * If the current channel has already attempted a connection, we attempt a connection
   * to the next address/subchannel in our list.
   */
@@ -279,10 +286,39 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           subchannels.get(addressIndex.getCurrentAddress()).getState();
       if (subchannelState == IDLE) {
         subchannel.requestConnection();
+        scheduleConnection();
       } else if (subchannelState == CONNECTING || subchannelState == TRANSIENT_FAILURE) {
         addressIndex.increment();
         requestConnection();
       }
+    }
+  }
+
+
+  /**
+  * Happy Eyeballs
+  * Schedules connection attempt to happen after a delay to the next available address.
+  */
+  private void scheduleConnection() {
+    class StartNextConnection implements Runnable {
+      @Override
+      public void run() {
+        scheduleConnectionTask = null;
+        requestConnection();
+      }
+    }
+
+    scheduleConnectionTask = helper.getSynchronizationContext().schedule(
+        new StartNextConnection(),
+        CONNECTION_DELAY_INTERVAL_MS,
+        TimeUnit.MILLISECONDS,
+        helper.getScheduledExecutorService());
+  }
+
+  private void cancelScheduleTask() {
+    if (scheduleConnectionTask != null) {
+      scheduleConnectionTask.cancel();
+      scheduleConnectionTask = null;
     }
   }
 
