@@ -11,7 +11,6 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import java.util.List;
 import java.util.Map;
-import io.grpc.util.DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder;
 
 @Internal
 public final class DeterministicSubsettingLoadBalancerProvider extends LoadBalancerProvider {
@@ -64,7 +63,8 @@ public final class DeterministicSubsettingLoadBalancerProvider extends LoadBalan
       ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates,
         LoadBalancerRegistry.getDefaultRegistry());
 
-    Builder configBuilder = new Builder();
+    DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder configBuilder =
+      new DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder();
 
     configBuilder.setChildPolicy((PolicySelection) selectedConfig.getConfig());
 
