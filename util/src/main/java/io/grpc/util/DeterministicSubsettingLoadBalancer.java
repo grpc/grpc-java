@@ -109,7 +109,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
     switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
   }
 
-  class AddressComparator implements Comparator<SocketAddress> {
+  private static class AddressComparator implements Comparator<SocketAddress> {
     @Override
     public int compare(SocketAddress o1, SocketAddress o2){
       return o1.hashCode() - o2.hashCode();
