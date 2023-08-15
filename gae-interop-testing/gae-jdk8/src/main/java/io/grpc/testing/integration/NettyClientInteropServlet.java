@@ -128,7 +128,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
     }
   }
 
-  public static final class Tester extends AbstractInteropTest {
+  static final class Tester extends AbstractInteropTest {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
       assertEquals(
