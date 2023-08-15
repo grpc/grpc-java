@@ -41,7 +41,7 @@ public class LoadBalancerRegistryTest {
   @Test
   public void stockProviders() {
     LoadBalancerRegistry defaultRegistry = LoadBalancerRegistry.getDefaultRegistry();
-    assertThat(defaultRegistry.providers()).hasSize(4);
+    assertThat(defaultRegistry.providers()).hasSize(5);
 
     LoadBalancerProvider pickFirst = defaultRegistry.getProvider("pick_first");
     assertThat(pickFirst).isInstanceOf(PickFirstLoadBalancerProvider.class);
