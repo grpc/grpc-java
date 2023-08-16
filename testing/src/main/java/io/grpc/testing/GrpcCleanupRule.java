@@ -70,7 +70,6 @@ import org.junit.runners.model.Statement;
  *
  * @since 1.13.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2488")
 @NotThreadSafe
 public final class GrpcCleanupRule extends ExternalResource {
 

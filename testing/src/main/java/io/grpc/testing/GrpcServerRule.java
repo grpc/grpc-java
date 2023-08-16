@@ -48,7 +48,6 @@ import org.junit.rules.TestRule;
  * <p>An {@link AbstractStub} can be created against this service by using the
  * {@link ManagedChannel} provided by {@link GrpcServerRule#getChannel()}.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2488")
 public final class GrpcServerRule extends ExternalResource {
 
   private ManagedChannel channel;
