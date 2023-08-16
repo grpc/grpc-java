@@ -20,7 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
+import static io.grpc.LoadBalancer.EMPTY_PICKER;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
@@ -39,6 +39,7 @@ import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.ErrorPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -52,7 +53,6 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -209,7 +209,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAttributes(Attributes.newBuilder().set(fakeKey, fakeValue).build())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
-    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
     assertThat(childBalancers).hasSize(4);
     assertThat(childHelpers).hasSize(4);
     assertThat(fooLbCreated).isEqualTo(2);
@@ -246,7 +246,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(newTargets))
             .build());
-    verify(helper, atLeast(2)).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+    verify(helper, atLeast(2)).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
     assertThat(childBalancers).hasSize(5);
     assertThat(childHelpers).hasSize(5);
     assertThat(fooLbCreated).isEqualTo(3); // One more foo LB created for target4
@@ -288,7 +288,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
-    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
 
     // Error after child balancers created.
     weightedTargetLb.handleNameResolutionError(Status.ABORTED);
@@ -315,7 +315,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
-    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
 
     // Subchannels to be created for each child balancer.
     final SubchannelPicker[] subchannelPickers = new SubchannelPicker[]{
@@ -335,7 +335,7 @@ public class WeightedTargetLoadBalancerTest {
     childHelpers.get(1).updateBalancingState(TRANSIENT_FAILURE, failurePickers[1]);
     verify(helper, never()).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
-    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
 
     // Another child balancer goes to READY.
     childHelpers.get(2).updateBalancingState(READY, subchannelPickers[2]);
@@ -396,7 +396,7 @@ public class WeightedTargetLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
-    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
 
     // LB shutdown and subchannel state change can happen simultaneously. If shutdown runs first,
     // any further balancing state update should be ignored.

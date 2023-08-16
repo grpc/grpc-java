@@ -39,7 +39,6 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;

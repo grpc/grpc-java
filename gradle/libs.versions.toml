@@ -18,7 +18,7 @@ netty = '4.1.93.Final'
 #   SECURITY.md
 nettytcnative = '2.0.61.Final'
 opencensus = "0.31.1"
-protobuf = "3.23.4"
+protobuf = "3.24.0"
 
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"

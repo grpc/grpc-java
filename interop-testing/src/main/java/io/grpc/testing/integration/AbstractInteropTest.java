@@ -2007,18 +2007,21 @@ public abstract class AbstractInteropTest {
   }
 
   private SoakIterationResult performOneSoakIteration(
-      TestServiceGrpc.TestServiceBlockingStub soakStub) throws Exception {
+      TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize, int soakResponseSize)
+      throws Exception {
     long startNs = System.nanoTime();
     Status status = Status.OK;
     try {
       final SimpleRequest request =
           SimpleRequest.newBuilder()
-              .setResponseSize(314159)
-              .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[271828])))
+              .setResponseSize(soakResponseSize)
+              .setPayload(
+                  Payload.newBuilder().setBody(ByteString.copyFrom(new byte[soakRequestSize])))
               .build();
       final SimpleResponse goldenResponse =
           SimpleResponse.newBuilder()
-              .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[314159])))
+              .setPayload(
+                  Payload.newBuilder().setBody(ByteString.copyFrom(new byte[soakResponseSize])))
               .build();
       assertResponse(goldenResponse, soakStub.unaryCall(request));
     } catch (StatusRuntimeException e) {
@@ -2039,7 +2042,9 @@ public abstract class AbstractInteropTest {
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
       int minTimeMsBetweenRpcs,
-      int overallTimeoutSeconds)
+      int overallTimeoutSeconds,
+      int soakRequestSize,
+      int soakResponseSize)
       throws Exception {
     int iterationsDone = 0;
     int totalFailures = 0;
@@ -2063,7 +2068,8 @@ public abstract class AbstractInteropTest {
             .newBlockingStub(soakChannel)
             .withInterceptors(recordClientCallInterceptor(clientCallCapture));
       }
-      SoakIterationResult result = performOneSoakIteration(soakStub);
+      SoakIterationResult result = 
+          performOneSoakIteration(soakStub, soakRequestSize, soakResponseSize);
       SocketAddress peer = clientCallCapture
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       StringBuilder logStr = new StringBuilder(

@@ -166,3 +166,7 @@ tasks.register("runInteropTestRemote") {
         throw new GradleException("Interop test failed:\nthrowable:${caught}")
     }
 }
+
+tasks.named("javadoc").configure {
+    enabled = false
+}
