@@ -22,6 +22,7 @@ def subprojects = [
     project(':grpc-servlet-jakarta'),
     project(':grpc-stub'),
     project(':grpc-testing'),
+    project(':grpc-util'),
     project(':grpc-xds'),
 ]
 

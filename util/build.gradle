@@ -45,3 +45,7 @@ animalsniffer {
         sourceSets.test
     ]
 }
+
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/util/MultiChildLoadBalancer.java'
+}
