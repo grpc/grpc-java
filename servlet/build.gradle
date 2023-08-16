@@ -104,7 +104,9 @@ tasks.named("check").configure {
 }
 
 tasks.named("jacocoTestReport").configure {
-    executionData undertowTest, tomcat9Test
+    // Must use executionData(Task...) override. The executionData(Object...) override doesn't find
+    // execution data correctly for tasks.
+    executionData undertowTest.get(), tomcat9Test.get()
 }
 
 // Only run these tests if java 11+ is being used
@@ -117,6 +119,8 @@ if (JavaVersion.current().isJava11Compatible()) {
         dependsOn jettyTest
     }
     tasks.named("jacocoTestReport").configure {
-        executionData jettyTest
+        // Must use executionData(Task...) override. The executionData(Object...) override doesn't
+        // find execution data correctly for tasks.
+        executionData jettyTest.get()
     }
 }
