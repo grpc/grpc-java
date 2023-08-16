@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ConnectivityState;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
@@ -40,10 +41,9 @@ import javax.annotation.Nullable;
 
 /**
  * A base load balancing policy for those policies which has multiple children such as
- * ClusterManager or the petiole policies.
- *
- * @since 1.58
+ * ClusterManager or the petiole policies.  For internal use only.
  */
+@Internal
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
