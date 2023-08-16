@@ -351,9 +351,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 0xFFFF;
 
-    // Assuming the mean of all known weights is M, StaticStrideScheduler will cap
-    // from above all known weights that are bigger than M*kMaxRatio
-    // to M*kMaxRatio and below all known weights to M*kMinRatio.
+    // Assuming the mean of all known weights is M, StaticStrideScheduler will clamp
+    // weights bigger than M*kMaxRatio and weights smaller than M*kMinRatio.
     //
     // This is done as a performance optimization by limiting the number of rounds for picks
     // for edge cases where channels have large differences in subchannel weights.
@@ -376,11 +375,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     // logically faulty. A demonstration of this is that the function that computes
     // weights in WeightedRoundRobin
     // (http://google3/production/rpc/stubs/core/loadbalancing/weightedroundrobin.cc;l=324-325;rcl=514986476)
-    // will cap some epsilon values to zero. There should be a clear distinction
-    // between "task is new, weight is unknown" and "task is unhealthy, weight is
-    // very low". A better solution would be to not mix "unknown" and "weight" into
-    // a single value but represent weights as std::optional<float> or, if memory
-    // usage is a concern, use NaN as the indicator of unknown weight.
+    // will cap some epsilon values to zero.
     private static final double K_MAX_RATIO = 10;
     private static final double K_MIN_RATIO = 0.1;
 
@@ -403,11 +398,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       // Adjust max value s.t. ratio does not exceed K_MAX_RATIO. This should
       // ensure that we on average do at most K_MAX_RATIO rounds for picks.
-      double ratio = unscaledMaxWeight / unscaledMeanWeight;
-      if (ratio > K_MAX_RATIO) {
-        unscaledMaxWeight = (float) (K_MAX_RATIO * unscaledMeanWeight);
-      }
-
+      unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
 
       // Scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly.
       // Note that, since we cap the weights to stay within K_MAX_RATIO, `meanWeight` might not
@@ -415,18 +406,15 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       double scalingFactor = K_MAX_WEIGHT / unscaledMaxWeight;
       int meanWeight = (int) Math.round(scalingFactor * unscaledMeanWeight);
 
-      // We compute `weightLowerBound` and cap it to 1 from below so that in the
-      // worst case we represent tiny weights as 1 but not as 0 (which would cause
-      // an infinite loop as in b/276292666). This capping to 1 is probably only
-      // useful in case someone misconfigures kMinRatio to be very small.
-      int weightLowerBound = (int) Math.max(1, Math.round(K_MIN_RATIO * meanWeight));
+      // We compute `weightLowerBound` and clamp it to 1 from below so that in the
+      // worst case, we represent tiny weights as 1.
+      int weightLowerBound = (int) Math.ceil(scalingFactor * unscaledMeanWeight * K_MIN_RATIO);
       short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] <= 0) {
           scaledWeights[i] = (short) meanWeight;
         } else {
-          double weightUpperBound = Math.min(weights[i], unscaledMaxWeight);
-          int weight = (int) Math.round(weightUpperBound * scalingFactor);
+          int weight = (int) Math.round(scalingFactor * Math.min(weights[i], unscaledMaxWeight));
           scaledWeights[i] = (short) Math.max(weight, weightLowerBound);
         }
       }
