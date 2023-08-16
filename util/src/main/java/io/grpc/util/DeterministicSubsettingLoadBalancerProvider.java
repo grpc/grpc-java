@@ -1,3 +1,19 @@
+/*
+ * Copyright 2023 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.util;
 
 import io.grpc.Internal;
@@ -51,8 +67,8 @@ public final class DeterministicSubsettingLoadBalancerProvider extends LoadBalan
     Integer subsetSize = JsonUtil.getNumberAsInteger(rawConfig, "subsetSize");
     Boolean sortAddresses = JsonUtil.getBoolean(rawConfig, "sortAddresses");
 
-    List<ServiceConfigUtil.LbConfig> childConfigCandidates = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-      JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
+    List<ServiceConfigUtil.LbConfig> childConfigCandidates = ServiceConfigUtil
+        .unwrapLoadBalancingConfigList(JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
     if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
       return ConfigOrError.fromError(Status.INTERNAL.withDescription(
         "No child policy in deterministic_subsetting LB policy " + rawConfig
@@ -60,10 +76,11 @@ public final class DeterministicSubsettingLoadBalancerProvider extends LoadBalan
     }
 
     ConfigOrError selectedConfig =
-      ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates,
+        ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates,
         LoadBalancerRegistry.getDefaultRegistry());
 
-    DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder configBuilder =
+    DeterministicSubsettingLoadBalancer
+        .DeterministicSubsettingLoadBalancerConfig.Builder configBuilder =
       new DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder();
 
     configBuilder.setChildPolicy((PolicySelection) selectedConfig.getConfig());

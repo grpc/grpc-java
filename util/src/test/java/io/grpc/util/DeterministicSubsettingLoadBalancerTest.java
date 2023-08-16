@@ -16,21 +16,20 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.ResolvedAddresses;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils;
-import java.net.SocketAddress;
-import io.grpc.util.OutlierDetectionLoadBalancerTest.FakeSocketAddress;
 import io.grpc.util.DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig;
+import io.grpc.util.OutlierDetectionLoadBalancerTest.FakeSocketAddress;
+import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -47,7 +46,7 @@ public class DeterministicSubsettingLoadBalancerTest {
   private Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
 
   private final Map<Subchannel, LoadBalancer.SubchannelStateListener> subchannelStateListeners
-    = Maps.newLinkedHashMap();
+      = Maps.newLinkedHashMap();
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
   @Mock
@@ -60,8 +59,8 @@ public class DeterministicSubsettingLoadBalancerTest {
   @Captor
   private ArgumentCaptor<ResolvedAddresses> resolvedAddrCaptor;
 
-  private final LoadBalancerProvider mockChildLbProvider = new TestUtils.StandardLoadBalancerProvider(
-    "foo_policy") {
+  private final LoadBalancerProvider mockChildLbProvider = new TestUtils
+      .StandardLoadBalancerProvider("foo_policy") {
     @Override
     public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
       return mockChildLb;
@@ -70,8 +69,8 @@ public class DeterministicSubsettingLoadBalancerTest {
 
   private DeterministicSubsettingLoadBalancer loadBalancer;
 
-  private final LoadBalancerProvider roundRobinLbProvider = new TestUtils.StandardLoadBalancerProvider(
-    "round_robin") {
+  private final LoadBalancerProvider roundRobinLbProvider = new TestUtils
+      .StandardLoadBalancerProvider("round_robin") {
     @Override
     public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
       return new RoundRobinLoadBalancer(helper);
@@ -100,7 +99,8 @@ public class DeterministicSubsettingLoadBalancerTest {
       new Answer<Subchannel>() {
         @Override
         public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-          LoadBalancer.CreateSubchannelArgs args = (LoadBalancer.CreateSubchannelArgs) invocation.getArguments()[0];
+          LoadBalancer.CreateSubchannelArgs args = (LoadBalancer.CreateSubchannelArgs)
+            invocation.getArguments()[0];
           final Subchannel subchannel = subchannels.get(args.getAddresses());
           when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
           when(subchannel.getAttributes()).thenReturn(args.getAttributes());
@@ -120,21 +120,25 @@ public class DeterministicSubsettingLoadBalancerTest {
   @Test
   public void acceptResolvedAddresses_mocked() {
     int subsetSize = 3;
-    DeterministicSubsettingLoadBalancerConfig config = new DeterministicSubsettingLoadBalancerConfig.Builder()
+    DeterministicSubsettingLoadBalancerConfig config = new DeterministicSubsettingLoadBalancerConfig
+      .Builder()
       .setSubsetSize(subsetSize)
       .setClientIndex(0)
       .setSortAddresses(true)
       .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
 
 
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder().setAddresses(ImmutableList.of(new EquivalentAddressGroup(mockSocketAddress)))
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder().setAddresses(
+      ImmutableList.of(new EquivalentAddressGroup(mockSocketAddress)))
       .setLoadBalancingPolicyConfig(config).build();
 
 
     assertThat(loadBalancer.acceptResolvedAddresses(resolvedAddresses)).isTrue();
 
     verify(mockChildLb).handleResolvedAddresses(
-      resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig()).build()
+      resolvedAddresses
+        .toBuilder()
+        .setLoadBalancingPolicyConfig(config.childPolicy.getConfig()).build()
     );
   }
 
@@ -143,20 +147,22 @@ public class DeterministicSubsettingLoadBalancerTest {
     addMock();
     setupBackends(6);
     int subsetSize = 3;
-    DeterministicSubsettingLoadBalancerConfig config = new DeterministicSubsettingLoadBalancerConfig.Builder()
+    DeterministicSubsettingLoadBalancerConfig config = new DeterministicSubsettingLoadBalancerConfig
+      .Builder()
       .setSubsetSize(subsetSize)
       .setClientIndex(0)
       .setSortAddresses(false)
       .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
 
 
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder().setAddresses(ImmutableList.copyOf(servers))
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+      .setAddresses(ImmutableList.copyOf(servers))
       .setLoadBalancingPolicyConfig(config).build();
 
     assertThat(loadBalancer.acceptResolvedAddresses(resolvedAddresses)).isTrue();
 
     int insubset = 0;
-    for (Subchannel subchannel : subchannels.values()){
+    for (Subchannel subchannel : subchannels.values()) {
       LoadBalancer.SubchannelStateListener sc = subchannelStateListeners.get(subchannel);
       if (sc != null) { // it might be null if it's not in the subset.
         insubset += 1;
@@ -198,13 +204,14 @@ public class DeterministicSubsettingLoadBalancerTest {
 
     for (int i = 0; i < 2; i++) {
       DeterministicSubsettingLoadBalancerConfig config = configs.get(i);
-      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder().setAddresses(ImmutableList.copyOf(servers))
+      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.copyOf(servers))
         .setLoadBalancingPolicyConfig(config).build();
       loadBalancer.acceptResolvedAddresses(resolvedAddresses);
-      for (Subchannel sc : subsets.get(i)){
+      for (Subchannel sc : subsets.get(i)) {
         verify(sc).shutdown();
       }
-      for (Subchannel sc : subchannels.values()){
+      for (Subchannel sc : subchannels.values()) {
         LoadBalancer.SubchannelStateListener ssl = subchannelStateListeners.get(sc);
         if (ssl != null) {
           newconns += 1;
@@ -233,7 +240,8 @@ public class DeterministicSubsettingLoadBalancerTest {
     List<Integer> perRun = Lists.newArrayList();
 
     for (DeterministicSubsettingLoadBalancerConfig config : configs) {
-      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder().setAddresses(ImmutableList.copyOf(servers))
+      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.copyOf(servers))
         .setLoadBalancingPolicyConfig(config).build();
       loadBalancer.acceptResolvedAddresses(resolvedAddresses);
       int numSubchannelsOpened = 0;
@@ -260,22 +268,24 @@ public class DeterministicSubsettingLoadBalancerTest {
   @Test
   public void backendsCanNotBeDistributedEvenly() {
     // Backends can't be distributed evenly because there are excluded backends in every round and
-    // not enough clients to fill the last round. This provides 2 opportunities for an backend to be
+    // not enough clients to fill the last round. This provides 2 opportunities for a backend to be
     // excluded, so the maxDiff is its maximum, 2
     verifyCreatesSubsets(37, 22, 5, 2);
   }
 
   @Test
   public void notEnoughClientsForLastRound() {
-    // There are no excluded backends in each round, but there are not enough clients for the last round,
-    // meaning there is only one chance for a backend to be excluded. Therefore, maxDiff =1
+    // There are no excluded backends in each round, but there are not enough clients for the
+    // last round, meaning there is only one chance for a backend to be excluded.
+    // Therefore, maxDiff =1
     verifyCreatesSubsets(20, 7, 5, 1);
   }
 
   @Test
   public void excludedBackendsInEveryRound() {
-    // There are enough clients to fill the last round, but there are excluded backends in every round,
-    // meaning there is only one chance for a backend to be excluded. Therefore, maxDiff =1
+    // There are enough clients to fill the last round, but there are excluded backends
+    // in every round, meaning there is only one chance for a backend to be excluded.
+    // Therefore, maxDiff =1
     verifyCreatesSubsets(21, 8, 5, 1);
   }
 
@@ -295,7 +305,8 @@ public class DeterministicSubsettingLoadBalancerTest {
     Map<SocketAddress, Integer> subsetDistn = Maps.newLinkedHashMap();
 
     for (DeterministicSubsettingLoadBalancerConfig config : configs) {
-      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder().setAddresses(ImmutableList.copyOf(servers))
+      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.copyOf(servers))
         .setLoadBalancingPolicyConfig(config).build();
       loadBalancer.acceptResolvedAddresses(resolvedAddresses);
       verify(mockChildLb, atLeastOnce()).handleResolvedAddresses(resolvedAddrCaptor.capture());

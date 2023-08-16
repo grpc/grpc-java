@@ -1,10 +1,25 @@
+/*
+ * Copyright 2023 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.collect.Lists;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
@@ -21,7 +36,7 @@ import java.util.Random;
  * Wraps a child {@code LoadBalancer}, separating the total set of backends
  * into smaller subsets for the child balancer to balance across.
  *
- * This implements deterministic subsetting gRFC:
+ * <p> This implements deterministic subsetting gRFC:
  * https://github.com/grpc/proposal/blob/master/A68-deterministic-subsetting-lb-policy.md
  */
 @Internal
@@ -30,31 +45,33 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
   private final GracefulSwitchLoadBalancer switchLb;
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses){
-    DeterministicSubsettingLoadBalancerConfig config
-      = (DeterministicSubsettingLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    DeterministicSubsettingLoadBalancerConfig config =
+        (DeterministicSubsettingLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
 
     switchLb.switchTo(config.childPolicy.getProvider());
 
     ResolvedAddresses subsetAddresses = buildSubsets(resolvedAddresses, config);
 
     switchLb.handleResolvedAddresses(
-      subsetAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
-        .build());
+        subsetAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig()).build());
     return true;
   }
 
   // implements the subsetting algorithm, as described in A68: https://github.com/grpc/proposal/pull/383
-  private ResolvedAddresses buildSubsets(ResolvedAddresses allAddresses, DeterministicSubsettingLoadBalancerConfig config){
+  private ResolvedAddresses buildSubsets(
+    ResolvedAddresses allAddresses,
+    DeterministicSubsettingLoadBalancerConfig config) {
     // The map should only retain entries for addresses in this latest update.
     ArrayList<SocketAddress> addresses = new ArrayList<>();
-    for (EquivalentAddressGroup addressGroup : allAddresses.getAddresses()){
+    for (EquivalentAddressGroup addressGroup : allAddresses.getAddresses()) {
       addresses.addAll(addressGroup.getAddresses());
     }
 
     if (addresses.size() <= config.subsetSize) return allAddresses;
     if (config.sortAddresses) {
-      // If we sort, we do so via destination hashcode. This is deterministic but differs from the golang instrumentation.
+      // If we sort, we do so via destination hashcode.
+      // This is deterministic but differs from the golang instrumentation.
       addresses.sort(new AddressComparator());
     }
 
@@ -105,13 +122,13 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
     switchLb.shutdown();
   }
 
-  public DeterministicSubsettingLoadBalancer(Helper helper){
+  public DeterministicSubsettingLoadBalancer(Helper helper) {
     switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
   }
 
   private static class AddressComparator implements Comparator<SocketAddress> {
     @Override
-    public int compare(SocketAddress o1, SocketAddress o2){
+    public int compare(SocketAddress o1, SocketAddress o2) {
       return o1.hashCode() - o2.hashCode();
     }
 
@@ -144,7 +161,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
       Boolean sortAddresses;
       PolicySelection childPolicy;
 
-      public Builder setClientIndex (Integer clientIndex){
+      public Builder setClientIndex(Integer clientIndex) {
         checkState(clientIndex != null);
         // Indices must be positive integers.
         checkState(clientIndex >= 0);
@@ -152,7 +169,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
         return this;
       }
 
-      public Builder setSubsetSize (Integer subsetSize){
+      public Builder setSubsetSize(Integer subsetSize) {
         checkArgument(subsetSize != null);
         // subsetSize of 1 is equivalent to `pick_first`. Use that policy if that behavior is desired.
         // Fallback to default of 10 of condition is not satisfied.
@@ -161,19 +178,19 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
         return this;
       }
 
-      public Builder setSortAddresses (Boolean sortAddresses){
+      public Builder setSortAddresses(Boolean sortAddresses) {
         checkArgument(sortAddresses != null);
         this.sortAddresses = sortAddresses;
         return this;
       }
 
-      public Builder setChildPolicy (PolicySelection childPolicy){
+      public Builder setChildPolicy(PolicySelection childPolicy) {
         checkState(childPolicy != null);
         this.childPolicy = childPolicy;
         return this;
       }
 
-      public DeterministicSubsettingLoadBalancerConfig build () {
+      public DeterministicSubsettingLoadBalancerConfig build() {
         checkState(childPolicy != null);
         checkState(clientIndex != null);
         return new DeterministicSubsettingLoadBalancerConfig(clientIndex, subsetSize, sortAddresses, childPolicy);
