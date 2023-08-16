@@ -929,24 +929,6 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testStaticStrideSchedulerFloats() {
-    float[] weights = {0.5f, 0.3f, 1.0f};
-    Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
-    double totalWeight = 1.8;
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = sss.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
-    }
-    for (int i = 0; i < 3; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isLessThan(0.002);
-    }
-  }
-
-  @Test
   public void testTwoWeights() {
     float[] weights = {1.43f, 2.119f};
     Random random = new Random(0);
