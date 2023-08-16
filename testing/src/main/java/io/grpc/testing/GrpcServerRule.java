@@ -19,7 +19,6 @@ package io.grpc.testing;
 import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.BindableService;
-import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
