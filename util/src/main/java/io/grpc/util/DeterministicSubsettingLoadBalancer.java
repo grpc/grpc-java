@@ -71,7 +71,9 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
       addresses.addAll(addressGroup.getAddresses());
     }
 
-    if (addresses.size() <= config.subsetSize) return allAddresses;
+    if (addresses.size() <= config.subsetSize) {
+      return allAddresses;
+    }
     if (config.sortAddresses) {
       // If we sort, we do so via the string representation of the SocketAddress.
       addresses.sort(new AddressComparator());
