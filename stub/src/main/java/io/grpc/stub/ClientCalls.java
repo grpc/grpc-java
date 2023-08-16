@@ -690,6 +690,7 @@ public final class ClientCalls {
     }
   }
 
+  @SuppressWarnings("serial")
   private static final class ThreadlessExecutor extends ConcurrentLinkedQueue<Runnable>
       implements Executor {
     private static final Logger log = Logger.getLogger(ThreadlessExecutor.class.getName());
