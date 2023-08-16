@@ -356,14 +356,14 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     // to M*kMaxRatio and below all known weights to M*kMinRatio.
     //
     // This is done as a performance optimization by limiting the number of rounds for picks
-    // for edge cases containing channels with large differences in subchannel weights.
+    // for edge cases where channels have large differences in subchannel weights.
     // In this case, without these clips, it would potentially require the scheduler to
     // frequently traverse through the entire subchannel list within the pick method.
     //
-    // The current value of 0.1 was chosen without any experimenting. It should
-    // ensure that WeightedRoundRobin doesn't do much more than an order of 100
-    // picks of non-accepting channels with high weights in such corner cases. But
-    // it also makes WeightedRoundRobin to send slightly more requests to
+    // The current values of 10 and 0.1 were chosen without any experimenting. It should
+    // decrease the amount of sequences that the scheduler must traverse through in order
+    // to pick a high weight subchannel in such corner cases.
+    // But, it also makes WeightedRoundRobin to send slightly more requests to
     // potentially very bad tasks (that would have near-zero weights) than zero.
     // This is not necessarily a downside, though. Perhaps this is not a problem at
     // all, and we can increase this value if needed to save CPU cycles.
