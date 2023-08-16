@@ -350,31 +350,23 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final short[] scaledWeights;
     private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 0xFFFF;
-    // Assuming the mean of all known weights is M, StaticStrideScheduler will cap
-    // from above all known weights that are bigger than M*kMaxRatio (to
-    // M*kMaxRatio).
-    //
-    // This is done to limit the number of rounds for picks.
-    private static final double K_MAX_RATIO = 10;
 
     // Assuming the mean of all known weights is M, StaticStrideScheduler will cap
-    // from below all known weights to M*kMinRatio.
+    // from above all known weights that are bigger than M*kMaxRatio
+    // to M*kMaxRatio and below all known weights to M*kMinRatio.
     //
-    // This is done as a performance optimization for edge cases when channels with
-    // large weights are non-accepting (and thus WeightedRoundRobin will retry
-    // picking them over and over again), and there are also channels with near-zero
-    // weights that are possibly accepting. In this case, without kMinRatio, it
-    // would potentially require WeightedRoundRobin to perform thousands of picks
-    // until it gets a single channel with near-zero weight. This was a part of what
-    // happened in b/276292666.
+    // This is done as a performance optimization by limiting the number of rounds for picks
+    // for edge cases containing channels with large differences in subchannel weights.
+    // In this case, without these clips, it would potentially require the scheduler to
+    // frequently traverse through the entire subchannel list within the pick method.
     //
-    // The current value of 0.01 was chosen without any experimenting. It should
+    // The current value of 0.1 was chosen without any experimenting. It should
     // ensure that WeightedRoundRobin doesn't do much more than an order of 100
     // picks of non-accepting channels with high weights in such corner cases. But
     // it also makes WeightedRoundRobin to send slightly more requests to
     // potentially very bad tasks (that would have near-zero weights) than zero.
     // This is not necessarily a downside, though. Perhaps this is not a problem at
-    // all, and we should increase this value (to 0.05 or 0.1) to save CPU cycles.
+    // all, and we can increase this value if needed to save CPU cycles.
     //
     // Note that this class treats weights that are exactly equal to zero as unknown
     // and thus needing to be replaced with M. This behavior itself makes sense
@@ -389,7 +381,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     // very low". A better solution would be to not mix "unknown" and "weight" into
     // a single value but represent weights as std::optional<float> or, if memory
     // usage is a concern, use NaN as the indicator of unknown weight.
-    private static final double K_MIN_RATIO = 0.01;
+    private static final double K_MAX_RATIO = 10;
+    private static final double K_MIN_RATIO = 0.1;
 
     StaticStrideScheduler(float[] weights, AtomicInteger sequence) {
       checkArgument(weights.length >= 1, "Couldn't build scheduler: requires at least one weight");

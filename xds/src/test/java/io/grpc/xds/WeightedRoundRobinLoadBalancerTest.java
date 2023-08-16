@@ -338,6 +338,54 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
+  public void pickByWeight_largeWeight() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.1, 0, 0.1, 999, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.9, 0, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double meanWeight = (999 / 0.1 + 2 / 0.9 + 100 / 0.86) / 3;
+    double cappedMin = meanWeight * 0.1; // min capped at minRatio * meanWeight
+    double totalWeight = 999 / 0.1 + cappedMin + cappedMin;
+    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, cappedMin / totalWeight,
+            cappedMin / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_largeWeight_useApplicationUtilization() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.44, 0.1, 0.1, 999, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.12, 0.9, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.33, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double meanWeight = (999 / 0.1 + 2 / 0.9 + 100 / 0.86) / 3;
+    double cappedMin = meanWeight * 0.1;
+    double totalWeight = 999 / 0.1 + cappedMin + cappedMin; // min capped at minRatio * meanWeight
+    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, cappedMin / totalWeight,
+        cappedMin / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_largeWeight_withEps_defaultErrorUtilizationPenalty() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.1, 0, 0.1, 999, 13, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.9, 0, 0.1, 2, 1.8, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0, 0.1, 100, 3, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double weight1 = 999 / (0.1 + 13 / 999F * weightedConfig.errorUtilizationPenalty); // ~5609.899
+    double weight2 = 2 / (0.9 + 1.8 / 2F * weightedConfig.errorUtilizationPenalty); // ~0.317
+    double weight3 = 100 / (0.86 + 3 / 100F * weightedConfig.errorUtilizationPenalty); // ~96.154
+    double meanWeight = (weight1 + weight2 + weight3) / 3;
+    double cappedMin = meanWeight * 0.1; // min capped at minRatio * meanWeight
+    double totalWeight = weight1 + cappedMin + cappedMin;
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, cappedMin / totalWeight,
+        cappedMin / totalWeight);
+  }
+
+  @Test
   public void pickByWeight_normalWeight() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
         0.12, 0, 0.1, 22, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
@@ -996,11 +1044,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     // We pick 201 elements and ensure that the second channel (with epsilon
     // weight) also gets picked. The math is: mean value of elements is ~50, so
     // the first channel keeps its weight of 100, but the second element's weight
-    // gets capped from below to 50*0.01 = 0.5.
-    for (int i = 0; i < 201; i++) {
+    // gets capped from below to 50*0.1 = 5.
+    for (int i = 0; i < 105; i++) {
       picks[sss.pick()] += 1;
     }
-    int[] expectedPicks = new int[] {200, 1};
+    int[] expectedPicks = new int[] {100, 5};
     assertThat(picks).isEqualTo(expectedPicks);
   }
 
