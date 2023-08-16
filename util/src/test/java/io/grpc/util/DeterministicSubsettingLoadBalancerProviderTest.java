@@ -20,11 +20,14 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class DeterministicSubsettingLoadBalancerProviderTest {
 
-  private final DeterministicSubsettingLoadBalancerProvider provider = new DeterministicSubsettingLoadBalancerProvider();
+  private final DeterministicSubsettingLoadBalancerProvider provider =
+      new DeterministicSubsettingLoadBalancerProvider();
+
   @Test
   public void registered() {
-    for (LoadBalancerProvider current : InternalServiceProviders.getCandidatesViaServiceLoader(
-      LoadBalancerProvider.class, getClass().getClassLoader())) {
+    for (LoadBalancerProvider current :
+        InternalServiceProviders.getCandidatesViaServiceLoader(
+            LoadBalancerProvider.class, getClass().getClassLoader())) {
       if (current instanceof DeterministicSubsettingLoadBalancerProvider) {
         return;
       }
@@ -35,15 +38,14 @@ public class DeterministicSubsettingLoadBalancerProviderTest {
   @Test
   public void providesLoadBalancer() {
     Helper helper = mock(Helper.class);
-    assertThat(provider.newLoadBalancer(helper)).isInstanceOf(DeterministicSubsettingLoadBalancer.class);
+    assertThat(provider.newLoadBalancer(helper))
+        .isInstanceOf(DeterministicSubsettingLoadBalancer.class);
   }
 
   @Test
   public void parseConfigRequiresClientIdx() throws IOException {
-    String lbConfig =
-      "{ \"clientIndex\" :  null }";
-    String lbConfig2 =
-      "{ \"clientIndex\" : -1 }";
+    String lbConfig = "{ \"clientIndex\" :  null }";
+    String lbConfig2 = "{ \"clientIndex\" : -1 }";
     ArrayList<String> configs = new ArrayList<>();
     configs.add(lbConfig);
     configs.add(lbConfig2);
@@ -58,13 +60,15 @@ public class DeterministicSubsettingLoadBalancerProviderTest {
   @Test
   public void parseConfigWithDefaults() throws IOException {
     String lbConfig =
-      "{ \"clientIndex\" : 0, "
-        + "\"childPolicy\" : [{\"round_robin\" : {}}], "
-        + "\"sortAddresses\" : false }";
-    ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+        "{ \"clientIndex\" : 0, "
+            + "\"childPolicy\" : [{\"round_robin\" : {}}], "
+            + "\"sortAddresses\" : false }";
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
     System.out.println(configOrError);
     assertThat(configOrError.getConfig()).isNotNull();
-    DeterministicSubsettingLoadBalancerConfig config = (DeterministicSubsettingLoadBalancerConfig) configOrError.getConfig();
+    DeterministicSubsettingLoadBalancerConfig config =
+        (DeterministicSubsettingLoadBalancerConfig) configOrError.getConfig();
 
     assertThat(config.clientIndex).isEqualTo(0);
     assertThat(config.sortAddresses).isEqualTo(false);

@@ -33,10 +33,10 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Wraps a child {@code LoadBalancer}, separating the total set of backends
- * into smaller subsets for the child balancer to balance across.
+ * Wraps a child {@code LoadBalancer}, separating the total set of backends into smaller subsets for
+ * the child balancer to balance across.
  *
- * <p> This implements deterministic subsetting gRFC:
+ * <p>This implements deterministic subsetting gRFC:
  * https://github.com/grpc/proposal/blob/master/A68-deterministic-subsetting-lb-policy.md
  */
 @Internal
@@ -47,21 +47,24 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     DeterministicSubsettingLoadBalancerConfig config =
-        (DeterministicSubsettingLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+        (DeterministicSubsettingLoadBalancerConfig)
+            resolvedAddresses.getLoadBalancingPolicyConfig();
 
     switchLb.switchTo(config.childPolicy.getProvider());
 
     ResolvedAddresses subsetAddresses = buildSubsets(resolvedAddresses, config);
 
     switchLb.handleResolvedAddresses(
-        subsetAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig()).build());
+        subsetAddresses.toBuilder()
+            .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
+            .build());
     return true;
   }
 
-  // implements the subsetting algorithm, as described in A68: https://github.com/grpc/proposal/pull/383
+  // implements the subsetting algorithm, as described in A68:
+  // https://github.com/grpc/proposal/pull/383
   private ResolvedAddresses buildSubsets(
-    ResolvedAddresses allAddresses,
-    DeterministicSubsettingLoadBalancerConfig config) {
+      ResolvedAddresses allAddresses, DeterministicSubsettingLoadBalancerConfig config) {
     // The map should only retain entries for addresses in this latest update.
     ArrayList<SocketAddress> addresses = new ArrayList<>();
     for (EquivalentAddressGroup addressGroup : allAddresses.getAddresses()) {
@@ -100,7 +103,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
     List<SocketAddress> subset = addresses.subList(start, end);
 
-    ArrayList<EquivalentAddressGroup>  eaglist = new ArrayList<>();
+    ArrayList<EquivalentAddressGroup> eaglist = new ArrayList<>();
 
     // Create new EAGs per address
     for (SocketAddress addr : subset) {
@@ -134,7 +137,6 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
     public int compare(SocketAddress o1, SocketAddress o2) {
       return o1.toString().compareTo(o2.toString());
     }
-
   }
 
   public static final class DeterministicSubsettingLoadBalancerConfig {
@@ -156,7 +158,6 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
       this.childPolicy = childPolicy;
     }
 
-
     public static class Builder {
       Integer clientIndex;
       Integer subsetSize = 10;
@@ -174,7 +175,8 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
       public Builder setSubsetSize(Integer subsetSize) {
         checkArgument(subsetSize != null);
-        // subsetSize of 1 is equivalent to `pick_first`. Use that policy if that behavior is desired.
+        // subsetSize of 1 is equivalent to `pick_first`. Use that policy if that behavior is
+        // desired.
         // Fallback to default of 10 of condition is not satisfied.
         checkArgument(subsetSize > 1);
         this.subsetSize = subsetSize;
@@ -197,10 +199,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
         checkState(childPolicy != null);
         checkState(clientIndex != null);
         return new DeterministicSubsettingLoadBalancerConfig(
-          clientIndex,
-          subsetSize,
-          sortAddresses,
-          childPolicy);
+            clientIndex, subsetSize, sortAddresses, childPolicy);
       }
     }
   }

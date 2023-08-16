@@ -1,6 +1,5 @@
 package io.grpc.util;
 
-
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
@@ -45,39 +44,34 @@ public class DeterministicSubsettingLoadBalancerTest {
   private List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
 
-  private final Map<Subchannel, LoadBalancer.SubchannelStateListener> subchannelStateListeners
-      = Maps.newLinkedHashMap();
-  @Rule
-  public final MockitoRule mockitoRule = MockitoJUnit.rule();
-  @Mock
-  private LoadBalancer.Helper mockHelper;
-  @Mock
-  private LoadBalancer mockChildLb;
-  @Mock
-  private SocketAddress mockSocketAddress;
+  private final Map<Subchannel, LoadBalancer.SubchannelStateListener> subchannelStateListeners =
+      Maps.newLinkedHashMap();
+  @Rule public final MockitoRule mockitoRule = MockitoJUnit.rule();
+  @Mock private LoadBalancer.Helper mockHelper;
+  @Mock private LoadBalancer mockChildLb;
+  @Mock private SocketAddress mockSocketAddress;
 
-  @Captor
-  private ArgumentCaptor<ResolvedAddresses> resolvedAddrCaptor;
+  @Captor private ArgumentCaptor<ResolvedAddresses> resolvedAddrCaptor;
 
-  private final LoadBalancerProvider mockChildLbProvider = new TestUtils
-      .StandardLoadBalancerProvider("foo_policy") {
-    @Override
-    public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-      return mockChildLb;
-    }
-  };
+  private final LoadBalancerProvider mockChildLbProvider =
+      new TestUtils.StandardLoadBalancerProvider("foo_policy") {
+        @Override
+        public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+          return mockChildLb;
+        }
+      };
 
   private DeterministicSubsettingLoadBalancer loadBalancer;
 
-  private final LoadBalancerProvider roundRobinLbProvider = new TestUtils
-      .StandardLoadBalancerProvider("round_robin") {
-    @Override
-    public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-      return new RoundRobinLoadBalancer(helper);
-    }
-  };
+  private final LoadBalancerProvider roundRobinLbProvider =
+      new TestUtils.StandardLoadBalancerProvider("round_robin") {
+        @Override
+        public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+          return new RoundRobinLoadBalancer(helper);
+        }
+      };
 
-  private void setupBackends(int backendCount){
+  private void setupBackends(int backendCount) {
     servers = Lists.newArrayList();
     subchannels = Maps.newLinkedHashMap();
     for (int i = 0; i < backendCount; i++) {
@@ -95,51 +89,58 @@ public class DeterministicSubsettingLoadBalancerTest {
   }
 
   public void addMock() {
-    when(mockHelper.createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class))).then(
-      new Answer<Subchannel>() {
-        @Override
-        public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-          LoadBalancer.CreateSubchannelArgs args = (LoadBalancer.CreateSubchannelArgs)
-            invocation.getArguments()[0];
-          final Subchannel subchannel = subchannels.get(args.getAddresses());
-          when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
-          when(subchannel.getAttributes()).thenReturn(args.getAttributes());
-          doAnswer(new Answer<Void>() {
-            @Override
-            public Void answer(InvocationOnMock invocation) throws Throwable {
-              subchannelStateListeners.put(subchannel,
-                (LoadBalancer.SubchannelStateListener) invocation.getArguments()[0]);
-              return null;
-            }
-          }).when(subchannel).start(any(LoadBalancer.SubchannelStateListener.class));
-          return subchannel;
-        }
-      });
+    when(mockHelper.createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class)))
+        .then(
+            new Answer<Subchannel>() {
+              @Override
+              public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+                LoadBalancer.CreateSubchannelArgs args =
+                    (LoadBalancer.CreateSubchannelArgs) invocation.getArguments()[0];
+                final Subchannel subchannel = subchannels.get(args.getAddresses());
+                when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
+                when(subchannel.getAttributes()).thenReturn(args.getAttributes());
+                doAnswer(
+                        new Answer<Void>() {
+                          @Override
+                          public Void answer(InvocationOnMock invocation) throws Throwable {
+                            subchannelStateListeners.put(
+                                subchannel,
+                                (LoadBalancer.SubchannelStateListener)
+                                    invocation.getArguments()[0]);
+                            return null;
+                          }
+                        })
+                    .when(subchannel)
+                    .start(any(LoadBalancer.SubchannelStateListener.class));
+                return subchannel;
+              }
+            });
   }
 
   @Test
   public void acceptResolvedAddresses_mocked() {
     int subsetSize = 3;
-    DeterministicSubsettingLoadBalancerConfig config = new DeterministicSubsettingLoadBalancerConfig
-      .Builder()
-      .setSubsetSize(subsetSize)
-      .setClientIndex(0)
-      .setSortAddresses(true)
-      .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
+    DeterministicSubsettingLoadBalancerConfig config =
+        new DeterministicSubsettingLoadBalancerConfig.Builder()
+            .setSubsetSize(subsetSize)
+            .setClientIndex(0)
+            .setSortAddresses(true)
+            .setChildPolicy(new PolicySelection(mockChildLbProvider, null))
+            .build();
 
-
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder().setAddresses(
-      ImmutableList.of(new EquivalentAddressGroup(mockSocketAddress)))
-      .setLoadBalancingPolicyConfig(config).build();
-
+    ResolvedAddresses resolvedAddresses =
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mockSocketAddress)))
+            .setLoadBalancingPolicyConfig(config)
+            .build();
 
     assertThat(loadBalancer.acceptResolvedAddresses(resolvedAddresses)).isTrue();
 
-    verify(mockChildLb).handleResolvedAddresses(
-      resolvedAddresses
-        .toBuilder()
-        .setLoadBalancingPolicyConfig(config.childPolicy.getConfig()).build()
-    );
+    verify(mockChildLb)
+        .handleResolvedAddresses(
+            resolvedAddresses.toBuilder()
+                .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
+                .build());
   }
 
   @Test
@@ -147,17 +148,19 @@ public class DeterministicSubsettingLoadBalancerTest {
     addMock();
     setupBackends(6);
     int subsetSize = 3;
-    DeterministicSubsettingLoadBalancerConfig config = new DeterministicSubsettingLoadBalancerConfig
-      .Builder()
-      .setSubsetSize(subsetSize)
-      .setClientIndex(0)
-      .setSortAddresses(false)
-      .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+    DeterministicSubsettingLoadBalancerConfig config =
+        new DeterministicSubsettingLoadBalancerConfig.Builder()
+            .setSubsetSize(subsetSize)
+            .setClientIndex(0)
+            .setSortAddresses(false)
+            .setChildPolicy(new PolicySelection(roundRobinLbProvider, null))
+            .build();
 
-
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-      .setAddresses(ImmutableList.copyOf(servers))
-      .setLoadBalancingPolicyConfig(config).build();
+    ResolvedAddresses resolvedAddresses =
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.copyOf(servers))
+            .setLoadBalancingPolicyConfig(config)
+            .build();
 
     assertThat(loadBalancer.acceptResolvedAddresses(resolvedAddresses)).isTrue();
 
@@ -180,33 +183,36 @@ public class DeterministicSubsettingLoadBalancerTest {
     List<DeterministicSubsettingLoadBalancerConfig> configs = Lists.newArrayList();
     for (int i = 0; i < 2; i++) {
       configs.add(
-        new DeterministicSubsettingLoadBalancerConfig.Builder()
-          .setSubsetSize(3)
-          .setClientIndex(i)
-          .setSortAddresses(false)
-          .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build());
+          new DeterministicSubsettingLoadBalancerConfig.Builder()
+              .setSubsetSize(3)
+              .setClientIndex(i)
+              .setSortAddresses(false)
+              .setChildPolicy(new PolicySelection(roundRobinLbProvider, null))
+              .build());
     }
     Iterator<Subchannel> scIterator = subchannels.values().iterator();
-    scIterator.next(); //subchannel0
+    scIterator.next(); // subchannel0
     Subchannel subchannel1 = scIterator.next();
     Subchannel subchannel2 = scIterator.next();
-    scIterator.next(); //subchannel3
+    scIterator.next(); // subchannel3
     Subchannel subchannel4 = scIterator.next();
-    scIterator.next(); //subchannel5
+    scIterator.next(); // subchannel5
 
     // In the first call to RR.acceptResolvedAddresses, all subchannels will be new
     // with nothing to close. in the second iteration, we need to remove the subchannels
     // from the first subset.
-    List<List<Subchannel>> subsets = Lists.newArrayList(
-      Lists.newArrayList(),
-      Lists.newArrayList(subchannel4, subchannel1, subchannel2));
+    List<List<Subchannel>> subsets =
+        Lists.newArrayList(
+            Lists.newArrayList(), Lists.newArrayList(subchannel4, subchannel1, subchannel2));
     int newconns = 0;
 
     for (int i = 0; i < 2; i++) {
       DeterministicSubsettingLoadBalancerConfig config = configs.get(i);
-      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.copyOf(servers))
-        .setLoadBalancingPolicyConfig(config).build();
+      ResolvedAddresses resolvedAddresses =
+          ResolvedAddresses.newBuilder()
+              .setAddresses(ImmutableList.copyOf(servers))
+              .setLoadBalancingPolicyConfig(config)
+              .build();
       loadBalancer.acceptResolvedAddresses(resolvedAddresses);
       for (Subchannel sc : subsets.get(i)) {
         verify(sc).shutdown();
@@ -230,19 +236,22 @@ public class DeterministicSubsettingLoadBalancerTest {
     List<DeterministicSubsettingLoadBalancerConfig> configs = Lists.newArrayList();
     for (int i = 0; i < 3; i++) {
       configs.add(
-        new DeterministicSubsettingLoadBalancerConfig.Builder()
-          .setSubsetSize(3)
-          .setClientIndex(i)
-          .setSortAddresses(false)
-          .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build());
+          new DeterministicSubsettingLoadBalancerConfig.Builder()
+              .setSubsetSize(3)
+              .setClientIndex(i)
+              .setSortAddresses(false)
+              .setChildPolicy(new PolicySelection(roundRobinLbProvider, null))
+              .build());
     }
 
     List<Integer> perRun = Lists.newArrayList();
 
     for (DeterministicSubsettingLoadBalancerConfig config : configs) {
-      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.copyOf(servers))
-        .setLoadBalancingPolicyConfig(config).build();
+      ResolvedAddresses resolvedAddresses =
+          ResolvedAddresses.newBuilder()
+              .setAddresses(ImmutableList.copyOf(servers))
+              .setLoadBalancingPolicyConfig(config)
+              .build();
       loadBalancer.acceptResolvedAddresses(resolvedAddresses);
       int numSubchannelsOpened = 0;
       for (Subchannel subchannel : subchannels.values()) {
@@ -255,9 +264,8 @@ public class DeterministicSubsettingLoadBalancerTest {
       perRun.add(numSubchannelsOpened);
       subchannelStateListeners.clear();
     }
-    assertThat(perRun).isEqualTo(Lists.newArrayList(3,0,0));
+    assertThat(perRun).isEqualTo(Lists.newArrayList(3, 0, 0));
   }
-
 
   @Test
   public void backendsCanBeDistributedEvenly() {
@@ -289,39 +297,41 @@ public class DeterministicSubsettingLoadBalancerTest {
     verifyCreatesSubsets(21, 8, 5, 1);
   }
 
-
   public void verifyCreatesSubsets(int backends, int clients, int subsetSize, int maxDiff) {
     setupBackends(backends);
     List<DeterministicSubsettingLoadBalancerConfig> configs = Lists.newArrayList();
-    for ( int i = 0; i < clients; i++ ) {
+    for (int i = 0; i < clients; i++) {
       configs.add(
-        new DeterministicSubsettingLoadBalancerConfig.Builder()
-          .setSubsetSize(subsetSize)
-          .setClientIndex(i)
-          .setSortAddresses(false)
-          .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build());
+          new DeterministicSubsettingLoadBalancerConfig.Builder()
+              .setSubsetSize(subsetSize)
+              .setClientIndex(i)
+              .setSortAddresses(false)
+              .setChildPolicy(new PolicySelection(mockChildLbProvider, null))
+              .build());
     }
 
     Map<SocketAddress, Integer> subsetDistn = Maps.newLinkedHashMap();
 
     for (DeterministicSubsettingLoadBalancerConfig config : configs) {
-      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.copyOf(servers))
-        .setLoadBalancingPolicyConfig(config).build();
+      ResolvedAddresses resolvedAddresses =
+          ResolvedAddresses.newBuilder()
+              .setAddresses(ImmutableList.copyOf(servers))
+              .setLoadBalancingPolicyConfig(config)
+              .build();
       loadBalancer.acceptResolvedAddresses(resolvedAddresses);
       verify(mockChildLb, atLeastOnce()).handleResolvedAddresses(resolvedAddrCaptor.capture());
       // Verify ChildLB is only getting subsetSize ResolvedAddresses each time
       assertThat(resolvedAddrCaptor.getValue().getAddresses().size()).isEqualTo(subsetSize);
-      for (EquivalentAddressGroup eag: resolvedAddrCaptor.getValue().getAddresses()) {
+      for (EquivalentAddressGroup eag : resolvedAddrCaptor.getValue().getAddresses()) {
         for (SocketAddress addr : eag.getAddresses()) {
-           Integer prev = subsetDistn.getOrDefault(addr, 0);
-           subsetDistn.put(addr, prev + 1);
-          }
+          Integer prev = subsetDistn.getOrDefault(addr, 0);
+          subsetDistn.put(addr, prev + 1);
         }
       }
+    }
     int maxConns = Collections.max(subsetDistn.values());
     int minConns = Collections.min(subsetDistn.values());
 
-    assertThat(maxConns < minConns+maxConns).isTrue();
+    assertThat(maxConns < minConns + maxConns).isTrue();
   }
 }

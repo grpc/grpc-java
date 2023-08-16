@@ -57,8 +57,9 @@ public final class DeterministicSubsettingLoadBalancerProvider extends LoadBalan
       return parseLoadBalancingPolicyConfigInternal(rawConfig);
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
-        Status.UNAVAILABLE.withCause(e).withDescription(
-          "Failed parsing configuration for " + getPolicyName()));
+          Status.UNAVAILABLE
+              .withCause(e)
+              .withDescription("Failed parsing configuration for " + getPolicyName()));
     }
   }
 
@@ -67,30 +68,32 @@ public final class DeterministicSubsettingLoadBalancerProvider extends LoadBalan
     Integer subsetSize = JsonUtil.getNumberAsInteger(rawConfig, "subsetSize");
     Boolean sortAddresses = JsonUtil.getBoolean(rawConfig, "sortAddresses");
 
-    List<ServiceConfigUtil.LbConfig> childConfigCandidates = ServiceConfigUtil
-        .unwrapLoadBalancingConfigList(JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
+    List<ServiceConfigUtil.LbConfig> childConfigCandidates =
+        ServiceConfigUtil.unwrapLoadBalancingConfigList(
+            JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
     if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
-      return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-        "No child policy in deterministic_subsetting LB policy " + rawConfig
-      ));
+      return ConfigOrError.fromError(
+          Status.INTERNAL.withDescription(
+              "No child policy in deterministic_subsetting LB policy " + rawConfig));
     }
 
     ConfigOrError selectedConfig =
-        ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates,
-        LoadBalancerRegistry.getDefaultRegistry());
+        ServiceConfigUtil.selectLbPolicyFromList(
+            childConfigCandidates, LoadBalancerRegistry.getDefaultRegistry());
 
-    DeterministicSubsettingLoadBalancer
-        .DeterministicSubsettingLoadBalancerConfig.Builder configBuilder =
-      new DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder();
+    DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder
+        configBuilder =
+            new DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig
+                .Builder();
 
     configBuilder.setChildPolicy((PolicySelection) selectedConfig.getConfig());
 
     if (clientIndex != null) {
       configBuilder.setClientIndex(clientIndex);
     } else {
-      return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-        "No client index set, cannot determine subsets " + rawConfig)
-      );
+      return ConfigOrError.fromError(
+          Status.INTERNAL.withDescription(
+              "No client index set, cannot determine subsets " + rawConfig));
     }
 
     if (subsetSize != null) {
