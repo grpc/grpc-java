@@ -19,7 +19,6 @@ package io.grpc.okhttp;
 import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -140,8 +139,6 @@ final class OkHttpServerTransport implements ServerTransport,
   @GuardedBy("lock")
   private Long gracefulShutdownPeriod = null;
 
-  private FrameHandler handler;
-
   public OkHttpServerTransport(Config config, Socket bareSocket) {
     this.config = Preconditions.checkNotNull(config, "config");
     this.socket = Preconditions.checkNotNull(bareSocket, "bareSocket");
@@ -251,8 +248,8 @@ final class OkHttpServerTransport implements ServerTransport,
             TimeUnit.NANOSECONDS);
       }
 
-      handler = new FrameHandler(variant.newReader(Okio.buffer(Okio.source(socket)), false));
-      transportExecutor.execute(handler);
+      transportExecutor.execute(new FrameHandler(
+          variant.newReader(Okio.buffer(Okio.source(socket)), false)));
     } catch (Error | IOException | RuntimeException ex) {
       synchronized (lock) {
         if (!handshakeShutdown) {
@@ -262,11 +259,6 @@ final class OkHttpServerTransport implements ServerTransport,
       GrpcUtil.closeQuietly(socket);
       terminated();
     }
-  }
-
-  @VisibleForTesting
-  FrameHandler getHandler() {
-    return handler;
   }
 
   @Override

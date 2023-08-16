@@ -31,7 +31,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
@@ -72,6 +71,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import okio.Buffer;
+import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.ByteString;
 import okio.Okio;
@@ -92,15 +92,19 @@ public class OkHttpServerTransportTest {
   private static final int TIME_OUT_MS = 2000;
   private static final int INITIAL_WINDOW_SIZE = 65535;
   private static final long MAX_CONNECTION_IDLE = TimeUnit.SECONDS.toNanos(1);
-
+  private static final byte FLAG_NONE = 0x0;
+  private static final byte FLAG_PADDED = 0x8;
+  private static final byte FLAG_END_STREAM = 0x1;
+  private static final byte TYPE_DATA = 0x0;
   private MockServerTransportListener mockTransportListener = new MockServerTransportListener();
   private ServerTransportListener transportListener
       = mock(ServerTransportListener.class, delegatesTo(mockTransportListener));
   private OkHttpServerTransport serverTransport;
   private final ExecutorService threadPool = Executors.newCachedThreadPool();
   private final SocketPair socketPair = SocketPair.create(threadPool);
-  private final FrameWriter clientFrameWriter
-      = new Http2().newWriter(Okio.buffer(Okio.sink(socketPair.getClientOutputStream())), true);
+  private final BufferedSink clientWriterSink = Okio.buffer(
+      Okio.sink(socketPair.getClientOutputStream()));
+  private final FrameWriter clientFrameWriter = new Http2().newWriter(clientWriterSink, true);
   private final FrameReader clientFrameReader
       = new Http2().newReader(Okio.buffer(Okio.source(socketPair.getClientInputStream())), true);
   private final FrameReader.Handler clientFramesRead = mock(FrameReader.Handler.class);
@@ -1002,9 +1006,10 @@ public class OkHttpServerTransportTest {
 
   @Test
   public void windowUpdate() throws Exception {
+    serverBuilder.flowControlWindow(100);
     initTransport();
     handshake();
-    OkHttpServerTransport.FrameHandler handler = serverTransport.getHandler();
+
     List<Header> headers = Arrays.asList(
         HTTP_SCHEME_HEADER,
         METHOD_HEADER,
@@ -1013,44 +1018,55 @@ public class OkHttpServerTransportTest {
         CONTENT_TYPE_HEADER,
         TE_HEADER,
         new Header("some-metadata", "this could be anything"));
+    clientFrameWriter.headers(1, new ArrayList<>(headers));
+    clientFrameWriter.headers(3, new ArrayList<>(headers));
+    String message = "Hello Server Pad Me!"; // length = 20, add buffer length = 5
+    writeDataDirectly(clientWriterSink, FLAG_NONE, 1, message, 0);
+    pingPong();
 
-    handler.headers(false, false, 1, 0, new ArrayList<>(headers), HeadersMode.HTTP_20_HEADERS);
-    MockStreamListener streamListener1 = mockTransportListener.newStreams.pop();
-    handler.headers(false, false, 3, 0, new ArrayList<>(headers), HeadersMode.HTTP_20_HEADERS);
+    MockStreamListener streamListener = mockTransportListener.newStreams.pop();
     MockStreamListener streamListener2 = mockTransportListener.newStreams.pop();
-    reset(clientFramesRead);
-
-    int messageSize = INITIAL_WINDOW_SIZE / 4 ;
-    int paddingLength = 10;
-    Buffer requestMessageFrame = createMessageFrame(new String(new char[messageSize]),
-        paddingLength);
-    int frameSize = (int) requestMessageFrame.size();
-    handler.data(false, 1, requestMessageFrame, frameSize - paddingLength, frameSize);
-    requestMessageFrame = createMessageFrame(new String(new char[messageSize]), paddingLength);
-    handler.data(false, 3, requestMessageFrame, frameSize - paddingLength, frameSize);
+    assertThat(streamListener.stream.getAuthority()).isEqualTo("example.com:80");
+    assertThat(streamListener.method).isEqualTo("com.example/SimpleService.doit");
+    assertThat(streamListener.headers.get(
+        Metadata.Key.of("Some-Metadata", Metadata.ASCII_STRING_MARSHALLER)))
+        .isEqualTo("this could be anything");
+    streamListener.stream.request(1);
+    pingPong();
+    assertThat(streamListener.messages.pop()).isEqualTo("Hello Server Pad Me!");
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"));
+    streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+    List<Header> responseHeaders = Arrays.asList(
+        new Header(":status", "200"),
+        CONTENT_TYPE_HEADER,
+        new Header("user-data", "best data"));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
-    // connection window update
-    verify(clientFramesRead).windowUpdate(0, frameSize * 2);
+    verify(clientFramesRead)
+        .headers(false, false, 1, -1, responseHeaders, HeadersMode.HTTP_20_HEADERS);
 
-    requestMessageFrame = createMessageFrame(new String(new char[messageSize]), 0);
-    handler.data(false, 3, requestMessageFrame, frameSize - paddingLength,
-        frameSize - paddingLength);
-    streamListener1.stream.request(1);
-    streamListener2.stream.request(2);
-    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
-    // per stream window update
-    verify(clientFramesRead).windowUpdate(3, frameSize * 2 - paddingLength);
+    writeDataDirectly(clientWriterSink, FLAG_PADDED, 1, message, 10);
+    writeDataDirectly(clientWriterSink, FLAG_PADDED | FLAG_END_STREAM, 3, message, 40);
+    clientFrameWriter.flush();
 
-    paddingLength = 2 * messageSize + 100;
-    requestMessageFrame = createMessageFrame(new String(new char[messageSize]), paddingLength);
-    frameSize = (int) requestMessageFrame.size();
-    handler.data(false, 1, requestMessageFrame, frameSize - paddingLength, frameSize);
+    int expectedConsumed = message.length() + 5;
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
-    // not enough window for padded data length
+    verify(clientFramesRead).windowUpdate(0, expectedConsumed * 2 + 10);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(0, expectedConsumed  + 40);
+    streamListener.stream.request(2);
+    streamListener2.stream.request(1);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(1, expectedConsumed * 2 + 10);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(3, expectedConsumed + 40);
+
+    writeDataDirectly(clientWriterSink, FLAG_PADDED | FLAG_END_STREAM, 1, message, 100);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).rstStream(eq(1), eq(ErrorCode.FLOW_CONTROL_ERROR));
-
-    handler.rstStream(3, ErrorCode.CANCEL);
-    shutdownAndTerminate(3);
+    clientFrameWriter.rstStream(3, ErrorCode.CANCEL);
+    pingPong();
+    shutdownAndTerminate(/*lastStreamId=*/ 3);
   }
 
   @Test
@@ -1275,17 +1291,38 @@ public class OkHttpServerTransportTest {
   }
 
   private static Buffer createMessageFrame(String stringMessage) {
-    return createMessageFrame(stringMessage, 0);
-  }
-
-  private static Buffer createMessageFrame(String stringMessage, int paddingLength) {
     byte[] message = stringMessage.getBytes(UTF_8);
     Buffer buffer = new Buffer();
     buffer.writeByte(0 /* UNCOMPRESSED */);
     buffer.writeInt(message.length);
     buffer.write(message);
-    buffer.write(new byte[paddingLength]);
     return buffer;
+  }
+
+  private void writeDataDirectly(BufferedSink sink, int flag, int streamId, String message,
+                                 int paddingLength) throws IOException {
+    Buffer buffer = createMessageFrame(message);
+    int bufferLengthWithPadding = (int) buffer.size();
+    if ((flag & FLAG_PADDED) != 0) {
+      bufferLengthWithPadding += paddingLength;
+    }
+    writeLength(sink, bufferLengthWithPadding);
+    sink.writeByte(TYPE_DATA & 0xff);//data frame type
+    sink.writeByte(flag & 0xff);
+    sink.writeInt(streamId & 0x7fffffff);
+    if ((flag & FLAG_PADDED) != 0) {
+      sink.writeByte((short)(paddingLength - 1));
+      char[] value = new char[paddingLength - 1];
+      Arrays.fill(value, '!');
+      buffer.write(new String(value).getBytes(UTF_8));
+    }
+    sink.write(buffer, buffer.size());
+  }
+
+  private void writeLength(BufferedSink sink, int length) throws IOException {
+    sink.writeByte((length >>> 16 ) & 0xff);
+    sink.writeByte((length >>> 8 ) & 0xff);
+    sink.writeByte(length & 0xff);
   }
 
   private Metadata metadata(String... keysAndValues) {
