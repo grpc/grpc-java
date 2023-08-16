@@ -1307,7 +1307,7 @@ public class OkHttpServerTransportTest {
       bufferLengthWithPadding += paddingLength;
     }
     writeLength(sink, bufferLengthWithPadding);
-    sink.writeByte(TYPE_DATA & 0xff);//data frame type
+    sink.writeByte(TYPE_DATA);
     sink.writeByte(flag & 0xff);
     sink.writeInt(streamId & 0x7fffffff);
     if ((flag & FLAG_PADDED) != 0) {
