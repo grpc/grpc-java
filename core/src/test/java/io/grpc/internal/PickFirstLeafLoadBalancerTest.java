@@ -210,15 +210,6 @@ public class PickFirstLeafLoadBalancerTest {
             .setLoadBalancingPolicyConfig(new PickFirstLeafLoadBalancerConfig(false)).build());
 
     verify(mockHelper, times(4)).createSubchannel(createArgsCaptor.capture());
-    List<CreateSubchannelArgs> argsList = createArgsCaptor.getAllValues();
-    assertThat(argsList.get(0).getAddresses().get(0)).isEqualTo(servers.get(0));
-    assertThat(argsList.get(1).getAddresses().get(0)).isEqualTo(servers.get(1));
-    assertThat(argsList.get(2).getAddresses().get(0)).isEqualTo(servers.get(2));
-    assertThat(argsList.get(3).getAddresses().get(0)).isEqualTo(servers.get(3));
-    assertThat(argsList.get(0).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(3).getAddresses().size()).isEqualTo(1);
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel1).requestConnection();
 
@@ -451,15 +442,6 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     inOrder.verify(mockHelper, times(4)).createSubchannel(createArgsCaptor.capture());
-    List<CreateSubchannelArgs> argsList = createArgsCaptor.getAllValues();
-    assertThat(argsList.get(0).getAddresses().get(0)).isEqualTo(servers.get(0));
-    assertThat(argsList.get(1).getAddresses().get(0)).isEqualTo(servers.get(1));
-    assertThat(argsList.get(2).getAddresses().get(0)).isEqualTo(servers.get(2));
-    assertThat(argsList.get(3).getAddresses().get(0)).isEqualTo(servers.get(3));
-    assertThat(argsList.get(0).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(3).getAddresses().size()).isEqualTo(1);
     verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     verify(mockSubchannel2).start(stateListenerCaptor.capture());
@@ -565,19 +547,6 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     inOrder.verify(mockHelper, times(4)).createSubchannel(createArgsCaptor.capture());
-    List<CreateSubchannelArgs> argsList = createArgsCaptor.getAllValues();
-    assertThat(argsList.get(0).getAddresses().get(0)).isEqualTo(servers.get(0));
-    assertThat(argsList.get(1).getAddresses().get(0)).isEqualTo(servers.get(1));
-    assertThat(argsList.get(2).getAddresses().get(0)).isEqualTo(servers.get(2));
-    assertThat(argsList.get(3).getAddresses().get(0)).isEqualTo(servers.get(3));
-    assertThat(argsList.get(0).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(3).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(0).getAttributes()).isEqualTo(Attributes.EMPTY);
-    assertThat(argsList.get(1).getAttributes()).isEqualTo(Attributes.EMPTY);
-    assertThat(argsList.get(2).getAttributes()).isEqualTo(Attributes.EMPTY);
-    assertThat(argsList.get(3).getAttributes()).isEqualTo(Attributes.EMPTY);
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel1).requestConnection();

@@ -37,8 +37,8 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -58,7 +58,7 @@ import javax.annotation.Nullable;
 final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   private final Helper helper;
-  private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
+  private final Map<SocketAddress, SubchannelData> subchannels = new LinkedHashMap<>();
   private final int CONNECTION_DELAY_INTERVAL_MS = 250;
   private Index addressIndex;
   @Nullable
