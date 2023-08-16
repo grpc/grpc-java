@@ -45,6 +45,7 @@ tasks.named("javadoc").configure {
     // Do not publish javadoc since currently there is no public API.
     failOnError false  // no public or protected classes found to document
     exclude 'io/grpc/lookup/v1/**'
+    exclude 'io/grpc/rls/*Provider.java'
     exclude 'io/grpc/rls/internal/**'
     exclude 'io/grpc/rls/Internal*'
 }
