@@ -35,6 +35,7 @@ configureProtoCompilation()
 
 tasks.named("javadoc").configure {
     exclude 'io/grpc/grpclb/Internal*'
+    exclude 'io/grpc/grpclb/*Provider.java'
 }
 
 tasks.named("jacocoTestReport").configure {
