@@ -372,10 +372,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     // (fresh channels without feedback information will get an average flow of
     // requests). However, it follows from this that this class will replace weight
     // = 0 with M, but weight = epsilon with M*kMinRatio, and this step function is
-    // logically faulty. A demonstration of this is that the function that computes
-    // weights in WeightedRoundRobin
-    // (http://google3/production/rpc/stubs/core/loadbalancing/weightedroundrobin.cc;l=324-325;rcl=514986476)
-    // will cap some epsilon values to zero.
+    // logically faulty.
     private static final double K_MAX_RATIO = 10;
     private static final double K_MIN_RATIO = 0.1;
 
