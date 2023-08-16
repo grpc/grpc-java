@@ -162,6 +162,7 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/xds/FilterChainMatchingProtocolNegotiators.java'
     exclude 'io/grpc/xds/TlsContextManager.java'
     exclude 'io/grpc/xds/XdsAttributes.java'
+    exclude 'io/grpc/xds/XdsCredentialsProvider.java'
     exclude 'io/grpc/xds/XdsInitializationException.java'
     exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'
