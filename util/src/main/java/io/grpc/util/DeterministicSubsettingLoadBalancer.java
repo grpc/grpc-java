@@ -70,8 +70,7 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
 
     if (addresses.size() <= config.subsetSize) return allAddresses;
     if (config.sortAddresses) {
-      // If we sort, we do so via destination hashcode.
-      // This is deterministic but differs from the golang instrumentation.
+      // If we sort, we do so via the string representation of the SocketAddress.
       addresses.sort(new AddressComparator());
     }
 
@@ -127,9 +126,13 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
   }
 
   private static class AddressComparator implements Comparator<SocketAddress> {
+    // For consistency with the golang instrumentation, this assumes toString is overridden such
+    // that it is a string representation of an IP. Though any string representation of a
+    // SocketAddress will work here, other definitions of toString may yield differing results from
+    // the golang instrumentation.
     @Override
     public int compare(SocketAddress o1, SocketAddress o2) {
-      return o1.hashCode() - o2.hashCode();
+      return o1.toString().compareTo(o2.toString());
     }
 
   }
@@ -193,7 +196,11 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
       public DeterministicSubsettingLoadBalancerConfig build() {
         checkState(childPolicy != null);
         checkState(clientIndex != null);
-        return new DeterministicSubsettingLoadBalancerConfig(clientIndex, subsetSize, sortAddresses, childPolicy);
+        return new DeterministicSubsettingLoadBalancerConfig(
+          clientIndex,
+          subsetSize,
+          sortAddresses,
+          childPolicy);
       }
     }
   }
