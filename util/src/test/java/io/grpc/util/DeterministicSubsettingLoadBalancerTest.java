@@ -1,3 +1,19 @@
+/*
+ * Copyright 2023 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -15,8 +31,10 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils;
@@ -89,32 +107,25 @@ public class DeterministicSubsettingLoadBalancerTest {
   }
 
   public void addMock() {
-    when(mockHelper.createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class)))
-        .then(
-            new Answer<Subchannel>() {
+    when(mockHelper.createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class))).then(
+        new Answer<Subchannel>() {
+          @Override
+          public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+            CreateSubchannelArgs args = (CreateSubchannelArgs) invocation.getArguments()[0];
+            final Subchannel subchannel = subchannels.get(args.getAddresses());
+            when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
+            when(subchannel.getAttributes()).thenReturn(args.getAttributes());
+            doAnswer(new Answer<Void>() {
               @Override
-              public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-                LoadBalancer.CreateSubchannelArgs args =
-                    (LoadBalancer.CreateSubchannelArgs) invocation.getArguments()[0];
-                final Subchannel subchannel = subchannels.get(args.getAddresses());
-                when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
-                when(subchannel.getAttributes()).thenReturn(args.getAttributes());
-                doAnswer(
-                        new Answer<Void>() {
-                          @Override
-                          public Void answer(InvocationOnMock invocation) throws Throwable {
-                            subchannelStateListeners.put(
-                                subchannel,
-                                (LoadBalancer.SubchannelStateListener)
-                                    invocation.getArguments()[0]);
-                            return null;
-                          }
-                        })
-                    .when(subchannel)
-                    .start(any(LoadBalancer.SubchannelStateListener.class));
-                return subchannel;
+              public Void answer(InvocationOnMock invocation) throws Throwable {
+                subchannelStateListeners.put(subchannel,
+                      (SubchannelStateListener) invocation.getArguments()[0]);
+                return null;
               }
-            });
+            }).when(subchannel).start(any(SubchannelStateListener.class));
+            return subchannel;
+          }
+        });
   }
 
   @Test
