@@ -374,8 +374,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       int numChannels = weights.length;
       int numWeightedChannels = 0;
       double sumWeight = 0;
-      float unscaledMaxWeight = 0;
       double unscaledMeanWeight;
+      float unscaledMaxWeight = 0;
       for (float weight : weights) {
         if (weight > 0) {
           sumWeight += weight;
@@ -415,7 +415,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       this.scaledWeights = scaledWeights;
       this.sequence = sequence;
-
     }
 
     /** Returns the next sequence number and atomically increases sequence with wraparound. */
@@ -462,7 +461,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       int i = 0;
       while (true) {
         i++;
-        System.out.println(i);
         long sequence = this.nextSequence();
         int backendIndex = (int) (sequence % scaledWeights.length);
         long generation = sequence / scaledWeights.length;
@@ -471,7 +469,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) {
           continue;
         }
-        System.out.println("pick");
         return backendIndex;
       }
     }
