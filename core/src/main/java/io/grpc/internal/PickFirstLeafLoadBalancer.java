@@ -137,6 +137,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (oldAddrs.size() == 0 || currentState == CONNECTING || currentState == READY) {
       // start connection attempt at first address
       updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+      cancelScheduleTask();
       requestConnection();
 
     } else if (currentState == IDLE) {
@@ -146,6 +147,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     } else if (currentState == TRANSIENT_FAILURE) {
       // start connection attempt at first address
+      cancelScheduleTask();
       requestConnection();
     }
 
