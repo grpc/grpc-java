@@ -42,33 +42,30 @@ java {
 // Mechanically transform sources from grpc-servlet to use the corrected packages
 def migrate(String name, String inputDir, SourceSet sourceSet) {
     def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
-    sourceSet.java.srcDir outputDir
-    return tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
+    sourceSet.java.srcDir tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
         into(outputDir)
         from("$inputDir/io/grpc/servlet") {
             into('io/grpc/servlet/jakarta')
             filter { String line ->
-                line.replaceAll('javax\\.servlet', 'jakarta.servlet')
-                    .replaceAll('io\\.grpc\\.servlet', 'io.grpc.servlet.jakarta')
+                line.replace('javax.servlet', 'jakarta.servlet')
+                    .replace('io.grpc.servlet', 'io.grpc.servlet.jakarta')
             }
         }
     }
 }
 
-compileJava.dependsOn migrate('main', '../src/main/java', sourceSets.main)
-
-sourcesJar.dependsOn migrateSourcesMain
+migrate('main', '../src/main/java', sourceSets.main)
 
 // Build the set of sourceSets and classpaths to modify, since Jetty 11 requires Java 11
 // and must be skipped
-compileUndertowTestJava.dependsOn(migrate('undertowTest', '../src/undertowTest/java', sourceSets.undertowTest))
-compileTomcatTestJava.dependsOn(migrate('tomcatTest', '../src/tomcatTest/java', sourceSets.tomcatTest))
+migrate('undertowTest', '../src/undertowTest/java', sourceSets.undertowTest)
+migrate('tomcatTest', '../src/tomcatTest/java', sourceSets.tomcatTest)
 if (JavaVersion.current().isJava11Compatible()) {
-    compileJettyTestJava.dependsOn(migrate('jettyTest', '../src/jettyTest/java', sourceSets.jettyTest))
+    migrate('jettyTest', '../src/jettyTest/java', sourceSets.jettyTest)
 }
 
 // Disable checkstyle for this project, since it consists only of generated code
-tasks.withType(Checkstyle) {
+tasks.withType(Checkstyle).configureEach {
     enabled = false
 }
 
@@ -106,11 +103,11 @@ dependencies {
 
 // Set up individual classpaths for each test, to avoid any mismatch,
 // and ensure they are only used when supported by the current jvm
-check.dependsOn(tasks.register('undertowTest', Test) {
+def undertowTest = tasks.register('undertowTest', Test) {
     classpath = sourceSets.undertowTest.runtimeClasspath
     testClassesDirs = sourceSets.undertowTest.output.classesDirs
-})
-check.dependsOn(tasks.register('tomcat10Test', Test) {
+}
+def tomcat10Test = tasks.register('tomcat10Test', Test) {
     classpath = sourceSets.tomcatTest.runtimeClasspath
     testClassesDirs = sourceSets.tomcatTest.output.classesDirs
 
@@ -127,11 +124,20 @@ check.dependsOn(tasks.register('tomcat10Test', Test) {
     if (JavaVersion.current().isJava9Compatible()) {
         jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
     }
-})
+}
+
+tasks.named("check").configure {
+    dependsOn undertowTest, tomcat10Test
+}
+
 // Only run these tests if java 11+ is being used
 if (JavaVersion.current().isJava11Compatible()) {
-    check.dependsOn(tasks.register('jetty11Test', Test) {
+    def jetty11Test = tasks.register('jetty11Test', Test) {
         classpath = sourceSets.jettyTest.runtimeClasspath
         testClassesDirs = sourceSets.jettyTest.output.classesDirs
-    })
+    }
+
+    tasks.named("check").configure {
+        dependsOn jetty11Test
+    }
 }
