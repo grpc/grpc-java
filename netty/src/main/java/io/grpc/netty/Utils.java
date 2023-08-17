@@ -138,10 +138,8 @@ class Utils {
       boolean defaultPreferDirect = PooledByteBufAllocator.defaultPreferDirect();
       logger.log(
           Level.FINE,
-          String.format(
-              "Using custom allocator: forceHeapBuffer=%s, defaultPreferDirect=%s",
-              forceHeapBuffer,
-              defaultPreferDirect));
+          "Using custom allocator: forceHeapBuffer={0}, defaultPreferDirect={1}",
+          new Object[] { forceHeapBuffer, defaultPreferDirect });
       if (forceHeapBuffer || !defaultPreferDirect) {
         return ByteBufAllocatorPreferHeapHolder.allocator;
       } else {
