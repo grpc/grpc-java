@@ -53,13 +53,13 @@ fi
 # Build examples
 
 cd ./examples/android/clientcache
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 cd ../routeguide
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 cd ../helloworld
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 cd ../strictmode
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 
 # Skip APK size and dex count comparisons for non-PR builds
 

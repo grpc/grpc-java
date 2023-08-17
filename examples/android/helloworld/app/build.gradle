@@ -49,7 +49,7 @@ protobuf {
 }
 
 dependencies {
-    implementation 'com.android.support:appcompat-v7:27.0.2'
+    implementation 'androidx.appcompat:appcompat:1.0.0'
 
     // You need to build grpc-java to obtain these libraries below.
     implementation 'io.grpc:grpc-okhttp:1.58.0-SNAPSHOT' // CURRENT_GRPC_VERSION
