@@ -1642,7 +1642,8 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     inOrder.verify(mockSubchannel1).requestConnection();
-    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    inOrder.verify(mockHelper).getSynchronizationContext();
+    inOrder.verify(mockHelper).getScheduledExecutorService();
 
     // Failing first connection attempt
     Status error = Status.UNAVAILABLE.withDescription("Simulated connection error");
@@ -1652,6 +1653,8 @@ public class PickFirstLeafLoadBalancerTest {
     // Starting second connection attempt
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
     inOrder.verify(mockSubchannel2).requestConnection();
+    inOrder.verify(mockHelper).getSynchronizationContext();
+    inOrder.verify(mockHelper).getScheduledExecutorService();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Failing second connection attempt
@@ -1701,6 +1704,8 @@ public class PickFirstLeafLoadBalancerTest {
     // If first subchannel is ready before it completes shutdown, we still choose subchannel 2
     // This can be verified by checking the mock helper.
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+
+    // Happy Eyeballs, once transient failure is reported, no longer schedules connections.
     verifyNoMoreInteractions(mockHelper);
   }
 
