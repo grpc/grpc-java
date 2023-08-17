@@ -2130,7 +2130,7 @@ public abstract class AbstractInteropTest {
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
   }
 
-  protected static void assertSuccess(StreamRecorder<?> recorder) {
+  private static void assertSuccess(StreamRecorder<?> recorder) {
     if (recorder.getError() != null) {
       throw new AssertionError(recorder.getError());
     }
