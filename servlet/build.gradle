@@ -64,7 +64,7 @@ dependencies {
             libraries.protobuf.java
 }
 
-test {
+tasks.named("test").configure {
     if (JavaVersion.current().isJava9Compatible()) {
         jvmArgs += [
                 // required for Lincheck
@@ -76,11 +76,11 @@ test {
 
 // Set up individual classpaths for each test, to avoid any mismatch,
 // and ensure they are only used when supported by the current jvm
-check.dependsOn(tasks.register('undertowTest', Test) {
+def undertowTest = tasks.register('undertowTest', Test) {
     classpath = sourceSets.undertowTest.runtimeClasspath
     testClassesDirs = sourceSets.undertowTest.output.classesDirs
-})
-check.dependsOn(tasks.register('tomcat9Test', Test) {
+}
+def tomcat9Test = tasks.register('tomcat9Test', Test) {
     classpath = sourceSets.tomcatTest.runtimeClasspath
     testClassesDirs = sourceSets.tomcatTest.output.classesDirs
 
@@ -97,19 +97,30 @@ check.dependsOn(tasks.register('tomcat9Test', Test) {
     if (JavaVersion.current().isJava9Compatible()) {
         jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
     }
-})
+}
+
+tasks.named("check").configure {
+    dependsOn undertowTest, tomcat9Test
+}
+
+tasks.named("jacocoTestReport").configure {
+    // Must use executionData(Task...) override. The executionData(Object...) override doesn't find
+    // execution data correctly for tasks.
+    executionData undertowTest.get(), tomcat9Test.get()
+}
 
 // Only run these tests if java 11+ is being used
 if (JavaVersion.current().isJava11Compatible()) {
-    check.dependsOn(tasks.register('jettyTest', Test) {
+    def jettyTest = tasks.register('jettyTest', Test) {
         classpath = sourceSets.jettyTest.runtimeClasspath
         testClassesDirs = sourceSets.jettyTest.output.classesDirs
-    })
-}
-
-jacocoTestReport {
-    executionData undertowTest, tomcat9Test
-    if (JavaVersion.current().isJava11Compatible()) {
-        executionData jettyTest
+    }
+    tasks.named("check").configure {
+        dependsOn jettyTest
+    }
+    tasks.named("jacocoTestReport").configure {
+        // Must use executionData(Task...) override. The executionData(Object...) override doesn't
+        // find execution data correctly for tasks.
+        executionData jettyTest.get()
     }
 }
