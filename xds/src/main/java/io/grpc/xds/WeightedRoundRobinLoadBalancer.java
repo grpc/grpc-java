@@ -458,9 +458,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      * an offset that varies per backend index is also included to the calculation.
      */
     int pick() {
-      int i = 0;
       while (true) {
-        i++;
         long sequence = this.nextSequence();
         int backendIndex = (int) (sequence % scaledWeights.length);
         long generation = sequence / scaledWeights.length;
