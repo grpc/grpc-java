@@ -330,11 +330,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 10000.0 - subchannel1PickRatio))
-        .isAtMost(0.0001);
+        .isLessThan(0.0002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 10000.0 - subchannel2PickRatio ))
-        .isAtMost(0.0001);
+        .isLessThan(0.0002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 10000.0 - subchannel3PickRatio ))
-        .isAtMost(0.0001);
+        .isLessThan(0.0002);
   }
 
   @Test

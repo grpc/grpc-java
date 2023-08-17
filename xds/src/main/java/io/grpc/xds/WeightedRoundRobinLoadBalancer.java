@@ -366,13 +366,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     // potentially very bad tasks (that would have near-zero weights) than zero.
     // This is not necessarily a downside, though. Perhaps this is not a problem at
     // all, and we can increase this value if needed to save CPU cycles.
-    //
-    // Note that this class treats weights that are exactly equal to zero as unknown
-    // and thus needing to be replaced with M. This behavior itself makes sense
-    // (fresh channels without feedback information will get an average flow of
-    // requests). However, it follows from this that this class will replace weight
-    // = 0 with M, but weight = epsilon with M*kMinRatio, and this step function is
-    // logically faulty.
     private static final double K_MAX_RATIO = 10;
     private static final double K_MIN_RATIO = 0.1;
 
@@ -382,6 +375,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       int numWeightedChannels = 0;
       double sumWeight = 0;
       float unscaledMaxWeight = 0;
+      double unscaledMeanWeight;
       for (float weight : weights) {
         if (weight > 0) {
           sumWeight += weight;
@@ -390,22 +384,25 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         }
       }
 
-      double unscaledMeanWeight = numWeightedChannels > 0
-          ? sumWeight / numWeightedChannels : 1;
-
       // Adjust max value s.t. ratio does not exceed K_MAX_RATIO. This should
       // ensure that we on average do at most K_MAX_RATIO rounds for picks.
-      unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
+      if (numWeightedChannels > 0) {
+        unscaledMeanWeight = sumWeight / numWeightedChannels;
+        unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
+      // Fall back to round robin if all values are non-positives
+      } else {
+        unscaledMeanWeight = 1;
+        unscaledMaxWeight = 1;
+      }
 
       // Scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly.
       // Note that, since we cap the weights to stay within K_MAX_RATIO, `meanWeight` might not
       // match the actual mean of the values that end up in the scheduler.
       double scalingFactor = K_MAX_WEIGHT / unscaledMaxWeight;
       int meanWeight = (int) Math.round(scalingFactor * unscaledMeanWeight);
-
       // We compute `weightLowerBound` and clamp it to 1 from below so that in the
       // worst case, we represent tiny weights as 1.
-      int weightLowerBound = (int) Math.ceil(scalingFactor * unscaledMeanWeight * K_MIN_RATIO);
+      int weightLowerBound = (int) Math.ceil((scalingFactor * unscaledMeanWeight * K_MIN_RATIO));
       short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] <= 0) {
@@ -462,7 +459,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
      * an offset that varies per backend index is also included to the calculation.
      */
     int pick() {
+      int i = 0;
       while (true) {
+        i++;
+        System.out.println(i);
         long sequence = this.nextSequence();
         int backendIndex = (int) (sequence % scaledWeights.length);
         long generation = sequence / scaledWeights.length;
@@ -471,6 +471,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         if ((weight * generation + offset) % K_MAX_WEIGHT < K_MAX_WEIGHT - weight) {
           continue;
         }
+        System.out.println("pick");
         return backendIndex;
       }
     }
