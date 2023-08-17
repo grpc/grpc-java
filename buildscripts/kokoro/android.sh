@@ -101,7 +101,7 @@ git checkout HEAD^
 ./gradlew --stop  # use a new daemon to build the previous commit
 ./gradlew publishToMavenLocal $GRADLE_FLAGS
 cd examples/android/helloworld/
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 
 sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
 read -r ignored old_dex_count < \
