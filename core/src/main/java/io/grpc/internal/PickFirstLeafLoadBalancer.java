@@ -147,6 +147,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       // start connection attempt at first address
       rawConnectivityState = CONNECTING;
       updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+      cancelScheduleTask();
       requestConnection();
 
     } else if (rawConnectivityState == IDLE) {
@@ -156,6 +157,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     } else if (rawConnectivityState == TRANSIENT_FAILURE) {
       // start connection attempt at first address
+      cancelScheduleTask();
       requestConnection();
     }
 
