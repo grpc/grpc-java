@@ -167,6 +167,8 @@ public class PickFirstLeafLoadBalancerTest {
     assertThat(argsList.get(3).getAddresses().size()).isEqualTo(1);
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel1).requestConnection();
+    verify(mockHelper).getSynchronizationContext();
+    verify(mockHelper).getScheduledExecutorService();
 
     // Calling pickSubchannel() twice gave the same result
     assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
@@ -195,6 +197,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel1).requestConnection();
+    verify(mockHelper).getSynchronizationContext();
+    verify(mockHelper).getScheduledExecutorService();
 
     // Calling pickSubchannel() twice gave the same result
     assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
@@ -212,6 +216,8 @@ public class PickFirstLeafLoadBalancerTest {
     verify(mockHelper, times(4)).createSubchannel(createArgsCaptor.capture());
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel1).requestConnection();
+    verify(mockHelper).getSynchronizationContext();
+    verify(mockHelper).getScheduledExecutorService();
 
     // Calling pickSubchannel() twice gave the same result
     assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
@@ -306,6 +312,8 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     verify(mockSubchannel1).requestConnection();
+    verify(mockHelper).getSynchronizationContext();
+    verify(mockHelper).getScheduledExecutorService();
 
     verify(mockHelper, times(4)).createSubchannel(createArgsCaptor.capture());
     verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
@@ -550,6 +558,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel1).requestConnection();
+    verify(mockHelper).getSynchronizationContext();
+    verify(mockHelper).getScheduledExecutorService();
 
     assertNull(pickerCaptor.getValue().pickSubchannel(mockArgs)
         .getSubchannel());
@@ -568,6 +578,8 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
     verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    verify(mockHelper).getSynchronizationContext();
+    verify(mockHelper).getScheduledExecutorService();
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
 
@@ -615,6 +627,9 @@ public class PickFirstLeafLoadBalancerTest {
     // calling requestConnection() starts next subchannel
     loadBalancer.requestConnection();
     inOrder.verify(mockSubchannel2).requestConnection();
+    inOrder.verify(mockHelper).getSynchronizationContext();
+    inOrder.verify(mockHelper).getScheduledExecutorService();
+
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
 
     // calling requestConnection is now a no-op
