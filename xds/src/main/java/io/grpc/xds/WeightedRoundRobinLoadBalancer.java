@@ -399,14 +399,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       // Note that, since we cap the weights to stay within K_MAX_RATIO, `meanWeight` might not
       // match the actual mean of the values that end up in the scheduler.
       double scalingFactor = K_MAX_WEIGHT / unscaledMaxWeight;
-      int meanWeight = (int) Math.round(scalingFactor * unscaledMeanWeight);
       // We compute `weightLowerBound` and clamp it to 1 from below so that in the
       // worst case, we represent tiny weights as 1.
       int weightLowerBound = (int) Math.ceil(scalingFactor * unscaledMeanWeight * K_MIN_RATIO);
       short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] <= 0) {
-          scaledWeights[i] = (short) meanWeight;
+          scaledWeights[i] = (short) Math.round(scalingFactor * unscaledMeanWeight);
         } else {
           int weight = (int) Math.round(scalingFactor * Math.min(weights[i], unscaledMaxWeight));
           scaledWeights[i] = (short) Math.max(weight, weightLowerBound);
