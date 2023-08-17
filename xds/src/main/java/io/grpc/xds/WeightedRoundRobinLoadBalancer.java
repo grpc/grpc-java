@@ -389,8 +389,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (numWeightedChannels > 0) {
         unscaledMeanWeight = sumWeight / numWeightedChannels;
         unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
-      // Fall back to round robin if all values are non-positives
       } else {
+        // Fall back to round robin if all values are non-positives
         unscaledMeanWeight = 1;
         unscaledMaxWeight = 1;
       }
@@ -402,7 +402,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       int meanWeight = (int) Math.round(scalingFactor * unscaledMeanWeight);
       // We compute `weightLowerBound` and clamp it to 1 from below so that in the
       // worst case, we represent tiny weights as 1.
-      int weightLowerBound = (int) Math.ceil((scalingFactor * unscaledMeanWeight * K_MIN_RATIO));
+      int weightLowerBound = (int) Math.ceil(scalingFactor * unscaledMeanWeight * K_MIN_RATIO);
       short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] <= 0) {
