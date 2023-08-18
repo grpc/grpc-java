@@ -78,9 +78,11 @@ def createStartScripts(String mainClassName) {
         outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
         classpath = startScripts.classpath
     }
-    applicationDistribution.into('bin') {
-        from(newTask)
-        fileMode = 0755
+    application {
+        applicationDistribution.into('bin') {
+            from(newTask)
+            fileMode = 0755
+        }
     }
 }
 

@@ -1,7 +1,6 @@
 plugins {
     id 'application' // Provide convenience executables for trying out the examples.
-    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.17'
+    id 'com.google.protobuf' version '0.9.4'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'java'
@@ -50,7 +49,9 @@ task ReflectionServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-applicationDistribution.into('bin') {
-    from(ReflectionServer)
-    fileMode = 0755
+application {
+    applicationDistribution.into('bin') {
+        from(ReflectionServer)
+        fileMode = 0755
+    }
 }
