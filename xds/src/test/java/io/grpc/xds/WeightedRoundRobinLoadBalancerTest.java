@@ -17,8 +17,8 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -35,6 +35,7 @@ import com.google.common.collect.Maps;
 import com.google.protobuf.Duration;
 import io.grpc.Attributes;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -49,15 +50,12 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.TestUtils;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
-import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
-import io.grpc.util.AbstractTestHelper;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
-import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedChildLbState;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
+import io.grpc.xds.WeightedRoundRobinLoadBalancer.WrrSubchannel;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -69,7 +67,6 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
@@ -90,8 +87,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
 
-  private final TestHelper testHelperInstance = new TestHelper();
-  private Helper helper = mock(Helper.class, delegatesTo(testHelperInstance));
+  @Mock
+  Helper helper;
 
   @Mock
   private LoadBalancer.PickSubchannelArgs mockArgs;
@@ -102,8 +99,9 @@ public class WeightedRoundRobinLoadBalancerTest {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor2;
 
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
+
   private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
-  private final Map<Subchannel, Subchannel> mockToRealSubChannelMap = new HashMap<>();
+
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
         Maps.newLinkedHashMap();
 
@@ -136,8 +134,7 @@ public class WeightedRoundRobinLoadBalancerTest {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       EquivalentAddressGroup eag = new EquivalentAddressGroup(addr);
       servers.add(eag);
-      Subchannel sc = helper.createSubchannel(CreateSubchannelArgs.newBuilder().setAddresses(eag)
-          .build());
+      Subchannel sc = mock(Subchannel.class);
       Channel channel = mock(Channel.class);
       when(channel.newCall(any(), any())).then(
           new Answer<ClientCall<OrcaLoadReportRequest, OrcaLoadReport>>() {
@@ -150,13 +147,35 @@ public class WeightedRoundRobinLoadBalancerTest {
               return clientCall;
             }
           });
-      testHelperInstance.setChannel(mockToRealSubChannelMap.get(sc), channel);
+      when(sc.asChannel()).thenReturn(channel);
       subchannels.put(Arrays.asList(eag), sc);
     }
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
+    when(helper.getScheduledExecutorService()).thenReturn(
+            fakeClock.getScheduledExecutorService());
+    when(helper.createSubchannel(any(CreateSubchannelArgs.class)))
+          .then(new Answer<Subchannel>() {
+            @Override
+            public Subchannel answer(InvocationOnMock invocation) throws Throwable {
+              CreateSubchannelArgs args = (CreateSubchannelArgs) invocation.getArguments()[0];
+              final Subchannel subchannel = subchannels.get(args.getAddresses());
+              when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
+              when(subchannel.getAttributes()).thenReturn(args.getAttributes());
+              when(subchannel.getChannelLogger()).thenReturn(mock(ChannelLogger.class));
+              doAnswer(
+                new Answer<Void>() {
+                    @Override
+                    public Void answer(InvocationOnMock invocation) throws Throwable {
+                        subchannelStateListeners.put(
+                                subchannel, (SubchannelStateListener) invocation.getArguments()[0]);
+                        return null;
+                    }
+                }).when(subchannel).start(any(SubchannelStateListener.class));
+              return subchannel;
+            }
+            });
     wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker(),
         new FakeRandom(0));
-
-    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
   }
 
   @Test
@@ -164,44 +183,44 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
                 .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
                 any(CreateSubchannelArgs.class));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     Subchannel connectingSubchannel = it.next();
-    getSubchannelStateListener(connectingSubchannel).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(connectingSubchannel).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.CONNECTING));
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(0);
-    assertThat(weightedPicker.getChildren().size()).isEqualTo(1);
+    assertThat(weightedPicker.getList().size()).isEqualTo(1);
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    assertThat(weightedPicker.getChildren().size()).isEqualTo(2);
+    assertThat(weightedPicker.getList().size()).isEqualTo(2);
     String weightedPickerStr = weightedPicker.toString();
     assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
     assertThat(weightedPickerStr).contains("errorUtilizationPenalty=1.0");
     assertThat(weightedPickerStr).contains("list=");
 
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
-
-    assertThat(getAddressesFromPick(weightedPicker)).isEqualTo(weightedChild1.getEag());
+    assertThat(weightedPicker.pickSubchannel(mockArgs)
+        .getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
@@ -219,44 +238,35 @@ public class WeightedRoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockArgs);
   }
 
-  /**
-   * Picks subchannel using mockArgs, gets its EAG, and then strips the Attrs to make a key.
-   */
-  private EquivalentAddressGroup getAddressesFromPick(WeightedRoundRobinPicker weightedPicker) {
-    return TestUtils.stripAttrs(
-        weightedPicker.pickSubchannel(mockArgs).getSubchannel().getAddresses());
-  }
-
   @Test
   public void enableOobLoadReportConfig() {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
-    assertThat(getAddresses(pickResult))
-        .isEqualTo(weightedChild1.getEag());
+    assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNotNull(); // verify per-request listener
     assertThat(oobCalls.isEmpty()).isTrue();
 
@@ -270,8 +280,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor2.capture());
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor2.getAllValues().get(2);
     pickResult = weightedPicker.pickSubchannel(mockArgs);
-    assertThat(getAddresses(pickResult))
-        .isEqualTo(weightedChild1.getEag());
+    assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(pickResult.getStreamTracerFactory()).isNull();
     OrcaLoadReportRequest golden = OrcaLoadReportRequest.newBuilder().setReportInterval(
             Duration.newBuilder().setSeconds(20).setNanos(30000000).build()).build();
@@ -286,52 +295,46 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel3 = it.next();
-    getSubchannelStateListener(readySubchannel3).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel3).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(2);
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    WeightedChildLbState weightedChild3 = (WeightedChildLbState) getChild(weightedPicker, 2);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(r1);
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(r2);
-    weightedChild3.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(r3);
-
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r1);
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r2);
+    weightedSubchannel3.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r3);
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
-    Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
+    Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
-      EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
+      Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(3);
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 10000.0 - subchannel1PickRatio))
-        .isAtMost(0.0001);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 10000.0 - subchannel2PickRatio ))
-        .isAtMost(0.0001);
-    assertThat(Math.abs(pickCount.get(weightedChild3.getEag()) / 10000.0 - subchannel3PickRatio ))
-        .isAtMost(0.0001);
-  }
-
-  private SubchannelStateListener getSubchannelStateListener(Subchannel mockSubChannel) {
-    return subchannelStateListeners.get(mockToRealSubChannelMap.get(mockSubChannel));
-  }
-
-  private static ChildLbState getChild(WeightedRoundRobinPicker picker, int index) {
-    return picker.getChildren().get(index);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 10000.0 - subchannel1PickRatio))
+        .isLessThan(0.0002);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 10000.0 - subchannel2PickRatio ))
+        .isLessThan(0.0002);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 10000.0 - subchannel3PickRatio ))
+        .isLessThan(0.0002);
   }
 
   @Test
@@ -342,10 +345,11 @@ public class WeightedRoundRobinLoadBalancerTest {
         0.9, 0, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
         0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    double totalWeight = 999 / 0.1 + 2 / 0.9 + 100 / 0.86;
-
-    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, 2 / 0.9 / totalWeight,
-            100 / 0.86 / totalWeight);
+    double meanWeight = (999 / 0.1 + 2 / 0.9 + 100 / 0.86) / 3;
+    double cappedMin = meanWeight * 0.1; // min capped at minRatio * meanWeight
+    double totalWeight = 999 / 0.1 + cappedMin + cappedMin;
+    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, cappedMin / totalWeight,
+            cappedMin / totalWeight);
   }
 
   @Test
@@ -356,10 +360,11 @@ public class WeightedRoundRobinLoadBalancerTest {
         0.12, 0.9, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
         0.33, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    double totalWeight = 999 / 0.1 + 2 / 0.9 + 100 / 0.86;
-
-    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, 2 / 0.9 / totalWeight,
-        100 / 0.86 / totalWeight);
+    double meanWeight = (999 / 0.1 + 2 / 0.9 + 100 / 0.86) / 3;
+    double cappedMin = meanWeight * 0.1;
+    double totalWeight = 999 / 0.1 + cappedMin + cappedMin; // min capped at minRatio * meanWeight
+    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, cappedMin / totalWeight,
+        cappedMin / totalWeight);
   }
 
   @Test
@@ -370,13 +375,14 @@ public class WeightedRoundRobinLoadBalancerTest {
         0.9, 0, 0.1, 2, 1.8, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
         0.86, 0, 0.1, 100, 3, new HashMap<>(), new HashMap<>(), new HashMap<>());
-    double weight1 = 999 / (0.1 + 13 / 999F * weightedConfig.errorUtilizationPenalty);
-    double weight2 = 2 / (0.9 + 1.8 / 2F * weightedConfig.errorUtilizationPenalty);
-    double weight3 = 100 / (0.86 + 3 / 100F * weightedConfig.errorUtilizationPenalty);
-    double totalWeight = weight1 + weight2 + weight3;
-
-    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
-        weight3 / totalWeight);
+    double weight1 = 999 / (0.1 + 13 / 999F * weightedConfig.errorUtilizationPenalty); // ~5609.899
+    double weight2 = 2 / (0.9 + 1.8 / 2F * weightedConfig.errorUtilizationPenalty); // ~0.317
+    double weight3 = 100 / (0.86 + 3 / 100F * weightedConfig.errorUtilizationPenalty); // ~96.154
+    double meanWeight = (weight1 + weight2 + weight3) / 3;
+    double cappedMin = meanWeight * 0.1; // min capped at minRatio * meanWeight
+    double totalWeight = weight1 + cappedMin + cappedMin;
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, cappedMin / totalWeight,
+        cappedMin / totalWeight);
   }
 
   @Test
@@ -466,14 +472,14 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(null)
             .setAttributes(affinity).build())).isFalse();
-    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper, never()).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(fakeClock.getPendingTasks()).isEmpty();
 
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().getClass().getName())
@@ -486,51 +492,51 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
-    Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 10000; i++) {
-      EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
+    Map<Subchannel, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(2);
     // within blackout period, fallback to simple round robin
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 10000.0 - 0.5)).isLessThan(0.002);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 10000.0 - 0.5)).isLessThan(0.002);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5)).isLessThan(0.002);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5)).isLessThan(0.002);
 
     assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
     pickCount = new HashMap<>();
-    for (int i = 0; i < 10000; i++) {
-      EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
+    for (int i = 0; i < 1000; i++) {
+      Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(2);
     // after blackout period
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 10000 - 2.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
             .isLessThan(0.002);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 10000 - 1.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
             .isLessThan(0.002);
   }
 
@@ -539,39 +545,39 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
         any(CreateSubchannelArgs.class));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
         .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
         .forNonError(ConnectivityState.READY));
     Subchannel connectingSubchannel = it.next();
-    getSubchannelStateListener(connectingSubchannel).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(connectingSubchannel).onSubchannelState(ConnectivityStateInfo
         .forNonError(ConnectivityState.CONNECTING));
     verify(helper, times(2)).updateBalancingState(
         eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(0);
-    assertThat(weightedPicker.getChildren().size()).isEqualTo(1);
+    assertThat(weightedPicker.getList().size()).isEqualTo(1);
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    assertThat(weightedPicker.getChildren().size()).isEqualTo(2);
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    assertThat(weightedPicker.getList().size()).isEqualTo(2);
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
-    assertThat(getAddressesFromPick(weightedPicker))
-        .isEqualTo(weightedChild1.getEag());
+    assertThat(weightedPicker.pickSubchannel(mockArgs)
+        .getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
@@ -580,18 +586,17 @@ public class WeightedRoundRobinLoadBalancerTest {
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
     assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
-    assertThat(getAddressesFromPick(weightedPicker))
-        .isEqualTo(weightedChild2.getEag());
-    assertThat(getAddressesFromPick(weightedPicker))
-        .isEqualTo(weightedChild1.getEag());
+    assertThat(weightedPicker.pickSubchannel(mockArgs)
+        .getSubchannel()).isEqualTo(weightedSubchannel2);
+
   }
 
   @Test
@@ -599,52 +604,52 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
-    Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
+    Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
-      EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
+      Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(2);
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 1000.0 - 2.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
             .isLessThan(0.002);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 1000.0 - 1.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
             .isLessThan(0.002);
 
     // weight expired, fallback to simple round robin
     assertThat(fakeClock.forwardTime(300, TimeUnit.SECONDS)).isEqualTo(1);
     pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
-      EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
+      Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
       pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(2);
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 1000.0 - 0.5))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5))
             .isLessThan(0.002);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 1000.0 - 0.5))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5))
             .isLessThan(0.002);
   }
 
@@ -653,66 +658,60 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
         any(CreateSubchannelArgs.class));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
         .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
         .forNonError(ConnectivityState.READY));
     verify(helper, times(2)).updateBalancingState(
         eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    Map<EquivalentAddressGroup, Integer> qpsByChannel = ImmutableMap.of(weightedChild1.getEag(), 2,
-        weightedChild2.getEag(), 1);
-    Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    Map<WrrSubchannel, Integer> qpsByChannel = ImmutableMap.of(weightedSubchannel1, 2,
+        weightedSubchannel2, 1);
+    Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
-      EquivalentAddressGroup addresses = getAddresses(pickResult);
-      pickCount.merge(addresses, 1, Integer::sum);
+      pickCount.put(pickResult.getSubchannel(),
+          pickCount.getOrDefault(pickResult.getSubchannel(), 0) + 1);
       assertThat(pickResult.getStreamTracerFactory()).isNotNull();
-      WeightedChildLbState childLbState = (WeightedChildLbState) wrr.getChild(addresses);
-      childLbState.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+      WrrSubchannel subchannel = (WrrSubchannel)pickResult.getSubchannel();
+      subchannel.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
           InternalCallMetricRecorder.createMetricReport(
-              0.1, 0, 0.1, qpsByChannel.get(addresses), 0,
+              0.1, 0, 0.1, qpsByChannel.get(subchannel), 0,
               new HashMap<>(), new HashMap<>(), new HashMap<>()));
     }
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 1000.0 - 1.0 / 2))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 1.0 / 2))
         .isAtMost(0.1);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 1000.0 - 1.0 / 2))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 2))
         .isAtMost(0.1);
-
-    // Identical to above except forwards time after each pick
     pickCount.clear();
     for (int i = 0; i < 1000; i++) {
       PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
-      EquivalentAddressGroup addresses = getAddresses(pickResult);
-      pickCount.merge(addresses, 1, Integer::sum);
+      pickCount.put(pickResult.getSubchannel(),
+          pickCount.getOrDefault(pickResult.getSubchannel(), 0) + 1);
       assertThat(pickResult.getStreamTracerFactory()).isNotNull();
-      WeightedChildLbState childLbState = (WeightedChildLbState) wrr.getChild(addresses);
-      childLbState.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+      WrrSubchannel subchannel = (WrrSubchannel) pickResult.getSubchannel();
+      subchannel.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
           InternalCallMetricRecorder.createMetricReport(
-              0.1, 0, 0.1, qpsByChannel.get(addresses), 0,
+              0.1, 0, 0.1, qpsByChannel.get(subchannel), 0,
               new HashMap<>(), new HashMap<>(), new HashMap<>()));
       fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
     }
     assertThat(pickCount.size()).isEqualTo(2);
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 1000.0 - 2.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
         .isAtMost(0.1);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 1000.0 - 1.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
         .isAtMost(0.1);
-  }
-
-  private static EquivalentAddressGroup getAddresses(PickResult pickResult) {
-    return TestUtils.stripAttrs(pickResult.getSubchannel().getAddresses());
   }
 
   @Test
@@ -720,46 +719,46 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
-            any(CreateSubchannelArgs.class)); // 3 from setup plus 3 from the execute
+    verify(helper, times(3)).createSubchannel(
+            any(CreateSubchannelArgs.class));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1)
-        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2)
-        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel3  = it.next();
-    getSubchannelStateListener(readySubchannel3)
-        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    subchannelStateListeners.get(readySubchannel3).onSubchannelState(ConnectivityStateInfo
+            .forNonError(ConnectivityState.READY));
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(2);
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    WeightedChildLbState weightedChild3 = (WeightedChildLbState) getChild(weightedPicker, 2);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
-    Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
+    Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
-      pickCount.merge(result.getAddresses(), 1, Integer::sum);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(3);
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 1000.0 - 4.0 / 9))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 4.0 / 9))
             .isLessThan(0.002);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 1000.0 - 2.0 / 9))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 2.0 / 9))
             .isLessThan(0.002);
     // subchannel3's weight is average of subchannel1 and subchannel2
-    assertThat(Math.abs(pickCount.get(weightedChild3.getEag()) / 1000.0 - 3.0 / 9))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 1000.0 - 3.0 / 9))
             .isLessThan(0.002);
   }
 
@@ -768,33 +767,33 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
-    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel1).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     Subchannel readySubchannel2  = it.next();
-    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+    subchannelStateListeners.get(readySubchannel2).onSubchannelState(ConnectivityStateInfo
             .forNonError(ConnectivityState.READY));
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
-    WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
-    weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
+    WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     CyclicBarrier barrier = new CyclicBarrier(2);
-    Map<EquivalentAddressGroup, AtomicInteger> pickCount = new ConcurrentHashMap<>();
-    pickCount.put(weightedChild1.getEag(), new AtomicInteger(0));
-    pickCount.put(weightedChild2.getEag(), new AtomicInteger(0));
+    Map<Subchannel, AtomicInteger> pickCount = new ConcurrentHashMap<>();
+    pickCount.put(weightedSubchannel1, new AtomicInteger(0));
+    pickCount.put(weightedSubchannel2, new AtomicInteger(0));
     new Thread(new Runnable() {
       @Override
       public void run() {
@@ -803,7 +802,7 @@ public class WeightedRoundRobinLoadBalancerTest {
           barrier.await();
           for (int i = 0; i < 1000; i++) {
             Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
-            pickCount.get(result.getAddresses()).addAndGet(1);
+            pickCount.get(result).addAndGet(1);
           }
           barrier.await();
         } catch (Exception ex) {
@@ -814,15 +813,15 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     barrier.await();
     for (int i = 0; i < 1000; i++) {
-      EquivalentAddressGroup result = getAddresses(weightedPicker.pickSubchannel(mockArgs));
+      Subchannel result = weightedPicker.pickSubchannel(mockArgs).getSubchannel();
       pickCount.get(result).addAndGet(1);
     }
     barrier.await();
     assertThat(pickCount.size()).isEqualTo(2);
     // after blackout period
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()).get() / 2000.0 - 2.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1).get() / 2000.0 - 2.0 / 3))
             .isLessThan(0.002);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()).get() / 2000.0 - 1.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2).get() / 2000.0 - 1.0 / 3))
             .isLessThan(0.002);
   }
 
@@ -839,7 +838,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test(expected = IllegalArgumentException.class)
   public void emptyWeights() {
     float[] weights = {};
-    Random random = new Random();
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
     sss.pick();
@@ -848,7 +847,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testPicksEqualsWeights() {
     float[] weights = {1.0f, 2.0f, 3.0f};
-    Random random = new Random();
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {1, 2, 3};
@@ -862,7 +861,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testContainsZeroWeightUseMean() {
     float[] weights = {3.0f, 0.0f, 1.0f};
-    Random random = new Random();
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {3, 2, 1};
@@ -876,7 +875,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testContainsNegativeWeightUseMean() {
     float[] weights = {3.0f, -1.0f, 1.0f};
-    Random random = new Random();
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {3, 2, 1};
@@ -890,7 +889,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testAllSameWeights() {
     float[] weights = {1.0f, 1.0f, 1.0f};
-    Random random = new Random();
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {2, 2, 2};
@@ -902,9 +901,9 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testAllZeroWeightsUseOne() {
+  public void testAllZeroWeightsIsRoundRobin() {
     float[] weights = {0.0f, 0.0f, 0.0f};
-    Random random = new Random();
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {2, 2, 2};
@@ -916,9 +915,9 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testAllInvalidWeightsUseOne() {
+  public void testAllInvalidWeightsIsRoundRobin() {
     float[] weights = {-3.1f, -0.0f, 0.0f};
-    Random random = new Random();
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {2, 2, 2};
@@ -927,68 +926,15 @@ public class WeightedRoundRobinLoadBalancerTest {
       picks[sss.pick()] += 1;
     }
     assertThat(picks).isEqualTo(expectedPicks);
-  }
-
-  @Test
-  public void testLargestWeightIndexPickedEveryGeneration() {
-    float[] weights = {1.0f, 2.0f, 3.0f};
-    int largestWeightIndex = 2;
-    Random random = new Random();
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
-    int largestWeightPickCount = 0;
-    int kMaxWeight = 65535;
-    for (int i = 0; i < largestWeightIndex * kMaxWeight; i++) {
-      if (sss.pick() == largestWeightIndex) {
-        largestWeightPickCount += 1;
-      }
-    }
-    assertThat(largestWeightPickCount).isEqualTo(kMaxWeight);
-  }
-
-  @Test
-  public void testStaticStrideSchedulerNonIntegers1() {
-    float[] weights = {2.0f, (float) (10.0 / 3.0), 1.0f};
-    Random random = new Random();
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
-    double totalWeight = 2 + 10.0 / 3.0 + 1.0;
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = sss.pick();
-      pickCount.merge(result, 1, (o, v) -> o + v);
-    }
-    for (int i = 0; i < 3; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isLessThan(0.002);
-    }
-  }
-
-  @Test
-  public void testStaticStrideSchedulerNonIntegers2() {
-    float[] weights = {0.5f, 0.3f, 1.0f};
-    Random random = new Random();
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
-    double totalWeight = 1.8;
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = sss.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
-    }
-    for (int i = 0; i < 3; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isLessThan(0.002);
-    }
   }
 
   @Test
   public void testTwoWeights() {
-    float[] weights = {1.0f, 2.0f};
-    Random random = new Random();
+    float[] weights = {1.43f, 2.119f};
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
-    double totalWeight = 3;
+    double totalWeight = 1.43 + 2.119;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       int result = sss.pick();
@@ -1002,11 +948,11 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   @Test
   public void testManyWeights() {
-    float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-    Random random = new Random();
+    float[] weights = {1.3f, 2.5f, 3.23f, 4.11f, 7.001f};
+    Random random = new Random(0);
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
         new AtomicInteger(random.nextInt()));
-    double totalWeight = 15;
+    double totalWeight = 1.3 + 2.5 + 3.23 + 4.11 + 7.001;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       int result = sss.pick();
@@ -1019,21 +965,38 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   @Test
-  public void testManyComplexWeights() {
-    float[] weights = {1.2f, 2.4f, 222.56f, 1.1f, 15.0f, 226342.0f, 5123.0f, 532.2f};
-    Random random = new Random();
+  public void testMaxClamped() {
+    float[] weights = {81f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
+        1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f};
     StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
-    double totalWeight = 1.2 + 2.4 + 222.56 + 15.0 + 226342.0 + 5123.0 + 0.0001;
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = sss.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+        new AtomicInteger(0));
+    int[] picks = new int[weights.length];
+
+    // max gets clamped to mean*maxRatio = 50 for this set of weights. So if we
+    // pick 50 + 19 times we should get all possible picks.
+    for (int i = 1; i < 70; i++) {
+      picks[sss.pick()] += 1;
     }
-    for (int i = 0; i < 8; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
-          .isAtMost(0.004);
+    int[] expectedPicks = new int[] {50, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testMinClamped() {
+    float[] weights = {100f, 1e-10f};
+    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
+        new AtomicInteger(0));
+    int[] picks = new int[weights.length];
+
+    // We pick 201 elements and ensure that the second channel (with epsilon
+    // weight) also gets picked. The math is: mean value of elements is ~50, so
+    // the first channel keeps its weight of 100, but the second element's weight
+    // gets capped from below to 50*0.1 = 5.
+    for (int i = 0; i < 105; i++) {
+      picks[sss.pick()] += 1;
     }
+    int[] expectedPicks = new int[] {100, 5};
+    assertThat(picks).isEqualTo(expectedPicks);
   }
 
   @Test
@@ -1138,35 +1101,5 @@ public class WeightedRoundRobinLoadBalancerTest {
       // return constant value to disable init deadline randomization in the scheduler
       return nextInt;
     }
-  }
-
-  private class TestHelper extends AbstractTestHelper {
-
-    @Override
-    public Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap() {
-      return subchannels;
-    }
-
-    @Override
-    public Map<Subchannel, Subchannel> getMockToRealSubChannelMap() {
-      return mockToRealSubChannelMap;
-    }
-
-    @Override
-    public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
-      return subchannelStateListeners;
-    }
-
-    @Override
-    public SynchronizationContext getSynchronizationContext() {
-      return syncContext;
-    }
-
-    @Override
-    public ScheduledExecutorService getScheduledExecutorService() {
-      return fakeClock.getScheduledExecutorService();
-    }
-
-
   }
 }

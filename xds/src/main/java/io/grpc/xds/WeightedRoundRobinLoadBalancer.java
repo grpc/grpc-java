@@ -351,41 +351,69 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final AtomicInteger sequence;
     private static final int K_MAX_WEIGHT = 0xFFFF;
 
+    // Assuming the mean of all known weights is M, StaticStrideScheduler will clamp
+    // weights bigger than M*kMaxRatio and weights smaller than M*kMinRatio.
+    //
+    // This is done as a performance optimization by limiting the number of rounds for picks
+    // for edge cases where channels have large differences in subchannel weights.
+    // In this case, without these clips, it would potentially require the scheduler to
+    // frequently traverse through the entire subchannel list within the pick method.
+    //
+    // The current values of 10 and 0.1 were chosen without any experimenting. It should
+    // decrease the amount of sequences that the scheduler must traverse through in order
+    // to pick a high weight subchannel in such corner cases.
+    // But, it also makes WeightedRoundRobin to send slightly more requests to
+    // potentially very bad tasks (that would have near-zero weights) than zero.
+    // This is not necessarily a downside, though. Perhaps this is not a problem at
+    // all, and we can increase this value if needed to save CPU cycles.
+    private static final double K_MAX_RATIO = 10;
+    private static final double K_MIN_RATIO = 0.1;
+
     StaticStrideScheduler(float[] weights, AtomicInteger sequence) {
       checkArgument(weights.length >= 1, "Couldn't build scheduler: requires at least one weight");
       int numChannels = weights.length;
       int numWeightedChannels = 0;
       double sumWeight = 0;
-      float maxWeight = 0;
-      short meanWeight = 0;
+      double unscaledMeanWeight;
+      float unscaledMaxWeight = 0;
       for (float weight : weights) {
         if (weight > 0) {
           sumWeight += weight;
-          maxWeight = Math.max(weight, maxWeight);
+          unscaledMaxWeight = Math.max(weight, unscaledMaxWeight);
           numWeightedChannels++;
         }
       }
 
-      double scalingFactor = K_MAX_WEIGHT / maxWeight;
+      // Adjust max value s.t. ratio does not exceed K_MAX_RATIO. This should
+      // ensure that we on average do at most K_MAX_RATIO rounds for picks.
       if (numWeightedChannels > 0) {
-        meanWeight = (short) Math.round(scalingFactor * sumWeight / numWeightedChannels);
+        unscaledMeanWeight = sumWeight / numWeightedChannels;
+        unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
       } else {
-        meanWeight = (short) Math.round(scalingFactor);
+        // Fall back to round robin if all values are non-positives
+        unscaledMeanWeight = 1;
+        unscaledMaxWeight = 1;
       }
 
-      // scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly
+      // Scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly.
+      // Note that, since we cap the weights to stay within K_MAX_RATIO, meanWeight might not
+      // match the actual mean of the values that end up in the scheduler.
+      double scalingFactor = K_MAX_WEIGHT / unscaledMaxWeight;
+      // We compute weightLowerBound and clamp it to 1 from below so that in the
+      // worst case, we represent tiny weights as 1.
+      int weightLowerBound = (int) Math.ceil(scalingFactor * unscaledMeanWeight * K_MIN_RATIO);
       short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
         if (weights[i] <= 0) {
-          scaledWeights[i] = meanWeight;
+          scaledWeights[i] = (short) Math.round(scalingFactor * unscaledMeanWeight);
         } else {
-          scaledWeights[i] = (short) Math.round(weights[i] * scalingFactor);
+          int weight = (int) Math.round(scalingFactor * Math.min(weights[i], unscaledMaxWeight));
+          scaledWeights[i] = (short) Math.max(weight, weightLowerBound);
         }
       }
 
       this.scaledWeights = scaledWeights;
       this.sequence = sequence;
-
     }
 
     /** Returns the next sequence number and atomically increases sequence with wraparound. */
