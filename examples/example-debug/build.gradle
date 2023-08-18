@@ -2,7 +2,7 @@ plugins {
     id 'application' // Provide convenience executables for trying out the examples.
     id 'java'
 
-    id "com.google.protobuf" version "0.8.17"
+    id "com.google.protobuf" version "0.9.4"
 
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
@@ -71,8 +71,10 @@ task HostnameDebuggableServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-applicationDistribution.into('bin') {
-    from(HelloWorldDebuggableClient)
-    from(HostnameDebuggableServer)
-    fileMode = 0755
+application {
+    applicationDistribution.into('bin') {
+        from(HelloWorldDebuggableClient)
+        from(HostnameDebuggableServer)
+        fileMode = 0755
+    }
 }
