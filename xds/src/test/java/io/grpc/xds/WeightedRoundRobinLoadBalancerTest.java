@@ -839,8 +839,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void emptyWeights() {
     float[] weights = {};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     sss.pick();
   }
 
@@ -848,8 +847,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testPicksEqualsWeights() {
     float[] weights = {1.0f, 2.0f, 3.0f};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {1, 2, 3};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -862,8 +860,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testContainsZeroWeightUseMean() {
     float[] weights = {3.0f, 0.0f, 1.0f};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {3, 2, 1};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -876,8 +873,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testContainsNegativeWeightUseMean() {
     float[] weights = {3.0f, -1.0f, 1.0f};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {3, 2, 1};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -890,8 +886,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testAllSameWeights() {
     float[] weights = {1.0f, 1.0f, 1.0f};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -904,8 +899,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testAllZeroWeightsIsRoundRobin() {
     float[] weights = {0.0f, 0.0f, 0.0f};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -918,8 +912,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testAllInvalidWeightsIsRoundRobin() {
     float[] weights = {-3.1f, -0.0f, 0.0f};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     int[] expectedPicks = new int[] {2, 2, 2};
     int[] picks = new int[3];
     for (int i = 0; i < 6; i++) {
@@ -932,8 +925,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testTwoWeights() {
     float[] weights = {1.43f, 2.119f};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     double totalWeight = 1.43 + 2.119;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -950,8 +942,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testManyWeights() {
     float[] weights = {1.3f, 2.5f, 3.23f, 4.11f, 7.001f};
     Random random = new Random(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
     double totalWeight = 1.3 + 2.5 + 3.23 + 4.11 + 7.001;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -968,8 +959,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void testMaxClamped() {
     float[] weights = {81f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
         1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(0));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(0));
     int[] picks = new int[weights.length];
 
     // max gets clamped to mean*maxRatio = 50 for this set of weights. So if we
@@ -984,8 +974,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testMinClamped() {
     float[] weights = {100f, 1e-10f};
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(0));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(0));
     int[] picks = new int[weights.length];
 
     // We pick 201 elements and ensure that the second channel (with epsilon
@@ -1002,30 +991,27 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testDeterministicPicks() {
     float[] weights = {2.0f, 3.0f, 6.0f};
-    Random random = new FakeRandom(0);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
-    assertThat(sss.getSequence()).isEqualTo(0);
+    AtomicInteger sequence = new AtomicInteger(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, sequence);
+    assertThat(sequence.get()).isEqualTo(0);
     assertThat(sss.pick()).isEqualTo(1);
-    assertThat(sss.getSequence()).isEqualTo(2);
+    assertThat(sequence.get()).isEqualTo(2);
     assertThat(sss.pick()).isEqualTo(2);
-    assertThat(sss.getSequence()).isEqualTo(3);
+    assertThat(sequence.get()).isEqualTo(3);
     assertThat(sss.pick()).isEqualTo(2);
-    assertThat(sss.getSequence()).isEqualTo(6);
+    assertThat(sequence.get()).isEqualTo(6);
     assertThat(sss.pick()).isEqualTo(0);
-    assertThat(sss.getSequence()).isEqualTo(7);
+    assertThat(sequence.get()).isEqualTo(7);
     assertThat(sss.pick()).isEqualTo(1);
-    assertThat(sss.getSequence()).isEqualTo(8);
+    assertThat(sequence.get()).isEqualTo(8);
     assertThat(sss.pick()).isEqualTo(2);
-    assertThat(sss.getSequence()).isEqualTo(9);
+    assertThat(sequence.get()).isEqualTo(9);
   }
 
   @Test
   public void testImmediateWraparound() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-    Random random = new FakeRandom(-1);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(-1));
     double totalWeight = 15;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1041,9 +1027,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testWraparound() {
     float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-    Random random = new FakeRandom(-500);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(-500));
     double totalWeight = 15;
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -1059,22 +1043,40 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void testDeterministicWraparound() {
     float[] weights = {2.0f, 3.0f, 6.0f};
-    Random random = new FakeRandom(-1);
-    StaticStrideScheduler sss = new StaticStrideScheduler(weights,
-        new AtomicInteger(random.nextInt()));
-    assertThat(sss.getSequence()).isEqualTo(0xFFFF_FFFFL);
+    AtomicInteger sequence = new AtomicInteger(-1);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, sequence);
+    assertThat(sequence.get()).isEqualTo(-1);
     assertThat(sss.pick()).isEqualTo(1);
-    assertThat(sss.getSequence()).isEqualTo(2);
+    assertThat(sequence.get()).isEqualTo(2);
     assertThat(sss.pick()).isEqualTo(2);
-    assertThat(sss.getSequence()).isEqualTo(3);
+    assertThat(sequence.get()).isEqualTo(3);
     assertThat(sss.pick()).isEqualTo(2);
-    assertThat(sss.getSequence()).isEqualTo(6);
+    assertThat(sequence.get()).isEqualTo(6);
     assertThat(sss.pick()).isEqualTo(0);
-    assertThat(sss.getSequence()).isEqualTo(7);
+    assertThat(sequence.get()).isEqualTo(7);
     assertThat(sss.pick()).isEqualTo(1);
-    assertThat(sss.getSequence()).isEqualTo(8);
+    assertThat(sequence.get()).isEqualTo(8);
     assertThat(sss.pick()).isEqualTo(2);
-    assertThat(sss.getSequence()).isEqualTo(9);
+    assertThat(sequence.get()).isEqualTo(9);
+  }
+
+  private static final class VerifyingScheduler {
+    private final StaticStrideScheduler delegate;
+    private final int max;
+    private final AtomicInteger sequence;
+
+    public VerifyingScheduler(float[] weights, AtomicInteger sequence) {
+      this.delegate = new StaticStrideScheduler(weights, sequence);
+      this.max = weights.length;
+      this.sequence = sequence;
+    }
+
+    public int pick() {
+      int start = sequence.get();
+      int i = delegate.pick();
+      assertThat(sequence.get() - start).isAtMost(max);
+      return i;
+    }
   }
 
   private static class FakeSocketAddress extends SocketAddress {

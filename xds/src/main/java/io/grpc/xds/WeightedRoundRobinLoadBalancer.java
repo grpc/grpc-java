@@ -421,11 +421,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       return Integer.toUnsignedLong(sequence.getAndIncrement());
     }
 
-    @VisibleForTesting
-    long getSequence() {
-      return Integer.toUnsignedLong(sequence.get());
-    }
-
     /*
      * Selects index of next backend server.
      * <p>
