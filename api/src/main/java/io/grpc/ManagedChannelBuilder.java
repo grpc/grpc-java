@@ -32,6 +32,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Creates a channel with the target's address and port number.
    *
+   * <p>Note that there is an open JDK bug on {@link java.net.URI} class parsing an ipv6 scope ID:
+   * bugs.openjdk.org/browse/JDK-8199396. This method is exposed to this bug. If you experience an
+   * issue, a work-around is to convert the scope ID to its numeric form (e.g. by using
+   * Inet6Address.getScopeId()) before calling this method.
+   *
    * @see #forTarget(String)
    * @since 1.0.0
    */
@@ -70,6 +75,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:443"}</li>
    * </ul>
    *
+   * <p>Note that there is an open JDK bug on {@link java.net.URI} class parsing an ipv6 scope ID:
+   * bugs.openjdk.org/browse/JDK-8199396. This method is exposed to this bug. If you experience an
+   * issue, a work-around is to convert the scope ID to its numeric form (e.g. by using
+   * Inet6Address.getScopeId()) before calling this method.
+   * 
    * @since 1.0.0
    */
   public static ManagedChannelBuilder<?> forTarget(String target) {
