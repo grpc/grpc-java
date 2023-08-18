@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
@@ -130,7 +131,8 @@ public final class DeterministicSubsettingLoadBalancer extends LoadBalancer {
     switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
   }
 
-  private static class AddressComparator implements Comparator<SocketAddress> {
+  @VisibleForTesting
+  static class AddressComparator implements Comparator<SocketAddress> {
     // For consistency with the golang instrumentation, this assumes toString is overridden such
     // that it is a string representation of an IP. Though any string representation of a
     // SocketAddress will work here, other definitions of toString may yield differing results from

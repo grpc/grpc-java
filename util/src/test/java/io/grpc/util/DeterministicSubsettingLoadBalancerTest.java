@@ -36,6 +36,7 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils;
 import io.grpc.util.DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig;
@@ -46,6 +47,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -68,6 +70,10 @@ public class DeterministicSubsettingLoadBalancerTest {
   @Mock private LoadBalancer.Helper mockHelper;
   @Mock private LoadBalancer mockChildLb;
   @Mock private SocketAddress mockSocketAddress;
+  @Captor
+  private ArgumentCaptor<ConnectivityState> connectivityStateCaptor;
+  @Captor
+  private ArgumentCaptor<LoadBalancer.SubchannelPicker> errorPickerCaptor;
 
   @Captor private ArgumentCaptor<ResolvedAddresses> resolvedAddrCaptor;
 
@@ -129,6 +135,69 @@ public class DeterministicSubsettingLoadBalancerTest {
   }
 
   @Test
+  public void handleNameResoutionError_noChildLb() {
+    loadBalancer.handleNameResolutionError(Status.DEADLINE_EXCEEDED);
+
+    verify(mockHelper).updateBalancingState(connectivityStateCaptor.capture(),
+      errorPickerCaptor.capture());
+    assertThat(connectivityStateCaptor.getValue()).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+  }
+  @Test
+  public void handleNameResolutionError_withChildLb() {
+    DeterministicSubsettingLoadBalancerConfig config = new DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder()
+      .setSubsetSize(2)
+      .setClientIndex(0)
+      .setSortAddresses(false)
+      .setChildPolicy(new PolicySelection(mockChildLbProvider, null))
+      .build();
+
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mockSocketAddress)))
+        .setLoadBalancingPolicyConfig(config)
+        .build());
+    loadBalancer.handleNameResolutionError(Status.DEADLINE_EXCEEDED);
+
+    verify(mockChildLb).handleNameResolutionError(Status.DEADLINE_EXCEEDED);
+  }
+
+  @Test
+  public void shutdown() {
+    DeterministicSubsettingLoadBalancerConfig config = new DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig.Builder()
+      .setSubsetSize(2)
+      .setClientIndex(0)
+      .setSortAddresses(false)
+      .setChildPolicy(new PolicySelection(mockChildLbProvider, null))
+      .build();
+
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+      .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mockSocketAddress)))
+      .setLoadBalancingPolicyConfig(config)
+      .build());
+    loadBalancer.shutdown();
+    verify(mockChildLb).shutdown();
+  }
+
+  @Test
+  public void addressComparator() {
+    setupBackends(5);
+    List<SocketAddress> sorted = Lists.newArrayList();
+    for (EquivalentAddressGroup eag: servers) {
+      sorted.addAll(eag.getAddresses());
+    }
+
+    Collections.shuffle(servers);
+    List<SocketAddress> addresses = Lists.newArrayList();
+    for (EquivalentAddressGroup eag: servers) {
+      addresses.addAll(eag.getAddresses());
+    }
+
+    assertThat(addresses).isNotEqualTo(sorted);
+    addresses.sort(new DeterministicSubsettingLoadBalancer.AddressComparator());
+
+    assertThat(addresses).isEqualTo(sorted);
+  }
+
+  @Test
   public void acceptResolvedAddresses_mocked() {
     int subsetSize = 3;
     DeterministicSubsettingLoadBalancerConfig config =
@@ -185,6 +254,52 @@ public class DeterministicSubsettingLoadBalancerTest {
     }
 
     assertThat(insubset).isEqualTo(subsetSize);
+  }
+
+  @Test
+  public void sortingBackends() {
+    setupBackends(4);
+    // Shuffle servers so that they're not in 0, 1, 2 order
+    List<EquivalentAddressGroup> shuffledServers = Lists.newArrayList(
+      servers.get(1), servers.get(3), servers.get(2), servers.get(0));
+    int subsetSize = 2;
+    DeterministicSubsettingLoadBalancerConfig sortConfig =
+      new DeterministicSubsettingLoadBalancerConfig.Builder()
+        .setSubsetSize(subsetSize)
+        .setClientIndex(0)
+        .setSortAddresses(true)
+        .setChildPolicy(new PolicySelection(mockChildLbProvider, null))
+        .build();
+
+    DeterministicSubsettingLoadBalancerConfig dontSortConfig =
+      new DeterministicSubsettingLoadBalancerConfig.Builder()
+        .setSubsetSize(subsetSize)
+        .setClientIndex(0)
+        .setSortAddresses(false)
+        .setChildPolicy(new PolicySelection(mockChildLbProvider, null))
+        .build();
+
+    List<DeterministicSubsettingLoadBalancerConfig> configs = Lists.newArrayList(sortConfig, dontSortConfig);
+    List<List<EquivalentAddressGroup>> actual = Lists.newArrayList();
+    for (DeterministicSubsettingLoadBalancerConfig config : configs) {
+      ResolvedAddresses resolvedAddresses =
+          ResolvedAddresses.newBuilder()
+              .setAddresses(ImmutableList.copyOf(shuffledServers))
+              .setLoadBalancingPolicyConfig(config)
+              .build();
+      loadBalancer.acceptResolvedAddresses(resolvedAddresses);
+      verify(mockChildLb, atLeastOnce()).handleResolvedAddresses(resolvedAddrCaptor.capture());
+      // Verify ChildLB is only getting subsetSize ResolvedAddresses each time
+      assertThat(resolvedAddrCaptor.getValue().getAddresses().size()).isEqualTo(subsetSize);
+      actual.add(resolvedAddrCaptor.getValue().getAddresses());
+    }
+    List<EquivalentAddressGroup> actualSorted = actual.get(0);
+    List<EquivalentAddressGroup> actualUnsorted = actual.get(1);
+
+    // We will sort, and then round 0 will shift from 0,1,2,3 to 3,0,1,2
+    assertThat(actualSorted).isEqualTo(Lists.newArrayList(servers.get(3), servers.get(0)));
+    // We will not sort, but round 0 will shift from 1,3,2,0 to 0,1,3,2 (same order given indices)
+    assertThat(actualUnsorted).isEqualTo(Lists.newArrayList(servers.get(0), servers.get(1)));
   }
 
   @Test
@@ -308,6 +423,13 @@ public class DeterministicSubsettingLoadBalancerTest {
     verifyCreatesSubsets(21, 8, 5, 1);
   }
 
+  @Test
+  public void excludedStartBiggerThanEnd() {
+    // There are 3 excluded backends on each round, and sometimes the selected excluded backends
+    // wrap around.
+    verifyCreatesSubsets(7, 3, 4, 1);
+  }
+
   public void verifyCreatesSubsets(int backends, int clients, int subsetSize, int maxDiff) {
     setupBackends(backends);
     List<DeterministicSubsettingLoadBalancerConfig> configs = Lists.newArrayList();
@@ -343,6 +465,6 @@ public class DeterministicSubsettingLoadBalancerTest {
     int maxConns = Collections.max(subsetDistn.values());
     int minConns = Collections.min(subsetDistn.values());
 
-    assertThat(maxConns < minConns + maxConns).isTrue();
+    assertThat(maxConns <= minConns + maxDiff).isTrue();
   }
 }

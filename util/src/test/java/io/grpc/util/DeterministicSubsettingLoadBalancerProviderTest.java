@@ -24,6 +24,7 @@ import io.grpc.InternalServiceProviders;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.internal.JsonParser;
 import io.grpc.util.DeterministicSubsettingLoadBalancer.DeterministicSubsettingLoadBalancerConfig;
 import java.io.IOException;
@@ -60,17 +61,12 @@ public class DeterministicSubsettingLoadBalancerProviderTest {
 
   @Test
   public void parseConfigRequiresClientIdx() throws IOException {
-    String lbConfig = "{ \"clientIndex\" :  null }";
-    String lbConfig2 = "{ \"clientIndex\" : -1 }";
-    ArrayList<String> configs = new ArrayList<>();
-    configs.add(lbConfig);
-    configs.add(lbConfig2);
+    String config = "{ \"childPolicy\" : [{\"round_robin\" : {}}] } ";
 
-    ConfigOrError configOrError;
-    for (String config : configs) {
-      configOrError = provider.parseLoadBalancingPolicyConfig(parseJsonObject(config));
-      assertThat(configOrError.getError()).isNotNull();
-    }
+    ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(parseJsonObject(config));
+    assertThat(configOrError.getError()).isNotNull();
+    assertThat(configOrError.getError().toString()).isEqualTo(Status.INTERNAL.withDescription(
+      "No client index set, cannot determine subsets {childPolicy=[{round_robin={}}]}" ).toString());
   }
 
   @Test
@@ -96,5 +92,20 @@ public class DeterministicSubsettingLoadBalancerProviderTest {
   @SuppressWarnings("unchecked")
   private static Map<String, ?> parseJsonObject(String json) throws IOException {
     return (Map<String, ?>) JsonParser.parse(json);
+  }
+  
+  @Test
+  public void parseConfigWithCustomSubsetSize() throws IOException {
+    String lbConfig =
+      "{ \"clientIndex\" : 0, "
+        + "\"subsetSize\" : 3, "
+        + "\"childPolicy\" : [{\"round_robin\" : {}}], "
+        + "\"sortAddresses\" : false }";
+
+    ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+    assertThat(configOrError.getConfig()).isNotNull();
+    DeterministicSubsettingLoadBalancerConfig config =
+      (DeterministicSubsettingLoadBalancerConfig) configOrError.getConfig();
+    assertThat(config.subsetSize).isEqualTo(3);
   }
 }
