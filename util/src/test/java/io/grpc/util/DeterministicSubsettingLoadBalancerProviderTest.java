@@ -68,7 +68,8 @@ public class DeterministicSubsettingLoadBalancerProviderTest {
         .isEqualTo(
             Status.INTERNAL
                 .withDescription(
-                    "No client index set, cannot determine subsets {childPolicy=[{round_robin={}}]}")
+                    "No client index set, cannot determine subsets "
+                      + " {childPolicy=[{round_robin={}}]}")
                 .toString());
   }
 
