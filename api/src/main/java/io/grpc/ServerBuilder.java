@@ -230,14 +230,13 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
 
   /**
    * Sets the permitted time for new connections to complete negotiation handshakes before being
-   * killed.
+   * killed. The default value is 2 minutes.
    *
    * @return this
    * @throws IllegalArgumentException if timeout is negative
    * @throws UnsupportedOperationException if unsupported
    * @since 1.8.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3706")
   public T handshakeTimeout(long timeout, TimeUnit unit) {
     throw new UnsupportedOperationException();
   }
