@@ -20,7 +20,7 @@ gRPC-Java - An RPC library and framework
 Supported Platforms
 -------------------
 
-gRPC-Java supports Java 8 and later. Android minSdkVersion 19 (KitKat) and
+gRPC-Java supports Java 8 and later. Android minSdkVersion 21 (Lollipop) and
 later are supported with [Java 8 language desugaring][android-java-8].
 
 TLS usage on Android typically requires Play Services Dynamic Security Provider.
