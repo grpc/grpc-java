@@ -92,8 +92,6 @@ checkArch ()
       assertEq "$format" "i386" $LINENO
     elif [[ "$ARCH" == x86_64 ]]; then
       assertEq "$format" "x86_64" $LINENO
-    elif [[ "$ARCH" == aarch_64 ]]; then
-	assertEq "$format" "arm64" $LINENO
     else
       fail "Unsupported arch: $ARCH"
     fi
