@@ -290,8 +290,9 @@ public class ServerCallImplTest {
     serverCall.close(Status.OK, new Metadata());
     try {
       serverCall.close(Status.OK, new Metadata());
+      fail("calling a second time should still cause an error");
     } catch (IllegalStateException expected) {
-      fail("calling a second time should only log");
+      // noop
     }
   }
 
