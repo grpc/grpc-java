@@ -169,6 +169,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         stream.flush();
       }
     } catch (RuntimeException e) {
+      log.warning("Server sendMessage() failed with Error: " + e);
       close(Status.fromThrowable(e), new Metadata());
     } catch (Error e) {
       close(
@@ -209,7 +210,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   private void closeInternal(Status status, Metadata trailers) {
-    checkState(!closeCalled, "call already closed");
+    if (closeCalled) {
+      log.fine("call already closed");
+      return;
+    }
+
     try {
       closeCalled = true;
 
