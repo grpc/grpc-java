@@ -94,6 +94,7 @@ def _java_rpc_library_impl(ctx):
         executable = toolchain.protoc,
         arguments = [args],
         use_default_shell_env = True,
+        toolchain = None,
     )
 
     deps_java_info = java_common.merge([dep[JavaInfo] for dep in ctx.attr.deps])
