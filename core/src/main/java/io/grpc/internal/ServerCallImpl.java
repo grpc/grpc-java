@@ -158,7 +158,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     checkState(!closeCalled, "call is closed");
 
     if (method.getType().serverSendsOneMessage() && messageSent) {
-      internalClose(Status.INTERNAL.withDescription(TOO_MANY_RESPONSES).asRuntimeException());
+      handleInternalError(Status.INTERNAL.withDescription(TOO_MANY_RESPONSES).asRuntimeException());
       return;
     }
 
@@ -170,8 +170,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         stream.flush();
       }
     } catch (RuntimeException e) {
-      log.log(Level.WARNING, "Server sendMessage() failed.", e);
-      internalClose(e);
+      handleInternalError(e);
     } catch (Error e) {
       close(
           Status.CANCELLED.withDescription("Server sendMessage() failed with Error"),
@@ -216,7 +215,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       closeCalled = true;
 
       if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
-        internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE).asRuntimeException());
+        handleInternalError(Status.INTERNAL.withDescription(MISSING_RESPONSE).asRuntimeException());
         return;
       }
 
@@ -265,11 +264,12 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
    * run until completion, but silently ignore interactions with the {@link ServerStream} from now
    * on.
    */
-  private void internalClose(Throwable internalError) {
-    log.log(Level.WARNING, "Cancelling the stream because of internal error}", internalError);
+  private void handleInternalError(Throwable internalError) {
+    log.log(Level.WARNING, "Cancelling the stream because of internal error", internalError);
     Status status = (internalError instanceof StatusRuntimeException)
         ? ((StatusRuntimeException) internalError).getStatus()
-        : Status.INTERNAL.withCause(internalError);
+        : Status.INTERNAL.withCause(internalError)
+            .withDescription("Internal error so cancelling stream.");
     stream.cancel(status);
     serverCallTracer.reportCallEnded(false); // error so always false
   }
