@@ -41,6 +41,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
@@ -157,7 +158,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     checkState(!closeCalled, "call is closed");
 
     if (method.getType().serverSendsOneMessage() && messageSent) {
-      internalClose(Status.INTERNAL.withDescription(TOO_MANY_RESPONSES));
+      internalClose(Status.INTERNAL.withDescription(TOO_MANY_RESPONSES).asRuntimeException());
       return;
     }
 
@@ -169,8 +170,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         stream.flush();
       }
     } catch (RuntimeException e) {
-      log.warning("Server sendMessage() failed with Error: " + e);
-      close(Status.fromThrowable(e), new Metadata());
+      log.log(Level.WARNING, "Server sendMessage() failed.", e);
+      internalClose(e);
     } catch (Error e) {
       close(
           Status.CANCELLED.withDescription("Server sendMessage() failed with Error"),
@@ -210,16 +211,12 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   private void closeInternal(Status status, Metadata trailers) {
-    if (closeCalled) {
-      log.fine("call already closed");
-      return;
-    }
-
+    checkState(!closeCalled, "call already closed");
     try {
       closeCalled = true;
 
       if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
-        internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
+        internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE).asRuntimeException());
         return;
       }
 
@@ -268,10 +265,13 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
    * run until completion, but silently ignore interactions with the {@link ServerStream} from now
    * on.
    */
-  private void internalClose(Status internalError) {
-    log.log(Level.WARNING, "Cancelling the stream with status {0}", new Object[] {internalError});
-    stream.cancel(internalError);
-    serverCallTracer.reportCallEnded(internalError.isOk()); // error so always false
+  private void internalClose(Throwable internalError) {
+    log.log(Level.WARNING, "Cancelling the stream because of internal error}", internalError);
+    Status status = (internalError instanceof StatusRuntimeException)
+        ? ((StatusRuntimeException) internalError).getStatus()
+        : Status.INTERNAL.withCause(internalError);
+    stream.cancel(status);
+    serverCallTracer.reportCallEnded(false); // error so always false
   }
 
   /**
