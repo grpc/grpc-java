@@ -219,7 +219,7 @@ public class ServerCallImplTest {
 
     call.sendMessage(1234L);
 
-    verify(stream).close(isA(Status.class), isA(Metadata.class));
+    verify(stream).cancel(isA(Status.class));
   }
 
   @Test
