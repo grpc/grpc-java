@@ -283,7 +283,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return policyProvider;
     }
 
-    public Subchannel getCurrentSubchannel(PickSubchannelArgs args) {
+    protected Subchannel getSubchannels(PickSubchannelArgs args) {
       return getCurrentPicker().pickSubchannel(args).getSubchannel();
     }
 

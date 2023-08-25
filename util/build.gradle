@@ -1,5 +1,6 @@
 plugins {
     id "java-library"
+    id "java-test-fixtures"
     id "maven-publish"
 
     id "me.champeau.jmh"
@@ -19,11 +20,18 @@ dependencies {
 
     implementation libraries.animalsniffer.annotations,
             libraries.guava
-    testImplementation testFixtures(project(':grpc-api')),
+    testImplementation libraries.guava.testlib,
+            testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
             project(':grpc-testing')
-    testImplementation libraries.guava.testlib
 
+    testFixturesApi project(':grpc-core')
+    testFixturesImplementation libraries.guava,
+            libraries.junit,
+            libraries.mockito.core,
+            testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-core')),
+            project(':grpc-testing')
     jmh project(':grpc-testing')
 
     signature libraries.signature.java
