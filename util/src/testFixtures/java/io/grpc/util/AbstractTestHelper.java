@@ -20,8 +20,6 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.Attributes;
-import io.grpc.Channel;
-import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
@@ -82,9 +80,6 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
     // no-op
   }
 
-  public void setChannel(Subchannel subchannel, Channel channel) {
-    ((TestSubchannel)subchannel).channel = channel;
-  }
   @Override
   public String toString() {
     return "Test Helper";
@@ -92,7 +87,6 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
 
   private class TestSubchannel extends ForwardingSubchannel {
     final CreateSubchannelArgs args;
-    Channel channel;
 
     public TestSubchannel(CreateSubchannelArgs args) {
       this.args = args;
@@ -134,16 +128,6 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
       for (EquivalentAddressGroup eag : getAllAddresses()) {
         getSubchannelMap().remove(Collections.singletonList(eag));
       }
-    }
-
-    @Override
-    public Channel asChannel() {
-      return channel;
-    }
-
-    @Override
-    public ChannelLogger getChannelLogger() {
-      return mock(ChannelLogger.class);
     }
 
     @Override
