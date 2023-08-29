@@ -546,17 +546,17 @@ public class RoundRobinLoadBalancerTest {
   private class TestHelper extends AbstractTestHelper {
 
     @Override
-    Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap() {
+    public Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap() {
       return subchannels;
     }
 
     @Override
-    Map<Subchannel, Subchannel> getMockToRealSubChannelMap() {
+    public Map<Subchannel, Subchannel> getMockToRealSubChannelMap() {
       return mockToRealSubChannelMap;
     }
 
     @Override
-    Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
+    public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
       return subchannelStateListeners;
     }
   }

@@ -202,7 +202,9 @@ public final class OrcaOobUtil {
    */
   public static void setListener(Subchannel subchannel, OrcaOobReportListener listener,
                                  OrcaReportingConfig config) {
-    SubchannelImpl orcaSubchannel = subchannel.getAttributes().get(ORCA_REPORTING_STATE_KEY);
+    Attributes attributes = subchannel.getAttributes();
+    SubchannelImpl orcaSubchannel =
+        (attributes == null) ? null : attributes.get(ORCA_REPORTING_STATE_KEY);
     if (orcaSubchannel == null) {
       throw new IllegalArgumentException("Subchannel does not have orca Out-Of-Band stream enabled."
           + " Try to use a subchannel created by OrcaOobUtil.OrcaHelper.");
@@ -241,7 +243,9 @@ public final class OrcaOobUtil {
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       syncContext.throwIfNotInThisSynchronizationContext();
       Subchannel subchannel = super.createSubchannel(args);
-      SubchannelImpl orcaSubchannel = subchannel.getAttributes().get(ORCA_REPORTING_STATE_KEY);
+      Attributes attributes = subchannel.getAttributes();
+      SubchannelImpl orcaSubchannel =
+          (attributes == null) ? null : attributes.get(ORCA_REPORTING_STATE_KEY);
       OrcaReportingState orcaState;
       if (orcaSubchannel == null) {
         // Only the first load balancing policy requesting ORCA reports instantiates an

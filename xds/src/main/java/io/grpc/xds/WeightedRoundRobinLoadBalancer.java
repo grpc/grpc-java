@@ -372,7 +372,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
 
-      this.scheduler = new StaticStrideScheduler(newWeights, random);
+      scheduler = (scheduler != null)
+          ? new StaticStrideScheduler(newWeights, random, scheduler.sequence.get())
+          : new StaticStrideScheduler(newWeights, random);
     }
 
     @Override
@@ -431,6 +433,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private static final int K_MAX_WEIGHT = 0xFFFF;
 
     StaticStrideScheduler(float[] weights, Random random) {
+      this(weights, random, -1);
+    }
+
+    StaticStrideScheduler(float[] weights, Random random, int initialSequence) {
       checkArgument(weights.length >= 1, "Couldn't build scheduler: requires at least one weight");
       int numChannels = weights.length;
       int numWeightedChannels = 0;
@@ -463,8 +469,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
 
       this.scaledWeights = scaledWeights;
-      this.sequence = new AtomicInteger(random.nextInt());
-
+      int seq = (initialSequence >= 0) ? initialSequence : random.nextInt();
+      this.sequence = new AtomicInteger(seq);
     }
 
     /** Returns the next sequence number and atomically increases sequence with wraparound. */
