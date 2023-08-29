@@ -47,7 +47,6 @@ import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
-import io.grpc.internal.SingleMessageProducer;
 import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -220,7 +219,7 @@ public class ServerCallImplTest {
 
     call.sendMessage(1234L);
 
-    verify(stream).close(isA(Status.class), isA(Metadata.class));
+    verify(stream).cancel(isA(Status.class));
   }
 
   @Test
@@ -469,7 +468,6 @@ public class ServerCallImplTest {
     streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
     // canceling the call should short circuit future halfClosed() calls.
     streamListener.closed(Status.CANCELLED);
-
     streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
 
     verify(callListener).onMessage(1234L);
