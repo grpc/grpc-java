@@ -362,7 +362,6 @@ public class AbstractClientStreamTest {
         .closed(statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
     stream.transportState().deframe(ReadableBuffers.wrap(new byte[] {1, 0, 0, 0, 2, 1}));
     assertSame(Status.Code.INTERNAL, statusCaptor.getValue().getCode());
-
   }
 
   @Test
