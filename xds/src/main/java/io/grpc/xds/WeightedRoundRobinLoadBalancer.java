@@ -188,6 +188,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       orcaReportListener = new OrcaReportListener(errorUtilizationPenalty);
       return orcaReportListener;
     }
+
     public void removeSubchannel(WrrSubchannel wrrSubchannel) {
       subchannels.remove(wrrSubchannel);
     }

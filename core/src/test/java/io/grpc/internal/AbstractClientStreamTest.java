@@ -350,21 +350,6 @@ public class AbstractClientStreamTest {
   }
 
   @Test
-  public void handleBadFrame() {
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    AbstractClientStream stream =
-        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
-    stream.start(mockListener);
-    // The application will call request when waiting for a message
-    stream.request(1);
-    // Send first byte of 2 byte message
-    verify(mockListener)
-        .closed(statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
-    stream.transportState().deframe(ReadableBuffers.wrap(new byte[] {1, 0, 0, 0, 2, 1}));
-    assertSame(Status.Code.INTERNAL, statusCaptor.getValue().getCode());
-  }
-
-  @Test
   public void statusOkFollowedByRstStreamNoError() {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);

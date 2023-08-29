@@ -85,6 +85,7 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   public void setChannel(Subchannel subchannel, Channel channel) {
     ((TestSubchannel)subchannel).channel = channel;
   }
+
   @Override
   public String toString() {
     return "Test Helper";

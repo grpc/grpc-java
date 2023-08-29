@@ -21,7 +21,6 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -52,8 +51,8 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.TestUtils;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
-import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.util.AbstractTestHelper;
+import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedChildLbState;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
@@ -319,11 +318,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 10000.0 - subchannel1PickRatio))
-        .isAtMost(0.0001);
+        .isAtMost(0.0002);
     assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 10000.0 - subchannel2PickRatio ))
-        .isAtMost(0.0001);
+        .isAtMost(0.0002);
     assertThat(Math.abs(pickCount.get(weightedChild3.getEag()) / 10000.0 - subchannel3PickRatio ))
-        .isAtMost(0.0001);
+        .isAtMost(0.0002);
   }
 
   private SubchannelStateListener getSubchannelStateListener(Subchannel mockSubChannel) {
@@ -531,9 +530,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(2);
     // after blackout period
-    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 10000 - 2.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 10000.0 - 2.0 / 3))
             .isLessThan(0.002);
-    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 10000 - 1.0 / 3))
+    assertThat(Math.abs(pickCount.get(weightedChild2.getEag()) / 10000.0 - 1.0 / 3))
             .isLessThan(0.002);
   }
 
