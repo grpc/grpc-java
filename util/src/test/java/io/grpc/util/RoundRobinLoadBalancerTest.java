@@ -521,7 +521,7 @@ public class RoundRobinLoadBalancerTest {
       }
       return subchannelList;
     } else {
-      return Collections.emptyList();
+      return new ArrayList<>();
     }
   }
 
