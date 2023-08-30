@@ -58,7 +58,8 @@ dependencies {
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-rls')
-    testImplementation testFixtures(project(':grpc-core'))
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-util'))
 
     annotationProcessor libraries.auto.value
     // At runtime use the epoll included in grpc-netty-shaded
