@@ -28,7 +28,6 @@ import java.io.InputStream;
  *
  * @since 1.1.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2600")
 public final class TestMethodDescriptors {
   private TestMethodDescriptors() {}
 
@@ -38,7 +37,6 @@ public final class TestMethodDescriptors {
    *
    * @since 1.1.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2600")
   public static MethodDescriptor<Void, Void> voidMethod() {
     return MethodDescriptor.<Void, Void>newBuilder()
         .setType(MethodType.UNARY)
@@ -53,7 +51,6 @@ public final class TestMethodDescriptors {
    *
    * @since 1.1.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2600")
   public static MethodDescriptor.Marshaller<Void> voidMarshaller() {
     return new NoopMarshaller();
   }
