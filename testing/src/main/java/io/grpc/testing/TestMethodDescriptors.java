@@ -16,7 +16,6 @@
 
 package io.grpc.testing;
 
-import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import java.io.ByteArrayInputStream;
