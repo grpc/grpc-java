@@ -53,6 +53,9 @@ final class SecretGrpclbNameResolverProvider {
 
     private static final String SCHEME = "dns";
 
+    private static final boolean IS_ANDROID = InternalServiceProviders
+        .isAndroid(SecretGrpclbNameResolverProvider.class.getClassLoader());
+
     @Override
     public GrpclbNameResolver newNameResolver(URI targetUri, Args args) {
       if (SCHEME.equals(targetUri.getScheme())) {
@@ -68,7 +71,7 @@ final class SecretGrpclbNameResolverProvider {
             args,
             GrpcUtil.SHARED_CHANNEL_EXECUTOR,
             Stopwatch.createUnstarted(),
-            InternalServiceProviders.isAndroid(getClass().getClassLoader()));
+            IS_ANDROID);
       } else {
         return null;
       }

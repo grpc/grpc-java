@@ -179,8 +179,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
               return null;
             }
           })
-      .when(streamListener)
-      .messagesAvailable(any(StreamListener.MessageProducer.class));
+        .when(streamListener)
+        .messagesAvailable(any(StreamListener.MessageProducer.class));
   }
 
   @Override
@@ -632,6 +632,34 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             eq(0),
             eq(false),
             any(ChannelPromise.class));
+  }
+
+  @Test
+  public void headersWithErrAndEndStreamReturnErrorButNotThrowNpe() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .add(AsciiString.of("host"), AsciiString.of("example.com"))
+        .path(new AsciiString("/foo/bar"));
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    channelRead(emptyGrpcFrame(STREAM_ID, true));
+
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Content-Type is missing from the request")
+        .status("" + 415)
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
+
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
+
   }
 
   @Test

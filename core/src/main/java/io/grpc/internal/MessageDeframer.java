@@ -112,7 +112,7 @@ public class MessageDeframer implements Closeable, Deframer {
    *
    * @param listener listener for deframer events.
    * @param decompressor the compression used if a compressed frame is encountered, with
-   *  {@code NONE} meaning unsupported
+   *                     {@code NONE} meaning unsupported
    * @param maxMessageSize the maximum allowed size for received messages.
    */
   public MessageDeframer(

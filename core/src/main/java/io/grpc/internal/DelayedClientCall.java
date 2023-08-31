@@ -140,7 +140,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     buf.append(String.format(Locale.US, ".%09d", nanos));
     buf.append("s. ");
 
-    /** Cancels the call if deadline exceeded prior to the real call being set. */
+    /* Cancels the call if deadline exceeded prior to the real call being set. */
     class DeadlineExceededRunnable implements Runnable {
       @Override
       public void run() {

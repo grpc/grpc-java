@@ -15,7 +15,7 @@ android {
     namespace 'io.grpc.cronet'
     compileSdkVersion 33
     defaultConfig {
-        minSdkVersion 19
+        minSdkVersion 21
         targetSdkVersion 33
         versionCode 1
         versionName "1.0"

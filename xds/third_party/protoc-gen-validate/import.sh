@@ -13,33 +13,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Update GIT_ORIGIN_REV_ID then in this directory run ./import.sh
+# Update VERSION then execute this script
 
 set -e
-BRANCH=main
-# import GIT_ORIGIN_REV_ID from one of the google internal CLs
-GIT_ORIGIN_REV_ID=dfcdc5ea103dda467963fb7079e4df28debcfd28
-GIT_REPO="https://github.com/envoyproxy/protoc-gen-validate.git"
-GIT_BASE_DIR=protoc-gen-validate
-SOURCE_PROTO_BASE_DIR=protoc-gen-validate
+# import VERSION from one of the google internal CLs
+VERSION=dfcdc5ea103dda467963fb7079e4df28debcfd28
+DOWNLOAD_URL="https://github.com/envoyproxy/protoc-gen-validate/archive/${VERSION}.tar.gz"
+DOWNLOAD_BASE_DIR="protoc-gen-validate-${VERSION}"
+SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}"
 TARGET_PROTO_BASE_DIR=src/main/proto
 # Sorted alphabetically.
 FILES=(
 validate/validate.proto
 )
 
-# clone the protoc-gen-validate github repo in a tmp directory
+pushd `git rev-parse --show-toplevel`/xds/third_party/protoc-gen-validate
+
+# put the repo in a tmp directory
 tmpdir="$(mktemp -d)"
-pushd "${tmpdir}"
-rm -rf "$GIT_BASE_DIR"
-git clone -b $BRANCH $GIT_REPO
-cd "$GIT_BASE_DIR"
-git checkout $GIT_ORIGIN_REV_ID
-popd
+trap "rm -rf ${tmpdir}" EXIT
+curl -Ls "${DOWNLOAD_URL}" | tar xz -C "${tmpdir}"
 
-cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
-cp -p "${tmpdir}/${GIT_BASE_DIR}/NOTICE" NOTICE
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/LICENSE" LICENSE
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/NOTICE" NOTICE
 
+rm -rf "${TARGET_PROTO_BASE_DIR}"
 mkdir -p "${TARGET_PROTO_BASE_DIR}"
 pushd "${TARGET_PROTO_BASE_DIR}"
 
@@ -51,4 +49,4 @@ do
 done
 popd
 
-rm -rf "$tmpdir"
+popd

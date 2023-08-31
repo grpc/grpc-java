@@ -13,15 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Update VERSION then in this directory run ./import.sh
+# Update VERSION then execute this script
 
 set -e
-BRANCH=main
 # import VERSION from one of the google internal CLs
 VERSION=e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7
-GIT_REPO="https://github.com/cncf/xds.git"
-GIT_BASE_DIR=xds
-SOURCE_PROTO_BASE_DIR=xds
+DOWNLOAD_URL="https://github.com/cncf/xds/archive/${VERSION}.tar.gz"
+DOWNLOAD_BASE_DIR="xds-${VERSION}"
+SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}"
 TARGET_PROTO_BASE_DIR=src/main/proto
 # Sorted alphabetically.
 FILES=(
@@ -54,18 +53,12 @@ xds/type/v3/typed_struct.proto
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/xds
 
-# clone the xds github repo in a tmp directory
+# put the repo in a tmp directory
 tmpdir="$(mktemp -d)"
-trap "rm -rf $tmpdir" EXIT
+trap "rm -rf ${tmpdir}" EXIT
+curl -Ls "${DOWNLOAD_URL}" | tar xz -C "${tmpdir}"
 
-pushd "${tmpdir}"
-git clone -b $BRANCH $GIT_REPO
-trap "rm -rf $GIT_BASE_DIR" EXIT
-cd "$GIT_BASE_DIR"
-git checkout $VERSION
-popd
-
-cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/LICENSE" LICENSE
 
 rm -rf "${TARGET_PROTO_BASE_DIR}"
 mkdir -p "${TARGET_PROTO_BASE_DIR}"

@@ -1140,7 +1140,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
      */
     @SuppressWarnings("GuardedBy")
     @Override
-    public void data(boolean inFinished, int streamId, BufferedSource in, int length)
+    public void data(boolean inFinished, int streamId, BufferedSource in, int length,
+                     int paddedLength)
         throws IOException {
       logger.logData(OkHttpFrameLogger.Direction.INBOUND,
           streamId, in.getBuffer(), length, inFinished);
@@ -1166,12 +1167,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         synchronized (lock) {
           // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock';
           // instead found: 'OkHttpClientTransport.this.lock'
-          stream.transportState().transportDataReceived(buf, inFinished);
+          stream.transportState().transportDataReceived(buf, inFinished, paddedLength - length);
         }
       }
 
       // connection window update
-      connectionUnacknowledgedBytesRead += length;
+      connectionUnacknowledgedBytesRead += paddedLength;
       if (connectionUnacknowledgedBytesRead >= initialWindowSize * DEFAULT_WINDOW_UPDATE_RATIO) {
         synchronized (lock) {
           frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);

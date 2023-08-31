@@ -270,7 +270,6 @@ public abstract class ClientCall<ReqT, RespT> {
    * encoding has been negotiated, this is a no-op. By default per-message compression is enabled,
    * but may not have any effect if compression is not enabled on the call.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1703")
   public void setMessageCompression(boolean enabled) {
     // noop
   }

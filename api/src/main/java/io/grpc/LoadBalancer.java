@@ -115,6 +115,19 @@ public abstract class LoadBalancer {
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
       Attributes.Key.create("internal:health-checking-config");
+
+  public static final SubchannelPicker EMPTY_PICKER = new SubchannelPicker() {
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return PickResult.withNoResult();
+    }
+
+    @Override
+    public String toString() {
+      return "EMPTY_PICKER";
+    }
+  };
+
   private int recursionCount;
 
   /**
@@ -1398,4 +1411,26 @@ public abstract class LoadBalancer {
      */
     public abstract LoadBalancer newLoadBalancer(Helper helper);
   }
+
+  public static final class ErrorPicker extends SubchannelPicker {
+
+    private final Status error;
+
+    public ErrorPicker(Status error) {
+      this.error = checkNotNull(error, "error");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return PickResult.withError(error);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("error", error)
+          .toString();
+    }
+  }
+
 }

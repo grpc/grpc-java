@@ -383,8 +383,9 @@ final class ControlPlaneClient {
     void start() {
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
           AggregatedDiscoveryServiceGrpc.newStub(channel);
-      StreamObserver<DiscoveryResponse> responseReader =
-          new ClientResponseObserver<DiscoveryRequest,DiscoveryResponse>() {
+
+      final class AdsClientResponseObserver
+          implements ClientResponseObserver<DiscoveryRequest, DiscoveryResponse> {
 
         @Override
         public void beforeStart(ClientCallStreamObserver<DiscoveryRequest> requestStream) {
@@ -434,8 +435,9 @@ final class ControlPlaneClient {
             }
           });
         }
-      };
-      requestWriter = stub.streamAggregatedResources(responseReader);
+      }
+
+      requestWriter = stub.streamAggregatedResources(new AdsClientResponseObserver());
     }
 
     @Override

@@ -242,7 +242,6 @@ public abstract class ServerCall<ReqT, RespT> {
    *
    * @return the authority string. {@code null} if not available.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2924")
   @Nullable
   public String getAuthority() {
     return null;

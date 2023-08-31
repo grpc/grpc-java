@@ -169,7 +169,7 @@ class BootstrapperImpl extends Bootstrapper {
         if (rawLocality.containsKey("sub_zone")) {
           subZone = JsonUtil.getString(rawLocality, "sub_zone");
         }
-        logger.log(XdsLogLevel.INFO, "Locality region: {0}, zone: {0}, subZone: {0}",
+        logger.log(XdsLogLevel.INFO, "Locality region: {0}, zone: {1}, subZone: {2}",
             region, zone, subZone);
         Locality locality = Locality.create(region, zone, subZone);
         nodeBuilder.setLocality(locality);

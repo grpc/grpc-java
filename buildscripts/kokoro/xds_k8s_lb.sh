@@ -177,6 +177,9 @@ main() {
   cd "${TEST_DRIVER_FULL_DIR}"
   local failed_tests=0
   test_suites=("api_listener_test" "change_backend_service_test" "failover_test" "remove_neg_test" "round_robin_test" "affinity_test" "outlier_detection_test" "custom_lb_test")
+  if [[ "${TESTING_VERSION}" =~ "master" ]]; then
+      test_suites+=('bootstrap_generator_test')
+  fi
   for test in "${test_suites[@]}"; do
     run_test $test || (( ++failed_tests ))
   done

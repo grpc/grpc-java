@@ -2106,6 +2106,9 @@ public abstract class AbstractTransportTest {
    * be present, and the cause should be stripped away.
    */
   private static void checkClientStatus(Status expectedStatus, Status clientStreamStatus) {
+    if (!clientStreamStatus.isOk() && clientStreamStatus.getCode() != expectedStatus.getCode()) {
+      System.out.println("Full Status:  " + clientStreamStatus);
+    }
     assertEquals(expectedStatus.getCode(), clientStreamStatus.getCode());
     assertEquals(expectedStatus.getDescription(), clientStreamStatus.getDescription());
     assertNull(clientStreamStatus.getCause());

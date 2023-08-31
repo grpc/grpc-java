@@ -23,7 +23,7 @@ cat <<EOF >> gradle.properties
 org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m
 EOF
 
-echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
+(yes || true) | "${ANDROID_HOME}/tools/bin/sdkmanager" --licenses
 
 # Proto deps
 buildscripts/make_dependencies.sh
@@ -53,13 +53,13 @@ fi
 # Build examples
 
 cd ./examples/android/clientcache
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 cd ../routeguide
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 cd ../helloworld
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 cd ../strictmode
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 
 # Skip APK size and dex count comparisons for non-PR builds
 
@@ -101,7 +101,7 @@ git checkout HEAD^
 ./gradlew --stop  # use a new daemon to build the previous commit
 ./gradlew publishToMavenLocal $GRADLE_FLAGS
 cd examples/android/helloworld/
-../../gradlew build
+../../gradlew build $GRADLE_FLAGS
 
 sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
 read -r ignored old_dex_count < \

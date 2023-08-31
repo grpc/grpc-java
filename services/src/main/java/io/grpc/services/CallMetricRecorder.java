@@ -41,6 +41,8 @@ public final class CallMetricRecorder {
       new AtomicReference<>();
   private final AtomicReference<ConcurrentHashMap<String, Double>> requestCostMetrics =
       new AtomicReference<>();
+  private final AtomicReference<ConcurrentHashMap<String, Double>> namedMetrics =
+      new AtomicReference<>();
   private double cpuUtilizationMetric = 0;
   private double applicationUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
@@ -124,6 +126,27 @@ public final class CallMetricRecorder {
       requestCostMetrics.compareAndSet(null, new ConcurrentHashMap<String, Double>());
     }
     requestCostMetrics.get().put(name, value);
+    return this;
+  }
+
+  /**
+   * Records an application-specific opaque custom metric measurement. If RPC has already finished,
+   * this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   */
+  public CallMetricRecorder recordNamedMetric(String name, double value) {
+    if (disabled) {
+      return this;
+    }
+    if (namedMetrics.get() == null) {
+      // The chance of race of creation of the map should be very small, so it should be fine
+      // to create these maps that might be discarded.
+      namedMetrics.compareAndSet(null, new ConcurrentHashMap<String, Double>());
+    }
+    namedMetrics.get().put(name, value);
     return this;
   }
 
@@ -235,12 +258,17 @@ public final class CallMetricRecorder {
   MetricReport finalizeAndDump2() {
     Map<String, Double> savedRequestCostMetrics = finalizeAndDump();
     Map<String, Double> savedUtilizationMetrics = utilizationMetrics.get();
+    Map<String, Double> savedNamedMetrics = namedMetrics.get();
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
+    if (savedNamedMetrics == null) {
+      savedNamedMetrics = Collections.emptyMap();
+    }
     return new MetricReport(cpuUtilizationMetric, applicationUtilizationMetric,
         memoryUtilizationMetric, qps, eps, Collections.unmodifiableMap(savedRequestCostMetrics),
-        Collections.unmodifiableMap(savedUtilizationMetrics)
+        Collections.unmodifiableMap(savedUtilizationMetrics),
+        Collections.unmodifiableMap(savedNamedMetrics)
     );
   }
 

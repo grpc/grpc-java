@@ -368,7 +368,7 @@ public class ManagedChannelImplBuilderTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void overrideAuthority_invalid() {
-    builder.overrideAuthority("not_allowed");
+    builder.overrideAuthority("user@not_allowed");
   }
 
   @Test

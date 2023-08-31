@@ -208,13 +208,15 @@ class OkHttpServerStream extends AbstractServerStream {
      * Must be called with holding the transport lock.
      */
     @Override
-    public void inboundDataReceived(okio.Buffer frame, int windowConsumed, boolean endOfStream) {
+    public void inboundDataReceived(okio.Buffer frame, int dataLength, int paddingLength,
+                                    boolean endOfStream) {
       synchronized (lock) {
         PerfMark.event("OkHttpServerTransport$FrameHandler.data", tag);
         if (endOfStream) {
           this.receivedEndOfStream = true;
         }
-        window -= windowConsumed;
+        window -= dataLength + paddingLength;
+        processedWindow -= paddingLength;
         super.inboundDataReceived(new OkHttpReadableBuffer(frame), endOfStream);
       }
     }

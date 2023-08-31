@@ -122,8 +122,8 @@ final class XdsTestControlPlaneService extends
   @Override
   public StreamObserver<DiscoveryRequest> streamAggregatedResources(
       final StreamObserver<DiscoveryResponse> responseObserver) {
-    final StreamObserver<DiscoveryRequest> requestObserver =
-        new StreamObserver<DiscoveryRequest>() {
+
+    final class AdsStreamObserver implements StreamObserver<DiscoveryRequest> {
       @Override
       public void onNext(final DiscoveryRequest value) {
         syncContext.execute(new Runnable() {
@@ -176,8 +176,9 @@ final class XdsTestControlPlaneService extends
           xdsNonces.get(type).remove(responseObserver);
         }
       }
-    };
-    return requestObserver;
+    }
+
+    return new AdsStreamObserver();
   }
 
   //must run in syncContext

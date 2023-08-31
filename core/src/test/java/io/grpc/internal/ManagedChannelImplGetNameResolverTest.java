@@ -139,8 +139,9 @@ public class ManagedChannelImplGetNameResolverTest {
 
   private void testValidTarget(String target, String expectedUriString, URI expectedUri) {
     NameResolver.Factory nameResolverFactory = new FakeNameResolverFactory(expectedUri.getScheme());
-    FakeNameResolver nameResolver = (FakeNameResolver) ManagedChannelImpl.getNameResolver(
-        target, null, nameResolverFactory, NAMERESOLVER_ARGS);
+    FakeNameResolver nameResolver
+        = (FakeNameResolver) ((RetryingNameResolver) ManagedChannelImpl.getNameResolver(
+            target, null, nameResolverFactory, NAMERESOLVER_ARGS)).getRetriedNameResolver();
     assertNotNull(nameResolver);
     assertEquals(expectedUri, nameResolver.uri);
     assertEquals(expectedUriString, nameResolver.uri.toString());

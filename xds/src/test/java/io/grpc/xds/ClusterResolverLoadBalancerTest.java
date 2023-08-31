@@ -153,13 +153,13 @@ public class ClusterResolverLoadBalancerTest {
   private final NameResolverRegistry nsRegistry = new NameResolverRegistry();
   private final PolicySelection roundRobin = new PolicySelection(
       new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-      new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null)));
+          new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null)));
   private final PolicySelection ringHash = new PolicySelection(
       new FakeLoadBalancerProvider("ring_hash_experimental"), new RingHashConfig(10L, 100L));
   private final PolicySelection leastRequest = new PolicySelection(
       new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-      new PolicySelection(new FakeLoadBalancerProvider("least_request_experimental"),
-          new LeastRequestConfig(3))));
+          new PolicySelection(new FakeLoadBalancerProvider("least_request_experimental"),
+              new LeastRequestConfig(3))));
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final List<FakeNameResolver> resolvers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
