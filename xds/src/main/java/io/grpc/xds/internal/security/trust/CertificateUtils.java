@@ -49,9 +49,9 @@ public final class CertificateUtils {
 
   private static CertificateFactory factory;
   private static final Pattern KEY_PATTERN = Pattern.compile(
-          "-+BEGIN\\s+.*PRIVATE\\s+KEY[^-]*-+(?:\\s|\\r|\\n)+" + // Header
-                  "([a-z0-9+/=\\r\\n]+)" +                             // Base64 text
-                  "-+END\\s+.*PRIVATE\\s+KEY[^-]*-+",                  // Footer
+          "-+BEGIN\\s+.*PRIVATE\\s+KEY[^-]*-+(?:\\s|\\r|\\n)+"  // Header
+                  + "([a-z0-9+/=\\r\\n]+)"                             // Base64 text
+                  + "-+END\\s+.*PRIVATE\\s+KEY[^-]*-+",                  // Footer
           Pattern.CASE_INSENSITIVE);
 
   private static synchronized void initInstance() throws CertificateException {

@@ -220,7 +220,7 @@ public final class Http2 implements Variant {
       return hpackReader.getAndResetHeaderList();
     }
 
-    private void readData(Handler handler, int length, byte flags, int streamId)
+    private void readData(Handler handler, int paddedLength, byte flags, int streamId)
         throws IOException {
       // TODO: checkState open or half-closed (local) or raise STREAM_CLOSED
       boolean inFinished = (flags & FLAG_END_STREAM) != 0;
@@ -230,10 +230,10 @@ public final class Http2 implements Variant {
       }
 
       short padding = (flags & FLAG_PADDED) != 0 ? (short) (source.readByte() & 0xff) : 0;
-      length = lengthWithoutPadding(length, flags, padding);
+      int length = lengthWithoutPadding(paddedLength, flags, padding);
 
       // FIXME: pass padding length to handler because it should be included for flow control
-      handler.data(inFinished, streamId, source, length);
+      handler.data(inFinished, streamId, source, length, paddedLength);
       source.skip(padding);
     }
 

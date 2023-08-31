@@ -272,9 +272,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
           transportListener = listener.transportCreated(transport);
         }
 
-        /**
-         * Releases the event loop if the channel is "done", possibly due to the channel closing.
-         */
+        /* Releases the event loop if the channel is "done", possibly due to the channel closing. */
         final class LoopReleaser implements ChannelFutureListener {
           private boolean done;
 

@@ -136,9 +136,7 @@ public final class ClientCalls {
   public static <ReqT, RespT> RespT blockingUnaryCall(ClientCall<ReqT, RespT> call, ReqT req) {
     try {
       return getUnchecked(futureUnaryCall(call, req));
-    } catch (RuntimeException e) {
-      throw cancelThrow(call, e);
-    } catch (Error e) {
+    } catch (RuntimeException | Error e) {
       throw cancelThrow(call, e);
     }
   }
@@ -170,10 +168,7 @@ public final class ClientCalls {
       }
       executor.shutdown();
       return getUnchecked(responseFuture);
-    } catch (RuntimeException e) {
-      // Something very bad happened. All bets are off; it may be dangerous to wait for onClose().
-      throw cancelThrow(call, e);
-    } catch (Error e) {
+    } catch (RuntimeException | Error e) {
       // Something very bad happened. All bets are off; it may be dangerous to wait for onClose().
       throw cancelThrow(call, e);
     } finally {
@@ -212,11 +207,10 @@ public final class ClientCalls {
    */
   public static <ReqT, RespT> Iterator<RespT> blockingServerStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req) {
-    ThreadlessExecutor executor = new ThreadlessExecutor();
     ClientCall<ReqT, RespT> call = channel.newCall(method,
-        callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING)
-            .withExecutor(executor));
-    BlockingResponseStream<RespT> result = new BlockingResponseStream<>(call, executor);
+        callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING));
+
+    BlockingResponseStream<RespT> result = new BlockingResponseStream<>(call);
     asyncUnaryRequestCall(call, req, result.listener());
     return result;
   }
@@ -361,8 +355,7 @@ public final class ClientCalls {
   private static RuntimeException cancelThrow(ClientCall<?, ?> call, Throwable t) {
     try {
       call.cancel(null, t);
-    } catch (Throwable e) {
-      assert e instanceof RuntimeException || e instanceof Error;
+    } catch (RuntimeException | Error e) {
       logger.log(Level.SEVERE, "RuntimeException encountered while closing call", e);
     }
     if (t instanceof RuntimeException) {
@@ -393,9 +386,7 @@ public final class ClientCalls {
     try {
       call.sendMessage(req);
       call.halfClose();
-    } catch (RuntimeException e) {
-      throw cancelThrow(call, e);
-    } catch (Error e) {
+    } catch (RuntimeException | Error e) {
       throw cancelThrow(call, e);
     }
   }
@@ -670,20 +661,12 @@ public final class ClientCalls {
     private final BlockingQueue<Object> buffer = new ArrayBlockingQueue<>(3);
     private final StartableListener<T> listener = new QueuingListener();
     private final ClientCall<?, T> call;
-    /** May be null. */
-    private final ThreadlessExecutor threadless;
     // Only accessed when iterating.
     private Object last;
 
     // Non private to avoid synthetic class
     BlockingResponseStream(ClientCall<?, T> call) {
-      this(call, null);
-    }
-
-    // Non private to avoid synthetic class
-    BlockingResponseStream(ClientCall<?, T> call, ThreadlessExecutor threadless) {
       this.call = call;
-      this.threadless = threadless;
     }
 
     StartableListener<T> listener() {
@@ -693,31 +676,14 @@ public final class ClientCalls {
     private Object waitForNext() {
       boolean interrupt = false;
       try {
-        if (threadless == null) {
-          while (true) {
-            try {
-              return buffer.take();
-            } catch (InterruptedException ie) {
-              interrupt = true;
-              call.cancel("Thread interrupted", ie);
-              // Now wait for onClose() to be called, to guarantee BlockingQueue doesn't fill
-            }
+        while (true) {
+          try {
+            return buffer.take();
+          } catch (InterruptedException ie) {
+            interrupt = true;
+            call.cancel("Thread interrupted", ie);
+            // Now wait for onClose() to be called, to guarantee BlockingQueue doesn't fill
           }
-        } else {
-          Object next;
-          while ((next = buffer.poll()) == null) {
-            try {
-              threadless.waitAndDrain();
-            } catch (InterruptedException ie) {
-              interrupt = true;
-              call.cancel("Thread interrupted", ie);
-              // Now wait for onClose() to be called, so interceptors can clean up
-            }
-          }
-          if (next == this || next instanceof StatusRuntimeException) {
-            threadless.shutdown();
-          }
-          return next;
         }
       } finally {
         if (interrupt) {

@@ -13,6 +13,7 @@
                 android:layout_weight="2"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:inputType="text"
                 android:hint="Enter Host" />
         <EditText
                 android:id="@+id/port_edit_text"
@@ -28,13 +29,13 @@
             android:id="@+id/message_edit_text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:inputType="text"
             android:hint="Enter message to send" />
 
     <Button
             android:id="@+id/send_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:onClick="sendMessage"
             android:text="Send Grpc Request" />
 
     <TextView

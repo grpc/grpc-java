@@ -18,7 +18,6 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.DoNotCall;
@@ -89,7 +88,7 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   @DoNotCall("Always throws. Use forPort(int, ServerCredentials) instead")
   @Deprecated
   public static OkHttpServerBuilder forPort(int port) {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("Use forPort(int, ServerCredentials) instead");
   }
 
   /**
@@ -131,7 +130,6 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
   long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 
-  @VisibleForTesting
   OkHttpServerBuilder(
       SocketAddress address, HandshakerSocketFactory handshakerSocketFactory) {
     this.listenAddress = Preconditions.checkNotNull(address, "address");

@@ -179,7 +179,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     synchronized (lock) {
       SizedValue existing = delegate.get(key);
       if (existing != null && isExpired(key, existing.value, ticker.read())) {
-        invalidate(key, EvictionType.EXPIRED);
         return null;
       }
       return existing;

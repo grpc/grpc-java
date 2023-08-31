@@ -54,16 +54,16 @@ public class MetadataTest {
 
   private static final Metadata.BinaryMarshaller<Fish> FISH_MARSHALLER =
       new Metadata.BinaryMarshaller<Fish>() {
-    @Override
-    public byte[] toBytes(Fish fish) {
-      return fish.name.getBytes(UTF_8);
-    }
+        @Override
+        public byte[] toBytes(Fish fish) {
+          return fish.name.getBytes(UTF_8);
+        }
 
-    @Override
-    public Fish parseBytes(byte[] serialized) {
-      return new Fish(new String(serialized, UTF_8));
-    }
-  };
+        @Override
+        public Fish parseBytes(byte[] serialized) {
+          return new Fish(new String(serialized, UTF_8));
+        }
+      };
 
   private static class FishStreamMarsaller implements Metadata.BinaryStreamMarshaller<Fish> {
     @Override
@@ -100,16 +100,16 @@ public class MetadataTest {
 
   private static final Metadata.BinaryStreamMarshaller<Fish> IMMUTABLE_FISH_MARSHALLER =
       new Metadata.BinaryStreamMarshaller<Fish>() {
-    @Override
-    public InputStream toStream(Fish fish) {
-      return new FakeFishStream(fish);
-    }
+        @Override
+        public InputStream toStream(Fish fish) {
+          return new FakeFishStream(fish);
+        }
 
-    @Override
-    public Fish parseStream(InputStream stream) {
-      return ((FakeFishStream) stream).fish;
-    }
-  };
+        @Override
+        public Fish parseStream(InputStream stream) {
+          return ((FakeFishStream) stream).fish;
+        }
+      };
 
   private static final String LANCE = "lance";
   private static final byte[] LANCE_BYTES = LANCE.getBytes(US_ASCII);
@@ -313,6 +313,7 @@ public class MetadataTest {
   }
 
   @Test
+  @SuppressWarnings("StringCaseLocaleUsage")  // System locale is exactly what we're testing.
   public void testKeyCaseHandling() {
     Locale originalLocale = Locale.getDefault();
     Locale.setDefault(new Locale("tr", "TR"));

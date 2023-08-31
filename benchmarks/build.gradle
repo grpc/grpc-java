@@ -18,6 +18,12 @@ configurations {
     alpnagent
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.benchmarks')
+    }
+}
+
 dependencies {
     implementation project(':grpc-core'),
             project(':grpc-netty'),
@@ -99,12 +105,14 @@ def benchmark_worker = tasks.register("benchmark_worker", CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-applicationDistribution.into("bin") {
-    from(qps_client)
-    from(openloop_client)
-    from(qps_server)
-    from(benchmark_worker)
-    fileMode = 0755
+application {
+    applicationDistribution.into("bin") {
+        from(qps_client)
+        from(openloop_client)
+        from(qps_server)
+        from(benchmark_worker)
+        fileMode = 0755
+    }
 }
 
 publishing {

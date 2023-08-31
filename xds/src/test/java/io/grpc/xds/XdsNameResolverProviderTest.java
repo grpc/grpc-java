@@ -110,14 +110,19 @@ public class XdsNameResolverProviderTest {
   }
 
   @Test
-  public void invalidName_hostnameContainsUnderscore() {
-    URI uri = URI.create("xds:///foo_bar.googleapis.com");
-    try {
-      provider.newNameResolver(uri, args);
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) {
-      // Expected
-    }
+  public void validName_urlExtractedAuthorityInvalidWithoutEncoding() {
+    XdsNameResolver resolver = 
+        provider.newNameResolver(URI.create("xds:///1234/path/foo.googleapis.com:8080"), args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("1234%2Fpath%2Ffoo.googleapis.com:8080");
+  }
+
+  @Test
+  public void validName_urlwithTargetAuthorityAndExtractedAuthorityInvalidWithoutEncoding() {
+    XdsNameResolver resolver = provider.newNameResolver(URI.create(
+        "xds://trafficdirector.google.com/1234/path/foo.googleapis.com:8080"), args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("1234%2Fpath%2Ffoo.googleapis.com:8080");
   }
 
   @Test

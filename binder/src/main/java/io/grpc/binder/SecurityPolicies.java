@@ -26,6 +26,7 @@ import android.content.pm.Signature;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Process;
+import androidx.annotation.RequiresApi;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
@@ -188,12 +189,12 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a device owner app. See
    * {@link DevicePolicyManager}.
    */
-  public static SecurityPolicy isDeviceOwner(Context applicationContext) {
+  @androidx.annotation.RequiresApi(18)
+  public static io.grpc.binder.SecurityPolicy isDeviceOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
     return anyPackageWithUidSatisfies(
-        applicationContext,
-        pkg -> VERSION.SDK_INT >= 18 && devicePolicyManager.isDeviceOwnerApp(pkg),
+        applicationContext, pkg -> devicePolicyManager.isDeviceOwnerApp(pkg),
         "Rejected by device owner policy. No packages found for UID.",
         "Rejected by device owner policy");
   }

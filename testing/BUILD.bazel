@@ -11,8 +11,8 @@ java_library(
     deps = [
         "//api",
         "//context",
-        "//core:inprocess",
-        "//core:util",
+        "//inprocess",
+        "//util",
         "//stub",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",

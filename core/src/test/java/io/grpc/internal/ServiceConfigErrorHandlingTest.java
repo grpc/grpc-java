@@ -542,7 +542,7 @@ public class ServiceConfigErrorHandlingTest {
     final URI expectedUri;
     final List<EquivalentAddressGroup> servers;
     final boolean resolvedAtStart;
-    final ArrayList<RetryingNameResolver> resolvers = new ArrayList<>();
+    final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
     final AtomicReference<Map<String, ?>> nextRawServiceConfig = new AtomicReference<>();
     final AtomicReference<Attributes> nextAttributes = new AtomicReference<>(Attributes.EMPTY);
 
@@ -561,13 +561,7 @@ public class ServiceConfigErrorHandlingTest {
         return null;
       }
       assertEquals(DEFAULT_PORT, args.getDefaultPort());
-      RetryingNameResolver resolver = new RetryingNameResolver(
-          new FakeNameResolver(args.getServiceConfigParser()),
-          new BackoffPolicyRetryScheduler(
-              new FakeBackoffPolicyProvider(),
-              args.getScheduledExecutorService(),
-              args.getSynchronizationContext()),
-          args.getSynchronizationContext());
+      FakeNameResolver resolver = new FakeNameResolver(args.getServiceConfigParser());
       resolvers.add(resolver);
       return resolver;
     }
@@ -578,8 +572,8 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     void allResolved() {
-      for (RetryingNameResolver resolver : resolvers) {
-        ((FakeNameResolver)resolver.getRetriedNameResolver()).resolved();
+      for (FakeNameResolver resolver : resolvers) {
+        resolver.resolved();
       }
     }
 

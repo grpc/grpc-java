@@ -46,16 +46,16 @@ public class TransportFrameUtilTest {
 
   private static final BinaryMarshaller<String> UTF8_STRING_MARSHALLER =
       new BinaryMarshaller<String>() {
-    @Override
-    public byte[] toBytes(String value) {
-      return value.getBytes(UTF_8);
-    }
+        @Override
+        public byte[] toBytes(String value) {
+          return value.getBytes(UTF_8);
+        }
 
-    @Override
-    public String parseBytes(byte[] serialized) {
-      return new String(serialized, UTF_8);
-    }
-  };
+        @Override
+        public String parseBytes(byte[] serialized) {
+          return new String(serialized, UTF_8);
+        }
+      };
 
   private static final Metadata.Key<String> PLAIN_STRING =
       Metadata.Key.of("plainstring", ASCII_STRING_MARSHALLER);

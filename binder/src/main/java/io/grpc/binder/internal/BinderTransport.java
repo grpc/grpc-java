@@ -28,6 +28,7 @@ import android.os.Parcel;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
+import android.os.UserHandle;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -46,6 +47,7 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BindServiceFlags;
+import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
 import io.grpc.internal.ClientStream;
@@ -568,7 +570,9 @@ public abstract class BinderTransport
 
     public BinderClientTransport(
         Context sourceContext,
+        BinderChannelCredentials channelCredentials,
         AndroidComponentAddress targetAddress,
+        @Nullable UserHandle targetUserHandle,
         BindServiceFlags bindServiceFlags,
         Executor mainThreadExecutor,
         ObjectPool<ScheduledExecutorService> executorServicePool,
@@ -590,7 +594,9 @@ public abstract class BinderTransport
           new ServiceBinding(
               mainThreadExecutor,
               sourceContext,
+              channelCredentials,
               targetAddress.asBindIntent(),
+              targetUserHandle,
               bindServiceFlags.toInteger(),
               this);
     }

@@ -32,7 +32,7 @@ public interface FrameReader extends Closeable {
   boolean nextFrame(Handler handler) throws IOException;
 
   interface Handler {
-    void data(boolean inFinished, int streamId, BufferedSource source, int length)
+    void data(boolean inFinished, int streamId, BufferedSource source, int length, int paddedLength)
         throws IOException;
 
     /**

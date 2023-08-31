@@ -13,15 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Update VERSION then in this directory run ./import.sh
+# Update VERSION then execute this script
 
 set -e
-BRANCH=main
 # import VERSION from the google internal copybara_version.txt for Envoy
 VERSION=0478eba2a495027bf6ac8e787c42e2f5b9eb553b
-GIT_REPO="https://github.com/envoyproxy/envoy.git"
-GIT_BASE_DIR=envoy
-SOURCE_PROTO_BASE_DIR=envoy/api
+DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
+DOWNLOAD_BASE_DIR="envoy-${VERSION}"
+SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
 TARGET_PROTO_BASE_DIR=src/main/proto
 # Sorted alphabetically.
 FILES=(
@@ -181,19 +180,13 @@ envoy/type/v3/semantic_version.proto
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/envoy
 
-# clone the envoy github repo in a tmp directory
+# put the repo in a tmp directory
 tmpdir="$(mktemp -d)"
 trap "rm -rf ${tmpdir}" EXIT
+curl -Ls "${DOWNLOAD_URL}" | tar xz -C "${tmpdir}"
 
-pushd "${tmpdir}"
-git clone -b $BRANCH $GIT_REPO
-trap "rm -rf $GIT_BASE_DIR" EXIT
-cd "$GIT_BASE_DIR"
-git checkout $VERSION
-popd
-
-cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
-cp -p "${tmpdir}/${GIT_BASE_DIR}/NOTICE" NOTICE
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/LICENSE" LICENSE
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/NOTICE" NOTICE
 
 rm -rf "${TARGET_PROTO_BASE_DIR}"
 mkdir -p "${TARGET_PROTO_BASE_DIR}"

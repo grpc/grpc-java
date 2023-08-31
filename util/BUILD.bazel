@@ -1,0 +1,18 @@
+java_library(
+    name = "util",
+    srcs = glob([
+        "src/main/java/io/grpc/util/*.java",
+    ]),
+    resources = glob([
+        "src/main/resources/**",
+    ]),
+    visibility = ["//visibility:public"],
+    deps = [
+        "//api",
+        "//core:internal",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_j2objc_j2objc_annotations//jar",
+        "@org_codehaus_mojo_animal_sniffer_annotations//jar",
+    ],
+)

@@ -21,7 +21,6 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
@@ -36,7 +35,6 @@ import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -149,7 +147,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         ChildLbState child =
             new ChildLbState(priority, priorityConfigs.get(priority).ignoreReresolution);
         children.put(priority, child);
-        updateOverallState(priority, CONNECTING, BUFFER_PICKER);
+        updateOverallState(priority, CONNECTING, LoadBalancer.EMPTY_PICKER);
         // Calling the child's updateResolvedAddresses() can result in tryNextPriority() being
         // called recursively. We need to be sure to be done with processing here before it is
         // called.
@@ -210,7 +208,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     @Nullable ScheduledHandle deletionTimer;
     @Nullable String policy;
     ConnectivityState connectivityState = CONNECTING;
-    SubchannelPicker picker = BUFFER_PICKER;
+    SubchannelPicker picker = LoadBalancer.EMPTY_PICKER;
 
     ChildLbState(final String priority, boolean ignoreReresolution) {
       this.priority = priority;

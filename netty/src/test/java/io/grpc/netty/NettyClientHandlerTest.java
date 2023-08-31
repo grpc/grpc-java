@@ -185,8 +185,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
               return null;
             }
           })
-      .when(streamListener)
-      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+        .when(streamListener)
+        .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
 
     lifecycleManager = new ClientTransportLifecycleManager(listener);
     // This mocks the keepalive manager only for there's in which we verify it. For other tests

@@ -233,7 +233,7 @@ public class SecurityProtocolNegotiatorsTest {
     ProtocolNegotiationEvent event = InternalProtocolNegotiationEvent.getDefault();
     Attributes attr = InternalProtocolNegotiationEvent.getAttributes(event)
             .toBuilder().set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER,
-            new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager)).build();
+              new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager)).build();
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.withAttributes(event, attr));
     channelHandlerCtx = pipeline.context(handlerPickerHandler);
     assertThat(channelHandlerCtx).isNull();

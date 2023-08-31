@@ -32,7 +32,6 @@ import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;

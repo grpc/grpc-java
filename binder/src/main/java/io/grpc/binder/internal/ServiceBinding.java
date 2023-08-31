@@ -16,15 +16,20 @@
 
 package io.grpc.binder.internal;
 
+import static com.google.common.base.Preconditions.checkState;
+
+import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.IBinder;
+import android.os.UserHandle;
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
+import io.grpc.binder.BinderChannelCredentials;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -56,7 +61,26 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     UNBOUND,
   }
 
+  // Type of the method used when binding the service.
+  private enum BindMethodType {
+    BIND_SERVICE("bindService"),
+    BIND_SERVICE_AS_USER("bindServiceAsUser"),
+    DEVICE_POLICY_BIND_SEVICE_ADMIN("DevicePolicyManager.bindDeviceAdminServiceAsUser");
+
+    private final String methodName;
+
+    BindMethodType(String methodName) {
+      this.methodName = methodName;
+    }
+
+    public String methodName() {
+      return methodName;
+    }
+  }
+
+  private final BinderChannelCredentials channelCredentials;
   private final Intent bindIntent;
+  @Nullable private final UserHandle targetUserHandle;
   private final int bindFlags;
   private final Observer observer;
   private final Executor mainThreadExecutor;
@@ -76,7 +100,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   ServiceBinding(
       Executor mainThreadExecutor,
       Context sourceContext,
+      BinderChannelCredentials channelCredentials,
       Intent bindIntent,
+      @Nullable UserHandle targetUserHandle,
       int bindFlags,
       Observer observer) {
     // We need to synchronize here ensure other threads see all
@@ -87,6 +113,8 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       this.observer = observer;
       this.sourceContext = sourceContext;
       this.mainThreadExecutor = mainThreadExecutor;
+      this.channelCredentials = channelCredentials;
+      this.targetUserHandle = targetUserHandle;
       state = State.NOT_BINDING;
       reportedState = State.NOT_BINDING;
     }
@@ -117,7 +145,14 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   public synchronized void bind() {
     if (state == State.NOT_BINDING) {
       state = State.BINDING;
-      Status bindResult = bindInternal(sourceContext, bindIntent, this, bindFlags);
+      Status bindResult =
+          bindInternal(
+            sourceContext,
+            bindIntent,
+            this,
+            bindFlags,
+            channelCredentials,
+            targetUserHandle);
       if (!bindResult.isOk()) {
         handleBindServiceFailure(sourceContext, this);
         state = State.UNBOUND;
@@ -127,19 +162,57 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   private static Status bindInternal(
-      Context context, Intent bindIntent, ServiceConnection conn, int flags) {
+      Context context,
+      Intent bindIntent,
+      ServiceConnection conn,
+      int flags,
+      BinderChannelCredentials channelCredentials,
+      @Nullable UserHandle targetUserHandle) {
+    BindMethodType bindMethodType = BindMethodType.BIND_SERVICE;
     try {
-      if (!context.bindService(bindIntent, conn, flags)) {
+      if (targetUserHandle == null) {
+        checkState(
+            channelCredentials.getDevicePolicyAdminComponentName() == null,
+            "BindingChannelCredentials is expected to have null devicePolicyAdmin when"
+                + " targetUserHandle is not set");
+      } else {
+        if (channelCredentials.getDevicePolicyAdminComponentName() != null) {
+          bindMethodType = BindMethodType.DEVICE_POLICY_BIND_SEVICE_ADMIN;
+        } else {
+          bindMethodType = BindMethodType.BIND_SERVICE_AS_USER;
+        }
+      }
+      boolean bindResult = false;
+      switch (bindMethodType) {
+        case BIND_SERVICE: 
+          bindResult = context.bindService(bindIntent, conn, flags);
+          break;
+        case BIND_SERVICE_AS_USER:
+          bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
+          break;
+        case DEVICE_POLICY_BIND_SEVICE_ADMIN:
+          DevicePolicyManager devicePolicyManager =
+              (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
+          bindResult = devicePolicyManager.bindDeviceAdminServiceAsUser(
+            channelCredentials.getDevicePolicyAdminComponentName(),
+            bindIntent,
+            conn,
+            flags,
+            targetUserHandle);
+          break;
+      }
+      if (!bindResult) {
         return Status.UNIMPLEMENTED.withDescription(
-            "bindService(" + bindIntent + ") returned false");
+              bindMethodType.methodName() + "(" + bindIntent + ") returned false");
       }
       return Status.OK;
     } catch (SecurityException e) {
-      return Status.PERMISSION_DENIED.withCause(e).withDescription(
-          "SecurityException from bindService");
+      return Status.PERMISSION_DENIED
+          .withCause(e)
+          .withDescription("SecurityException from " + bindMethodType.methodName());
     } catch (RuntimeException e) {
       return Status.INTERNAL.withCause(e).withDescription(
-          "RuntimeException from bindService");
+        "RuntimeException from " + bindMethodType.methodName());
     }
   }
 

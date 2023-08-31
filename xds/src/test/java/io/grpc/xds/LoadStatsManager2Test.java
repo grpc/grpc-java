@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Status;
 import io.grpc.internal.FakeClock;
@@ -39,6 +40,7 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class LoadStatsManager2Test {
+  private static final double TOLERANCE = 1.0e-10;
   private static final String CLUSTER_NAME1 = "cluster-foo.googleapis.com";
   private static final String CLUSTER_NAME2 = "cluster-bar.googleapis.com";
   private static final String EDS_SERVICE_NAME1 = "backend-service-foo.googleapis.com";
@@ -71,12 +73,17 @@ public class LoadStatsManager2Test {
     for (int i = 0; i < 19; i++) {
       loadCounter1.recordCallStarted();
     }
+    loadCounter1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 3.14159));
+    loadCounter1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.618));
+    loadCounter1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 99.0));
+    loadCounter1.recordBackendLoadMetricStats(ImmutableMap.of("named1", -97.23, "named2", -2.718));
     fakeClock.forwardTime(5L, TimeUnit.SECONDS);
     dropCounter2.recordDroppedRequest();
     loadCounter1.recordCallFinished(Status.OK);
     for (int i = 0; i < 9; i++) {
       loadCounter2.recordCallStarted();
     }
+    loadCounter2.recordBackendLoadMetricStats(ImmutableMap.of("named3", 0.0009));
     loadCounter2.recordCallFinished(Status.UNAVAILABLE);
     fakeClock.forwardTime(10L, TimeUnit.SECONDS);
     loadCounter3.recordCallStarted();
@@ -96,6 +103,18 @@ public class LoadStatsManager2Test {
     assertThat(loadStats1.totalSuccessfulRequests()).isEqualTo(1L);
     assertThat(loadStats1.totalErrorRequests()).isEqualTo(0L);
     assertThat(loadStats1.totalRequestsInProgress()).isEqualTo(19L - 1L);
+    assertThat(loadStats1.loadMetricStatsMap().containsKey("named1")).isTrue();
+    assertThat(loadStats1.loadMetricStatsMap().containsKey("named2")).isTrue();
+    assertThat(
+        loadStats1.loadMetricStatsMap().get("named1").numRequestsFinishedWithMetric()).isEqualTo(
+        4L);
+    assertThat(loadStats1.loadMetricStatsMap().get("named1").totalMetricValue()).isWithin(TOLERANCE)
+        .of(3.14159 + 1.618 + 99 - 97.23);
+    assertThat(
+        loadStats1.loadMetricStatsMap().get("named2").numRequestsFinishedWithMetric()).isEqualTo(
+        1L);
+    assertThat(loadStats1.loadMetricStatsMap().get("named2").totalMetricValue()).isWithin(TOLERANCE)
+        .of(-2.718);
 
     UpstreamLocalityStats loadStats2 =
         findLocalityStats(stats1.upstreamLocalityStatsList(), LOCALITY2);
@@ -103,6 +122,12 @@ public class LoadStatsManager2Test {
     assertThat(loadStats2.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(loadStats2.totalErrorRequests()).isEqualTo(1L);
     assertThat(loadStats2.totalRequestsInProgress()).isEqualTo(9L - 1L);
+    assertThat(loadStats2.loadMetricStatsMap().containsKey("named3")).isTrue();
+    assertThat(
+        loadStats2.loadMetricStatsMap().get("named3").numRequestsFinishedWithMetric()).isEqualTo(
+        1L);
+    assertThat(loadStats2.loadMetricStatsMap().get("named3").totalMetricValue()).isWithin(TOLERANCE)
+        .of(0.0009);
 
     ClusterStats stats2 = findClusterStats(allStats, CLUSTER_NAME1, EDS_SERVICE_NAME2);
     assertThat(stats2.loadReportIntervalNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L + 10L));
@@ -121,6 +146,7 @@ public class LoadStatsManager2Test {
     assertThat(loadStats3.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(loadStats3.totalErrorRequests()).isEqualTo(0L);
     assertThat(loadStats3.totalRequestsInProgress()).isEqualTo(1L);
+    assertThat(loadStats3.loadMetricStatsMap()).isEmpty();
 
     fakeClock.forwardTime(3L, TimeUnit.SECONDS);
     List<ClusterStats> clusterStatsList = loadStatsManager.getClusterStatsReports(CLUSTER_NAME1);
@@ -135,11 +161,13 @@ public class LoadStatsManager2Test {
     assertThat(loadStats1.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(loadStats1.totalErrorRequests()).isEqualTo(0L);
     assertThat(loadStats1.totalRequestsInProgress()).isEqualTo(18L);  // still in-progress
+    assertThat(loadStats1.loadMetricStatsMap()).isEmpty();
     loadStats2 = findLocalityStats(stats1.upstreamLocalityStatsList(), LOCALITY2);
     assertThat(loadStats2.totalIssuedRequests()).isEqualTo(0L);
     assertThat(loadStats2.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(loadStats2.totalErrorRequests()).isEqualTo(0L);
     assertThat(loadStats2.totalRequestsInProgress()).isEqualTo(8L);  // still in-progress
+    assertThat(loadStats2.loadMetricStatsMap()).isEmpty();
 
     stats2 = findClusterStats(clusterStatsList, CLUSTER_NAME1, EDS_SERVICE_NAME2);
     assertThat(stats2.loadReportIntervalNano()).isEqualTo(TimeUnit.SECONDS.toNanos(3L));
@@ -194,9 +222,12 @@ public class LoadStatsManager2Test {
     ClusterLocalityStats ref2 = loadStatsManager.getClusterLocalityStats(
         CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
     ref1.recordCallStarted();
+    ref1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.618));
+    ref1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 3.14159));
     ref1.recordCallFinished(Status.OK);
     ref2.recordCallStarted();
     ref2.recordCallStarted();
+    ref2.recordBackendLoadMetricStats(ImmutableMap.of("named1", -1.0, "named2", 2.718));
     ref2.recordCallFinished(Status.UNAVAILABLE);
 
     ClusterStats stats = Iterables.getOnlyElement(
@@ -207,6 +238,18 @@ public class LoadStatsManager2Test {
     assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(1L);
     assertThat(localityStats.totalErrorRequests()).isEqualTo(1L);
     assertThat(localityStats.totalRequestsInProgress()).isEqualTo(1L + 2L - 1L - 1L);
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named1")).isTrue();
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named2")).isTrue();
+    assertThat(
+        localityStats.loadMetricStatsMap().get("named1").numRequestsFinishedWithMetric()).isEqualTo(
+        3L);
+    assertThat(localityStats.loadMetricStatsMap().get("named1").totalMetricValue()).isWithin(
+        TOLERANCE).of(1.618 + 3.14159 - 1);
+    assertThat(
+        localityStats.loadMetricStatsMap().get("named2").numRequestsFinishedWithMetric()).isEqualTo(
+        1L);
+    assertThat(localityStats.loadMetricStatsMap().get("named2").totalMetricValue()).isEqualTo(
+        2.718);
   }
 
   @Test
@@ -215,6 +258,8 @@ public class LoadStatsManager2Test {
         CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
     counter.recordCallStarted();
     counter.recordCallStarted();
+    counter.recordBackendLoadMetricStats(ImmutableMap.of("named1", 2.718));
+    counter.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.414));
 
     ClusterStats stats = Iterables.getOnlyElement(
         loadStatsManager.getClusterStatsReports(CLUSTER_NAME1));
@@ -224,6 +269,12 @@ public class LoadStatsManager2Test {
     assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats.totalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.totalRequestsInProgress()).isEqualTo(2L);
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named1")).isTrue();
+    assertThat(
+        localityStats.loadMetricStatsMap().get("named1").numRequestsFinishedWithMetric()).isEqualTo(
+        2L);
+    assertThat(localityStats.loadMetricStatsMap().get("named1").totalMetricValue()).isEqualTo(
+        2.718 + 1.414);
 
     // release the counter, but requests still in-flight
     counter.release();
@@ -234,6 +285,7 @@ public class LoadStatsManager2Test {
     assertThat(localityStats.totalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.totalRequestsInProgress())
         .isEqualTo(2L);  // retained by in-flight calls
+    assertThat(localityStats.loadMetricStatsMap().isEmpty()).isTrue();
 
     counter.recordCallFinished(Status.OK);
     counter.recordCallFinished(Status.UNAVAILABLE);
@@ -243,6 +295,7 @@ public class LoadStatsManager2Test {
     assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(1L);
     assertThat(localityStats.totalErrorRequests()).isEqualTo(1L);
     assertThat(localityStats.totalRequestsInProgress()).isEqualTo(0L);
+    assertThat(localityStats.loadMetricStatsMap().isEmpty()).isTrue();
 
     assertThat(loadStatsManager.getClusterStatsReports(CLUSTER_NAME1)).isEmpty();
   }

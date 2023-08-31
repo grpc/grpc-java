@@ -164,6 +164,42 @@ public class GrpcUtilTest {
   }
 
   @Test
+  public void urlAuthorityEscape_ipv6Address() {
+    assertEquals("[::1]", GrpcUtil.AuthorityEscaper.encodeAuthority("[::1]"));
+  }
+
+  @Test
+  public void urlAuthorityEscape_userInAuthority() {
+    assertEquals("user@host", GrpcUtil.AuthorityEscaper.encodeAuthority("user@host"));
+  }
+
+  @Test
+  public void urlAuthorityEscape_slashesAreEncoded() {
+    assertEquals(
+        "project%2F123%2Fnetwork%2Fabc%2Fservice",
+        GrpcUtil.AuthorityEscaper.encodeAuthority("project/123/network/abc/service"));
+  }
+
+  @Test
+  public void urlAuthorityEscape_allowedCharsAreNotEncoded() {
+    assertEquals(
+        "-._~!$&'()*+,;=@:[]", GrpcUtil.AuthorityEscaper.encodeAuthority("-._~!$&'()*+,;=@:[]"));
+  }
+
+  @Test
+  public void urlAuthorityEscape_allLettersAndNumbers() {
+    assertEquals(
+        "abcdefghijklmnopqrstuvwxyz0123456789",
+        GrpcUtil.AuthorityEscaper.encodeAuthority("abcdefghijklmnopqrstuvwxyz0123456789"));
+  }
+
+  @Test
+  public void urlAuthorityEscape_unicodeAreNotEncoded() {
+    assertEquals(
+        "ö®", GrpcUtil.AuthorityEscaper.encodeAuthority("ö®"));
+  }
+
+  @Test
   public void checkAuthority_failsOnNull() {
     thrown.expect(NullPointerException.class);
 
@@ -199,13 +235,6 @@ public class GrpcUtilTest {
     GrpcUtil.checkAuthority("[ : : 1]");
   }
 
-  @Test
-  public void checkAuthority_failsOnInvalidHost() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("No host in authority");
-
-    GrpcUtil.checkAuthority("bad_host");
-  }
 
   @Test
   public void checkAuthority_userInfoNotAllowed() {

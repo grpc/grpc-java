@@ -48,7 +48,7 @@ public class ForwardingServerCallTest {
           protected ServerCall<Integer, Integer> delegate() {
             return serverCall;
           }
-    };
+        };
   }
 
   @Test

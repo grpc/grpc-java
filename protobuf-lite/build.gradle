@@ -21,6 +21,12 @@ dependencies {
     signature libraries.signature.android
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.protobuf.lite')
+    }
+}
+
 tasks.named("compileTestJava").configure {
     options.compilerArgs += [
         "-Xlint:-cast"

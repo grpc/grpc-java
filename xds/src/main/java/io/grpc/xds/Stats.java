@@ -18,6 +18,8 @@ package io.grpc.xds;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /** Represents client load stats. */
@@ -101,10 +103,45 @@ final class Stats {
 
     abstract long totalRequestsInProgress();
 
+    abstract ImmutableMap<String, BackendLoadMetricStats> loadMetricStatsMap();
+
     static UpstreamLocalityStats create(Locality locality, long totalIssuedRequests,
-        long totalSuccessfulRequests, long totalErrorRequests, long totalRequestsInProgress) {
+        long totalSuccessfulRequests, long totalErrorRequests, long totalRequestsInProgress,
+        Map<String, BackendLoadMetricStats> loadMetricStatsMap) {
       return new AutoValue_Stats_UpstreamLocalityStats(locality, totalIssuedRequests,
-          totalSuccessfulRequests, totalErrorRequests, totalRequestsInProgress);
+          totalSuccessfulRequests, totalErrorRequests, totalRequestsInProgress,
+          ImmutableMap.copyOf(loadMetricStatsMap));
+    }
+  }
+
+  /**
+   * Load metric stats for multi-dimensional load balancing.
+   */
+  static final class BackendLoadMetricStats {
+
+    private long numRequestsFinishedWithMetric;
+    private double totalMetricValue;
+
+    BackendLoadMetricStats(long numRequestsFinishedWithMetric, double totalMetricValue) {
+      this.numRequestsFinishedWithMetric = numRequestsFinishedWithMetric;
+      this.totalMetricValue = totalMetricValue;
+    }
+
+    public long numRequestsFinishedWithMetric() {
+      return numRequestsFinishedWithMetric;
+    }
+
+    public double totalMetricValue() {
+      return totalMetricValue;
+    }
+
+    /**
+     * Adds the given {@code metricValue} and increments the number of requests finished counter for
+     * the existing {@link BackendLoadMetricStats}.
+     */
+    public void addMetricValueAndIncrementRequestsFinished(double metricValue) {
+      numRequestsFinishedWithMetric += 1;
+      totalMetricValue += metricValue;
     }
   }
 }

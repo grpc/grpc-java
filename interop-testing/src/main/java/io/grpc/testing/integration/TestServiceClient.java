@@ -97,6 +97,8 @@ public class TestServiceClient {
   private int soakMinTimeMsBetweenRpcs = 0;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
+  private int soakRequestSize = 271828;
+  private int soakResponseSize = 314159;
   private String additionalMetadata = "";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
@@ -175,6 +177,10 @@ public class TestServiceClient {
         soakMinTimeMsBetweenRpcs = Integer.parseInt(value);
       } else if ("soak_overall_timeout_seconds".equals(key)) {
         soakOverallTimeoutSeconds = Integer.parseInt(value);
+      } else if ("soak_request_size".equals(key)) {
+        soakRequestSize = Integer.parseInt(value);
+      } else if ("soak_response_size".equals(key)) {
+        soakResponseSize = Integer.parseInt(value);
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
       } else {
@@ -247,6 +253,12 @@ public class TestServiceClient {
           + "\n                              should stop and fail, if the desired number of "
           + "\n                              iterations have not yet completed. Default "
             + c.soakOverallTimeoutSeconds
+          + "\n --soak_request_size "
+          + "\n                              The request size in a soak RPC. Default "
+            + c.soakRequestSize
+          + "\n --soak_response_size "
+          + "\n                              The response size in a soak RPC. Default "
+            + c.soakResponseSize
           + "\n --additional_metadata "
           + "\n                              Additional metadata to send in each request, as a "
           + "\n                              semicolon-separated list of key:value pairs. Default "
@@ -481,7 +493,9 @@ public class TestServiceClient {
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds);
+            soakOverallTimeoutSeconds,
+            soakRequestSize,
+            soakResponseSize);
         break;
       }
 
@@ -493,7 +507,9 @@ public class TestServiceClient {
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds);
+            soakOverallTimeoutSeconds,
+            soakRequestSize,
+            soakResponseSize);
         break;
 
       }

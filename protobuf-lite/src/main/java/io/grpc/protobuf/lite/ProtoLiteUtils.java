@@ -69,7 +69,6 @@ public final class ProtoLiteUtils {
    *
    * @since 1.0.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1787")
   public static void setExtensionRegistry(ExtensionRegistryLite newRegistry) {
     globalRegistry = checkNotNull(newRegistry, "newRegistry");
   }

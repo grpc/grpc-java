@@ -58,7 +58,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
   static boolean enableWrr = getFlag("GRPC_EXPERIMENTAL_XDS_WRR_LB", true);
 
   @VisibleForTesting
-  static boolean enablePickFirst = getFlag("GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG", false);
+  static boolean enablePickFirst = getFlag("GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG", true);
 
   static final String TYPE_URL_CLUSTER_CONFIG =
       "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";

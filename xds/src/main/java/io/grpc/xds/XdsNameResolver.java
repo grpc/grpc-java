@@ -147,7 +147,11 @@ final class XdsNameResolver extends NameResolver {
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
-    serviceAuthority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
+
+    // The name might have multiple slashes so encode it before verifying.
+    String authority = GrpcUtil.AuthorityEscaper.encodeAuthority(checkNotNull(name, "name"));
+    serviceAuthority = GrpcUtil.checkAuthority(authority);
+
     this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
