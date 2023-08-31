@@ -362,7 +362,7 @@ public final class BlockingClientCall<ReqT, RespT> {
     executor.add(NoOpRunnable.INSTANCE);
   }
 
-  private final class QueuingListener extends StartableListener<RespT> {
+  private final class QueuingListener<ReqT, RespT> extends ClientCall.Listener<RespT> {
 
     private final ClientCall<ReqT, RespT> call;
     private boolean done = false;
@@ -389,8 +389,8 @@ public final class BlockingClientCall<ReqT, RespT> {
     }
 
     @Override
-    void onStart() {
-      call.request(1);
+    public void onReady() {
+      handleReady();
     }
   }
 

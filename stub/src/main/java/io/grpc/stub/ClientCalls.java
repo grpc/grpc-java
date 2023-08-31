@@ -277,17 +277,9 @@ public final class ClientCalls {
 
     BlockingClientCall<ReqT, RespT> blockingClientCall = new BlockingClientCall<>(call, executor);
 
-    CallToStreamObserverAdapter<ReqT> adapter = new CallToStreamObserverAdapter<>(call, true);
-    adapter.setOnReadyHandler(new Runnable() {
-      @Override
-      public void run() {
-        blockingClientCall.handleReady();
-      }
-    });
-
     // Get the call started
-    startCall( call, blockingClientCall.getListener());
-
+    call.start(blockingClientCall.getListener(), new Metadata());
+    call.request(1);
     return blockingClientCall;
   }
 
@@ -419,7 +411,7 @@ public final class ClientCalls {
     responseListener.onStart();
   }
 
-  abstract static class StartableListener<T> extends ClientCall.Listener<T> {
+  private abstract static class StartableListener<T> extends ClientCall.Listener<T> {
     abstract void onStart();
   }
 
