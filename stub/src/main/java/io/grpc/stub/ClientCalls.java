@@ -274,6 +274,7 @@ public final class ClientCalls {
     // Get the call started
     call.start(blockingClientCall.getListener(), new Metadata());
     call.request(1);
+
     return blockingClientCall;
   }
 

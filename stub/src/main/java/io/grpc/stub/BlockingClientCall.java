@@ -21,7 +21,6 @@ import com.google.common.base.Preconditions;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.stub.ClientCalls.StartableListener;
 import io.grpc.stub.ClientCalls.ThreadlessExecutor;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -43,7 +42,7 @@ public final class BlockingClientCall<ReqT, RespT> {
   private static final Logger logger = Logger.getLogger(BlockingClientCall.class.getName());
 
   private final BlockingQueue<RespT> buffer;
-  private final StartableListener<RespT> listener;
+  private final ClientCall.Listener<RespT> listener;
   private final ClientCall<ReqT, RespT> call;
 
   private final ThreadlessExecutor executor;
@@ -55,7 +54,7 @@ public final class BlockingClientCall<ReqT, RespT> {
     this.call = call;
     this.executor = executor;
     buffer = new ArrayBlockingQueue<>(1);
-    listener = new QueuingListener(buffer, call);
+    listener = new QueuingListener<>(buffer, call);
   }
 
   /**
@@ -342,7 +341,7 @@ public final class BlockingClientCall<ReqT, RespT> {
     }
   }
 
-  StartableListener<RespT> getListener() {
+  ClientCall.Listener<RespT> getListener() {
     return listener;
   }
 
