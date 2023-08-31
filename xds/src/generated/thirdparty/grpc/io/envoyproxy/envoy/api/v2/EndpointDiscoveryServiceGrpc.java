@@ -12,7 +12,7 @@ public final class EndpointDiscoveryServiceGrpc {
 
   private EndpointDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.api.v2.EndpointDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.api.v2.EndpointDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -275,7 +275,7 @@ public final class EndpointDiscoveryServiceGrpc {
      * to subscribe to updates for.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest,io.envoyproxy.envoy.api.v2.DiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>
         streamEndpoints() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamEndpointsMethod(), getCallOptions());
@@ -283,7 +283,7 @@ public final class EndpointDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
         deltaEndpoints() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDeltaEndpointsMethod(), getCallOptions());
@@ -442,9 +442,9 @@ public final class EndpointDiscoveryServiceGrpc {
   private static final class EndpointDiscoveryServiceMethodDescriptorSupplier
       extends EndpointDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    EndpointDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    EndpointDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

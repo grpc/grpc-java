@@ -12,7 +12,7 @@ public final class LoadBalancerGrpc {
 
   private LoadBalancerGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.lb.v1.LoadBalancer";
+  public static final java.lang.String SERVICE_NAME = "grpc.lb.v1.LoadBalancer";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.lb.v1.LoadBalanceRequest,
@@ -180,7 +180,7 @@ public final class LoadBalancerGrpc {
      * Bidirectional rpc to get a list of servers.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.lb.v1.LoadBalanceRequest,io.grpc.lb.v1.LoadBalanceResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.lb.v1.LoadBalanceRequest, io.grpc.lb.v1.LoadBalanceResponse>
         balanceLoad() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getBalanceLoadMethod(), getCallOptions());
@@ -294,9 +294,9 @@ public final class LoadBalancerGrpc {
   private static final class LoadBalancerMethodDescriptorSupplier
       extends LoadBalancerBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    LoadBalancerMethodDescriptorSupplier(String methodName) {
+    LoadBalancerMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

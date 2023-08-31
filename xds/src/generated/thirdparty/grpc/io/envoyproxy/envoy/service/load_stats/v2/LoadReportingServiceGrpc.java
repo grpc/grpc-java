@@ -12,7 +12,7 @@ public final class LoadReportingServiceGrpc {
 
   private LoadReportingServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.service.load_stats.v2.LoadReportingService";
+  public static final java.lang.String SERVICE_NAME = "envoy.service.load_stats.v2.LoadReportingService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest,
@@ -258,7 +258,7 @@ public final class LoadReportingServiceGrpc {
      *    assignment destined for each zone Envoys are located in. Goto 2.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest,io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest, io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse>
         streamLoadStats() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamLoadStatsMethod(), getCallOptions());
@@ -372,9 +372,9 @@ public final class LoadReportingServiceGrpc {
   private static final class LoadReportingServiceMethodDescriptorSupplier
       extends LoadReportingServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    LoadReportingServiceMethodDescriptorSupplier(String methodName) {
+    LoadReportingServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

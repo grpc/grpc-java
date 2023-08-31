@@ -22,7 +22,7 @@ public final class OpenRcaServiceGrpc {
 
   private OpenRcaServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "xds.service.orca.v3.OpenRcaService";
+  public static final java.lang.String SERVICE_NAME = "xds.service.orca.v3.OpenRcaService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<com.github.xds.service.orca.v3.OrcaLoadReportRequest,
@@ -221,9 +221,9 @@ public final class OpenRcaServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingClientCall<com.github.xds.service.orca.v3.OrcaLoadReportRequest,com.github.xds.data.orca.v3.OrcaLoadReport>
+    public io.grpc.stub.BlockingClientCall<?, com.github.xds.data.orca.v3.OrcaLoadReport>
         streamCoreMetrics(com.github.xds.service.orca.v3.OrcaLoadReportRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<com.github.xds.service.orca.v3.OrcaLoadReportRequest,com.github.xds.data.orca.v3.OrcaLoadReport> call =
+      io.grpc.stub.BlockingClientCall<com.github.xds.service.orca.v3.OrcaLoadReportRequest, com.github.xds.data.orca.v3.OrcaLoadReport> call =
           io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
               getChannel(), getStreamCoreMetricsMethod(), getCallOptions());
       call.write(request);
@@ -368,9 +368,9 @@ public final class OpenRcaServiceGrpc {
   private static final class OpenRcaServiceMethodDescriptorSupplier
       extends OpenRcaServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    OpenRcaServiceMethodDescriptorSupplier(String methodName) {
+    OpenRcaServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

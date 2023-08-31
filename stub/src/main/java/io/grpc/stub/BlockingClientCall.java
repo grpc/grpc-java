@@ -260,10 +260,10 @@ public final class BlockingClientCall<ReqT, RespT> {
     boolean origWriteClosed = writeClosed;
     writeClosed = true;
 
-    if (!origWriteClosed && getClosedStatus() == null) {
-      call.halfClose();
-    } else if (origWriteClosed) {
+    if (origWriteClosed) {
       throw new IllegalStateException("halfClose cannot be called after stream terminated");
+    } else if (getClosedStatus() == null) {
+      call.halfClose();
     }
 
     executor.add(NoOpRunnable.INSTANCE);

@@ -20,7 +20,7 @@ public final class AggregatedDiscoveryServiceGrpc {
 
   private AggregatedDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.service.discovery.v3.AggregatedDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.service.discovery.v3.AggregatedDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest,
@@ -266,7 +266,7 @@ public final class AggregatedDiscoveryServiceGrpc {
      * This is a gRPC-only API.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest,io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest, io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse>
         streamAggregatedResources() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamAggregatedResourcesMethod(), getCallOptions());
@@ -274,7 +274,7 @@ public final class AggregatedDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest,io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest, io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryResponse>
         deltaAggregatedResources() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDeltaAggregatedResourcesMethod(), getCallOptions());
@@ -415,9 +415,9 @@ public final class AggregatedDiscoveryServiceGrpc {
   private static final class AggregatedDiscoveryServiceMethodDescriptorSupplier
       extends AggregatedDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    AggregatedDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    AggregatedDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

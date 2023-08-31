@@ -12,7 +12,7 @@ public final class BenchmarkServiceGrpc {
 
   private BenchmarkServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.BenchmarkService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.BenchmarkService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
@@ -413,7 +413,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is on each response
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamingCallMethod(), getCallOptions());
@@ -425,7 +425,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is once the client does WritesDone
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingFromClient() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamingFromClientMethod(), getCallOptions());
@@ -437,9 +437,9 @@ public final class BenchmarkServiceGrpc {
      * The server repeatedly returns the client payload as-is
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse> call =
+      io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse> call =
           io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
               getChannel(), getStreamingFromServerMethod(), getCallOptions());
       call.write(request);
@@ -453,7 +453,7 @@ public final class BenchmarkServiceGrpc {
      * Both sides send the content of their own choice to the other
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest,io.grpc.benchmarks.proto.Messages.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingBothWays() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamingBothWaysMethod(), getCallOptions());
@@ -648,9 +648,9 @@ public final class BenchmarkServiceGrpc {
   private static final class BenchmarkServiceMethodDescriptorSupplier
       extends BenchmarkServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    BenchmarkServiceMethodDescriptorSupplier(String methodName) {
+    BenchmarkServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

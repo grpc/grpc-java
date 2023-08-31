@@ -12,7 +12,7 @@ public final class SecretDiscoveryServiceGrpc {
 
   private SecretDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.service.discovery.v2.SecretDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.service.discovery.v2.SecretDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
@@ -263,7 +263,7 @@ public final class SecretDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
         deltaSecrets() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDeltaSecretsMethod(), getCallOptions());
@@ -271,7 +271,7 @@ public final class SecretDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest,io.envoyproxy.envoy.api.v2.DiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>
         streamSecrets() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamSecretsMethod(), getCallOptions());
@@ -430,9 +430,9 @@ public final class SecretDiscoveryServiceGrpc {
   private static final class SecretDiscoveryServiceMethodDescriptorSupplier
       extends SecretDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    SecretDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    SecretDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

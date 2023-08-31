@@ -15,7 +15,7 @@ public final class TestServiceGrpc {
 
   private TestServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.compiler.TestService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.compiler.TestService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,
@@ -583,9 +583,9 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         streamingOutputCall(io.grpc.testing.compiler.Test.StreamingOutputCallRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse> call =
+      io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest, io.grpc.testing.compiler.Test.StreamingOutputCallResponse> call =
           io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
               getChannel(), getStreamingOutputCallMethod(), getCallOptions());
       call.write(request);
@@ -599,7 +599,7 @@ public final class TestServiceGrpc {
      * The server returns the aggregated size of client payload as the result.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest,io.grpc.testing.compiler.Test.StreamingInputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest, io.grpc.testing.compiler.Test.StreamingInputCallResponse>
         streamingInputCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getStreamingInputCallMethod(), getCallOptions());
@@ -612,7 +612,7 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full bidirectionality.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest, io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         fullBidiCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getFullBidiCallMethod(), getCallOptions());
@@ -626,7 +626,7 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest,io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest, io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         halfBidiCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getHalfBidiCallMethod(), getCallOptions());
@@ -638,7 +638,7 @@ public final class TestServiceGrpc {
      * method should have a '_' appended.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest,io.grpc.testing.compiler.Test.StreamingInputCallResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest, io.grpc.testing.compiler.Test.StreamingInputCallResponse>
         import_() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getImportMethod(), getCallOptions());

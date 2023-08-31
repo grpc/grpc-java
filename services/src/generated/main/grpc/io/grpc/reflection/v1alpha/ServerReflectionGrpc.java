@@ -12,7 +12,7 @@ public final class ServerReflectionGrpc {
 
   private ServerReflectionGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.reflection.v1alpha.ServerReflection";
+  public static final java.lang.String SERVICE_NAME = "grpc.reflection.v1alpha.ServerReflection";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.reflection.v1alpha.ServerReflectionRequest,
@@ -183,7 +183,7 @@ public final class ServerReflectionGrpc {
      * all related requests go to a single server.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.reflection.v1alpha.ServerReflectionRequest,io.grpc.reflection.v1alpha.ServerReflectionResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.reflection.v1alpha.ServerReflectionRequest, io.grpc.reflection.v1alpha.ServerReflectionResponse>
         serverReflectionInfo() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getServerReflectionInfoMethod(), getCallOptions());
@@ -297,9 +297,9 @@ public final class ServerReflectionGrpc {
   private static final class ServerReflectionMethodDescriptorSupplier
       extends ServerReflectionBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ServerReflectionMethodDescriptorSupplier(String methodName) {
+    ServerReflectionMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

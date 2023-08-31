@@ -16,7 +16,7 @@ public final class TestDeprecatedServiceGrpc {
 
   private TestDeprecatedServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.compiler.TestDeprecatedService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.compiler.TestDeprecatedService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,

@@ -24,7 +24,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
 
   private VirtualHostDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.api.v2.VirtualHostDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.api.v2.VirtualHostDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
@@ -231,7 +231,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
         deltaVirtualHosts() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDeltaVirtualHostsMethod(), getCallOptions());
@@ -369,9 +369,9 @@ public final class VirtualHostDiscoveryServiceGrpc {
   private static final class VirtualHostDiscoveryServiceMethodDescriptorSupplier
       extends VirtualHostDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    VirtualHostDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    VirtualHostDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

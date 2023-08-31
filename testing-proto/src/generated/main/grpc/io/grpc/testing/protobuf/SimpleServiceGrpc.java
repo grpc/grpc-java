@@ -15,7 +15,7 @@ public final class SimpleServiceGrpc {
 
   private SimpleServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.SimpleService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.SimpleService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
@@ -361,7 +361,7 @@ public final class SimpleServiceGrpc {
      * Simple client-to-server streaming RPC.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest,io.grpc.testing.protobuf.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>
         clientStreamingRpc() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getClientStreamingRpcMethod(), getCallOptions());
@@ -372,9 +372,9 @@ public final class SimpleServiceGrpc {
      * Simple server-to-client streaming RPC.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest,io.grpc.testing.protobuf.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.protobuf.SimpleResponse>
         serverStreamingRpc(io.grpc.testing.protobuf.SimpleRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest,io.grpc.testing.protobuf.SimpleResponse> call =
+      io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse> call =
           io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
               getChannel(), getServerStreamingRpcMethod(), getCallOptions());
       call.write(request);
@@ -387,7 +387,7 @@ public final class SimpleServiceGrpc {
      * Simple bidirectional streaming RPC.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest,io.grpc.testing.protobuf.SimpleResponse>
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>
         bidiStreamingRpc() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getBidiStreamingRpcMethod(), getCallOptions());
@@ -574,9 +574,9 @@ public final class SimpleServiceGrpc {
   private static final class SimpleServiceMethodDescriptorSupplier
       extends SimpleServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    SimpleServiceMethodDescriptorSupplier(String methodName) {
+    SimpleServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

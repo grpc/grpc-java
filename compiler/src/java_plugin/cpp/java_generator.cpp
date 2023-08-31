@@ -710,7 +710,7 @@ static void PrintStub(
         if (client_streaming && server_streaming) {
           p->Print(
               *vars,
-              "$BlockingClientCall$<$input_type$,$output_type$>\n"
+              "$BlockingClientCall$<$input_type$, $output_type$>\n"
                "    $lower_method_name$()");
         } else if (server_streaming) {
           // Server streaming
@@ -729,21 +729,21 @@ static void PrintStub(
         if (client_streaming) { // Both Bidi and Client Streaming
           p->Print(
               *vars,
-              "$BlockingClientCall$<$input_type$,$output_type$>\n"
+              "$BlockingClientCall$<$input_type$, $output_type$>\n"
                "    $lower_method_name$()");
         } else if (server_streaming) {
           // Server streaming
           p->Print(
               *vars,
-              "$BlockingClientCall$<$input_type$,$output_type$>\n"
+              "$BlockingClientCall$<?, $output_type$>\n"
               "    $lower_method_name$($input_type$ request) throws java.lang.InterruptedException");
        } else {
           // Simple RPC
           p->Print(
               *vars,
               "$output_type$ $lower_method_name$($input_type$ request)");
-        }
-        break;
+       }
+       break;
       case ASYNC_CALL:
         if (client_streaming) {
           // Bidirectional streaming or client streaming
@@ -789,16 +789,10 @@ static void PrintStub(
             "$method_method_name$(), responseObserver);\n");
       }
     } else if (!interface) {
-      switch (call_type) {
+        switch (call_type) {
         case BLOCKING_CALL:
           GRPC_CODEGEN_CHECK(!client_streaming)
               << "Blocking client and bidi streaming interface are not available";
-          if (client_streaming && server_streaming) {
-            p->Print(
-                *vars,
-                "return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(\n"
-                "    getChannel(), $method_method_name$(), getCallOptions());\n");
-          } else {
             if (server_streaming) {
               (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingServerStreamingCall";
               (*vars)["params"] = "request";
@@ -810,10 +804,9 @@ static void PrintStub(
                 *vars,
                 "return $calls_method$(\n"
                 "    getChannel(), $method_method_name$(), getCallOptions(), $params$);\n");
-          }
           break;
         case BLOCKING_V2_CALL:
-          if (client_streaming) {
+          if (client_streaming) { // used for both client and bidi
             p->Print(
                 *vars,
                 "return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(\n"
@@ -821,7 +814,7 @@ static void PrintStub(
           } else if (server_streaming) {
             p->Print(
                 *vars,
-                "$BlockingClientCall$<$input_type$,$output_type$> call =\n"
+                "$BlockingClientCall$<$input_type$, $output_type$> call =\n"
                 "    io.grpc.stub.ClientCalls.blockingBidiStreamingCall(\n"
                 "        getChannel(), $method_method_name$(), getCallOptions());\n"
                 "call.write(request);\n"
@@ -872,7 +865,7 @@ static void PrintStub(
               "return $calls_method$(\n"
               "    getChannel().newCall($method_method_name$(), getCallOptions()), request);\n");
           break;
-      }
+        }
     } else {
       GRPC_CODEGEN_FAIL << "Do not create Stub interfaces";
     }
@@ -1057,9 +1050,9 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
         "private static final class $proto_method_descriptor_supplier$\n"
         "    extends $proto_base_descriptor_supplier$\n"
         "    implements $ProtoMethodDescriptorSupplier$ {\n"
-        "  private final String methodName;\n"
+        "  private final $String$ methodName;\n"
         "\n"
-        "  $proto_method_descriptor_supplier$(String methodName) {\n"
+        "  $proto_method_descriptor_supplier$($String$ methodName) {\n"
         "    this.methodName = methodName;\n"
         "  }\n"
         "\n"
@@ -1217,7 +1210,7 @@ static void PrintService(const ServiceDescriptor* service,
 
   p->Print(
       *vars,
-      "public static final String SERVICE_NAME = "
+      "public static final $String$ SERVICE_NAME = "
       "\"$Package$$service_name$\";\n\n");
 
   PrintMethodFields(service, vars, p, flavor);

@@ -12,7 +12,7 @@ public final class HealthGrpc {
 
   private HealthGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.health.v1.Health";
+  public static final java.lang.String SERVICE_NAME = "grpc.health.v1.Health";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
@@ -281,9 +281,9 @@ public final class HealthGrpc {
      * clients should retry the call with appropriate exponential backoff.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.health.v1.HealthCheckRequest,io.grpc.health.v1.HealthCheckResponse>
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.health.v1.HealthCheckResponse>
         watch(io.grpc.health.v1.HealthCheckRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.health.v1.HealthCheckRequest,io.grpc.health.v1.HealthCheckResponse> call =
+      io.grpc.stub.BlockingClientCall<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse> call =
           io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
               getChannel(), getWatchMethod(), getCallOptions());
       call.write(request);
@@ -458,9 +458,9 @@ public final class HealthGrpc {
   private static final class HealthMethodDescriptorSupplier
       extends HealthBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    HealthMethodDescriptorSupplier(String methodName) {
+    HealthMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

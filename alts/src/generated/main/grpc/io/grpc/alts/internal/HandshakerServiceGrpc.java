@@ -12,7 +12,7 @@ public final class HandshakerServiceGrpc {
 
   private HandshakerServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.gcp.HandshakerService";
+  public static final java.lang.String SERVICE_NAME = "grpc.gcp.HandshakerService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.alts.internal.HandshakerReq,
@@ -195,7 +195,7 @@ public final class HandshakerServiceGrpc {
      * response before sending next request.
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.alts.internal.HandshakerReq,io.grpc.alts.internal.HandshakerResp>
+    public io.grpc.stub.BlockingClientCall<io.grpc.alts.internal.HandshakerReq, io.grpc.alts.internal.HandshakerResp>
         doHandshake() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getDoHandshakeMethod(), getCallOptions());
@@ -309,9 +309,9 @@ public final class HandshakerServiceGrpc {
   private static final class HandshakerServiceMethodDescriptorSupplier
       extends HandshakerServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    HandshakerServiceMethodDescriptorSupplier(String methodName) {
+    HandshakerServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 
