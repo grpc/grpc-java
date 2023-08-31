@@ -12,7 +12,7 @@ public final class MetricsServiceGrpc {
 
   private MetricsServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.MetricsService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.MetricsService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.EmptyMessage,
@@ -233,14 +233,10 @@ public final class MetricsServiceGrpc {
      * the service
      * </pre>
      */
-    public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Metrics.EmptyMessage,io.grpc.testing.integration.Metrics.GaugeResponse>
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.integration.Metrics.GaugeResponse>
         getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Metrics.EmptyMessage,io.grpc.testing.integration.Metrics.GaugeResponse> call =
-          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-              getChannel(), getGetAllGaugesMethod(), getCallOptions());
-      call.write(request);
-      call.halfClose();
-      return call;
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getGetAllGaugesMethod(), getCallOptions(), request);
     }
 
     /**

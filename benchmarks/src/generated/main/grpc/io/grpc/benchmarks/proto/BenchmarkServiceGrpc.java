@@ -427,7 +427,7 @@ public final class BenchmarkServiceGrpc {
      */
     public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingFromClient() {
-      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
           getChannel(), getStreamingFromClientMethod(), getCallOptions());
     }
 
@@ -439,12 +439,8 @@ public final class BenchmarkServiceGrpc {
      */
     public io.grpc.stub.BlockingClientCall<?, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse> call =
-          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-              getChannel(), getStreamingFromServerMethod(), getCallOptions());
-      call.write(request);
-      call.halfClose();
-      return call;
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getStreamingFromServerMethod(), getCallOptions(), request);
     }
 
     /**

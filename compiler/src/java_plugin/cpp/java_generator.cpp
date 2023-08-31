@@ -806,23 +806,23 @@ static void PrintStub(
                 "    getChannel(), $method_method_name$(), getCallOptions(), $params$);\n");
           break;
         case BLOCKING_V2_CALL:
-          if (client_streaming) { // used for both client and bidi
-            p->Print(
+          if (client_streaming) { // client and bidi streaming
+                if (server_streaming) {
+                    (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingBidiStreamingCall";
+                 } else {
+                   (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingClientStreamingCall";
+                 }
+           p->Print(
                 *vars,
-                "return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(\n"
+                "return $calls_method$(\n"
                 "    getChannel(), $method_method_name$(), getCallOptions());\n");
-          } else if (server_streaming) {
-            p->Print(
-                *vars,
-                "$BlockingClientCall$<$input_type$, $output_type$> call =\n"
-                "    io.grpc.stub.ClientCalls.blockingBidiStreamingCall(\n"
-                "        getChannel(), $method_method_name$(), getCallOptions());\n"
-                "call.write(request);\n"
-                "call.halfClose();\n"
-                "return call;\n");
-          } else {
-            (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingUnaryCall";
-            (*vars)["params"] = "request";
+          } else { // server streaming and unary
+               (*vars)["params"] = "request";
+               if (server_streaming) {
+                   (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall";
+                } else {
+                  (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingUnaryCall";
+                }
 
             p->Print(
                 *vars,

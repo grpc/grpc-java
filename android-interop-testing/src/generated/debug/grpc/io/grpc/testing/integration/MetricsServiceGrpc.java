@@ -235,12 +235,8 @@ public final class MetricsServiceGrpc {
      */
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.integration.Metrics.GaugeResponse>
         getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Metrics.EmptyMessage, io.grpc.testing.integration.Metrics.GaugeResponse> call =
-          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-              getChannel(), getGetAllGaugesMethod(), getCallOptions());
-      call.write(request);
-      call.halfClose();
-      return call;
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getGetAllGaugesMethod(), getCallOptions(), request);
     }
 
     /**

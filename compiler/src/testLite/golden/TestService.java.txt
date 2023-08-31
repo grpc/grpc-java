@@ -585,12 +585,8 @@ public final class TestServiceGrpc {
      */
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         streamingOutputCall(io.grpc.testing.compiler.Test.StreamingOutputCallRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest, io.grpc.testing.compiler.Test.StreamingOutputCallResponse> call =
-          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-              getChannel(), getStreamingOutputCallMethod(), getCallOptions());
-      call.write(request);
-      call.halfClose();
-      return call;
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getStreamingOutputCallMethod(), getCallOptions(), request);
     }
 
     /**
@@ -601,7 +597,7 @@ public final class TestServiceGrpc {
      */
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest, io.grpc.testing.compiler.Test.StreamingInputCallResponse>
         streamingInputCall() {
-      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
           getChannel(), getStreamingInputCallMethod(), getCallOptions());
     }
 

@@ -363,7 +363,7 @@ public final class SimpleServiceGrpc {
      */
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>
         clientStreamingRpc() {
-      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+      return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
           getChannel(), getClientStreamingRpcMethod(), getCallOptions());
     }
 
@@ -374,12 +374,8 @@ public final class SimpleServiceGrpc {
      */
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.protobuf.SimpleResponse>
         serverStreamingRpc(io.grpc.testing.protobuf.SimpleRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse> call =
-          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-              getChannel(), getServerStreamingRpcMethod(), getCallOptions());
-      call.write(request);
-      call.halfClose();
-      return call;
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getServerStreamingRpcMethod(), getCallOptions(), request);
     }
 
     /**

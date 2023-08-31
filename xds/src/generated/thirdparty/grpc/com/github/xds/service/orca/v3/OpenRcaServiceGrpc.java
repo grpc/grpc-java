@@ -223,12 +223,8 @@ public final class OpenRcaServiceGrpc {
      */
     public io.grpc.stub.BlockingClientCall<?, com.github.xds.data.orca.v3.OrcaLoadReport>
         streamCoreMetrics(com.github.xds.service.orca.v3.OrcaLoadReportRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<com.github.xds.service.orca.v3.OrcaLoadReportRequest, com.github.xds.data.orca.v3.OrcaLoadReport> call =
-          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-              getChannel(), getStreamCoreMetricsMethod(), getCallOptions());
-      call.write(request);
-      call.halfClose();
-      return call;
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getStreamCoreMetricsMethod(), getCallOptions(), request);
     }
   }
 

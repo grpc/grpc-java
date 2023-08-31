@@ -283,12 +283,8 @@ public final class HealthGrpc {
      */
     public io.grpc.stub.BlockingClientCall<?, io.grpc.health.v1.HealthCheckResponse>
         watch(io.grpc.health.v1.HealthCheckRequest request) throws java.lang.InterruptedException {
-      io.grpc.stub.BlockingClientCall<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse> call =
-          io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-              getChannel(), getWatchMethod(), getCallOptions());
-      call.write(request);
-      call.halfClose();
-      return call;
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getWatchMethod(), getCallOptions(), request);
     }
   }
 

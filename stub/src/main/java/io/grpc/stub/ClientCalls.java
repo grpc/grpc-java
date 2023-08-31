@@ -202,14 +202,14 @@ public final class ClientCalls {
 
   /**
    * Executes a server-streaming call returning a blocking {@link Iterator} over the
-   * response stream.  The {@code call} should not be already started.  After calling this method,
-   * {@code call} should no longer be used.
+   * response stream.
    *
    * <p>The returned iterator may throw {@link StatusRuntimeException} on error.
    *
+   * <p>Warning:  the iterator can result in leaks if not completely consumed.
+   *
    * @return an iterator over the response stream.
    */
-  // TODO(louiscryan): Not clear if we want to use this idiom for 'simple' stubs.
   public static <ReqT, RespT> Iterator<RespT> blockingServerStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req) {
     ThreadlessExecutor executor = new ThreadlessExecutor();
@@ -219,6 +219,46 @@ public final class ClientCalls {
     BlockingResponseStream<RespT> result = new BlockingResponseStream<>(call, executor);
     asyncUnaryRequestCall(call, req, result.listener());
     return result;
+  }
+
+  /**
+   * The better way to do server streaming calls.<br>
+   * Call {@link BlockingClientCall#read()} for
+   * retrieving values.  A {@code null} will be returned after the server has closed the stream.
+   * <br>
+   * The methods {@link BlockingClientCall#hasNext()} and {@link
+   * BlockingClientCall#cancel(String, Throwable)} can be used for more extensive control.
+   * <br>
+   * <p> Example usage:</p>
+   * <pre>
+   * {@code  while ((response = call.read()) != null) { ... } }
+   * </pre>
+   * or
+   * <pre>
+   * {@code
+   *   while (call.hasNext()) {
+   *     response = call.read();
+   *     ...
+   *   }
+   * }
+   * </pre>
+   *
+   * @return A {@link BlockingClientCall} that has had the request sent and halfClose called
+   * @throws InterruptedException if it receives an interrupt while sending the request
+   */
+  public static <ReqT, RespT> BlockingClientCall<?, RespT> blockingV2ServerStreamingCall(
+      Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req)
+      throws InterruptedException {
+    io.grpc.stub.BlockingClientCall<ReqT, RespT> call =
+        blockingBidiStreamingCall(channel, method, callOptions);
+    call.write(req);
+    call.halfClose();
+    return call;
+  }
+
+  public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingClientStreamingCall(
+      Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+    return blockingBidiStreamingCall(channel, method, callOptions);
   }
 
   /**
