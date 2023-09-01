@@ -54,7 +54,7 @@ public final class BlockingClientCall<ReqT, RespT> {
     this.call = call;
     this.executor = executor;
     buffer = new ArrayBlockingQueue<>(1);
-    listener = new QueuingListener<>(buffer, call);
+    listener = new QueuingListener(buffer);
   }
 
   /**
@@ -361,15 +361,11 @@ public final class BlockingClientCall<ReqT, RespT> {
     executor.add(NoOpRunnable.INSTANCE);
   }
 
-  private final class QueuingListener<ReqT, RespT> extends ClientCall.Listener<RespT> {
-
-    private final ClientCall<ReqT, RespT> call;
+  private final class QueuingListener extends ClientCall.Listener<RespT> {
     private boolean done = false;
     private final BlockingQueue<RespT> buffer;
 
-
-    QueuingListener(BlockingQueue<RespT> bufferArg, ClientCall<ReqT, RespT> callArg) {
-      this.call = callArg;
+    QueuingListener(BlockingQueue<RespT> bufferArg) {
       this.buffer = bufferArg;
     }
 
