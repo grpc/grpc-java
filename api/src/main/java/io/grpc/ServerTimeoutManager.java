@@ -23,28 +23,31 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-/** A global manager that schedules the timeout tasks for the gRPC server. */
+/**
+ * A global manager that schedules the timeout tasks for the gRPC server.
+ * Please make it a singleton and shut it down when the server is shutdown.
+ */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10361")
 public class ServerTimeoutManager {
-  private final int timeout;
-  private final TimeUnit unit;
-  private final boolean shouldInterrupt;
-
-  private final Consumer<String> logFunction;
-
-  private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-
   /**
-   * Creates an instance. Please make it a singleton and remember to shut it down.
+   * Creates a builder.
    *
    * @param timeout Configurable timeout threshold. A value less than 0 (e.g. 0 or -1) means not to
    *     check timeout.
    * @param unit The unit of the timeout.
-   * @param shouldInterrupt If {@code true}, interrupts the RPC worker thread.
-   * @param logFunction An optional function that can log (e.g. Logger::warn). Through this,
-   *     we avoid depending on a specific logger library.
    */
-  public ServerTimeoutManager(int timeout, TimeUnit unit,
+  public static Builder newBuilder(int timeout, TimeUnit unit) {
+    return new Builder(timeout, unit);
+  }
+
+  private final int timeout;
+  private final TimeUnit unit;
+  private final boolean shouldInterrupt;
+  private final Consumer<String> logFunction;
+
+  private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+
+  protected ServerTimeoutManager(int timeout, TimeUnit unit,
                               boolean shouldInterrupt, Consumer<String> logFunction) {
     this.timeout = timeout;
     this.unit = unit;
@@ -84,6 +87,7 @@ public class ServerTimeoutManager {
         if (c.cancellationCause() == null) {
           return;
         }
+        System.out.println("RPC cancelled");
         if (threadRef != null) {
           Thread thread = threadRef.getAndSet(null);
           if (thread != null) {
@@ -109,6 +113,45 @@ public class ServerTimeoutManager {
         Thread.interrupted();
       }
       return true;
+    }
+  }
+
+  /** Builder for constructing ServerTimeoutManager instances. */
+  public static class Builder {
+    private final int timeout;
+    private final TimeUnit unit;
+
+    private boolean shouldInterrupt;
+    private Consumer<String> logFunction;
+
+    private Builder(int timeout, TimeUnit unit) {
+      this.timeout = timeout;
+      this.unit = unit;
+    }
+
+    /**
+     * Sets shouldInterrupt. Defaults to {@code false}.
+     *
+     * @param shouldInterrupt If {@code true}, interrupts the RPC worker thread.
+     */
+    public Builder setShouldInterrupt(boolean shouldInterrupt) {
+      this.shouldInterrupt = shouldInterrupt;
+      return this;
+    }
+
+    /**
+     * Sets the logFunction. Through this, we avoid depending on a specific logger library.
+     *
+     * @param logFunction An optional function that can make server logs (e.g. Logger::warn).
+     */
+    public Builder setLogFunction(Consumer<String> logFunction) {
+      this.logFunction = logFunction;
+      return this;
+    }
+
+    /** Construct new ServerTimeoutManager. */
+    public ServerTimeoutManager build() {
+      return new ServerTimeoutManager(timeout, unit, shouldInterrupt, logFunction);
     }
   }
 }

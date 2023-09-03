@@ -49,7 +49,7 @@ public class ServerCallTimeoutInterceptorTest {
           .build();
 
   @Test
-  public void unaryServerCallWithinTimeout() {
+  public void unaryServerCall_setShouldInterrupt_withinTimeout_isNotInterrupted() {
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(
@@ -61,15 +61,19 @@ public class ServerCallTimeoutInterceptorTest {
                   responseObserver.onNext(req);
                   responseObserver.onCompleted();
                 } catch (InterruptedException e) {
-                  Status status = Status.ABORTED.withDescription(e.getMessage());
+                  Status status =
+                      Context.current().isCancelled() ? Status.CANCELLED : Status.INTERNAL;
                   responseObserver.onError(new StatusRuntimeException(status));
                 }
               }
             });
     StringBuffer logBuf = new StringBuffer();
 
-    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        100, TimeUnit.MILLISECONDS, true, logBuf::append);
+    ServerTimeoutManager serverTimeoutManager =
+        ServerTimeoutManager.newBuilder(100, TimeUnit.MILLISECONDS)
+        .setShouldInterrupt(true)
+        .setLogFunction(logBuf::append)
+        .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
     listener.onMessage(42);
@@ -83,7 +87,7 @@ public class ServerCallTimeoutInterceptorTest {
   }
 
   @Test
-  public void unaryServerCallExceedsTimeout() {
+  public void unaryServerCall_setShouldInterrupt_exceedingTimeout_isInterrupted() {
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(
@@ -95,15 +99,19 @@ public class ServerCallTimeoutInterceptorTest {
                   responseObserver.onNext(req);
                   responseObserver.onCompleted();
                 } catch (InterruptedException e) {
-                  Status status = Status.ABORTED.withDescription(e.getMessage());
+                  Status status =
+                      Context.current().isCancelled() ? Status.CANCELLED : Status.INTERNAL;
                   responseObserver.onError(new StatusRuntimeException(status));
                 }
               }
             });
     StringBuffer logBuf = new StringBuffer();
 
-    ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        1, TimeUnit.NANOSECONDS, true, logBuf::append);
+    ServerTimeoutManager serverTimeoutManager =
+        ServerTimeoutManager.newBuilder(1, TimeUnit.NANOSECONDS)
+        .setShouldInterrupt(true)
+        .setLogFunction(logBuf::append)
+        .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
     listener.onMessage(42);
@@ -112,8 +120,7 @@ public class ServerCallTimeoutInterceptorTest {
     serverTimeoutManager.shutdown();
 
     assertThat(serverCall.responses).isEmpty();
-    assertEquals(Status.Code.ABORTED, serverCall.status.getCode());
-    assertEquals("sleep interrupted", serverCall.status.getDescription());
+    assertEquals(Status.Code.CANCELLED, serverCall.status.getCode());
     assertThat(logBuf.toString()).startsWith("Interrupted RPC thread ");
   }
 
@@ -130,7 +137,8 @@ public class ServerCallTimeoutInterceptorTest {
                   responseObserver.onNext(req);
                   responseObserver.onCompleted();
                 } catch (InterruptedException e) {
-                  Status status = Status.ABORTED.withDescription(e.getMessage());
+                  Status status =
+                      Context.current().isCancelled() ? Status.CANCELLED : Status.INTERNAL;
                   responseObserver.onError(new StatusRuntimeException(status));
                 }
               }
