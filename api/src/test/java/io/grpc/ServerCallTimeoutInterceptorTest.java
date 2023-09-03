@@ -69,7 +69,7 @@ public class ServerCallTimeoutInterceptorTest {
     StringBuffer logBuf = new StringBuffer();
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        100, TimeUnit.MILLISECONDS, logBuf::append);
+        100, TimeUnit.MILLISECONDS, true, logBuf::append);
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
     listener.onMessage(42);
@@ -103,7 +103,7 @@ public class ServerCallTimeoutInterceptorTest {
     StringBuffer logBuf = new StringBuffer();
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        1, TimeUnit.NANOSECONDS, logBuf::append);
+        1, TimeUnit.NANOSECONDS, true, logBuf::append);
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
     listener.onMessage(42);
@@ -138,7 +138,7 @@ public class ServerCallTimeoutInterceptorTest {
     AtomicBoolean isTimeoutScheduled = new AtomicBoolean(false);
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        0, TimeUnit.MILLISECONDS, null) {
+        0, TimeUnit.MILLISECONDS, true, null) {
       @Override
       public boolean withTimeout(Runnable invocation) {
         boolean result = super.withTimeout(invocation);
@@ -171,7 +171,7 @@ public class ServerCallTimeoutInterceptorTest {
     AtomicBoolean isManagerCalled = new AtomicBoolean(false);
 
     ServerTimeoutManager serverTimeoutManager = new ServerTimeoutManager(
-        100, TimeUnit.MILLISECONDS, null) {
+        100, TimeUnit.MILLISECONDS, true, null) {
       @Override
       public boolean withTimeout(Runnable invocation) {
         isManagerCalled.set(true);

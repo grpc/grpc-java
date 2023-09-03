@@ -25,6 +25,7 @@ package io.grpc;
  * <p>Limitation: it only applies the timeout to unary calls
  * (streaming calls will still run without timeout).
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10361")
 public class ServerCallTimeoutInterceptor implements ServerInterceptor {
 
   private final ServerTimeoutManager serverTimeoutManager;

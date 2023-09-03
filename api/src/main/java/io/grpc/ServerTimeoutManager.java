@@ -20,29 +20,35 @@ import com.google.common.util.concurrent.MoreExecutors;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-/** A global instance that schedules the timeout tasks. */
+/** A global manager that schedules the timeout tasks for the gRPC server. */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10361")
 public class ServerTimeoutManager {
   private final int timeout;
   private final TimeUnit unit;
+  private final boolean shouldInterrupt;
 
   private final Consumer<String> logFunction;
 
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
   /**
-   * Creates a manager. Please make it a singleton and remember to shut it down.
+   * Creates an instance. Please make it a singleton and remember to shut it down.
    *
    * @param timeout Configurable timeout threshold. A value less than 0 (e.g. 0 or -1) means not to
    *     check timeout.
    * @param unit The unit of the timeout.
+   * @param shouldInterrupt If {@code true}, interrupts the RPC worker thread.
    * @param logFunction An optional function that can log (e.g. Logger::warn). Through this,
    *     we avoid depending on a specific logger library.
    */
-  public ServerTimeoutManager(int timeout, TimeUnit unit, Consumer<String> logFunction) {
+  public ServerTimeoutManager(int timeout, TimeUnit unit,
+                              boolean shouldInterrupt, Consumer<String> logFunction) {
     this.timeout = timeout;
     this.unit = unit;
+    this.shouldInterrupt = shouldInterrupt;
     this.logFunction = logFunction;
   }
 
@@ -58,6 +64,9 @@ public class ServerTimeoutManager {
    * Calls the RPC method invocation with a timeout scheduled.
    * Invalidates the timeout if the invocation completes in time.
    *
+   * <p>When the timeout is reached: It cancels the context around the RPC method invocation. And
+   * if shouldInterrupt is {@code true}, it also interrupts the current worker thread.
+   *
    * @param invocation The RPC method invocation that processes a request.
    * @return true if a timeout is scheduled
    */
@@ -69,26 +78,37 @@ public class ServerTimeoutManager {
 
     try (Context.CancellableContext context = Context.current()
         .withDeadline(Deadline.after(timeout, unit), scheduler)) {
-      Thread thread = Thread.currentThread();
+      AtomicReference<Thread> threadRef =
+          shouldInterrupt ? new AtomicReference<>(Thread.currentThread()) : null;
       Context.CancellationListener cancelled = c -> {
         if (c.cancellationCause() == null) {
           return;
         }
-        thread.interrupt();
-        if (logFunction != null) {
-          logFunction.accept(
-              "Interrupted RPC thread "
-                  + thread.getName()
-                  + " for timeout at "
-                  + timeout
-                  + " "
-                  + unit);
+        if (threadRef != null) {
+          Thread thread = threadRef.getAndSet(null);
+          if (thread != null) {
+            thread.interrupt();
+            if (logFunction != null) {
+              logFunction.accept(
+                  "Interrupted RPC thread "
+                      + thread.getName()
+                      + " for timeout at "
+                      + timeout
+                      + " "
+                      + unit);
+            }
+          }
         }
       };
       context.addListener(cancelled, MoreExecutors.directExecutor());
       context.run(invocation);
+      // Invocation is done, should ensure the interruption state is cleared so
+      // the worker thread can be safely reused for the next task. Doing this
+      // mainly for ForkJoinPool https://bugs.openjdk.org/browse/JDK-8223430.
+      if (threadRef != null && threadRef.get() == null) {
+        Thread.interrupted();
+      }
       return true;
     }
   }
-
 }
