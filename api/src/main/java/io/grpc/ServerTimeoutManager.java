@@ -105,13 +105,17 @@ public class ServerTimeoutManager {
         }
       };
       context.addListener(cancelled, MoreExecutors.directExecutor());
-      context.run(invocation);
-      // Invocation is done, should ensure the interruption state is cleared so
-      // the worker thread can be safely reused for the next task. Doing this
-      // mainly for ForkJoinPool https://bugs.openjdk.org/browse/JDK-8223430.
-      if (threadRef != null && threadRef.get() == null) {
-        Thread.interrupted();
+      try {
+        context.run(invocation);
+      } finally {
+        // Clear the interruption state if this context previously caused an interruption,
+        // allowing the worker thread to be safely reused for the next task in a ForkJoinPool.
+        // For more information, refer to https://bugs.openjdk.org/browse/JDK-8223430
+        if (threadRef != null && threadRef.get() == null) {
+          Thread.interrupted();
+        }
       }
+
       return true;
     }
   }
