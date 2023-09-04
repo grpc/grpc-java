@@ -34,7 +34,10 @@ android {
 
     defaultConfig {
         applicationId "io.grpc.android.integrationtest"
-        minSdkVersion 19
+        // Held back to 20 as Gradle fails to build at the 21 level. This is
+        // presumably a Gradle bug that can be revisited later.
+        // Maybe this issue: https://github.com/gradle/gradle/issues/20778
+        minSdkVersion 20
         targetSdkVersion 33
         versionCode 1
         versionName "1.0"
@@ -88,8 +91,7 @@ dependencies {
 
     compileOnly libraries.javax.annotation
 
-    androidTestImplementation project(':grpc-netty'),
-            'androidx.test.ext:junit:1.1.3',
+    androidTestImplementation 'androidx.test.ext:junit:1.1.3',
             'androidx.test:runner:1.4.0'
 }
 
@@ -112,13 +114,26 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
-            "-Xlint:-cast"
+            "-Xlint:-cast",
+            "-Xlint:-deprecation", // https://github.com/grpc/grpc-java/issues/10298
     ]
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
     appendToProperty(
             it.options.errorprone.excludedPaths,
             ".*/src/generated/.*",
             "|")
+}
+
+afterEvaluate {
+    // Hack to workaround "Task ':grpc-android-interop-testing:extractIncludeDebugProto' uses this
+    // output of task ':grpc-context:jar' without declaring an explicit or implicit dependency." The
+    // issue started when grpc-context became empty.
+    tasks.named('extractIncludeDebugProto').configure {
+        dependsOn project(':grpc-context').tasks.named('jar')
+    }
+    tasks.named('extractIncludeReleaseProto').configure {
+        dependsOn project(':grpc-context').tasks.named('jar')
+    }
 }
 
 configureProtoCompilation()

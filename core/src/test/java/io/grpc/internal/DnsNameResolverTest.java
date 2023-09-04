@@ -1293,8 +1293,7 @@ public class DnsNameResolverTest {
   }
 
   private void testValidUri(URI uri, String exportedAuthority, int expectedPort) {
-    DnsNameResolver resolver = (DnsNameResolver) ((RetryingNameResolver) provider.newNameResolver(
-        uri, args)).getRetriedNameResolver();
+    DnsNameResolver resolver = (DnsNameResolver) provider.newNameResolver(uri, args);
     assertNotNull(resolver);
     assertEquals(expectedPort, resolver.getPort());
     assertEquals(exportedAuthority, resolver.getServiceAuthority());

@@ -93,8 +93,8 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
               return null;
             }
           })
-      .when(serverListener)
-      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+        .when(serverListener)
+        .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   @Test

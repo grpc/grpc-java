@@ -33,9 +33,7 @@ dependencies {
             libraries.mockito.core,
             libraries.truth
 
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
     testRuntimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
     testRuntimeOnly (libraries.netty.transport.epoll) {
@@ -67,6 +65,9 @@ tasks.named("javadoc").configure {
 tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.alts')
+    }
 }
 
 // We want to use grpc-netty-shaded instead of grpc-netty. But we also want our

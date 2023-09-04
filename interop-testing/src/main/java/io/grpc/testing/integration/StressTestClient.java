@@ -32,24 +32,22 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.StatusException;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NegotiationType;
-import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TlsTesting;
-import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -296,19 +294,9 @@ public class StressTestClient {
     List<InetSocketAddress> addresses = new ArrayList<>();
 
     for (List<String> namePort : parseCommaSeparatedTuples(addressesStr)) {
-      InetAddress address;
       String name = namePort.get(0);
       int port = Integer.valueOf(namePort.get(1));
-      try {
-        address = InetAddress.getByName(name);
-        if (serverHostOverride != null) {
-          // Force the hostname to match the cert the server uses.
-          address = InetAddress.getByAddress(serverHostOverride, address.getAddress());
-        }
-      } catch (UnknownHostException ex) {
-        throw new RuntimeException(ex);
-      }
-      addresses.add(new InetSocketAddress(address, port));
+      addresses.add(new InetSocketAddress(name, port));
     }
 
     return addresses;
@@ -341,19 +329,28 @@ public class StressTestClient {
   }
 
   private ManagedChannel createChannel(InetSocketAddress address) {
-    SslContext sslContext = null;
-    if (useTestCa) {
-      try {
-        sslContext = GrpcSslContexts.forClient().trustManager(
-            TlsTesting.loadCert("ca.pem")).build();
-      } catch (Exception ex) {
-        throw new RuntimeException(ex);
+    ChannelCredentials channelCredentials;
+    if (useTls) {
+      if (useTestCa) {
+        try {
+          channelCredentials = TlsChannelCredentials.newBuilder()
+              .trustManager(TlsTesting.loadCert("ca.pem"))
+              .build();
+        } catch (Exception ex) {
+          throw new RuntimeException(ex);
+        }
+      } else {
+        channelCredentials = TlsChannelCredentials.create();
       }
+    } else {
+      channelCredentials = InsecureChannelCredentials.create();
     }
-    return NettyChannelBuilder.forAddress(address)
-        .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
-        .sslContext(sslContext)
-        .build();
+    ManagedChannelBuilder<?> builder = Grpc.newChannelBuilderForAddress(
+        address.getHostString(), address.getPort(), channelCredentials);
+    if (serverHostOverride != null) {
+      builder.overrideAuthority(serverHostOverride);
+    }
+    return builder.build();
   }
 
   private static String serverAddressesToString(List<InetSocketAddress> addresses) {

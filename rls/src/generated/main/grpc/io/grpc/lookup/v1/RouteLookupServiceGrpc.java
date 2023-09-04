@@ -12,7 +12,7 @@ public final class RouteLookupServiceGrpc {
 
   private RouteLookupServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.lookup.v1.RouteLookupService";
+  public static final java.lang.String SERVICE_NAME = "grpc.lookup.v1.RouteLookupService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.lookup.v1.RouteLookupRequest,
@@ -273,9 +273,9 @@ public final class RouteLookupServiceGrpc {
   private static final class RouteLookupServiceMethodDescriptorSupplier
       extends RouteLookupServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    RouteLookupServiceMethodDescriptorSupplier(String methodName) {
+    RouteLookupServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

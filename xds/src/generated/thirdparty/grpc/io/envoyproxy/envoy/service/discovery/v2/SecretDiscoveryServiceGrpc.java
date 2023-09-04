@@ -12,7 +12,7 @@ public final class SecretDiscoveryServiceGrpc {
 
   private SecretDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.service.discovery.v2.SecretDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.service.discovery.v2.SecretDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
@@ -375,9 +375,9 @@ public final class SecretDiscoveryServiceGrpc {
   private static final class SecretDiscoveryServiceMethodDescriptorSupplier
       extends SecretDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    SecretDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    SecretDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

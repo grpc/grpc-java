@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.api.expr.v1alpha1.Expr;
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
@@ -339,6 +340,22 @@ public class RbacFilterTest {
     assertThat(result.config).isEqualTo(RbacConfig.create(null));
   }
 
+  @Test
+  public void testOrderIndependenceOfPolicies() {
+    Message rawProto = buildComplexRbac(ImmutableList.of(1, 2, 3, 4, 5, 6), true);
+    ConfigOrError<RbacConfig> ascFirst = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+
+    rawProto = buildComplexRbac(ImmutableList.of(1, 2, 3, 4, 5, 6), false);
+    ConfigOrError<RbacConfig> ascLast = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+
+    assertThat(ascFirst.config).isEqualTo(ascLast.config);
+
+    rawProto = buildComplexRbac(ImmutableList.of(6, 5, 4, 3, 2, 1), true);
+    ConfigOrError<RbacConfig> decFirst = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+
+    assertThat(ascFirst.config).isEqualTo(decFirst.config);
+  }
+
   private static Metadata metadata(String key, String value) {
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
@@ -369,11 +386,61 @@ public class RbacFilterTest {
   private io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC buildRbac(
           List<Permission> permissionList, List<Principal> principalList) {
     return io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
-            .setRules(RBAC.newBuilder().setAction(Action.DENY)
-                    .putPolicies("policy-name", Policy.newBuilder()
-                            .addAllPermissions(permissionList)
-                            .addAllPrincipals(principalList).build()).build()).build();
+            .setRules(buildRbacRule("policy-name", Action.DENY,
+                permissionList, principalList)).build();
+  }
 
+  private static RBAC buildRbacRule(String policyName, Action action,
+      List<Permission> permissionList, List<Principal> principalList) {
+    return RBAC.newBuilder().setAction(action)
+        .putPolicies(policyName, Policy.newBuilder()
+            .addAllPermissions(permissionList)
+            .addAllPrincipals(principalList).build())
+        .build();
+  }
+
+  private io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC buildComplexRbac(
+      List<Integer> ids, boolean listsFirst) {
+    Policy policy1 = createSimplePolicyUsingLists(0);
+
+    RBAC.Builder ruleBuilder = RBAC.newBuilder().setAction(Action.DENY);
+
+    if (listsFirst) {
+      ruleBuilder.putPolicies("list-policy", policy1);
+    }
+
+    String base = "filterConfig\\u003dRbacConfig{authConfig\\u003dAuthConfig{policies\\u003d[Poli"
+        + "cyMatcher{name\\u003dpsm-interop-authz-policy-20230514-0917-er2uh_td_rbac_rule_";
+
+    for (Integer id : ids) {
+      ruleBuilder.putPolicies(base + id, createSimplePolicyUsingLists(id));
+    }
+
+    if (!listsFirst) {
+      ruleBuilder.putPolicies("list-policy", policy1);
+    }
+
+    return io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
+        .setRules(ruleBuilder.build()).build();
+  }
+
+  private static Policy createSimplePolicyUsingLists(int id) {
+    CidrRange cidrRange = CidrRange.newBuilder().setAddressPrefix("10.10." + id + ".0")
+        .setPrefixLen(UInt32Value.of(24)).build();
+    List<Permission> permissionList = Arrays.asList(
+        Permission.newBuilder().setAndRules(Permission.Set.newBuilder()
+            .addRules(Permission.newBuilder().setDestinationIp(cidrRange).build())
+            .addRules(Permission.newBuilder().setDestinationPort(9090).build()).build()
+        ).build());
+    List<Principal> principalList = Arrays.asList(
+        Principal.newBuilder().setAndIds(Principal.Set.newBuilder()
+            .addIds(Principal.newBuilder().setDirectRemoteIp(cidrRange).build())
+            .addIds(Principal.newBuilder().setRemoteIp(cidrRange).build())
+            .build()).build());
+
+    return Policy.newBuilder()
+        .addAllPermissions(permissionList)
+        .addAllPrincipals(principalList).build();
   }
 
   private ConfigOrError<RbacConfig> parseOverride(List<Permission> permissionList,

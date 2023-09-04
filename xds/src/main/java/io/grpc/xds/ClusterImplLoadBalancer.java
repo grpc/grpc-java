@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -33,6 +32,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.ObjectPool;
+import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.util.GracefulSwitchLoadBalancer;
@@ -45,8 +45,9 @@ import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
+import io.grpc.xds.orca.OrcaPerRequestUtil;
+import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -69,10 +70,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   static boolean enableCircuitBreaking =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
-  @VisibleForTesting
-  static boolean enableSecurity =
-      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"))
-          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
+
   private static final Attributes.Key<ClusterLocalityStats> ATTR_CLUSTER_LOCALITY_STATS =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityStats");
 
@@ -173,7 +171,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final class ClusterImplLbHelper extends ForwardingLoadBalancerHelper {
     private final AtomicLong inFlights;
     private ConnectivityState currentState = ConnectivityState.IDLE;
-    private SubchannelPicker currentPicker = BUFFER_PICKER;
+    private SubchannelPicker currentPicker = LoadBalancer.EMPTY_PICKER;
     private List<DropOverload> dropPolicies = Collections.emptyList();
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable
@@ -240,7 +238,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       for (EquivalentAddressGroup eag : addresses) {
         Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
             InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
-        if (enableSecurity && sslContextProviderSupplier != null) {
+        if (sslContextProviderSupplier != null) {
           attrBuilder.set(
               InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
               sslContextProviderSupplier);
@@ -332,7 +330,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           if (stats != null) {
             ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
                 stats, inFlights, result.getStreamTracerFactory());
-            return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
+            ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
+                .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
+            return PickResult.withSubchannel(result.getSubchannel(), orcaTracerFactory);
           }
         }
         return result;
@@ -387,6 +387,24 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           delegate().streamClosed(status);
         }
       };
+    }
+  }
+
+  private static final class OrcaPerRpcListener implements OrcaPerRequestReportListener {
+
+    private final ClusterLocalityStats stats;
+
+    private OrcaPerRpcListener(ClusterLocalityStats stats) {
+      this.stats = checkNotNull(stats, "stats");
+    }
+
+    /**
+     * Copies {@link MetricReport#getNamedMetrics()} to {@link ClusterLocalityStats} such that it is
+     * included in the snapshot for the LRS report sent to the LRS server.
+     */
+    @Override
+    public void onLoadReport(MetricReport report) {
+      stats.recordBackendLoadMetricStats(report.getNamedMetrics());
     }
   }
 }

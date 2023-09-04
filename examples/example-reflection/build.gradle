@@ -1,7 +1,6 @@
 plugins {
     id 'application' // Provide convenience executables for trying out the examples.
-    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.17'
+    id 'com.google.protobuf' version '0.9.4'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'java'
@@ -14,11 +13,13 @@ repositories {
     mavenLocal()
 }
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
 
-def grpcVersion = '1.56.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.22.3'
+def grpcVersion = '1.59.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protocVersion = '3.24.0'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
@@ -48,7 +49,9 @@ task ReflectionServer(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-applicationDistribution.into('bin') {
-    from(ReflectionServer)
-    fileMode = 0755
+application {
+    applicationDistribution.into('bin') {
+        from(ReflectionServer)
+        fileMode = 0755
+    }
 }

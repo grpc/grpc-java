@@ -8,6 +8,12 @@ plugins {
 
 description = "gRPC: Testing Protos"
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.testing.protobuf')
+    }
+}
+
 dependencies {
     api project(':grpc-protobuf'),
             project(':grpc-stub')

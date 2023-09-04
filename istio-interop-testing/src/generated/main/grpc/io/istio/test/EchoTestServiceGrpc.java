@@ -12,7 +12,7 @@ public final class EchoTestServiceGrpc {
 
   private EchoTestServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "proto.EchoTestService";
+  public static final java.lang.String SERVICE_NAME = "proto.EchoTestService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.istio.test.Echo.EchoRequest,
@@ -334,9 +334,9 @@ public final class EchoTestServiceGrpc {
   private static final class EchoTestServiceMethodDescriptorSupplier
       extends EchoTestServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    EchoTestServiceMethodDescriptorSupplier(String methodName) {
+    EchoTestServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

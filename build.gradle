@@ -20,7 +20,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.56.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.59.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -37,6 +37,9 @@ subprojects {
             "-Xlint:-try"
         ]
         it.options.encoding = "UTF-8"
+        // Avoid Gradle OOM.
+        // https://docs.gradle.org/current/userguide/performance.html#run_the_compiler_as_a_separate_process
+        it.options.fork = true
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
             it.options.compilerArgs += ["-Werror"]
         }
@@ -68,11 +71,6 @@ subprojects {
                 }
                 generateProtoTasks {
                     all().each { task ->
-                        // Recompile protos when build.gradle has been changed, because
-                        // it's possible the version of protoc has been changed.
-                        task.inputs.file("${rootProject.projectDir}/build.gradle")
-                          .withPathSensitivity(PathSensitivity.RELATIVE)
-                          .withPropertyName('root build.gradle')
                         if (isAndroid) {
                             task.builtins {
                                 java { option 'lite' }
@@ -164,7 +162,8 @@ subprojects {
 
     checkstyle {
         configDirectory = file("$rootDir/buildscripts")
-        toolVersion = libs.checkstyle.get().version
+        toolVersion = JavaVersion.current().isJava11Compatible() ? libs.checkstyle.get().version : libs.checkstylejava8.get().version 
+
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
@@ -183,9 +182,6 @@ subprojects {
     }
 
     plugins.withId("java") {
-        sourceCompatibility = 1.8
-        targetCompatibility = 1.8
-
         dependencies {
             testImplementation libraries.junit,
                     libraries.mockito.core,
@@ -241,12 +237,25 @@ subprojects {
             }
         }
 
+        tasks.withType(JavaCompile).configureEach {
+            if (JavaVersion.current().isJava9Compatible()) {
+                options.release = 8
+            } else {
+                sourceCompatibility = JavaVersion.VERSION_1_8
+                targetCompatibility = JavaVersion.VERSION_1_8
+            }
+        }
         tasks.named("compileJava").configure {
             // This project targets Java 7 (no time.Duration class)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
+
+            // TODO(https://github.com/grpc/grpc-java/issues/10372): remove when fixed.
+            if (JavaVersion.current().isJava11Compatible()) {
+              options.errorprone.check("StringCaseLocaleUsage", CheckSeverity.OFF)
+            }
         }
         tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
@@ -273,7 +282,7 @@ subprojects {
                 requireUpperBoundDepsMatch(configurations.runtimeClasspath, project)
             }
         }
-        tasks.named('compileJava').configure {
+        tasks.named('assemble').configure {
             dependsOn checkUpperBoundDeps
         }
     }
@@ -281,10 +290,6 @@ subprojects {
     plugins.withId("me.champeau.jmh") {
         // invoke jmh on a single benchmark class like so:
         //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
-	tasks.named("compileJmhJava").configure {
-	    sourceCompatibility = 1.8
-	    targetCompatibility = 1.8
-	}
         tasks.named("jmh").configure {
             warmupIterations = 10
             iterations = 10
@@ -412,31 +417,25 @@ subprojects {
         def baselineGrpcVersion = '1.6.1'
 
         // Get the baseline version's jar for this subproject
-        File baselineArtifact = null
-        // Use a detached configuration, otherwise the current version's jar will take precedence
-        // over the baseline jar.
+        configurations {
+            baselineArtifact
+        }
         // A necessary hack, the intuitive thing does NOT work:
         // https://discuss.gradle.org/t/is-the-default-configuration-leaking-into-independent-configurations/2088/6
         def oldGroup = project.group
         try {
             project.group = 'virtual_group_for_japicmp'
-            String depModule = "io.grpc:${project.name}:${baselineGrpcVersion}@jar"
-            String depJar = "${project.name}-${baselineGrpcVersion}.jar"
-            Configuration configuration = configurations.detachedConfiguration(
-                    dependencies.create(depModule)
-                    )
-            baselineArtifact = files(configuration.files).filter {
-                it.name.equals(depJar)
-            }.singleFile
+            dependencies {
+                baselineArtifact "io.grpc:${project.name}:${baselineGrpcVersion}@jar"
+            }
         } finally {
             project.group = oldGroup
         }
 
         // Add a japicmp task that compares the current .jar with baseline .jar
         tasks.register("japicmp", me.champeau.gradle.japicmp.JapicmpTask) {
-            dependsOn jar
-            oldClasspath = files(baselineArtifact)
-            newClasspath = files(jar.archiveFile)
+            oldClasspath.from configurations.baselineArtifact
+            newClasspath.from tasks.named("jar")
             onlyBinaryIncompatibleModified = false
             // Be quiet about things that did not change
             onlyModified = true
@@ -449,12 +448,10 @@ subprojects {
 
             // Also break on source incompatible changes, not just binary.
             // Eg adding abstract method to public class.
-            // TODO(zpencer): enable after japicmp-gradle-plugin/pull/14
-            // breakOnSourceIncompatibility = true
+            failOnSourceIncompatibility = true
 
             // Ignore any classes or methods marked @ExperimentalApi
-            // TODO(zpencer): enable after japicmp-gradle-plugin/pull/15
-            // annotationExcludes = ['@io.grpc.ExperimentalApi']
+            annotationExcludes = ['@io.grpc.ExperimentalApi']
         }
     }
 }
@@ -506,6 +503,11 @@ def requireUpperBoundDepsMatch(Configuration conf, Project project) {
                 + "to diagnose")
         }
         result.selected.dependencies.each {
+            // Category.CATEGORY_ATTRIBUTE is the inappropriate Attribute because it is "desugared".
+            // https://github.com/gradle/gradle/issues/8854
+            Attribute<String> category = Attribute.of('org.gradle.category', String)
+            if (it.resolvedVariant.attributes.getAttribute(category) != Category.LIBRARY)
+                return
             queue.add(new DepAndParents(
                 dep: it, parents: depAndParents.parents + [artifact + ":" + version]))
         }
@@ -570,7 +572,7 @@ tasks.register('checkForUpdates') {
             if (oldResolved != newResolved) {
                 def oldId = oldResolved.id.componentIdentifier
                 def newId = newResolved.id.componentIdentifier
-                println("${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
+                println("libs.${name} = ${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
             }
         }
     }

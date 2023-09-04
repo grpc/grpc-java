@@ -32,6 +32,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Creates a channel with the target's address and port number.
    *
+   * <p>Note that there is an open JDK bug on {@link java.net.URI} class parsing an ipv6 scope ID:
+   * bugs.openjdk.org/browse/JDK-8199396. This method is exposed to this bug. If you experience an
+   * issue, a work-around is to convert the scope ID to its numeric form (e.g. by using
+   * Inet6Address.getScopeId()) before calling this method.
+   *
    * @see #forTarget(String)
    * @since 1.0.0
    */
@@ -70,6 +75,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:443"}</li>
    * </ul>
    *
+   * <p>Note that there is an open JDK bug on {@link java.net.URI} class parsing an ipv6 scope ID:
+   * bugs.openjdk.org/browse/JDK-8199396. This method is exposed to this bug. If you experience an
+   * issue, a work-around is to convert the scope ID to its numeric form (e.g. by using
+   * Inet6Address.getScopeId()) before calling this method.
+   * 
    * @since 1.0.0
    */
   public static ManagedChannelBuilder<?> forTarget(String target) {
@@ -193,14 +203,16 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Makes the client use TLS.
+   * Makes the client use TLS. Note: this is enabled by default.
+   *
+   * <p>It is recommended to use the {@link ChannelCredentials} API
+   * instead of this method.
    *
    * @return this
    * @throws IllegalStateException if ChannelCredentials were provided when constructing the builder
    * @throws UnsupportedOperationException if transport security is not supported.
    * @since 1.9.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3713")
   public T useTransportSecurity() {
     throw new UnsupportedOperationException();
   }
@@ -350,6 +362,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * small of a value as necessary.
    *
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.7.0
    */
   public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
@@ -364,6 +378,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This value should be at least multiple times the RTT to allow for lost packets.
    *
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.7.0
    */
   public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
@@ -381,6 +397,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * @throws UnsupportedOperationException if unsupported
    * @see #keepAliveTime(long, TimeUnit)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.7.0
    */
   public T keepAliveWithoutCalls(boolean enable) {
@@ -569,10 +587,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *   return o;
    * }}</pre>
    *
+   * @return this
    * @throws IllegalArgumentException When the given serviceConfig is invalid or the current version
    *         of grpc library can not parse it gracefully. The state of the builder is unchanged if
    *         an exception is thrown.
-   * @return this
    * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")

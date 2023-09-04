@@ -1,7 +1,7 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    id 'com.google.protobuf' version '0.9.1'
+    id 'com.google.protobuf' version '0.9.4'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
@@ -13,16 +13,18 @@ repositories {
     mavenLocal()
 }
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
 
 // IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
 // are looking at a tagged version of the example and not "master"!
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.56.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.22.3'
+def grpcVersion = '1.59.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.24.0'
 def protocVersion = protobufVersion
 
 dependencies {
@@ -76,9 +78,11 @@ def createStartScripts(String mainClassName) {
         outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
         classpath = startScripts.classpath
     }
-    applicationDistribution.into('bin') {
-        from(newTask)
-        fileMode = 0755
+    application {
+        applicationDistribution.into('bin') {
+            from(newTask)
+            fileMode = 0755
+        }
     }
 }
 
@@ -108,6 +112,8 @@ createStartScripts('io.grpc.examples.multiplex.MultiplexingServer')
 createStartScripts('io.grpc.examples.multiplex.SharingClient')
 createStartScripts('io.grpc.examples.nameresolve.NameResolveClient')
 createStartScripts('io.grpc.examples.nameresolve.NameResolveServer')
+createStartScripts('io.grpc.examples.preserialized.PreSerializedClient')
+createStartScripts('io.grpc.examples.preserialized.PreSerializedServer')
 createStartScripts('io.grpc.examples.retrying.RetryingHelloWorldClient')
 createStartScripts('io.grpc.examples.retrying.RetryingHelloWorldServer')
 createStartScripts('io.grpc.examples.routeguide.RouteGuideClient')

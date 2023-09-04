@@ -8,14 +8,14 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.56.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.59.0-SNAPSHOT)",
     comments = "Source: grpc/testing/compiler/test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class TestServiceGrpc {
 
   private TestServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.compiler.TestService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.compiler.TestService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,
@@ -811,9 +811,9 @@ public final class TestServiceGrpc {
   private static final class TestServiceMethodDescriptorSupplier
       extends TestServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    TestServiceMethodDescriptorSupplier(String methodName) {
+    TestServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

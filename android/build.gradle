@@ -15,7 +15,7 @@ android {
     compileSdkVersion 33
     defaultConfig {
         consumerProguardFiles "proguard-rules.txt"
-        minSdkVersion 19
+        minSdkVersion 21
         targetSdkVersion 33
         versionCode 1
         versionName "1.0"
@@ -41,10 +41,7 @@ dependencies {
     testImplementation project('::grpc-okhttp')
     testImplementation libraries.androidx.test.core
     testImplementation libraries.junit
-    testImplementation (libraries.robolectric) {
-        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
-        exclude group: 'com.google.auto.service', module: 'auto-service'
-    }
+    testImplementation libraries.robolectric
     testImplementation libraries.truth
 }
 

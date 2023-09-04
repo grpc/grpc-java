@@ -12,7 +12,7 @@ public final class WorkerServiceGrpc {
 
   private WorkerServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.WorkerService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.WorkerService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ServerArgs,
@@ -504,9 +504,9 @@ public final class WorkerServiceGrpc {
   private static final class WorkerServiceMethodDescriptorSupplier
       extends WorkerServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    WorkerServiceMethodDescriptorSupplier(String methodName) {
+    WorkerServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

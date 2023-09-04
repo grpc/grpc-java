@@ -124,8 +124,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
               return null;
             }
           })
-      .when(listener)
-      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+        .when(listener)
+        .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   @Override

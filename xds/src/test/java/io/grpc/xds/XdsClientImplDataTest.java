@@ -28,6 +28,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
+import com.google.protobuf.FloatValue;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
@@ -171,7 +172,6 @@ public class XdsClientImplDataTest {
   @Before
   public void setUp() {
     originalEnableRouteLookup = XdsResourceType.enableRouteLookup;
-    assertThat(originalEnableRouteLookup).isFalse();
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     assertThat(originalEnableLeastRequest).isFalse();
     originalEnableWrr = XdsResourceType.enableWrr;
@@ -2003,6 +2003,8 @@ public class XdsClientImplDataTest {
                                 .setBlackoutPeriod(Duration.newBuilder().setSeconds(17).build())
                                 .setEnableOobLoadReport(
                                     BoolValue.newBuilder().setValue(true).build())
+                                .setErrorUtilizationPenalty(
+                                    FloatValue.newBuilder().setValue(1.75F).build())
                                 .build()))
                         .build())
                     .build())
@@ -2046,6 +2048,7 @@ public class XdsClientImplDataTest {
     assertThat(result.oobReportingPeriodNanos).isEqualTo(10_000_000_000L);
     assertThat(result.weightUpdatePeriodNanos).isEqualTo(1_000_000_000L);
     assertThat(result.weightExpirationPeriodNanos).isEqualTo(180_000_000_000L);
+    assertThat(result.errorUtilizationPenalty).isEqualTo(1.75F);
   }
 
   @Test

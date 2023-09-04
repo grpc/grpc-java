@@ -24,6 +24,9 @@ sourceSets {
             srcDir 'third_party/istio/src/main/proto'
         }
     }
+    main {
+        output.classesDirs.from(sourceSets.thirdparty.output.classesDirs)
+    }
     test {
         java {
             srcDir "${projectDir}/third_party/zero-allocation-hashing/test/java"
@@ -42,7 +45,7 @@ dependencies {
     thirdpartyImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.opencensus.proto
-    implementation sourceSets.thirdparty.output
+    compileOnly sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-services'),
@@ -68,9 +71,7 @@ dependencies {
             classifier = "linux-x86_64"
         }
     }
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
 
     shadow configurations.implementation.getDependencies().minus([nettyDependency])
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
@@ -139,7 +140,13 @@ tasks.named("compileJava").configure {
 
 tasks.named("jar").configure {
     archiveClassifier = 'original'
-    from sourceSets.thirdparty.output
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.xds')
+    }
+}
+
+tasks.named("sourcesJar").configure {
+    from sourceSets.thirdparty.allSource
 }
 
 tasks.named("javadoc").configure {
@@ -155,6 +162,7 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/xds/FilterChainMatchingProtocolNegotiators.java'
     exclude 'io/grpc/xds/TlsContextManager.java'
     exclude 'io/grpc/xds/XdsAttributes.java'
+    exclude 'io/grpc/xds/XdsCredentialsProvider.java'
     exclude 'io/grpc/xds/XdsInitializationException.java'
     exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'
@@ -238,10 +246,6 @@ publishing {
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')
                 project.configurations.pomDeps.allDependencies.each { dep ->
-                    if (dep.group == null && dep.name == 'unspecified') {
-                        // Ignore the thirdparty self-dependency
-                        return;
-                    }
                     def dependencyNode = dependenciesNode.appendNode('dependency')
                     dependencyNode.appendNode('groupId', dep.group)
                     dependencyNode.appendNode('artifactId', dep.name)

@@ -52,7 +52,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
-import io.grpc.xds.WeightedRoundRobinLoadBalancer.EdfScheduler;
+import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WrrSubchannel;
@@ -175,7 +175,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             }
             });
     wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker(),
-        new FakeRandom());
+        new FakeRandom(0));
   }
 
   @Test
@@ -205,15 +205,22 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(weightedPicker.getList().size()).isEqualTo(1);
     weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     assertThat(weightedPicker.getList().size()).isEqualTo(2);
+    String weightedPickerStr = weightedPicker.toString();
+    assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
+    assertThat(weightedPickerStr).contains("errorUtilizationPenalty=1.0");
+    assertThat(weightedPickerStr).contains("list=");
+
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
-            .getSubchannel()).isEqualTo(weightedSubchannel1);
+        .getSubchannel()).isEqualTo(weightedSubchannel1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
@@ -251,10 +258,12 @@ public class WeightedRoundRobinLoadBalancerTest {
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.9, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(pickResult.getSubchannel()).isEqualTo(weightedSubchannel1);
@@ -307,9 +316,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
-    weightedSubchannel1.onLoadReport(r1);
-    weightedSubchannel2.onLoadReport(r2);
-    weightedSubchannel3.onLoadReport(r3);
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r1);
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r2);
+    weightedSubchannel3.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        r3);
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
@@ -318,39 +330,141 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 10000.0 - subchannel1PickRatio))
-        .isAtMost(0.001);
+        .isLessThan(0.0002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 10000.0 - subchannel2PickRatio ))
-        .isAtMost(0.001);
+        .isLessThan(0.0002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 10000.0 - subchannel3PickRatio ))
-        .isAtMost(0.001);
+        .isLessThan(0.0002);
   }
 
   @Test
-  public void pickByWeight_LargeWeight() {
+  public void pickByWeight_largeWeight() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-        0.1, 0.1, 999, new HashMap<>(), new HashMap<>());
+        0.1, 0, 0.1, 999, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.9, 0.1, 2, new HashMap<>(), new HashMap<>());
+        0.9, 0, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0.1, 100, new HashMap<>(), new HashMap<>());
-    double totalWeight = 999 / 0.1 + 2 / 0.9 + 100 / 0.86;
+        0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double meanWeight = (999 / 0.1 + 2 / 0.9 + 100 / 0.86) / 3;
+    double cappedMin = meanWeight * 0.1; // min capped at minRatio * meanWeight
+    double totalWeight = 999 / 0.1 + cappedMin + cappedMin;
+    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, cappedMin / totalWeight,
+            cappedMin / totalWeight);
+  }
 
-    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, 2 / 0.9 / totalWeight,
-            100 / 0.86 / totalWeight);
+  @Test
+  public void pickByWeight_largeWeight_useApplicationUtilization() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.44, 0.1, 0.1, 999, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.12, 0.9, 0.1, 2, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.33, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double meanWeight = (999 / 0.1 + 2 / 0.9 + 100 / 0.86) / 3;
+    double cappedMin = meanWeight * 0.1;
+    double totalWeight = 999 / 0.1 + cappedMin + cappedMin; // min capped at minRatio * meanWeight
+    pickByWeight(report1, report2, report3, 999 / 0.1 / totalWeight, cappedMin / totalWeight,
+        cappedMin / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_largeWeight_withEps_defaultErrorUtilizationPenalty() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.1, 0, 0.1, 999, 13, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.9, 0, 0.1, 2, 1.8, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0, 0.1, 100, 3, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double weight1 = 999 / (0.1 + 13 / 999F * weightedConfig.errorUtilizationPenalty); // ~5609.899
+    double weight2 = 2 / (0.9 + 1.8 / 2F * weightedConfig.errorUtilizationPenalty); // ~0.317
+    double weight3 = 100 / (0.86 + 3 / 100F * weightedConfig.errorUtilizationPenalty); // ~96.154
+    double meanWeight = (weight1 + weight2 + weight3) / 3;
+    double cappedMin = meanWeight * 0.1; // min capped at minRatio * meanWeight
+    double totalWeight = weight1 + cappedMin + cappedMin;
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, cappedMin / totalWeight,
+        cappedMin / totalWeight);
   }
 
   @Test
   public void pickByWeight_normalWeight() {
     MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
-            0.12, 0.1, 22, new HashMap<>(), new HashMap<>());
+        0.12, 0, 0.1, 22, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
-        0.28, 0.1, 40, new HashMap<>(), new HashMap<>());
+        0.28, 0, 0.1, 40, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
-        0.86, 0.1, 100, new HashMap<>(), new HashMap<>());
+        0.86, 0, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
     double totalWeight = 22 / 0.12 + 40 / 0.28 + 100 / 0.86;
     pickByWeight(report1, report2, report3, 22 / 0.12 / totalWeight,
             40 / 0.28 / totalWeight, 100 / 0.86 / totalWeight
     );
+  }
+
+  @Test
+  public void pickByWeight_normalWeight_useApplicationUtilization() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.72, 0.12, 0.1, 22, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.98, 0.28, 0.1, 40, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.99, 0.86, 0.1, 100, 0, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double totalWeight = 22 / 0.12 + 40 / 0.28 + 100 / 0.86;
+    pickByWeight(report1, report2, report3, 22 / 0.12 / totalWeight,
+        40 / 0.28 / totalWeight, 100 / 0.86 / totalWeight
+    );
+  }
+
+  @Test
+  public void pickByWeight_normalWeight_withEps_defaultErrorUtilizationPenalty() {
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.12, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.28, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double weight1 = 22 / (0.12 + 19.7 / 22F * weightedConfig.errorUtilizationPenalty);
+    double weight2 = 40 / (0.28 + 0.998 / 40F * weightedConfig.errorUtilizationPenalty);
+    double weight3 = 100 / (0.86 + 3.14159 / 100F * weightedConfig.errorUtilizationPenalty);
+    double totalWeight = weight1 + weight2 + weight3;
+
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
+        weight3 / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_normalWeight_withEps_customErrorUtilizationPenalty() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
+        .setErrorUtilizationPenalty(1.75F).build();
+
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0.12, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0.28, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0.86, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double weight1 = 22 / (0.12 + 19.7 / 22F * weightedConfig.errorUtilizationPenalty);
+    double weight2 = 40 / (0.28 + 0.998 / 40F * weightedConfig.errorUtilizationPenalty);
+    double weight3 = 100 / (0.86 + 3.14159 / 100F * weightedConfig.errorUtilizationPenalty);
+    double totalWeight = weight1 + weight2 + weight3;
+
+    pickByWeight(report1, report2, report3, weight1 / totalWeight, weight2 / totalWeight,
+        weight3 / totalWeight);
+  }
+
+  @Test
+  public void pickByWeight_avgWeight_zeroCpuUtilization_withEps_customErrorUtilizationPenalty() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
+        .setErrorUtilizationPenalty(1.75F).build();
+
+    MetricReport report1 = InternalCallMetricRecorder.createMetricReport(
+        0, 0, 0.1, 22, 19.7, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report2 = InternalCallMetricRecorder.createMetricReport(
+        0, 0, 0.1, 40, 0.998, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    MetricReport report3 = InternalCallMetricRecorder.createMetricReport(
+        0, 0, 0.1, 100, 3.14159, new HashMap<>(), new HashMap<>(), new HashMap<>());
+    double avgSubchannelPickRatio = 1.0 / 3;
+
+    pickByWeight(report1, report2, report3, avgSubchannelPickRatio, avgSubchannelPickRatio,
+        avgSubchannelPickRatio);
   }
 
   @Test
@@ -395,10 +509,12 @@ public class WeightedRoundRobinLoadBalancerTest {
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -407,8 +523,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(2);
     // within blackout period, fallback to simple round robin
-    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5)).isAtMost(0.001);
-    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5)).isAtMost(0.001);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5)).isLessThan(0.002);
+    assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5)).isLessThan(0.002);
 
     assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
     pickCount = new HashMap<>();
@@ -419,9 +535,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(pickCount.size()).isEqualTo(2);
     // after blackout period
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
   }
 
   @Test
@@ -453,10 +569,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(weightedPicker.getList().size()).isEqualTo(2);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-        0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-        0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
         .getSubchannel()).isEqualTo(weightedSubchannel1);
@@ -468,14 +586,17 @@ public class WeightedRoundRobinLoadBalancerTest {
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-        0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-        0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
     assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
     assertThat(weightedPicker.pickSubchannel(mockArgs)
         .getSubchannel()).isEqualTo(weightedSubchannel2);
+
   }
 
   @Test
@@ -500,10 +621,12 @@ public class WeightedRoundRobinLoadBalancerTest {
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -512,9 +635,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(2);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 2.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 1.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
 
     // weight expired, fallback to simple round robin
     assertThat(fakeClock.forwardTime(300, TimeUnit.SECONDS)).isEqualTo(1);
@@ -525,9 +648,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(2);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 0.5))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 0.5))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
   }
 
   @Test
@@ -562,8 +685,10 @@ public class WeightedRoundRobinLoadBalancerTest {
           pickCount.getOrDefault(pickResult.getSubchannel(), 0) + 1);
       assertThat(pickResult.getStreamTracerFactory()).isNotNull();
       WrrSubchannel subchannel = (WrrSubchannel)pickResult.getSubchannel();
-      subchannel.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-          0.1, 0.1, qpsByChannel.get(subchannel), new HashMap<>(), new HashMap<>()));
+      subchannel.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+          InternalCallMetricRecorder.createMetricReport(
+              0.1, 0, 0.1, qpsByChannel.get(subchannel), 0,
+              new HashMap<>(), new HashMap<>(), new HashMap<>()));
     }
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 1.0 / 2))
         .isAtMost(0.1);
@@ -575,9 +700,11 @@ public class WeightedRoundRobinLoadBalancerTest {
       pickCount.put(pickResult.getSubchannel(),
           pickCount.getOrDefault(pickResult.getSubchannel(), 0) + 1);
       assertThat(pickResult.getStreamTracerFactory()).isNotNull();
-      WrrSubchannel subchannel = (WrrSubchannel)pickResult.getSubchannel();
-      subchannel.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-          0.1, 0.1, qpsByChannel.get(subchannel), new HashMap<>(), new HashMap<>()));
+      WrrSubchannel subchannel = (WrrSubchannel) pickResult.getSubchannel();
+      subchannel.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+          InternalCallMetricRecorder.createMetricReport(
+              0.1, 0, 0.1, qpsByChannel.get(subchannel), 0,
+              new HashMap<>(), new HashMap<>(), new HashMap<>()));
       fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
     }
     assertThat(pickCount.size()).isEqualTo(2);
@@ -613,10 +740,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
     WrrSubchannel weightedSubchannel3 = (WrrSubchannel) weightedPicker.getList().get(2);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     Map<Subchannel, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
@@ -625,12 +754,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedSubchannel1) / 1000.0 - 4.0 / 9))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2) / 1000.0 - 2.0 / 9))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     // subchannel3's weight is average of subchannel1 and subchannel2
     assertThat(Math.abs(pickCount.get(weightedSubchannel3) / 1000.0 - 3.0 / 9))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
   }
 
   @Test
@@ -655,10 +784,12 @@ public class WeightedRoundRobinLoadBalancerTest {
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
     WrrSubchannel weightedSubchannel1 = (WrrSubchannel) weightedPicker.getList().get(0);
     WrrSubchannel weightedSubchannel2 = (WrrSubchannel) weightedPicker.getList().get(1);
-    weightedSubchannel1.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.1, 0.1, 1, new HashMap<>(), new HashMap<>()));
-    weightedSubchannel2.onLoadReport(InternalCallMetricRecorder.createMetricReport(
-            0.2, 0.1, 1, new HashMap<>(), new HashMap<>()));
+    weightedSubchannel1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
+    weightedSubchannel2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(
+            0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     CyclicBarrier barrier = new CyclicBarrier(2);
     Map<Subchannel, AtomicInteger> pickCount = new ConcurrentHashMap<>();
     pickCount.put(weightedSubchannel1, new AtomicInteger(0));
@@ -689,40 +820,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(pickCount.size()).isEqualTo(2);
     // after blackout period
     assertThat(Math.abs(pickCount.get(weightedSubchannel1).get() / 2000.0 - 2.0 / 3))
-            .isAtMost(0.001);
+            .isLessThan(0.002);
     assertThat(Math.abs(pickCount.get(weightedSubchannel2).get() / 2000.0 - 1.0 / 3))
-            .isAtMost(0.001);
-  }
-
-  @Test
-  public void edfScheduler() {
-    Random random = new Random();
-    double totalWeight = 0;
-    int capacity = random.nextInt(10) + 1;
-    double[] weights = new double[capacity];
-    EdfScheduler scheduler = new EdfScheduler(capacity, random);
-    for (int i = 0; i < capacity; i++) {
-      weights[i] = random.nextDouble();
-      scheduler.add(i, weights[i]);
-      totalWeight += weights[i];
-    }
-    Map<Integer, Integer> pickCount = new HashMap<>();
-    for (int i = 0; i < 1000; i++) {
-      int result = scheduler.pick();
-      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
-    }
-    for (int i = 0; i < capacity; i++) {
-      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight) )
-          .isAtMost(0.01);
-    }
-  }
-
-  @Test
-  public void edsScheduler_sameWeight() {
-    EdfScheduler scheduler = new EdfScheduler(2, new FakeRandom());
-    scheduler.add(0, 0.5);
-    scheduler.add(1, 0.5);
-    assertThat(scheduler.pick()).isEqualTo(0);
+            .isLessThan(0.002);
   }
 
   @Test(expected = NullPointerException.class)
@@ -733,6 +833,250 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test(expected = NullPointerException.class)
   public void wrrConfig_BooleanValueNonNull() {
     WeightedRoundRobinLoadBalancerConfig.newBuilder().setEnableOobLoadReport((Boolean) null);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void emptyWeights() {
+    float[] weights = {};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    sss.pick();
+  }
+
+  @Test
+  public void testPicksEqualsWeights() {
+    float[] weights = {1.0f, 2.0f, 3.0f};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    int[] expectedPicks = new int[] {1, 2, 3};
+    int[] picks = new int[3];
+    for (int i = 0; i < 6; i++) {
+      picks[sss.pick()] += 1;
+    }
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testContainsZeroWeightUseMean() {
+    float[] weights = {3.0f, 0.0f, 1.0f};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    int[] expectedPicks = new int[] {3, 2, 1};
+    int[] picks = new int[3];
+    for (int i = 0; i < 6; i++) {
+      picks[sss.pick()] += 1;
+    }
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testContainsNegativeWeightUseMean() {
+    float[] weights = {3.0f, -1.0f, 1.0f};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    int[] expectedPicks = new int[] {3, 2, 1};
+    int[] picks = new int[3];
+    for (int i = 0; i < 6; i++) {
+      picks[sss.pick()] += 1;
+    }
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testAllSameWeights() {
+    float[] weights = {1.0f, 1.0f, 1.0f};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    int[] expectedPicks = new int[] {2, 2, 2};
+    int[] picks = new int[3];
+    for (int i = 0; i < 6; i++) {
+      picks[sss.pick()] += 1;
+    }
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testAllZeroWeightsIsRoundRobin() {
+    float[] weights = {0.0f, 0.0f, 0.0f};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    int[] expectedPicks = new int[] {2, 2, 2};
+    int[] picks = new int[3];
+    for (int i = 0; i < 6; i++) {
+      picks[sss.pick()] += 1;
+    }
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testAllInvalidWeightsIsRoundRobin() {
+    float[] weights = {-3.1f, -0.0f, 0.0f};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    int[] expectedPicks = new int[] {2, 2, 2};
+    int[] picks = new int[3];
+    for (int i = 0; i < 6; i++) {
+      picks[sss.pick()] += 1;
+    }
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testTwoWeights() {
+    float[] weights = {1.43f, 2.119f};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    double totalWeight = 1.43 + 2.119;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 2; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
+          .isLessThan(0.002);
+    }
+  }
+
+  @Test
+  public void testManyWeights() {
+    float[] weights = {1.3f, 2.5f, 3.23f, 4.11f, 7.001f};
+    Random random = new Random(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(random.nextInt()));
+    double totalWeight = 1.3 + 2.5 + 3.23 + 4.11 + 7.001;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 5; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
+          .isLessThan(0.002);
+    }
+  }
+
+  @Test
+  public void testMaxClamped() {
+    float[] weights = {81f, 1f, 1f, 1f, 1f, 1f, 1f, 1f,
+        1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f};
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(0));
+    int[] picks = new int[weights.length];
+
+    // max gets clamped to mean*maxRatio = 50 for this set of weights. So if we
+    // pick 50 + 19 times we should get all possible picks.
+    for (int i = 1; i < 70; i++) {
+      picks[sss.pick()] += 1;
+    }
+    int[] expectedPicks = new int[] {50, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testMinClamped() {
+    float[] weights = {100f, 1e-10f};
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(0));
+    int[] picks = new int[weights.length];
+
+    // We pick 201 elements and ensure that the second channel (with epsilon
+    // weight) also gets picked. The math is: mean value of elements is ~50, so
+    // the first channel keeps its weight of 100, but the second element's weight
+    // gets capped from below to 50*0.1 = 5.
+    for (int i = 0; i < 105; i++) {
+      picks[sss.pick()] += 1;
+    }
+    int[] expectedPicks = new int[] {100, 5};
+    assertThat(picks).isEqualTo(expectedPicks);
+  }
+
+  @Test
+  public void testDeterministicPicks() {
+    float[] weights = {2.0f, 3.0f, 6.0f};
+    AtomicInteger sequence = new AtomicInteger(0);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, sequence);
+    assertThat(sequence.get()).isEqualTo(0);
+    assertThat(sss.pick()).isEqualTo(1);
+    assertThat(sequence.get()).isEqualTo(2);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sequence.get()).isEqualTo(3);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sequence.get()).isEqualTo(6);
+    assertThat(sss.pick()).isEqualTo(0);
+    assertThat(sequence.get()).isEqualTo(7);
+    assertThat(sss.pick()).isEqualTo(1);
+    assertThat(sequence.get()).isEqualTo(8);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sequence.get()).isEqualTo(9);
+  }
+
+  @Test
+  public void testImmediateWraparound() {
+    float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(-1));
+    double totalWeight = 15;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 5; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
+          .isLessThan(0.002);
+    }
+  }
+  
+  @Test
+  public void testWraparound() {
+    float[] weights = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+    VerifyingScheduler sss = new VerifyingScheduler(weights, new AtomicInteger(-500));
+    double totalWeight = 15;
+    Map<Integer, Integer> pickCount = new HashMap<>();
+    for (int i = 0; i < 1000; i++) {
+      int result = sss.pick();
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
+    }
+    for (int i = 0; i < 5; i++) {
+      assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
+          .isLessThan(0.002);
+    }
+  }
+
+  @Test
+  public void testDeterministicWraparound() {
+    float[] weights = {2.0f, 3.0f, 6.0f};
+    AtomicInteger sequence = new AtomicInteger(-1);
+    VerifyingScheduler sss = new VerifyingScheduler(weights, sequence);
+    assertThat(sequence.get()).isEqualTo(-1);
+    assertThat(sss.pick()).isEqualTo(1);
+    assertThat(sequence.get()).isEqualTo(2);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sequence.get()).isEqualTo(3);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sequence.get()).isEqualTo(6);
+    assertThat(sss.pick()).isEqualTo(0);
+    assertThat(sequence.get()).isEqualTo(7);
+    assertThat(sss.pick()).isEqualTo(1);
+    assertThat(sequence.get()).isEqualTo(8);
+    assertThat(sss.pick()).isEqualTo(2);
+    assertThat(sequence.get()).isEqualTo(9);
+  }
+
+  private static final class VerifyingScheduler {
+    private final StaticStrideScheduler delegate;
+    private final int max;
+    private final AtomicInteger sequence;
+
+    public VerifyingScheduler(float[] weights, AtomicInteger sequence) {
+      this.delegate = new StaticStrideScheduler(weights, sequence);
+      this.max = weights.length;
+      this.sequence = sequence;
+    }
+
+    public int pick() {
+      int start = sequence.get();
+      int i = delegate.pick();
+      assertThat(sequence.get() - start).isAtMost(max);
+      return i;
+    }
   }
 
   private static class FakeSocketAddress extends SocketAddress {
@@ -748,10 +1092,16 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   private static class FakeRandom extends Random {
+    private int nextInt;
+
+    public FakeRandom(int nextInt) {
+      this.nextInt = nextInt;
+    }
+
     @Override
-    public double nextDouble() {
+    public int nextInt() {
       // return constant value to disable init deadline randomization in the scheduler
-      return 0.322023;
+      return nextInt;
     }
   }
 }

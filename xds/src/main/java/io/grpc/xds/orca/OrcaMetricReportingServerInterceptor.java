@@ -115,10 +115,13 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   private static OrcaLoadReport.Builder fromInternalReport(MetricReport internalReport) {
     return OrcaLoadReport.newBuilder()
         .setCpuUtilization(internalReport.getCpuUtilization())
+        .setApplicationUtilization(internalReport.getApplicationUtilization())
         .setMemUtilization(internalReport.getMemoryUtilization())
         .setRpsFractional(internalReport.getQps())
+        .setEps(internalReport.getEps())
         .putAllUtilization(internalReport.getUtilizationMetrics())
-        .putAllRequestCost(internalReport.getRequestCostMetrics());
+        .putAllRequestCost(internalReport.getRequestCostMetrics())
+        .putAllNamedMetrics(internalReport.getNamedMetrics());
   }
 
   /**
@@ -131,11 +134,16 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
       MetricReport callMetricRecorderReport
   ) {
     metricRecorderReportBuilder.putAllUtilization(callMetricRecorderReport.getUtilizationMetrics())
-        .putAllRequestCost(callMetricRecorderReport.getRequestCostMetrics());
+        .putAllRequestCost(callMetricRecorderReport.getRequestCostMetrics())
+        .putAllNamedMetrics(callMetricRecorderReport.getNamedMetrics());
     // Overwrite only if the values from the given MetricReport for CallMetricRecorder are set
     double cpu = callMetricRecorderReport.getCpuUtilization();
     if (isReportValueSet(cpu)) {
       metricRecorderReportBuilder.setCpuUtilization(cpu);
+    }
+    double applicationUtilization = callMetricRecorderReport.getApplicationUtilization();
+    if (isReportValueSet(applicationUtilization)) {
+      metricRecorderReportBuilder.setApplicationUtilization(applicationUtilization);
     }
     double mem = callMetricRecorderReport.getMemoryUtilization();
     if (isReportValueSet(mem)) {
@@ -144,6 +152,10 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
     double rps = callMetricRecorderReport.getQps();
     if (isReportValueSet(rps)) {
       metricRecorderReportBuilder.setRpsFractional(rps);
+    }
+    double eps = callMetricRecorderReport.getEps();
+    if (isReportValueSet(eps)) {
+      metricRecorderReportBuilder.setEps(eps);
     }
   }
 

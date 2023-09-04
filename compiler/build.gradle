@@ -65,6 +65,7 @@ model {
             target("loongarch_64")
         }
         clang(Clang) {
+            target("aarch_64") {}
         }
     }
 
@@ -136,8 +137,10 @@ model {
     }
 }
 
-configurations {
-    testLiteImplementation
+sourceSets {
+    testLite {
+        proto { setSrcDirs(['src/test/proto']) }
+    }
 }
 
 dependencies {
@@ -147,12 +150,6 @@ dependencies {
     testLiteImplementation project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             libraries.javax.annotation
-}
-
-sourceSets {
-    testLite {
-        proto { setSrcDirs(['src/test/proto']) }
-    }
 }
 
 tasks.named("compileTestJava").configure {
@@ -201,7 +198,7 @@ protobuf {
     }
 }
 
-println "*** Building codegen requires Protobuf version ${libs.versions.protobuf.get()}"
+println "*** Building codegen requires Protobuf"
 println "*** Please refer to https://github.com/grpc/grpc-java/blob/master/COMPILING.md#how-to-build-code-generation-plugin"
 
 tasks.register("buildArtifacts", Copy) {
@@ -214,7 +211,9 @@ tasks.register("buildArtifacts", Copy) {
     into artifactStagingPath
 }
 
-archivesBaseName = "$protocPluginBaseName"
+base {
+    archivesName = "$protocPluginBaseName"
+}
 
 def checkArtifacts = tasks.register("checkArtifacts") {
     dependsOn buildArtifacts
