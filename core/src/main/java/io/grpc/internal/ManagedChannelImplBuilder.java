@@ -104,6 +104,30 @@ public final class ManagedChannelImplBuilder
   private static final long DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES = 1L << 24;  // 16M
   private static final long DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES = 1L << 20; // 1M
 
+  private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
+
+  static {
+    Method getClientInterceptorMethod = null;
+    try {
+      Class<?> censusStatsAccessor =
+          Class.forName("io.grpc.census.InternalCensusStatsAccessor");
+      getClientInterceptorMethod =
+          censusStatsAccessor.getDeclaredMethod(
+              "getClientInterceptor",
+              boolean.class,
+              boolean.class,
+              boolean.class,
+              boolean.class);
+    } catch (ClassNotFoundException e) {
+      // Replace these separate catch statements with multicatch when Android min-API >= 19
+      log.log(Level.FINE, "Unable to apply census stats", e);
+    } catch (NoSuchMethodException e) {
+      log.log(Level.FINE, "Unable to apply census stats", e);
+    }
+    GET_CLIENT_INTERCEPTOR_METHOD = getClientInterceptorMethod;
+  }
+
+
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
   ObjectPool<? extends Executor> offloadExecutorPool = DEFAULT_EXECUTOR_POOL;
@@ -647,34 +671,24 @@ public final class ManagedChannelImplBuilder
     }
     if (!isGlobalInterceptorsSet && statsEnabled) {
       ClientInterceptor statsInterceptor = null;
-      try {
-        Class<?> censusStatsAccessor =
-            Class.forName("io.grpc.census.InternalCensusStatsAccessor");
-        Method getClientInterceptorMethod =
-            censusStatsAccessor.getDeclaredMethod(
-                "getClientInterceptor",
-                boolean.class,
-                boolean.class,
-                boolean.class,
-                boolean.class);
-        statsInterceptor =
-            (ClientInterceptor) getClientInterceptorMethod
-                .invoke(
-                    null,
-                    recordStartedRpcs,
-                    recordFinishedRpcs,
-                    recordRealTimeMetrics,
-                    recordRetryMetrics);
-      } catch (ClassNotFoundException e) {
-        // Replace these separate catch statements with multicatch when Android min-API >= 19
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (NoSuchMethodException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (IllegalAccessException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
-      } catch (InvocationTargetException e) {
-        log.log(Level.FINE, "Unable to apply census stats", e);
+
+      if (GET_CLIENT_INTERCEPTOR_METHOD != null) {
+        try {
+          statsInterceptor =
+            (ClientInterceptor) GET_CLIENT_INTERCEPTOR_METHOD
+              .invoke(
+                null,
+                recordStartedRpcs,
+                recordFinishedRpcs,
+                recordRealTimeMetrics,
+                recordRetryMetrics);
+        } catch (IllegalAccessException e) {
+          log.log(Level.FINE, "Unable to apply census stats", e);
+        } catch (InvocationTargetException e) {
+          log.log(Level.FINE, "Unable to apply census stats", e);
+        }
       }
+
       if (statsInterceptor != null) {
         // First interceptor runs last (see ClientInterceptors.intercept()), so that no
         // other interceptor can override the tracer factory we set in CallOptions.
