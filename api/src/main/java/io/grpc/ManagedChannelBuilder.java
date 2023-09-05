@@ -492,7 +492,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * Enables the retry and hedging subsystem which will use
    * <a href="https://github.com/grpc/proposal/blob/master/A6-client-retries.md#integration-with-service-config">
    * per-method configuration</a>. If a method is unconfigured, it will be limited to
-   * transparent retries, which are safe for non-idempotent RPCs. Service config is ideally provided
+   * transparent retries, which are safe for idempotent RPCs. Service config is ideally provided
    * by the name resolver, but may also be specified via {@link #defaultServiceConfig}.
    *
    * @return this
