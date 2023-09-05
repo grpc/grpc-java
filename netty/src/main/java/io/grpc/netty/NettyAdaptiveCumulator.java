@@ -210,10 +210,6 @@ class NettyAdaptiveCumulator implements Cumulator {
       // the input and the new tail so that finally block can handles them properly.
       composite.readerIndex(prevReader);
     } finally {
-      // Input buffer was merged with the tail.
-      if (in != null) {
-        in.release();
-      }
       // If new tail's ownership isn't transferred to the composite buf.
       // Release it to prevent a leak.
       if (newTail != null) {
