@@ -95,6 +95,11 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
+  public void touch() {
+    buffer.touch();
+  }
+
+  @Override
   public boolean markSupported() {
     return true;
   }

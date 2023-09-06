@@ -409,6 +409,7 @@ public class MessageDeframer implements Closeable, Deframer {
     statsTraceCtx.inboundMessageRead(currentMessageSeqNo, inboundBodyWireSize, -1);
     inboundBodyWireSize = 0;
     InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
+    nextFrame.touch();
     nextFrame = null;
     listener.messagesAvailable(new SingleMessageProducer(stream));
 
