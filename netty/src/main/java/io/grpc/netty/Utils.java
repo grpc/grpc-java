@@ -263,9 +263,16 @@ class Utils {
       return s;
     }
     if (t instanceof ClosedChannelException) {
-      // ClosedChannelException is used any time the Netty channel is closed. Proper error
-      // processing requires remembering the error that occurred before this one and using it
-      // instead.
+      if (t.getCause() != null) {
+        // If the remote closes the connection while the event loop is processing, then a write or
+        // flush can be the first operation to notice the closure. Those exceptions are a
+        // ClosedChannelException, with a cause that provides more information, which is exactly
+        // what we'd hope for.
+        return Status.UNAVAILABLE.withDescription("channel closed").withCause(t);
+      }
+      // ClosedChannelException is used for all operations after the Netty channel is closed. But it
+      // doesn't have the original closure information. Proper error processing requires remembering
+      // the error that occurred before this one and using it instead.
       //
       // Netty uses an exception that has no stack trace, while we would never hope to show this to
       // users, if it happens having the extra information may provide a small hint of where to
