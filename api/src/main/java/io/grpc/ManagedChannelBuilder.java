@@ -117,7 +117,9 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T executor(Executor executor);
 
   /**
-   * Provides a custom executor that will be used for operations that block or are expensive.
+   * Provides a custom executor that will be used for operations that block or are expensive, to
+   * avoid blocking asynchronous code paths. For example, DNS queries and OAuth token fetching over
+   * HTTP could use this executor.
    *
    * <p>It's an optional parameter. If the user has not provided an executor when the channel is
    * built, the builder will use a static cached thread pool.
