@@ -536,7 +536,7 @@ public class NettyAdaptiveCumulatorTest {
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
         assertSame(expectedError, actualError);
-        // Input must be released unless its ownership has been to the composite cumulation.
+        // Because of error, ownership shouldn't have changed so should not have been released.
         assertEquals(1, in.refCnt());
         // Tail released
         assertEquals(0, tail.refCnt());
@@ -573,7 +573,7 @@ public class NettyAdaptiveCumulatorTest {
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
         assertSame(expectedError, actualError);
-        // Input must be released unless its ownership has been to the composite cumulation.
+        // Because of error, ownership shouldn't have changed so should not have been released.
         assertEquals(1, in.refCnt());
         // New buffer released
         assertEquals(0, newTail.refCnt());
