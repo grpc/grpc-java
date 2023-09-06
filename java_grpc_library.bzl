@@ -94,6 +94,7 @@ def _java_rpc_library_impl(ctx):
     args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.configuration.host_path_separator)
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
+    # TODO: Once Bazel 5.x support is dropped, add 'toolchain = None' inside the action.
     ctx.actions.run(
         inputs = depset([toolchain.plugin] + srcs, transitive = [descriptor_set_in]),
         outputs = [srcjar],
@@ -133,6 +134,8 @@ _java_grpc_library = rule(
         "_toolchain": attr.label(
             default = Label("//compiler:java_grpc_library_toolchain"),
         ),
+        # TODO: Enable AEGs when Bazel 5.x support is dropped.
+        "_use_auto_exec_groups": attr.bool(default = False),
     },
     toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
     fragments = ["java"],
@@ -160,6 +163,8 @@ _java_lite_grpc_library = rule(
         "_toolchain": attr.label(
             default = Label("//compiler:java_lite_grpc_library_toolchain"),
         ),
+        # TODO: Enable AEGs when Bazel 5.x support is dropped.
+        "_use_auto_exec_groups": attr.bool(default = False),
     },
     toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
     fragments = ["java"],
