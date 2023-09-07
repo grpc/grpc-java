@@ -37,6 +37,7 @@ import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFactory;
@@ -60,6 +61,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.UnresolvedAddressException;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -135,6 +137,13 @@ class Utils {
   public static ByteBufAllocator getByteBufAllocator(boolean forceHeapBuffer) {
     if (Boolean.parseBoolean(
             System.getProperty("io.grpc.netty.useCustomAllocator", "true"))) {
+
+      String allocType = System.getProperty("io.netty.allocator.type", "pooled");
+      if (allocType.toLowerCase(Locale.ROOT).equals("unpooled")) {
+        logger.log(Level.FINE, "Using unpooled allocator");
+        return UnpooledByteBufAllocator.DEFAULT;
+      }
+
       boolean defaultPreferDirect = PooledByteBufAllocator.defaultPreferDirect();
       logger.log(
           Level.FINE,
