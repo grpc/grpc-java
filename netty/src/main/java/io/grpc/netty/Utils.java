@@ -135,14 +135,15 @@ class Utils {
   }
 
   public static ByteBufAllocator getByteBufAllocator(boolean forceHeapBuffer) {
-    String allocType = System.getProperty("io.netty.allocator.type", "pooled");
-    if (allocType.toLowerCase(Locale.ROOT).equals("unpooled")) {
-      logger.log(Level.FINE, "Using unpooled allocator");
-      return UnpooledByteBufAllocator.DEFAULT;
-    }
-
     if (Boolean.parseBoolean(
             System.getProperty("io.grpc.netty.useCustomAllocator", "true"))) {
+
+      String allocType = System.getProperty("io.netty.allocator.type", "pooled");
+      if (allocType.toLowerCase(Locale.ROOT).equals("unpooled")) {
+        logger.log(Level.FINE, "Using unpooled allocator");
+        return UnpooledByteBufAllocator.DEFAULT;
+      }
+
       boolean defaultPreferDirect = PooledByteBufAllocator.defaultPreferDirect();
       logger.log(
           Level.FINE,
