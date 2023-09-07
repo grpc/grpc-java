@@ -408,6 +408,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       buf.append(seconds);
       buf.append(String.format(Locale.US, ".%09d", nanos));
       buf.append("s. ");
+      Long nsDelay = callOptions.getOption(NAME_RESOLUTION_DELAYED);
+      buf.append(String.format(Locale.US, "Name resolution delay %.9f seconds. ",
+          nsDelay == null ? 0 : nsDelay / NANO_TO_SECS));
       buf.append(insight);
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(buf.toString()));
     }
