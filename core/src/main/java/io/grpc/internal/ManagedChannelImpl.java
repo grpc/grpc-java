@@ -46,6 +46,7 @@ import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
@@ -297,6 +298,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   // Temporary false flag that can skip the retry code path.
   private final boolean retryEnabled;
+
+  private final Deadline.Ticker ticker = Deadline.getSystemTicker();
 
   // Called from syncContext
   private final ManagedClientTransport.Listener delayedTransportListener =
@@ -1066,6 +1069,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final Context context;
       final MethodDescriptor<ReqT, RespT> method;
       final CallOptions callOptions;
+      private final long callCreationTime;
 
       PendingCall(
           Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
@@ -1073,6 +1077,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         this.context = context;
         this.method = method;
         this.callOptions = callOptions;
+        this.callCreationTime = ticker.nanoTime();
       }
 
       /** Called when it's ready to create a real call and reprocess the pending call. */
@@ -1080,7 +1085,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         ClientCall<ReqT, RespT> realCall;
         Context previous = context.attach();
         try {
-          CallOptions delayResolutionOption = callOptions.withOption(NAME_RESOLUTION_DELAYED, true);
+          CallOptions delayResolutionOption = callOptions.withOption(NAME_RESOLUTION_DELAYED,
+              ticker.nanoTime() - callCreationTime);
           realCall = newClientCall(method, delayResolutionOption);
         } finally {
           context.detach(previous);

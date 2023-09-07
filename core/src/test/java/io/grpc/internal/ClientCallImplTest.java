@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -765,7 +766,17 @@ public class ClientCallImplTest {
 
   @Test
   public void deadlineExceededBeforeCallStarted() {
-    CallOptions callOptions = baseCallOptions.withDeadlineAfter(0, TimeUnit.SECONDS);
+    deadlineExeedeed(baseCallOptions.withDeadlineAfter(0, TimeUnit.SECONDS), "Name resolution took 0.000000000 seconds.");
+  }
+
+  @Test
+  public void deadlineExceededBeforeCallStartedDelayed() {
+    deadlineExeedeed(baseCallOptions.withDeadlineAfter(0, TimeUnit.SECONDS)
+            .withOption(NAME_RESOLUTION_DELAYED, 1200000000L),
+        "Name resolution took 1.200000000 seconds.");
+  }
+
+  private void deadlineExeedeed(CallOptions callOptions, String descriptionSuffix) {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
@@ -785,8 +796,10 @@ public class ClientCallImplTest {
             any(Context.class));
     verify(callListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
-    assertThat(statusCaptor.getValue().getDescription())
+    String deadlineExceedDescription = statusCaptor.getValue().getDescription();
+    assertThat(deadlineExceedDescription)
         .startsWith("ClientCall started after CallOptions deadline was exceeded");
+    assertThat(deadlineExceedDescription).endsWith(descriptionSuffix);
     verifyNoInteractions(clientStreamProvider);
   }
 
