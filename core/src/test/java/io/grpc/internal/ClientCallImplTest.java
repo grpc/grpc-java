@@ -767,14 +767,14 @@ public class ClientCallImplTest {
   @Test
   public void deadlineExceededBeforeCallStarted() {
     deadlineExeedeed(baseCallOptions.withDeadlineAfter(0, TimeUnit.SECONDS),
-        "Name resolution took 0.000000000 seconds.");
+        "Name resolution delay 0.000000000 seconds.");
   }
 
   @Test
   public void deadlineExceededBeforeCallStartedDelayed() {
     deadlineExeedeed(baseCallOptions.withDeadlineAfter(0, TimeUnit.SECONDS)
             .withOption(NAME_RESOLUTION_DELAYED, 1200000000L),
-        "Name resolution took 1.200000000 seconds.");
+        "Name resolution delay 1.200000000 seconds.");
   }
 
   private void deadlineExeedeed(CallOptions callOptions, String descriptionSuffix) {

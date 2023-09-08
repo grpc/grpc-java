@@ -265,7 +265,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       Long nameResolutionDelay = callOptions.getOption(NAME_RESOLUTION_DELAYED);
       String description = String.format(
           "ClientCall started after %s deadline was exceeded %.9f seconds ago. "
-              + "Name resolution took %.9f seconds.", deadlineName,
+              + "Name resolution delay %.9f seconds.", deadlineName,
           effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS) / NANO_TO_SECS,
           nameResolutionDelay == null ? 0 : nameResolutionDelay / NANO_TO_SECS);
       stream = new FailingClientStream(DEADLINE_EXCEEDED.withDescription(description), tracers);
