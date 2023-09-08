@@ -66,8 +66,11 @@ public class ChannelAndServerBuilderTest {
       Class<?> clazz = Class.forName(className, false /*initialize*/, loader);
       if (ServerBuilder.class.isAssignableFrom(clazz) && clazz != ServerBuilder.class) {
         classes.add(new Object[]{clazz});
-      } else if (ManagedChannelBuilder.class.isAssignableFrom(clazz)
-          && clazz != ManagedChannelBuilder.class) {
+        continue;
+      }
+      // ForwardingChannelBuilder extends ForwardingChannelBuilder2, not need for extra checks.
+      if (ManagedChannelBuilder.class.isAssignableFrom(clazz)
+          && clazz != ManagedChannelBuilder.class && clazz != ForwardingChannelBuilder.class) {
         classes.add(new Object[]{clazz});
       }
     }

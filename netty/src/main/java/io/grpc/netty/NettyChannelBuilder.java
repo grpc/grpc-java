@@ -33,10 +33,10 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
@@ -72,8 +72,7 @@ import javax.net.ssl.SSLException;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 @CheckReturnValue
-public final class NettyChannelBuilder extends
-    AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
+public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyChannelBuilder> {
 
   // 1MiB.
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
@@ -102,6 +101,7 @@ public final class NettyChannelBuilder extends
   private boolean autoFlowControl = DEFAULT_AUTO_FLOW_CONTROL;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
+  private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private boolean keepAliveWithoutCalls;

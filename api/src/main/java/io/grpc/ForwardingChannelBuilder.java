@@ -16,8 +16,6 @@
 
 package io.grpc;
 
-import com.google.common.base.MoreObjects;
-import com.google.errorprone.annotations.DoNotCall;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -28,39 +26,26 @@ import javax.annotation.Nullable;
  * A {@link ManagedChannelBuilder} that delegates all its builder methods to another builder by
  * default.
  *
- * @param <T> The type of the subclass extending this abstract class.
+ * <p>Important! Use {@link ForwardingChannelBuilder2} instead!
  *
+ * <p>This class mistakenly used {@code <T extends ForwardingChannelBuilder<T>>} which causes
+ * return types to be {@link ForwardingChannelBuilder} instead of {@link ManagedChannelBuilder}.
+ * This pollutes the ABI of its subclasses with undesired method signatures.
+ * {@link ForwardingChannelBuilder2} generates correct return types; use it instead.
+ *
+ * @param <T> The type of the subclass extending this abstract class.
  * @since 1.7.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3363")
 public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilder<T>>
-    extends ManagedChannelBuilder<T> {
+    extends ForwardingChannelBuilder2<T> {
+  // TODO(sergiitk): deprecate after stabilizing
 
   /**
    * The default constructor.
    */
-  protected ForwardingChannelBuilder() {}
-
-  /**
-   * This method serves to force sub classes to "hide" this static factory.
-   */
-  @DoNotCall("Unsupported")
-  public static ManagedChannelBuilder<?> forAddress(String name, int port) {
-    throw new UnsupportedOperationException("Subclass failed to hide static factory");
+  protected ForwardingChannelBuilder() {
   }
-
-  /**
-   * This method serves to force sub classes to "hide" this static factory.
-   */
-  @DoNotCall("Unsupported")
-  public static ManagedChannelBuilder<?> forTarget(String target) {
-    throw new UnsupportedOperationException("Subclass failed to hide static factory");
-  }
-
-  /**
-   * Returns the delegated {@code ManagedChannelBuilder}.
-   */
-  protected abstract ManagedChannelBuilder<?> delegate();
 
   @Override
   public T directExecutor() {
@@ -250,23 +235,10 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   /**
-   * Returns the {@link ManagedChannel} built by the delegate by default. Overriding method can
-   * return different value.
-   */
-  @Override
-  public ManagedChannel build() {
-    return delegate().build();
-  }
-
-  @Override
-  public String toString() {
-    return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
-  }
-
-  /**
    * Returns the correctly typed version of the builder.
    */
   protected final T thisT() {
+    // TODO(sergiitk): make private when stabilizing.
     @SuppressWarnings("unchecked")
     T thisT = (T) this;
     return thisT;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.DoNotCall;
-import io.grpc.BinaryLog;
-import io.grpc.ClientInterceptor;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.NameResolver;
-import io.grpc.ProxyDetector;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -34,30 +25,27 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * Temporarily duplicates {@link io.grpc.ForwardingChannelBuilder} to fix ABI backward
- * compatibility.
+ * A {@link ManagedChannelBuilder} that delegates all its builder methods to another builder by
+ * default.
  *
- * @param <T> The concrete type of this builder.
- * @see <a href="https://github.com/grpc/grpc-java/issues/7211">grpc/grpc-java#7211</a>
+ * <p>Always choose this over {@link ForwardingChannelBuilder}, because
+ * {@link ForwardingChannelBuilder2} is ABI-safe.
+ *
+ * @param <T> The type of the subclass extending this abstract class.
+ * @since 1.59.0
  */
-public abstract class AbstractManagedChannelImplBuilder
-    <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
-
-  /**
-   * Added for ABI compatibility.
-   *
-   * <p>See details in {@link #maxInboundMessageSize(int)}.
-   * TODO(sergiitk): move back to concrete classes as a private field, when this class is removed.
-   */
-  protected int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10585")
+public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<T>>
+    extends ManagedChannelBuilder<T> {
 
   /**
    * The default constructor.
    */
-  protected AbstractManagedChannelImplBuilder() {}
+  protected ForwardingChannelBuilder2() {
+  }
 
   /**
-   * This method serves to force sub classes to "hide" this static factory.
+   * This method serves to force subclasses to "hide" this static factory.
    */
   @DoNotCall("Unsupported")
   public static ManagedChannelBuilder<?> forAddress(String name, int port) {
@@ -65,7 +53,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
-   * This method serves to force sub classes to "hide" this static factory.
+   * This method serves to force subclasses to "hide" this static factory.
    */
   @DoNotCall("Unsupported")
   public static ManagedChannelBuilder<?> forTarget(String target) {
@@ -170,31 +158,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public T maxInboundMessageSize(int max) {
-    /*
-     Why this method is not delegating, as the rest of the methods?
-
-     In refactoring described in #7211, the implementation of #maxInboundMessageSize(int)
-     (and its corresponding field) was pulled down from internal AbstractManagedChannelImplBuilder
-     to concrete classes that actually enforce this setting. For the same reason, it wasn't ported
-     to ManagedChannelImplBuilder (the #delegate()).
-
-     Then AbstractManagedChannelImplBuilder was brought back to fix ABI backward compatibility,
-     and temporarily turned into a ForwardingChannelBuilder, ref PR #7564. Eventually it will
-     be deleted, after a period with "bridge" ABI solution introduced in #7834.
-
-     However, restoring AbstractManagedChannelImplBuilder unintentionally made ABI of
-     #maxInboundMessageSize(int) implemented by the concrete classes backward incompatible:
-     pre-refactoring builds expect it to be a method of AbstractManagedChannelImplBuilder,
-     and not concrete classes, ref #8313.
-
-     The end goal is to keep #maxInboundMessageSize(int) only in concrete classes that enforce it.
-     To fix method's ABI, we temporary reintroduce it to the original layer it was removed from:
-     AbstractManagedChannelImplBuilder. This class' only intention is to provide short-term
-     ABI compatibility. Once we move forward with dropping the ABI, both fixes are no longer
-     necessary, and both will perish with removing AbstractManagedChannelImplBuilder.
-    */
-    Preconditions.checkArgument(max >= 0, "negative max");
-    maxInboundMessageSize = max;
+    delegate().maxInboundMessageSize(max);
     return thisT();
   }
 
@@ -305,7 +269,7 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * Returns the correctly typed version of the builder.
    */
-  protected final T thisT() {
+  private T thisT() {
     @SuppressWarnings("unchecked")
     T thisT = (T) this;
     return thisT;
