@@ -113,11 +113,6 @@ plugins.withId("java") {
                     "io/grpc/internal/AbstractManagedChannelImplBuilder.class").get().getAsFile(),
                 "<T:Lio/grpc/internal/AbstractManagedChannelImplBuilder<TT;>;>Lio/grpc/ManagedChannelBuilder<TT;>;",
                 "<T:Lio/grpc/ManagedChannelBuilder<TT;>;>Lio/grpc/ManagedChannelBuilder<TT;>;");
-            project.replaceConstant(
-                destinationDirectory.file(
-                    "io/grpc/internal/AbstractServerImplBuilder.class").get().getAsFile(),
-                "<T:Lio/grpc/internal/AbstractServerImplBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;",
-                "<T:Lio/grpc/ServerBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;");
         }
     }
 }
