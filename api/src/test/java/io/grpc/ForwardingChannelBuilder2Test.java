@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,33 +14,30 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.base.Defaults;
-import com.google.common.collect.ImmutableSet;
-import io.grpc.ForwardingTestUtil;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link AbstractManagedChannelImplBuilder}.
+ * Unit tests for {@link ForwardingChannelBuilder2}.
  */
 @RunWith(JUnit4.class)
-public class AbstractManagedChannelImplBuilderTest {
+public class ForwardingChannelBuilder2Test {
   private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
 
-  private final AbstractManagedChannelImplBuilder<?> testChannelBuilder = new TestBuilder();
+  private final ForwardingChannelBuilder2<?> testChannelBuilder = new TestBuilder();
 
-  private final class TestBuilder extends AbstractManagedChannelImplBuilder<TestBuilder> {
+  private final class TestBuilder extends ForwardingChannelBuilder2<TestBuilder> {
     @Override
     protected ManagedChannelBuilder<?> delegate() {
       return mockDelegate;
@@ -53,8 +50,7 @@ public class AbstractManagedChannelImplBuilderTest {
         ManagedChannelBuilder.class,
         mockDelegate,
         testChannelBuilder,
-        // maxInboundMessageSize is the only method that shouldn't forward.
-        ImmutableSet.of(ManagedChannelBuilder.class.getMethod("maxInboundMessageSize", int.class)),
+        Collections.emptyList(),
         new ForwardingTestUtil.ArgumentProvider() {
           @Override
           public Object get(Method method, int argPos, Class<?> clazz) {
@@ -65,15 +61,6 @@ public class AbstractManagedChannelImplBuilderTest {
             return null;
           }
         });
-  }
-
-  @Test
-  public void testMaxInboundMessageSize() {
-    assertThat(testChannelBuilder.maxInboundMessageSize)
-        .isEqualTo(GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE);
-
-    testChannelBuilder.maxInboundMessageSize(42);
-    assertThat(testChannelBuilder.maxInboundMessageSize).isEqualTo(42);
   }
 
   @Test
