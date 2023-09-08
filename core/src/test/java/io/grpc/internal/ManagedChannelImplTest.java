@@ -1078,7 +1078,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void delayedNameResolution() {
+  public void delayedNameResolution() throws Exception {
     ClientStream mockStream = mock(ClientStream.class);
     final ClientStreamTracer tracer = new ClientStreamTracer() {};
     ClientStreamTracer.Factory factory = new ClientStreamTracer.Factory() {
@@ -1096,6 +1096,7 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, callOptions);
     call.start(mockCallListener, new Metadata());
 
+    Thread.sleep(500);
     nsFactory.allResolved();
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
@@ -1118,7 +1119,10 @@ public class ManagedChannelImplTest {
         same(method), any(Metadata.class), callOptionsCaptor.capture(),
         tracersCaptor.capture());
     assertThat(Arrays.asList(tracersCaptor.getValue()).contains(tracer)).isTrue();
-    assertThat(callOptionsCaptor.getValue().getOption(NAME_RESOLUTION_DELAYED)).isTrue();
+    Long realDelay = callOptionsCaptor.getValue().getOption(NAME_RESOLUTION_DELAYED);
+    assertThat(realDelay).isNotNull();
+    assertThat(realDelay).isAtLeast(
+        TimeUnit.MILLISECONDS.toNanos(400));//sleep not precise
   }
 
   @Test
