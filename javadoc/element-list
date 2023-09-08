@@ -4,7 +4,6 @@ io.grpc.binarylog.v1
 io.grpc.channelz.v1
 io.grpc.grpclb
 io.grpc.health.v1
-io.grpc.inprocess
 io.grpc.lb.v1
 io.grpc.netty
 io.grpc.okhttp
@@ -12,7 +11,6 @@ io.grpc.protobuf
 io.grpc.protobuf.lite
 io.grpc.protobuf.services
 io.grpc.reflection.v1alpha
-io.grpc.rls
 io.grpc.services
 io.grpc.servlet
 io.grpc.servlet.jakarta
