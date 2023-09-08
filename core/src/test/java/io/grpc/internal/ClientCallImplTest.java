@@ -825,8 +825,6 @@ public class ClientCallImplTest {
     verify(stream).setDeadline(deadlineCaptor.capture());
 
     assertTimeoutBetween(deadlineCaptor.getValue().timeRemaining(TimeUnit.MILLISECONDS), 600, 1000);
-
-
   }
 
   @Test
