@@ -138,7 +138,8 @@ public final class ServerRegistry {
     List<ServerProvider> providers = providers();
     if (providers.isEmpty()) {
       throw new ProviderNotFoundException("No functional server found. "
-          + "Try adding a dependency on the grpc-netty or grpc-netty-shaded artifact");
+          + "Try adding a dependency on the grpc-netty, grpc-netty-shaded, or grpc-okhttp "
+          + "artifact");
     }
     StringBuilder error = new StringBuilder();
     for (ServerProvider provider : providers()) {
