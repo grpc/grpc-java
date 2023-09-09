@@ -16,7 +16,6 @@
 
 package io.grpc.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -64,15 +63,7 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
-    return null; // TODO
-  }
-
-  @Override
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
-      Object childConfig) {
-    checkArgument(key instanceof EquivalentAddressGroup, "key is wrong type");
-
-    return pickResolvedAddress((EquivalentAddressGroup) key, resolvedAddresses, childConfig);
+    throw new UnsupportedOperationException(); // local updateOverallBalancingState doesn't use this
   }
 
   private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
@@ -88,7 +79,7 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
       // RRLB will request connection immediately on subchannel IDLE.
       boolean isConnecting = false;
-      for (ChildLbState childLbState : getChildren()) {
+      for (ChildLbState childLbState : getChildLbStates()) {
         ConnectivityState state = childLbState.getCurrentState();
         if (state == CONNECTING || state == IDLE) {
           isConnecting = true;
@@ -99,7 +90,7 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
       if (isConnecting) {
         updateBalancingState(CONNECTING,  new EmptyPicker(Status.OK));
       } else {
-        updateBalancingState(TRANSIENT_FAILURE, createReadyPicker(getChildren()));
+        updateBalancingState(TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
       }
     } else {
       updateBalancingState(READY, createReadyPicker(activeList));
@@ -129,11 +120,11 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
   }
 
   /**
-   * Filters out non-ready and deactivated child laod balancers (subchannels).
+   * Filters out non-ready and deactivated child load balancers (subchannels).
    */
   private List<ChildLbState> getReadyChildren() {
     List<ChildLbState> activeChildren = new ArrayList<>();
-    for (ChildLbState child : getChildren()) {
+    for (ChildLbState child : getChildLbStates()) {
       if (!child.isDeactivated() && child.getCurrentState() == READY) {
         activeChildren.add(child);
       }

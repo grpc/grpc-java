@@ -200,10 +200,10 @@ public class RoundRobinLoadBalancerTest {
     verify(removedSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).requestConnection();
 
-    assertThat(loadBalancer.getChildren().size()).isEqualTo(2);
-    assertThat(loadBalancer.getChild(removedEag).getCurrentPicker().pickSubchannel(null)
+    assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(2);
+    assertThat(loadBalancer.getChildLbState(removedEag).getCurrentPicker().pickSubchannel(null)
         .getSubchannel()).isEqualTo(removedSubchannel);
-    assertThat(loadBalancer.getChild(oldEag1).getCurrentPicker().pickSubchannel(null)
+    assertThat(loadBalancer.getChildLbState(oldEag1).getCurrentPicker().pickSubchannel(null)
         .getSubchannel()).isEqualTo(oldSubchannel);
 
     // This time with Attributes
@@ -219,10 +219,10 @@ public class RoundRobinLoadBalancerTest {
 
     deliverSubchannelState(newSubchannel, ConnectivityStateInfo.forNonError(READY));
 
-    assertThat(loadBalancer.getChildren().size()).isEqualTo(2);
-    assertThat(loadBalancer.getChild(TestUtils.stripAttrs(newEag)).getCurrentPicker()
+    assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(2);
+    assertThat(loadBalancer.getChildLbState(newEag).getCurrentPicker()
         .pickSubchannel(null).getSubchannel()).isEqualTo(newSubchannel);
-    assertThat(loadBalancer.getChild(TestUtils.stripAttrs(oldEag2)).getCurrentPicker()
+    assertThat(loadBalancer.getChildLbState(oldEag2).getCurrentPicker()
         .pickSubchannel(null).getSubchannel()).isEqualTo(oldSubchannel);
 
     verify(mockHelper, times(6)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -242,7 +242,7 @@ public class RoundRobinLoadBalancerTest {
 
     // TODO figure out if this method testing the right things
 
-    ChildLbState childLbState = loadBalancer.getChildren().iterator().next();
+    ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
     Subchannel subchannel = childLbState.getCurrentPicker().pickSubchannel(null).getSubchannel();
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
@@ -279,7 +279,7 @@ public class RoundRobinLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
     loadBalancer.shutdown();
-    for (ChildLbState child : loadBalancer.getChildren()) {
+    for (ChildLbState child : loadBalancer.getChildLbStates()) {
       Subchannel sc = child.getCurrentPicker().pickSubchannel(null).getSubchannel();
       verify(child).shutdown();
       // When the subchannel is being shut down, a SHUTDOWN connectivity state is delivered
@@ -300,7 +300,7 @@ public class RoundRobinLoadBalancerTest {
 
     Map<ChildLbState, Subchannel> childToSubChannelMap = new HashMap<>();
     // Simulate state transitions for each subchannel individually.
-    for ( ChildLbState child : loadBalancer.getChildren()) {
+    for ( ChildLbState child : loadBalancer.getChildLbStates()) {
       Subchannel sc = child.getSubchannels(mockArgs);
       childToSubChannelMap.put(child, sc);
       Status error = Status.UNKNOWN.withDescription("connection broken");
@@ -317,7 +317,7 @@ public class RoundRobinLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), isA(ReadyPicker.class));
     inOrder.verifyNoMoreInteractions();
 
-    ChildLbState child = loadBalancer.getChildren().iterator().next();
+    ChildLbState child = loadBalancer.getChildLbStates().iterator().next();
     Subchannel subchannel = childToSubChannelMap.get(child);
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     assertThat(child.getCurrentState()).isEqualTo(READY);
@@ -337,7 +337,7 @@ public class RoundRobinLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
     // Simulate state transitions for each subchannel individually.
-    for (ChildLbState child : loadBalancer.getChildren()) {
+    for (ChildLbState child : loadBalancer.getChildLbStates()) {
       Subchannel sc = child.getSubchannels(mockArgs);
       verify(sc).requestConnection();
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(CONNECTING));
