@@ -50,6 +50,26 @@ public final class AndroidComponentAddressTest {
   }
 
   @Test
+  public void testTargetPackageNullComponentName() {
+    AndroidComponentAddress addr =
+        AndroidComponentAddress.forBindIntent(
+            new Intent().setPackage("com.foo").setAction(ApiConstants.ACTION_BIND));
+    assertThat(addr.getPackage()).isEqualTo("com.foo");
+    assertThat(addr.getComponent()).isNull();
+  }
+
+  @Test
+  public void testTargetPackageNonNullComponentName() {
+    AndroidComponentAddress addr =
+        AndroidComponentAddress.forBindIntent(
+            new Intent()
+                .setComponent(new ComponentName("com.foo", "com.foo.BarService"))
+                .setPackage("com.foo")
+                .setAction(ApiConstants.ACTION_BIND));
+    assertThat(addr.getPackage()).isEqualTo("com.foo");
+  }
+
+  @Test
   public void testAsBindIntent() {
     Intent bindIntent =
         new Intent()

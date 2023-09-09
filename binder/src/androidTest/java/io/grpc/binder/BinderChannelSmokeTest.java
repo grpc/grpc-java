@@ -22,6 +22,7 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Parcel;
 import android.os.Parcelable;
 import androidx.test.core.app.ApplicationProvider;
@@ -32,7 +33,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ClientCall;
 import io.grpc.ClientInterceptors;
 import io.grpc.ConnectivityState;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
@@ -231,6 +231,18 @@ public final class BinderChannelSmokeTest {
   @Test
   public void testConnectViaTargetUri() throws Exception {
     channel = BinderChannelBuilder.forTarget(SERVER_TARGET_URI, appContext).build();
+    assertThat(doCall("Hello").get()).isEqualTo("Hello");
+  }
+
+  @Test
+  public void testConnectViaIntentFilter() throws Exception {
+    // Compare with the <intent-filter> mapping in AndroidManifest.xml.
+    channel =
+        BinderChannelBuilder.forAddress(
+                AndroidComponentAddress.forBindIntent(
+                    new Intent().setAction("action1").setPackage(appContext.getPackageName())),
+                appContext)
+            .build();
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
   }
 
