@@ -64,7 +64,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected Map<Object, ChildLbState> getChildLbMap(ResolvedAddresses resolvedAddresses) {
+  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
     Map<Object, ChildLbState> newChildPolicies = new HashMap<>();
