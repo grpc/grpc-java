@@ -681,7 +681,11 @@ public class WeightedRoundRobinLoadBalancerTest {
       EquivalentAddressGroup addresses = getAddresses(pickResult);
       pickCount.merge(addresses, 1, Integer::sum);
       assertThat(pickResult.getStreamTracerFactory()).isNotNull();
+<<<<<<< HEAD
       WeightedChildLbState childLbState = (WeightedChildLbState) wrr.getChildLbStateEag(addresses);
+=======
+      WeightedChildLbState childLbState = (WeightedChildLbState) wrr.getChildLbState(addresses);
+>>>>>>> 87585d87f (Responded to a number of the code review comments.)
       childLbState.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
           InternalCallMetricRecorder.createMetricReport(
               0.1, 0, 0.1, qpsByChannel.get(addresses), 0,
@@ -699,7 +703,11 @@ public class WeightedRoundRobinLoadBalancerTest {
       EquivalentAddressGroup addresses = getAddresses(pickResult);
       pickCount.merge(addresses, 1, Integer::sum);
       assertThat(pickResult.getStreamTracerFactory()).isNotNull();
+<<<<<<< HEAD
       WeightedChildLbState childLbState = (WeightedChildLbState) wrr.getChildLbStateEag(addresses);
+=======
+      WeightedChildLbState childLbState = (WeightedChildLbState) wrr.getChildLbState(addresses);
+>>>>>>> 87585d87f (Responded to a number of the code review comments.)
       childLbState.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
           InternalCallMetricRecorder.createMetricReport(
               0.1, 0, 0.1, qpsByChannel.get(addresses), 0,

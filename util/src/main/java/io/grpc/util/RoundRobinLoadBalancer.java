@@ -16,7 +16,6 @@
 
 package io.grpc.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -113,6 +112,22 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
     return new ReadyPicker(pickerList, startIndex);
   }
 
+<<<<<<< HEAD
+=======
+  /**
+   * Filters out non-ready and deactivated child load balancers (subchannels).
+   */
+  private List<ChildLbState> getReadyChildren() {
+    List<ChildLbState> activeChildren = new ArrayList<>();
+    for (ChildLbState child : getChildLbStates()) {
+      if (!child.isDeactivated() && child.getCurrentState() == READY) {
+        activeChildren.add(child);
+      }
+    }
+    return activeChildren;
+  }
+
+>>>>>>> 87585d87f (Responded to a number of the code review comments.)
   public abstract static class RoundRobinPicker extends SubchannelPicker {
     public abstract boolean isEquivalentTo(RoundRobinPicker picker);
   }
