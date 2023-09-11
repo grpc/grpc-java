@@ -25,7 +25,7 @@ build_java_test_app() {
   cd "${SRC_DIR}"
   GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'" \
   ./gradlew --no-daemon grpc-interop-testing:installDist -x test \
-    -PskipCodegen=true -PskipAndroid=true --console=plain
+    -PskipCodegen=true -PskipAndroid=true -PskipServlet=true --console=plain
 
   # Test-run binaries
   run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-client" --help

@@ -9,7 +9,7 @@ cd github
 
 pushd grpc-java/interop-testing
 GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'" \
-  ../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
+  ../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true -PskipServlet=true
 popd
 
 git clone -b master --single-branch --depth=1 https://github.com/grpc/grpc.git
