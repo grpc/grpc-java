@@ -96,25 +96,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-<<<<<<< HEAD
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
       SubchannelPicker initialPicker) {
     ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
         initialPicker);
     return childLbState;
-=======
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
-    Map<Object, ChildLbState> childLbMap = new HashMap<>();
-    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
-    Object policyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    for (EquivalentAddressGroup eag : addresses) {
-      EquivalentAddressGroup key = stripAttrs(eag);
-      ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
-          getInitialPicker());
-      childLbMap.put(key, childLbState);
-    }
-    return childLbMap;
->>>>>>> 87585d87f (Responded to a number of the code review comments.)
   }
 
   @Override
@@ -146,13 +132,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   // Expose for tests in this package.
   @Override
-<<<<<<< HEAD
   protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
     return super.getChildLbStateEag(eag);
-=======
-  protected ChildLbState getChildLbState(EquivalentAddressGroup eag) {
-    return super.getChildLbState(eag);
->>>>>>> 87585d87f (Responded to a number of the code review comments.)
   }
 
   @VisibleForTesting
@@ -293,11 +274,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       checkElementIndex(0, args.getAddresses().size(), "Empty address group");
       WeightedChildLbState childLbState =
-<<<<<<< HEAD
           (WeightedChildLbState) wrr.getChildLbStateEag(args.getAddresses().get(0));
-=======
-          (WeightedChildLbState) wrr.getChildLbState(args.getAddresses().get(0));
->>>>>>> 87585d87f (Responded to a number of the code review comments.)
       return wrr.new WrrSubchannel(delegate().createSubchannel(args), childLbState);
     }
   }

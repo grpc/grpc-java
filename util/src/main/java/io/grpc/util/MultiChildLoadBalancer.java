@@ -26,7 +26,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
@@ -71,7 +70,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     logger.log(Level.FINE, "Created");
   }
 
-<<<<<<< HEAD
   protected abstract SubchannelPicker getSubchannelPicker(
       Map<Object, SubchannelPicker> childPickers);
 
@@ -79,19 +77,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return new EquivalentAddressGroup(eag.getAddresses());
   }
 
-=======
-  protected static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
-    if (eag.getAttributes() == Attributes.EMPTY) {
-      return eag;
-    } else {
-      return new EquivalentAddressGroup(eag.getAddresses());
-    }
-  }
-
-  protected abstract SubchannelPicker getSubchannelPicker(
-      Map<Object, SubchannelPicker> childPickers);
-
->>>>>>> 87585d87f (Responded to a number of the code review comments.)
   protected SubchannelPicker getInitialPicker() {
     return EMPTY_PICKER;
   }
@@ -109,15 +94,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates.values();
   }
 
-  /**
-   * Generally, the only reason to override this is to expose it to a test of a LB in a
-   * different package.
-    */
-  @VisibleForTesting
-  protected Collection<ChildLbState> getChildLbStates() {
-    return childLbStates.values();
-  }
-
   protected ChildLbState getChildLbState(EquivalentAddressGroup eag) {
     if (eag == null) {
       return null;
@@ -125,54 +101,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates.get(stripAttrs(eag));
   }
 
-  /**
-   * Override to utilize parsing of the policy configuration or alternative helper/lb generation.
-   */
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
-    Map<Object, ChildLbState> childLbMap = new HashMap<>();
-    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
-    Object policyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    for (EquivalentAddressGroup eag : addresses) {
-      EquivalentAddressGroup strippedEag = stripAttrs(eag); // keys need to be just addresses
-      ChildLbState childLbState = new ChildLbState(strippedEag, pickFirstLbProvider, policyConfig,
-          getInitialPicker());
-      childLbMap.put(strippedEag, childLbState);
-    }
-    return childLbMap;
-  }
-
-  @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    try {
-      resolvingAddresses = true;
-      return acceptResolvedAddressesInternal(resolvedAddresses);
-    } finally {
-      resolvingAddresses = false;
-    }
-  }
-
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
-      Object childConfig) {
-    checkArgument(key instanceof EquivalentAddressGroup, "key is wrong type");
-
-    // Retrieve the non-stripped version
-    EquivalentAddressGroup eag = null;
-    for (EquivalentAddressGroup equivalentAddressGroup : resolvedAddresses.getAddresses()) {
-      if (stripAttrs(equivalentAddressGroup).equals(key)) {
-        eag = equivalentAddressGroup;
-        break;
-      }
-    }
-
-    checkNotNull(eag, key.toString() + " no longer present in load balancer children");
-
-    return resolvedAddresses.toBuilder()
-        .setAddresses(Collections.singletonList(eag))
-        .setLoadBalancingPolicyConfig(childConfig)
-        .build();
-  }
-
-<<<<<<< HEAD
   protected ChildLbState getChildLbState(Object key) {
     if (key == null) {
       return null;
@@ -229,9 +157,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       resolvingAddresses = false;
     }
   }
-=======
-
->>>>>>> 87585d87f (Responded to a number of the code review comments.)
 
   /**
    * Override this if your keys are not of type Endpoint.
@@ -525,7 +450,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       logger.log(Level.FINE, "Child balancer {0} deleted", key);
     }
 
-<<<<<<< HEAD
     /**
      * ChildLbStateHelper is the glue between ChildLbState and the helpers associated with the
      * petiole policy above and the PickFirstLoadBalancer's helper below.
@@ -533,8 +457,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
      * <p>The ChildLbState updates happen during updateBalancingState.  Otherwise, it is doing
      * simple forwarding.
      */
-=======
->>>>>>> 87585d87f (Responded to a number of the code review comments.)
     private final class ChildLbStateHelper extends ForwardingLoadBalancerHelper {
 
       @Override

@@ -197,15 +197,9 @@ public class RoundRobinLoadBalancerTest {
     verify(oldSubchannel, times(1)).requestConnection();
 
     assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(2);
-<<<<<<< HEAD
     assertThat(loadBalancer.getChildLbStateEag(removedEag).getCurrentPicker().pickSubchannel(null)
         .getSubchannel()).isEqualTo(removedSubchannel);
     assertThat(loadBalancer.getChildLbStateEag(oldEag1).getCurrentPicker().pickSubchannel(null)
-=======
-    assertThat(loadBalancer.getChildLbState(removedEag).getCurrentPicker().pickSubchannel(null)
-        .getSubchannel()).isEqualTo(removedSubchannel);
-    assertThat(loadBalancer.getChildLbState(oldEag1).getCurrentPicker().pickSubchannel(null)
->>>>>>> 87585d87f (Responded to a number of the code review comments.)
         .getSubchannel()).isEqualTo(oldSubchannel);
 
     // This time with Attributes
@@ -222,15 +216,9 @@ public class RoundRobinLoadBalancerTest {
     deliverSubchannelState(newSubchannel, ConnectivityStateInfo.forNonError(READY));
 
     assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(2);
-<<<<<<< HEAD
     assertThat(loadBalancer.getChildLbStateEag(newEag).getCurrentPicker()
         .pickSubchannel(null).getSubchannel()).isEqualTo(newSubchannel);
     assertThat(loadBalancer.getChildLbStateEag(oldEag2).getCurrentPicker()
-=======
-    assertThat(loadBalancer.getChildLbState(newEag).getCurrentPicker()
-        .pickSubchannel(null).getSubchannel()).isEqualTo(newSubchannel);
-    assertThat(loadBalancer.getChildLbState(oldEag2).getCurrentPicker()
->>>>>>> 87585d87f (Responded to a number of the code review comments.)
         .pickSubchannel(null).getSubchannel()).isEqualTo(oldSubchannel);
 
     verify(mockHelper, times(6)).createSubchannel(any(CreateSubchannelArgs.class));
