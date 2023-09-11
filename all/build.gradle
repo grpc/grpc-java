@@ -18,13 +18,19 @@ def subprojects = [
     project(':grpc-protobuf-lite'),
     project(':grpc-rls'),
     project(':grpc-services'),
-    project(':grpc-servlet'),
-    project(':grpc-servlet-jakarta'),
     project(':grpc-stub'),
     project(':grpc-testing'),
     project(':grpc-util'),
     project(':grpc-xds'),
 ]
+
+// Servlet project can be excluded with skipServlet property.
+if (findProject(':grpc-servlet') != null) {
+    subprojects.addAll(
+        project(':grpc-servlet'),
+        project(':grpc-servlet-jakarta'),
+    )
+}
 
 for (subproject in subprojects) {
     if (subproject == project) {
