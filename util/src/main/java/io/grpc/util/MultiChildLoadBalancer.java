@@ -66,6 +66,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     logger.log(Level.FINE, "Created");
   }
 
+  @SuppressWarnings("ReferenceEquality")
   protected static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
     if (eag.getAttributes() == Attributes.EMPTY) {
       return eag;
