@@ -6,16 +6,26 @@ Building is only necessary if you are making changes to gRPC-Java or testing/usi
 
 Building requires JDK 8, as our tests use TLS.
 
+To configure the build settings, create the file
+`<project-root>/gradle.properties`. You can add the following settings to it:
+
+##### `skipCodegen=true`
 grpc-java has a C++ code generation plugin for protoc. Since many Java
 developers don't have C compilers installed and don't need to run or modify the
-codegen, the build can skip it. To skip, create the file
-`<project-root>/gradle.properties` and add `skipCodegen=true`.
+codegen, the build can skip it.
 
+##### `skipAndroid=true` and `android.useAndroidX=true`
 Some parts of grpc-java depend on Android. Since many Java developers don't have
 the Android SDK installed and don't need to run or modify the Android
-components, the build can skip it. To skip, create the file
-`<project-root>/gradle.properties` and add `skipAndroid=true`.
-Otherwise, create the file `<project-root>/gradle.properties` and add `android.useAndroidX=true`.
+components, the build can skip it.
+
+Add `skipAndroid=true` to skip. Otherwise, add `android.useAndroidX=true`.
+
+#### `skipServlet=true`
+`grpc-servlet` tests take a few minutes to run. You may skip the servlet 
+project to speed up the build.
+
+### Building
 
 Then, to build, run:
 ```
