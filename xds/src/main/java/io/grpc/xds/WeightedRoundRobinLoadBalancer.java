@@ -96,17 +96,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
-    Map<Object, ChildLbState> childLbMap = new HashMap<>();
-    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
-    Object policyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    for (EquivalentAddressGroup eag : addresses) {
-      EquivalentAddressGroup key = stripAttrs(eag);
-      ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
-          getInitialPicker());
-      childLbMap.put(key, childLbState);
-    }
-    return childLbMap;
+  protected ChildLbState createChildLbState(Object key, Object policyConfig,
+      SubchannelPicker initialPicker) {
+    ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
+        initialPicker);
+    return childLbState;
   }
 
   @Override
@@ -136,8 +130,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-  protected ChildLbState getChildLbState(EquivalentAddressGroup eag) {
-    return super.getChildLbState(eag);
+  protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
+    return super.getChildLbStateEag(eag);
   }
 
   @VisibleForTesting
@@ -283,7 +277,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       checkElementIndex(0, args.getAddresses().size(), "Empty address group");
       WeightedChildLbState childLbState =
-          (WeightedChildLbState) wrr.getChildLbState(args.getAddresses().get(0));
+          (WeightedChildLbState) wrr.getChildLbStateEag(args.getAddresses().get(0));
       return wrr.new WrrSubchannel(delegate().createSubchannel(args), childLbState);
     }
   }
