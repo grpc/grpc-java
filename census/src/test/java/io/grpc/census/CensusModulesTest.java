@@ -134,7 +134,7 @@ public class CensusModulesTest {
       CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder()
-          .setCallOptions(CallOptions.DEFAULT.withOption(NAME_RESOLUTION_DELAYED, true)).build();
+          .setCallOptions(CallOptions.DEFAULT.withOption(NAME_RESOLUTION_DELAYED, 10L)).build();
 
   private static class StringInputStream extends InputStream {
     final String string;

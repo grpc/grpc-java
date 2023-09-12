@@ -17,7 +17,9 @@ sourceSets {
 }
 
 tasks.named("compileContextJava").configure {
-    if (JavaVersion.current().isJava9Compatible()) {
+    if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_20)) {
+        println("!!! Javac does not support generating Java 7 bytecode. Do not use for release builds !!!")
+    } else if (JavaVersion.current().isJava9Compatible()) {
         options.release = 7
     } else {
         sourceCompatibility = JavaVersion.VERSION_1_7
