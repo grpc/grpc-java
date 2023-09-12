@@ -73,10 +73,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   protected abstract SubchannelPicker getSubchannelPicker(
       Map<Object, SubchannelPicker> childPickers);
 
-  protected static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
-    return new EquivalentAddressGroup(eag.getAddresses());
-  }
-
   protected SubchannelPicker getInitialPicker() {
     return EMPTY_PICKER;
   }
@@ -94,19 +90,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates.values();
   }
 
-  protected ChildLbState getChildLbState(EquivalentAddressGroup eag) {
-    if (eag == null) {
-      return null;
-    }
-    return childLbStates.get(stripAttrs(eag));
-  }
-
   protected ChildLbState getChildLbState(Object key) {
     if (key == null) {
       return null;
-    }
-    if (key instanceof EquivalentAddressGroup) {
-      key = new Endpoint((EquivalentAddressGroup) key);
     }
     return childLbStates.get(key);
   }
