@@ -91,11 +91,15 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates.values();
   }
 
-  protected ChildLbState getChildLbState(EquivalentAddressGroup eag) {
-    if (eag == null) {
+  protected ChildLbState getChildLbState(Object key) {
+    if (key == null) {
       return null;
     }
-    return childLbStates.get(stripAttrs(eag));
+    return childLbStates.get(key);
+  }
+
+  protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
+    return getChildLbState(stripAttrs(eag));
   }
 
   /**
@@ -107,11 +111,16 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     Object policyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     for (EquivalentAddressGroup eag : addresses) {
       EquivalentAddressGroup strippedEag = stripAttrs(eag); // keys need to be just addresses
-      ChildLbState childLbState = new ChildLbState(strippedEag, pickFirstLbProvider, policyConfig,
-          getInitialPicker());
+      ChildLbState childLbState = childLbMap.getOrDefault(strippedEag,
+          createChildLbState(strippedEag, policyConfig, getInitialPicker()));
       childLbMap.put(strippedEag, childLbState);
     }
     return childLbMap;
+  }
+
+  protected ChildLbState createChildLbState(Object key, Object policyConfig,
+      SubchannelPicker initialPicker) {
+    return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
   }
 
   @Override
@@ -165,12 +174,14 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       if (!childLbStates.containsKey(key)) {
         childLbStates.put(key, entry.getValue());
       } else {
-        childLbStates.get(key).reactivate(childPolicyProvider);
+        // Reuse the existing one
+        ChildLbState existingChildLbState = childLbStates.get(key);
+        if (existingChildLbState.isDeactivated()) {
+          existingChildLbState.reactivate(childPolicyProvider);
+        }
       }
+
       LoadBalancer childLb = childLbStates.get(key).lb;
-      if (childLb != entry.getValue().getLb()) {
-        entry.getValue().shutdown(); // Reused old LB
-      }
       childLb.handleResolvedAddresses(getChildAddresses(key, resolvedAddresses, childConfig));
     }
 
