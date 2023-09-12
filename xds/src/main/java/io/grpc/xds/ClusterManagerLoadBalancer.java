@@ -70,8 +70,11 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     Map<Object, ChildLbState> newChildPolicies = new HashMap<>();
     if (config != null) {
       for (Entry<String, PolicySelection> entry : config.childPolicies.entrySet()) {
-        ChildLbState child = new ClusterManagerLbState(entry.getKey(),
-            entry.getValue().getProvider(), entry.getValue().getConfig(), getInitialPicker());
+        ChildLbState child = getChildLbState(entry.getKey());
+        if (child == null) {
+          child = new ClusterManagerLbState(entry.getKey(),
+              entry.getValue().getProvider(), entry.getValue().getConfig(), getInitialPicker());
+        }
         newChildPolicies.put(entry.getKey(), child);
       }
     }
