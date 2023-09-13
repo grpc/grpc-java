@@ -83,6 +83,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
+  private final int hpackHuffmanCodeThreshold;
   private KeepAliveManager keepAliveManager;
   private final long keepAliveTimeNanos;
   private final long keepAliveTimeoutNanos;
@@ -109,7 +110,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
       ProtocolNegotiator negotiator, boolean autoFlowControl, int flowControlWindow,
-      int maxMessageSize, int maxHeaderListSize,
+      int maxMessageSize, int maxHeaderListSize, int hpackHuffmanCodeThreshold,
       long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
       Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
@@ -126,6 +127,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
+    this.hpackHuffmanCodeThreshold = hpackHuffmanCodeThreshold;
     this.keepAliveTimeNanos = keepAliveTimeNanos;
     this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
     this.keepAliveWithoutCalls = keepAliveWithoutCalls;
@@ -224,6 +226,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
+        hpackHuffmanCodeThreshold,
         GrpcUtil.STOPWATCH_SUPPLIER,
         tooManyPingsRunnable,
         transportTracer,

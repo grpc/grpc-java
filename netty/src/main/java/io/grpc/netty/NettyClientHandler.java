@@ -54,6 +54,7 @@ import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
+import io.netty.handler.codec.http2.DefaultHttp2HeadersEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2CodecUtil;
@@ -69,6 +70,7 @@ import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2HeadersDecoder;
+import io.netty.handler.codec.http2.Http2HeadersEncoder;
 import io.netty.handler.codec.http2.Http2InboundFrameLogger;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
@@ -140,6 +142,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
+      int hpackHuffmanCodeThreshold,
       Supplier<Stopwatch> stopwatchFactory,
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
@@ -148,9 +151,13 @@ class NettyClientHandler extends AbstractNettyHandler {
       ChannelLogger negotiationLogger,
       Ticker ticker) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
+    Preconditions.checkArgument(hpackHuffmanCodeThreshold > 0,
+        "hpackHuffmanCodeThreshold must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
-    Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter();
+    Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
+        Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, hpackHuffmanCodeThreshold);
+    Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
     WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);
     dist.allocationQuantum(16 * 1024); // Make benchmarks fast again.

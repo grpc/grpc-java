@@ -19,11 +19,13 @@ package io.grpc.netty;
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.TruthJUnit.assume;
+import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
+import static io.grpc.netty.NettyChannelBuilder.DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -36,6 +38,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
@@ -86,6 +89,8 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.traffic.ChannelTrafficShapingHandler;
+import io.netty.handler.traffic.TrafficCounter;
 import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -97,6 +102,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -118,6 +124,8 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
+  public static final String LONG_STRING_OF_A = Strings.repeat("a", 128);
+  public static final String LONG_STRING_OF_TILDE = Strings.repeat("~", 128);
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final SslContext SSL_CONTEXT = createSslContext();
@@ -192,7 +200,8 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = new NettyClientTransport(
         address, new ReflectiveChannelFactory<>(NioSocketChannel.class), channelOptions, group,
         newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
-        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
+        DEFAULT_MAX_HEADER_LIST_SIZE, DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD,
+        KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
         new SocketPicker(), new FakeChannelLogger(), false, Ticker.systemTicker());
     transports.add(transport);
@@ -442,7 +451,8 @@ public class NettyClientTransportTest {
         address, new ReflectiveChannelFactory<>(CantConstructChannel.class),
         new HashMap<ChannelOption<?>, Object>(), group,
         newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
-        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
+        DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
         new FakeChannelLogger(), false, Ticker.systemTicker());
     transports.add(transport);
@@ -536,6 +546,105 @@ public class NettyClientTransportTest {
       assertEquals("RST_STREAM closed stream. HTTP/2 error code: PROTOCOL_ERROR",
           status.getDescription());
     }
+  }
+
+  @Test
+  public void huffmanCodingShouldBePerformed() throws Exception {
+    startServer();
+
+    NettyClientTransport transport =
+            newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_HEADER_LIST_SIZE,
+                    1, null, true, TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+                    new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
+    callMeMaybe(transport.start(clientTransportListener));
+
+    ChannelTrafficShapingHandler channelTrafficShapingHandler =
+            new ChannelTrafficShapingHandler(0);
+
+    transport.channel().pipeline().addFirst(channelTrafficShapingHandler);
+
+    // Warm up the channel and get common header strings cached
+    {
+      Metadata headers = new Metadata();
+      headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
+      new Rpc(transport, headers).halfClose().waitForResponse();
+    }
+
+    // When coded using the HPACK code "a" is shorter than "~"
+    long aHeaderRpcSize = getWrittenBytes(channelTrafficShapingHandler, () -> {
+          Metadata headers = new Metadata();
+          headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+                  LONG_STRING_OF_A);
+          new Rpc(transport, headers).halfClose().waitForResponse();
+          return  null;
+        }
+    );
+
+    long tildeHeaderRpcSize = getWrittenBytes(channelTrafficShapingHandler, () -> {
+          Metadata headers = new Metadata();
+          headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+                  LONG_STRING_OF_TILDE);
+          new Rpc(transport, headers).halfClose().waitForResponse();
+          return  null;
+        }
+    );
+
+    assertThat(aHeaderRpcSize).isLessThan(tildeHeaderRpcSize);
+  }
+
+  @Test
+  public void huffmanCodingShouldNotBePerformed() throws Exception {
+    startServer();
+
+    NettyClientTransport transport =
+            newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_HEADER_LIST_SIZE,
+                    Integer.MAX_VALUE, null, true, TimeUnit.SECONDS.toNanos(10L),
+                    TimeUnit.SECONDS.toNanos(1L),
+                    new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
+    callMeMaybe(transport.start(clientTransportListener));
+
+    ChannelTrafficShapingHandler channelTrafficShapingHandler = new ChannelTrafficShapingHandler(0);
+
+    transport.channel().pipeline().addFirst(channelTrafficShapingHandler);
+
+    // Warm up the channel and get common header strings cached
+    {
+      Metadata headers = new Metadata();
+      headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
+      new Rpc(transport, headers).halfClose().waitForResponse();
+    }
+
+    // When coded using the HPACK code, "a" is shorter than "~"
+    long aHeaderRpcSize = getWrittenBytes(channelTrafficShapingHandler, () -> {
+          Metadata headers = new Metadata();
+          headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+                  LONG_STRING_OF_A);
+          new Rpc(transport, headers).halfClose().waitForResponse();
+          return  null;
+        }
+    );
+
+    long tildeHeaderRpcSize = getWrittenBytes(channelTrafficShapingHandler, () -> {
+          Metadata headers = new Metadata();
+          headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+                  LONG_STRING_OF_TILDE);
+          new Rpc(transport, headers).halfClose().waitForResponse();
+          return  null;
+        }
+    );
+
+    assertThat(aHeaderRpcSize).isEqualTo(tildeHeaderRpcSize);
+  }
+
+  private long getWrittenBytes(ChannelTrafficShapingHandler channelTrafficShapingHandler,
+                               Callable<Void> callable) throws Exception {
+    long startBytes = 0;
+    TrafficCounter startTrafficCounter = channelTrafficShapingHandler.trafficCounter();
+    if (startTrafficCounter != null) {
+      startBytes = startTrafficCounter.cumulativeWrittenBytes();
+    }
+    callable.call();
+    return channelTrafficShapingHandler.trafficCounter().cumulativeWrittenBytes() - startBytes;
   }
 
   @Test
@@ -748,13 +857,22 @@ public class NettyClientTransportTest {
       int maxHeaderListSize, String userAgent, boolean enableKeepAlive, long keepAliveTimeNano,
       long keepAliveTimeoutNano, ChannelFactory<? extends Channel> channelFactory,
       EventLoopGroup group) {
+    return newTransport(negotiator, maxMsgSize, maxHeaderListSize,
+            DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD, userAgent, enableKeepAlive, keepAliveTimeNano,
+            keepAliveTimeoutNano, channelFactory, group);
+  }
+
+  private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
+      int maxHeaderListSize, int huffCodeThreshold, String userAgent, boolean enableKeepAlive,
+      long keepAliveTimeNano, long keepAliveTimeoutNano,
+      ChannelFactory<? extends Channel> channelFactory, EventLoopGroup group) {
     if (!enableKeepAlive) {
       keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
     }
     NettyClientTransport transport = new NettyClientTransport(
         address, channelFactory, new HashMap<ChannelOption<?>, Object>(), group,
         negotiator, false, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
-        keepAliveTimeNano, keepAliveTimeoutNano,
+            huffCodeThreshold, keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
         new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false,
         Ticker.systemTicker());
