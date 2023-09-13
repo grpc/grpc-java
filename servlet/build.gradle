@@ -8,6 +8,9 @@ description = "gRPC: Servlet"
 def jettyVersion = '10.0.7'
 
 sourceSets {
+    // Testing threading is more of a brute-force test and is very slow. No need to run it as part
+    // of normal suite.
+    threadingTest {}
     // Create a test sourceset for each classpath - could be simplified if we made new test directories
     undertowTest {}
     tomcatTest {}
@@ -39,7 +42,11 @@ dependencies {
     implementation project(':grpc-util'),
             libraries.guava
 
-    testImplementation 'javax.servlet:javax.servlet-api:4.0.1',
+    testImplementation 'javax.servlet:javax.servlet-api:4.0.1'
+
+    threadingTestImplementation project(':grpc-servlet'),
+        libraries.truth,
+	'javax.servlet:javax.servlet-api:4.0.1',
         'org.jetbrains.kotlinx:lincheck:2.14.1'
 
     itImplementation project(':grpc-servlet'),
@@ -72,6 +79,15 @@ tasks.named("test").configure {
                 '--add-exports=java.base/jdk.internal.util=ALL-UNNAMED',
         ]
     }
+}
+
+tasks.register('threadingTest', Test) {
+    classpath = sourceSets.threadingTest.runtimeClasspath
+    testClassesDirs = sourceSets.threadingTest.output.classesDirs
+}
+
+tasks.named("assemble").configure {
+    dependsOn tasks.named('compileThreadingTestJava')
 }
 
 // Set up individual classpaths for each test, to avoid any mismatch,
