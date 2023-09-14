@@ -205,7 +205,9 @@ class NettyAdaptiveCumulator implements Cumulator {
       // New tail's ownership transferred to the composite buf.
       newTail = null;
       composite.readerIndex(prevReader);
-      in.release(); // Successful so took over ownership of in
+      // Input buffer was successfully merged with the tail.
+      // Must be the last line in the try because we release it only on success.
+      in.release();
     } finally {
       // If new tail's ownership isn't transferred to the composite buf.
       // Release it to prevent a leak.
