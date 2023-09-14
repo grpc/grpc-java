@@ -34,6 +34,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
@@ -60,6 +62,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   protected final PickFirstLoadBalancerProvider pickFirstLbProvider =
       new PickFirstLoadBalancerProvider();
 
+  protected ConnectivityState currentConnectivityState;
 
   protected MultiChildLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -233,9 +236,14 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
     if (overallState != null) {
       helper.updateBalancingState(overallState, getSubchannelPicker(childPickers));
+      currentConnectivityState = overallState;
     }
   }
 
+  protected final void updateHelperBalancingState(ConnectivityState newState,
+      SubchannelPicker newPicker) {
+    helper.updateBalancingState(newState, newPicker);
+  }
   @Nullable
   protected static ConnectivityState aggregateState(
       @Nullable ConnectivityState overallState, ConnectivityState childState) {
@@ -260,6 +268,19 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   protected void removeChild(Object key) {
     childLbStates.remove(key);
+  }
+
+  /**
+   * Filters out non-ready and deactivated child load balancers (subchannels).
+   */
+  protected List<ChildLbState> getReadyChildren() {
+    List<ChildLbState> activeChildren = new ArrayList<>();
+    for (ChildLbState child : getChildLbStates()) {
+      if (!child.isDeactivated() && child.getCurrentState() == READY) {
+        activeChildren.add(child);
+      }
+    }
+    return activeChildren;
   }
 
 
@@ -308,7 +329,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return getCurrentPicker().pickSubchannel(args).getSubchannel();
     }
 
-    ConnectivityState getCurrentState() {
+    public ConnectivityState getCurrentState() {
       return currentState;
     }
 

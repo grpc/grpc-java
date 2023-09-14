@@ -53,7 +53,6 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
       Attributes.Key.create("state-info");
 
   private final Random random;
-  private ConnectivityState currentState;
   protected RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
 
   public RoundRobinLoadBalancer(Helper helper) {
@@ -98,9 +97,9 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
   }
 
   private void updateBalancingState(ConnectivityState state, RoundRobinPicker picker) {
-    if (state != currentState || !picker.isEquivalentTo(currentPicker)) {
+    if (state != currentConnectivityState || !picker.isEquivalentTo(currentPicker)) {
       getHelper().updateBalancingState(state, picker);
-      currentState = state;
+      currentConnectivityState = state;
       currentPicker = picker;
     }
   }
@@ -117,19 +116,6 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
     }
 
     return new ReadyPicker(pickerList, startIndex);
-  }
-
-  /**
-   * Filters out non-ready and deactivated child load balancers (subchannels).
-   */
-  private List<ChildLbState> getReadyChildren() {
-    List<ChildLbState> activeChildren = new ArrayList<>();
-    for (ChildLbState child : getChildLbStates()) {
-      if (!child.isDeactivated() && child.getCurrentState() == READY) {
-        activeChildren.add(child);
-      }
-    }
-    return activeChildren;
   }
 
   public abstract static class RoundRobinPicker extends SubchannelPicker {

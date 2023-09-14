@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
-import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.LeastRequestLoadBalancerProvider.DEFAULT_CHOICE_COUNT;
 import static io.grpc.xds.LeastRequestLoadBalancerProvider.MAX_CHOICE_COUNT;
@@ -38,12 +37,13 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -60,7 +60,7 @@ import javax.annotation.Nonnull;
  * The default sampling amount of two is also known as
  * the "power of two choices" (P2C).
  */
-final class LeastRequestLoadBalancer extends LoadBalancer {
+final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
@@ -68,12 +68,10 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
   static final Attributes.Key<AtomicInteger> IN_FLIGHTS =
       Attributes.Key.create("in-flights");
 
-  private final Helper helper;
   private final ThreadSafeRandom random;
-  private final Map<EquivalentAddressGroup, Subchannel> subchannels =
-      new HashMap<>();
+  // private final Map<EquivalentAddressGroup, Subchannel> subchannels =
+  //     new HashMap<>();
 
-  private ConnectivityState currentState;
   private LeastRequestPicker currentPicker = new EmptyPicker(EMPTY_OK);
   private int choiceCount = DEFAULT_CHOICE_COUNT;
 
@@ -83,118 +81,32 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   LeastRequestLoadBalancer(Helper helper, ThreadSafeRandom random) {
-    this.helper = checkNotNull(helper, "helper");
+    super(helper);
     this.random = checkNotNull(random, "random");
   }
 
   @Override
+  protected SubchannelPicker getInitialPicker() {
+    return currentPicker;
+  }
+
+  @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (resolvedAddresses.getAddresses().isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
-              + ", attrs=" + resolvedAddresses.getAttributes()));
+    if (super.acceptResolvedAddresses(resolvedAddresses)) {
+      LeastRequestConfig config =
+          (LeastRequestConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+      if (config != null) {
+        choiceCount = config.choiceCount;
+      }
+      return true;
+    } else {
       return false;
     }
-    LeastRequestConfig config =
-        (LeastRequestConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    // Config may be null if least_request is used outside xDS
-    if (config != null) {
-      choiceCount = config.choiceCount;
-    }
-
-    List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
-    Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
-    Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(servers);
-    Set<EquivalentAddressGroup> removedAddrs = setsDifference(currentAddrs, latestAddrs.keySet());
-
-    for (Map.Entry<EquivalentAddressGroup, EquivalentAddressGroup> latestEntry :
-        latestAddrs.entrySet()) {
-      EquivalentAddressGroup strippedAddressGroup = latestEntry.getKey();
-      EquivalentAddressGroup originalAddressGroup = latestEntry.getValue();
-      Subchannel existingSubchannel = subchannels.get(strippedAddressGroup);
-      if (existingSubchannel != null) {
-        // EAG's Attributes may have changed.
-        existingSubchannel.updateAddresses(Collections.singletonList(originalAddressGroup));
-        continue;
-      }
-      // Create new subchannels for new addresses.
-      Attributes.Builder subchannelAttrs = Attributes.newBuilder()
-          .set(STATE_INFO, new Ref<>(ConnectivityStateInfo.forNonError(IDLE)))
-          // Used to track the in flight requests on this particular subchannel
-          .set(IN_FLIGHTS, new AtomicInteger(0));
-
-      final Subchannel subchannel = checkNotNull(
-          helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-              .setAddresses(originalAddressGroup)
-              .setAttributes(subchannelAttrs.build())
-              .build()),
-          "subchannel");
-      subchannel.start(new SubchannelStateListener() {
-        @Override
-        public void onSubchannelState(ConnectivityStateInfo state) {
-          processSubchannelState(subchannel, state);
-        }
-      });
-      subchannels.put(strippedAddressGroup, subchannel);
-      subchannel.requestConnection();
-    }
-
-    ArrayList<Subchannel> removedSubchannels = new ArrayList<>();
-    for (EquivalentAddressGroup addressGroup : removedAddrs) {
-      removedSubchannels.add(subchannels.remove(addressGroup));
-    }
-
-    // Update the picker before shutting down the subchannels, to reduce the chance of the race
-    // between picking a subchannel and shutting it down.
-    updateBalancingState();
-
-    // Shutdown removed subchannels
-    for (Subchannel removedSubchannel : removedSubchannels) {
-      shutdownSubchannel(removedSubchannel);
-    }
-
-    return true;
   }
 
   @Override
-  public void handleNameResolutionError(Status error) {
-    if (currentState != READY)  {
-      updateBalancingState(TRANSIENT_FAILURE, new EmptyPicker(error));
-    }
-  }
-
-  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
-      return;
-    }
-    if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
-      helper.refreshNameResolution();
-    }
-    if (stateInfo.getState() == IDLE) {
-      subchannel.requestConnection();
-    }
-    Ref<ConnectivityStateInfo> subchannelStateRef = getSubchannelStateInfoRef(subchannel);
-    if (subchannelStateRef.value.getState().equals(TRANSIENT_FAILURE)) {
-      if (stateInfo.getState().equals(CONNECTING) || stateInfo.getState().equals(IDLE)) {
-        return;
-      }
-    }
-    subchannelStateRef.value = stateInfo;
-    updateBalancingState();
-  }
-
-  private void shutdownSubchannel(Subchannel subchannel) {
-    subchannel.shutdown();
-    getSubchannelStateInfoRef(subchannel).value =
-        ConnectivityStateInfo.forNonError(SHUTDOWN);
-  }
-
-  @Override
-  public void shutdown() {
-    for (Subchannel subchannel : getSubchannels()) {
-      shutdownSubchannel(subchannel);
-    }
-    subchannels.clear();
+  protected SubchannelPicker getErrorPicker(Status error) {
+    return new EmptyPicker(error);
   }
 
   private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
@@ -203,18 +115,16 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
    * Updates picker with the list of active subchannels (state == READY).
    */
   @SuppressWarnings("ReferenceEquality")
-  private void updateBalancingState() {
-    List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
+  @Override
+  protected void updateOverallBalancingState() {
+    List<ChildLbState> activeList = getReadyChildren();
     if (activeList.isEmpty()) {
       // No READY subchannels, determine aggregate state and error status
       boolean isConnecting = false;
       Status aggStatus = EMPTY_OK;
-      for (Subchannel subchannel : getSubchannels()) {
-        ConnectivityStateInfo stateInfo = getSubchannelStateInfoRef(subchannel).value;
-        // This subchannel IDLE is not because of channel IDLE_TIMEOUT,
-        // in which case LB is already shutdown.
-        // LRLB will request connection immediately on subchannel IDLE.
-        if (stateInfo.getState() == CONNECTING || stateInfo.getState() == IDLE) {
+      for (ChildLbState childLbState : getChildLbStates()) {
+        ConnectivityState state = childLbState.getCurrentState();
+        if (state == CONNECTING || state == IDLE) {
           isConnecting = true;
         }
         if (aggStatus == EMPTY_OK || !aggStatus.isOk()) {
@@ -230,43 +140,18 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
     }
   }
 
+  @Override
+  protected ChildLbState createChildLbState(Object key, Object policyConfig,
+      SubchannelPicker initialPicker) {
+    return new LeastRequestLbState((key, pickFirstLbProvider, policyConfig, initialPicker);
+  }
+
   private void updateBalancingState(ConnectivityState state, LeastRequestPicker picker) {
-    if (state != currentState || !picker.isEquivalentTo(currentPicker)) {
-      helper.updateBalancingState(state, picker);
-      currentState = state;
+    if (state != currentConnectivityState || !picker.isEquivalentTo(currentPicker)) {
+      updateHelperBalancingState(state, picker);
+      currentConnectivityState = state;
       currentPicker = picker;
     }
-  }
-
-  /**
-   * Filters out non-ready subchannels.
-   */
-  private static List<Subchannel> filterNonFailingSubchannels(
-      Collection<Subchannel> subchannels) {
-    List<Subchannel> readySubchannels = new ArrayList<>(subchannels.size());
-    for (Subchannel subchannel : subchannels) {
-      if (isReady(subchannel)) {
-        readySubchannels.add(subchannel);
-      }
-    }
-    return readySubchannels;
-  }
-
-  /**
-   * Converts list of {@link EquivalentAddressGroup} to {@link EquivalentAddressGroup} set and
-   * remove all attributes. The values are the original EAGs.
-   */
-  private static Map<EquivalentAddressGroup, EquivalentAddressGroup> stripAttrs(
-      List<EquivalentAddressGroup> groupList) {
-    Map<EquivalentAddressGroup, EquivalentAddressGroup> addrs = new HashMap<>(groupList.size() * 2);
-    for (EquivalentAddressGroup group : groupList) {
-      addrs.put(stripAttrs(group), group);
-    }
-    return addrs;
-  }
-
-  private static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
-    return new EquivalentAddressGroup(eag.getAddresses());
   }
 
   @VisibleForTesting
@@ -279,13 +164,8 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
     return checkNotNull(subchannel.getAttributes().get(STATE_INFO), "STATE_INFO");
   }
 
-  private static AtomicInteger getInFlights(Subchannel subchannel) {
-    return checkNotNull(subchannel.getAttributes().get(IN_FLIGHTS), "IN_FLIGHTS");
-  }
-
-  // package-private to avoid synthetic access
-  static boolean isReady(Subchannel subchannel) {
-    return getSubchannelStateInfoRef(subchannel).value.getState() == READY;
+  private static AtomicInteger getInFlights(ChildLbState childLbState) {
+    return ((LeastRequestLbState)childLbState).activeRequests;
   }
 
   private static <T> Set<T> setsDifference(Set<T> a, Set<T> b) {
@@ -301,11 +181,11 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   static final class ReadyPicker extends LeastRequestPicker {
-    private final List<Subchannel> list; // non-empty
+    private final List<ChildLbState> list; // non-empty
     private final int choiceCount;
     private final ThreadSafeRandom random;
 
-    ReadyPicker(List<Subchannel> list, int choiceCount, ThreadSafeRandom random) {
+    ReadyPicker(List<ChildLbState> list, int choiceCount, ThreadSafeRandom random) {
       checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
       this.choiceCount = choiceCount;
@@ -314,10 +194,10 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      final Subchannel subchannel = nextSubchannel();
+      final ChildLbState childLbState = nextSubchannel();
       final OutstandingRequestsTracingFactory factory =
-          new OutstandingRequestsTracingFactory(getInFlights(subchannel));
-      return PickResult.withSubchannel(subchannel, factory);
+          new OutstandingRequestsTracingFactory(getInFlights(childLbState));
+      return PickResult.withSubchannel(childLbState, factory);
     }
 
     @Override
@@ -328,10 +208,10 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
                         .toString();
     }
 
-    private Subchannel nextSubchannel() {
-      Subchannel candidate = list.get(random.nextInt(list.size()));
+    private ChildLbState nextSubchannel() {
+      ChildLbState candidate = list.get(random.nextInt(list.size()));
       for (int i = 0; i < choiceCount - 1; ++i) {
-        Subchannel sampled = list.get(random.nextInt(list.size()));
+        ChildLbState sampled = list.get(random.nextInt(list.size()));
         if (getInFlights(sampled).get() < getInFlights(candidate).get()) {
           candidate = sampled;
         }
@@ -433,6 +313,15 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
       return MoreObjects.toStringHelper(this)
           .add("choiceCount", choiceCount)
           .toString();
+    }
+  }
+
+  private class LeastRequestLbState extends ChildLbState {
+
+    final AtomicInteger activeRequests = new AtomicInteger(0);
+    public LeastRequestLbState(Object key, LoadBalancerProvider policyProvider,
+        Object childConfig, SubchannelPicker initialPicker) {
+      super(key, policyProvider, childConfig, initialPicker);
     }
   }
 }
