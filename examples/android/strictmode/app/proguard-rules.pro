@@ -15,5 +15,4 @@
 -dontwarn javax.naming.**
 -dontwarn okio.**
 -dontwarn sun.misc.Unsafe
--keep class io.grpc.internal.AbstractManagedChannelImplBuilder
 
