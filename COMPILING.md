@@ -68,7 +68,7 @@ For Visual C++, please refer to the [Protobuf README](https://github.com/google/
 for how to compile Protobuf. gRPC-java assumes a Release build.
 
 #### Mac
-Some versions of Mac OS X (e.g., 10.10) doesn't have ``/usr/local`` in the
+Some versions of Mac OS X (e.g., 10.10) don't have ``/usr/local`` in the
 default search paths for header files and libraries. It will fail the build of
 the codegen. To work around this, you will need to set environment variables:
 ```
