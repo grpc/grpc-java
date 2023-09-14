@@ -533,13 +533,12 @@ public class NettyAdaptiveCumulatorTest {
 
       try {
         NettyAdaptiveCumulator.mergeWithCompositeTail(alloc, compositeThrows, in);
+        in = null; // On success it would be released
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
         assertSame(expectedError, actualError);
         // Because of error, ownership shouldn't have changed so should not have been released.
-        int inRefCnt = in.refCnt();
-        in.release();
-        assertEquals(1, inRefCnt);
+        assertEquals(1, in.refCnt());
         // Tail released
         assertEquals(0, tail.refCnt());
         // Composite cumulation is retained
@@ -547,6 +546,9 @@ public class NettyAdaptiveCumulatorTest {
         // Composite cumulation loses the tail
         assertEquals(0, compositeThrows.numComponents());
       } finally {
+        if (in != null) {
+          in.release();
+        }
         compositeThrows.release();
       }
     }
@@ -571,13 +573,12 @@ public class NettyAdaptiveCumulatorTest {
 
       try {
         NettyAdaptiveCumulator.mergeWithCompositeTail(mockAlloc, compositeRo, in);
+        in = null; // On success it would be released
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
-        int inRefCnt = in.refCnt();
-        in.release();
         assertSame(expectedError, actualError);
         // Because of error, ownership shouldn't have changed so should not have been released.
-        assertEquals(1, inRefCnt);
+        assertEquals(1, in.refCnt());
         // New buffer released
         assertEquals(0, newTail.refCnt());
         // Composite cumulation is retained
@@ -585,6 +586,9 @@ public class NettyAdaptiveCumulatorTest {
         // Composite cumulation loses the tail
         assertEquals(0, compositeRo.numComponents());
       } finally {
+        if (in != null) {
+          in.release();
+        }
         compositeRo.release();
       }
     }
