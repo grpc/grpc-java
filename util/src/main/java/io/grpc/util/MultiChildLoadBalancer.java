@@ -16,25 +16,29 @@
 
 package io.grpc.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
-import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -46,22 +50,33 @@ import javax.annotation.Nullable;
 @Internal
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
-  @VisibleForTesting
-  public static final int DELAYED_CHILD_DELETION_TIME_MINUTES = 15;
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
   private final Map<Object, ChildLbState> childLbStates = new HashMap<>();
   private final Helper helper;
-  protected final SynchronizationContext syncContext;
-  private final ScheduledExecutorService timeService;
   // Set to true if currently in the process of handling resolved addresses.
-  private boolean resolvingAddresses;
+  @VisibleForTesting
+  boolean resolvingAddresses;
+
+  protected final PickFirstLoadBalancerProvider pickFirstLbProvider =
+      new PickFirstLoadBalancerProvider();
+
 
   protected MultiChildLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
-    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
-    this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     logger.log(Level.FINE, "Created");
   }
+
+  @SuppressWarnings("ReferenceEquality")
+  protected static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
+    if (eag.getAttributes() == Attributes.EMPTY) {
+      return eag;
+    } else {
+      return new EquivalentAddressGroup(eag.getAddresses());
+    }
+  }
+
+  protected abstract SubchannelPicker getSubchannelPicker(
+      Map<Object, SubchannelPicker> childPickers);
 
   protected SubchannelPicker getInitialPicker() {
     return EMPTY_PICKER;
@@ -71,11 +86,42 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return new ErrorPicker(error);
   }
 
-  protected abstract Map<Object, PolicySelection> getPolicySelectionMap(
-      ResolvedAddresses resolvedAddresses);
+  @VisibleForTesting
+  protected Collection<ChildLbState> getChildLbStates() {
+    return childLbStates.values();
+  }
 
-  protected abstract SubchannelPicker getSubchannelPicker(
-      Map<Object, SubchannelPicker> childPickers);
+  protected ChildLbState getChildLbState(Object key) {
+    if (key == null) {
+      return null;
+    }
+    return childLbStates.get(key);
+  }
+
+  protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
+    return getChildLbState(stripAttrs(eag));
+  }
+
+  /**
+   * Override to utilize parsing of the policy configuration or alternative helper/lb generation.
+   */
+  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
+    Map<Object, ChildLbState> childLbMap = new HashMap<>();
+    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
+    Object policyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    for (EquivalentAddressGroup eag : addresses) {
+      EquivalentAddressGroup strippedEag = stripAttrs(eag); // keys need to be just addresses
+      ChildLbState childLbState = childLbMap.getOrDefault(strippedEag,
+          createChildLbState(strippedEag, policyConfig, getInitialPicker()));
+      childLbMap.put(strippedEag, childLbState);
+    }
+    return childLbMap;
+  }
+
+  protected ChildLbState createChildLbState(Object key, Object policyConfig,
+      SubchannelPicker initialPicker) {
+    return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
+  }
 
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -87,25 +133,61 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
   }
 
+  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
+      Object childConfig) {
+    checkArgument(key instanceof EquivalentAddressGroup, "key is wrong type");
+
+    // Retrieve the non-stripped version
+    EquivalentAddressGroup eag = null;
+    for (EquivalentAddressGroup equivalentAddressGroup : resolvedAddresses.getAddresses()) {
+      if (stripAttrs(equivalentAddressGroup).equals(key)) {
+        eag = equivalentAddressGroup;
+        break;
+      }
+    }
+
+    checkNotNull(eag, key.toString() + " no longer present in load balancer children");
+
+    return resolvedAddresses.toBuilder()
+        .setAddresses(Collections.singletonList(eag))
+        .setLoadBalancingPolicyConfig(childConfig)
+        .build();
+  }
+
+
+
   private boolean acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
-    Map<Object, PolicySelection> newChildPolicies = getPolicySelectionMap(resolvedAddresses);
-    for (Map.Entry<Object, PolicySelection> entry : newChildPolicies.entrySet()) {
+    Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
+
+    if (newChildren.isEmpty()) {
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+          "NameResolver returned no usable address. " + resolvedAddresses));
+      return false;
+    }
+
+    // Do adds and updates
+    for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
       final Object key = entry.getKey();
-      LoadBalancerProvider childPolicyProvider = entry.getValue().getProvider();
+      LoadBalancerProvider childPolicyProvider = entry.getValue().getPolicyProvider();
       Object childConfig = entry.getValue().getConfig();
       if (!childLbStates.containsKey(key)) {
-        childLbStates.put(key, new ChildLbState(key, childPolicyProvider, getInitialPicker()));
+        childLbStates.put(key, entry.getValue());
       } else {
-        childLbStates.get(key).reactivate(childPolicyProvider);
+        // Reuse the existing one
+        ChildLbState existingChildLbState = childLbStates.get(key);
+        if (existingChildLbState.isDeactivated()) {
+          existingChildLbState.reactivate(childPolicyProvider);
+        }
       }
+
       LoadBalancer childLb = childLbStates.get(key).lb;
-      ResolvedAddresses childAddresses =
-          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build();
-      childLb.handleResolvedAddresses(childAddresses);
+      childLb.handleResolvedAddresses(getChildAddresses(key, resolvedAddresses, childConfig));
     }
-    for (Object key : childLbStates.keySet()) {
-      if (!newChildPolicies.containsKey(key)) {
+
+    // Do removals
+    for (Object key : ImmutableList.copyOf(childLbStates.keySet())) {
+      if (!newChildren.containsKey(key)) {
         childLbStates.get(key).deactivate();
       }
     }
@@ -139,10 +221,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     childLbStates.clear();
   }
 
-  private void updateOverallBalancingState() {
+  protected void updateOverallBalancingState() {
     ConnectivityState overallState = null;
     final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
-    for (ChildLbState childLbState : childLbStates.values()) {
+    for (ChildLbState childLbState : getChildLbStates()) {
       if (childLbState.deactivated) {
         continue;
       }
@@ -155,7 +237,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   }
 
   @Nullable
-  private static ConnectivityState aggregateState(
+  protected static ConnectivityState aggregateState(
       @Nullable ConnectivityState overallState, ConnectivityState childState) {
     if (overallState == null) {
       return childState;
@@ -172,67 +254,109 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return overallState;
   }
 
-  private final class ChildLbState {
+  protected Helper getHelper() {
+    return helper;
+  }
+
+  protected void removeChild(Object key) {
+    childLbStates.remove(key);
+  }
+
+
+  public class ChildLbState {
     private final Object key;
+    private final Object config;
     private final GracefulSwitchLoadBalancer lb;
     private LoadBalancerProvider policyProvider;
     private ConnectivityState currentState = CONNECTING;
     private SubchannelPicker currentPicker;
     private boolean deactivated;
-    @Nullable
-    ScheduledHandle deletionTimer;
 
-    ChildLbState(Object key, LoadBalancerProvider policyProvider, SubchannelPicker initialPicker) {
+    public ChildLbState(Object key, LoadBalancerProvider policyProvider, Object childConfig,
+        SubchannelPicker initialPicker) {
       this.key = key;
       this.policyProvider = policyProvider;
       lb = new GracefulSwitchLoadBalancer(new ChildLbStateHelper());
       lb.switchTo(policyProvider);
       currentPicker = initialPicker;
+      config = childConfig;
     }
 
-    void deactivate() {
+
+    @Override
+    public String toString() {
+      return "Address = " + key
+          + ", state = " + currentState
+          + ", picker type: " + currentPicker.getClass()
+          + ", lb: " + lb.delegate().getClass()
+          + (deactivated ? ", deactivated" : "");
+    }
+
+    public Object getKey() {
+      return key;
+    }
+
+    Object getConfig() {
+      return config;
+    }
+
+    public LoadBalancerProvider getPolicyProvider() {
+      return policyProvider;
+    }
+
+    protected Subchannel getSubchannels(PickSubchannelArgs args) {
+      return getCurrentPicker().pickSubchannel(args).getSubchannel();
+    }
+
+    ConnectivityState getCurrentState() {
+      return currentState;
+    }
+
+    public SubchannelPicker getCurrentPicker() {
+      return currentPicker;
+    }
+
+    public boolean isDeactivated() {
+      return deactivated;
+    }
+
+    @VisibleForTesting
+    LoadBalancer getLb() {
+      return this.lb;
+    }
+
+    protected void setDeactivated() {
+      deactivated = true;
+    }
+
+    protected void deactivate() {
       if (deactivated) {
         return;
       }
 
-      class DeletionTask implements Runnable {
-        @Override
-        public void run() {
-          shutdown();
-          childLbStates.remove(key);
-        }
-      }
-
-      deletionTimer =
-          syncContext.schedule(
-              new DeletionTask(),
-              DELAYED_CHILD_DELETION_TIME_MINUTES,
-              TimeUnit.MINUTES,
-              timeService);
+      shutdown();
+      childLbStates.remove(key);
       deactivated = true;
       logger.log(Level.FINE, "Child balancer {0} deactivated", key);
     }
 
-    void reactivate(LoadBalancerProvider policyProvider) {
-      if (deletionTimer != null && deletionTimer.isPending()) {
-        deletionTimer.cancel();
-        deactivated = false;
-        logger.log(Level.FINE, "Child balancer {0} reactivated", key);
-      }
+    protected void reactivate(LoadBalancerProvider policyProvider) {
       if (!this.policyProvider.getPolicyName().equals(policyProvider.getPolicyName())) {
         Object[] objects = {
             key, this.policyProvider.getPolicyName(),policyProvider.getPolicyName()};
         logger.log(Level.FINE, "Child balancer {0} switching policy from {1} to {2}", objects);
         lb.switchTo(policyProvider);
         this.policyProvider = policyProvider;
+      } else {
+        logger.log(Level.FINE, "Child balancer {0} reactivated", key);
       }
+
+      deactivated = false;
     }
 
-    void shutdown() {
-      if (deletionTimer != null && deletionTimer.isPending()) {
-        deletionTimer.cancel();
-      }
+    protected void shutdown() {
       lb.shutdown();
+      this.currentState = SHUTDOWN;
       logger.log(Level.FINE, "Child balancer {0} deleted", key);
     }
 

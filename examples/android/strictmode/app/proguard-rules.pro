@@ -15,3 +15,4 @@
 -dontwarn javax.naming.**
 -dontwarn okio.**
 -dontwarn sun.misc.Unsafe
+
