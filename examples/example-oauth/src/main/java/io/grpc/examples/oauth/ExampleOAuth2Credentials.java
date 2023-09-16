@@ -24,10 +24,18 @@ import java.util.Date;
 
 /**
  * Subclass of {@link OAuth2Credentials } with a simple implementation of
- * {@link OAuth2Credentials#refreshAccessToken()}.
+ * {@link OAuth2Credentials#refreshAccessToken()}. A real implementation
+ * will maintain a refresh token and use it to exchange it for a new
+ * access token from the authorization server.
  */
 public class ExampleOAuth2Credentials extends OAuth2Credentials {
 
+  /**
+   * Creates an access token using the passed in clientId. A real
+   * implementation will contact the authorization server to get an access
+   * token and a refresh token.
+   *
+   */
   public ExampleOAuth2Credentials(String clientId) {
     super(new AccessToken(Constant.ACCESS_TOKEN + ":" + clientId,
         new Date()));
@@ -36,6 +44,8 @@ public class ExampleOAuth2Credentials extends OAuth2Credentials {
 
   /**
    * Refreshes access token by simply appending ":+1" to the previous value.
+   * A real implementation will use the existing refresh token to get
+   * fresh access and refresh tokens from the authorization server.
    */
   @Override
   public AccessToken refreshAccessToken() throws IOException {

@@ -32,6 +32,5 @@ final class Constant {
     static final Metadata.Key<String> AUTHORIZATION_METADATA_KEY = Metadata.Key.of("Authorization", ASCII_STRING_MARSHALLER);
 
     private Constant() {
-        throw new AssertionError();
     }
 }

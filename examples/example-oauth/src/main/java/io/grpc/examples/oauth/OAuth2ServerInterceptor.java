@@ -28,6 +28,9 @@ import io.grpc.Status;
  * This interceptor gets the OAuth2 access token from metadata, verifies it and sets the client
  * identifier obtained from the token into the context. The one check it does on the access token
  * is that the token has been refreshed at least once.
+ *
+ * A real implementation will validate the access token using the resource server (or the
+ * authorization server).
  */
 class OAuth2ServerInterceptor implements ServerInterceptor {
 
@@ -36,18 +39,18 @@ class OAuth2ServerInterceptor implements ServerInterceptor {
   @Override
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> serverCall,
       Metadata metadata, ServerCallHandler<ReqT, RespT> serverCallHandler) {
-    String value = metadata.get(Constant.AUTHORIZATION_METADATA_KEY);
+    String authHeaderValue = metadata.get(Constant.AUTHORIZATION_METADATA_KEY);
 
     Status status = Status.OK;
-    if (value == null) {
+    if (authHeaderValue == null) {
       status = Status.UNAUTHENTICATED.withDescription("Authorization token is missing");
-    } else if (!value.startsWith(BEARER_TYPE)) {
+    } else if (!authHeaderValue.startsWith(BEARER_TYPE)) {
       status = Status.UNAUTHENTICATED.withDescription("Unknown authorization type");
     } else {
       // remove authorization type prefix
-      String tokenValue = value.substring(BEARER_TYPE.length()).trim();
+      String tokenValue = authHeaderValue.substring(BEARER_TYPE.length()).trim();
       if (!tokenValue.startsWith(Constant.ACCESS_TOKEN)) {
-        status = Status.UNAUTHENTICATED.withDescription("Invalid access token value");
+        status = Status.UNAUTHENTICATED.withDescription("Invalid access token authHeaderValue");
       } else {
         String[] tokens = tokenValue.split(":");
         if (tokens.length >= 3 && tokens[2].equals(Constant.REFRESH_SUFFIX)) {
@@ -61,6 +64,7 @@ class OAuth2ServerInterceptor implements ServerInterceptor {
       }
     }
 
+    // at this point we have auth failure: skip further processing and close the call
     serverCall.close(status, new Metadata());
     return new ServerCall.Listener<ReqT>() {
       // noop

@@ -51,7 +51,7 @@ public class AuthClient {
   }
 
   /**
-   * Construct client for accessing GreeterGrpc server using the existing channel.
+   * Construct a client for accessing GreeterGrpc server using an existing channel.
    */
   AuthClient(CallCredentials callCredentials, ManagedChannel channel) {
     this.callCredentials = callCredentials;

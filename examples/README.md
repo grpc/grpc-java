@@ -205,6 +205,8 @@ $ bazel-bin/hello-world-client
 
 - [JWT-based Authentication](example-jwt-auth)
 
+- [OAuth2-based Authentication](example-oauth)
+
 - [Pre-serialized messages](src/main/java/io/grpc/examples/preserialized)
 
 ## Unit test examples
