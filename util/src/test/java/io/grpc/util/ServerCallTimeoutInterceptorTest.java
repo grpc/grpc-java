@@ -70,8 +70,8 @@ public class ServerCallTimeoutInterceptorTest {
           responseObserver.onNext(req);
           responseObserver.onCompleted();
         } catch (InterruptedException e) {
-          Status status = Context.current().isCancelled() ?
-              Status.CANCELLED : Status.INTERNAL;
+          Status status = Context.current().isCancelled()
+              ? Status.CANCELLED : Status.INTERNAL;
           responseObserver.onError(
               new StatusRuntimeException(status.withDescription(e.getMessage())));
         }
