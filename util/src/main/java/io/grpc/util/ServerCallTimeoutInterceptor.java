@@ -25,13 +25,13 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 
 /**
- * An optional ServerInterceptor that can interrupt server calls that are running for too long time.
- * In this way, it prevents problematic code from using up all threads.
+ * An optional ServerInterceptor to stop server calls at best effort when the timeout is reached.
+ * In this way, it prevents problematic code from excessively using up all threads in the pool.
  *
- * <p>How to use: you can add it to your server using ServerBuilder#intercept(ServerInterceptor).
+ * <p>How to use: install it to your server using ServerBuilder#intercept(ServerInterceptor).
  *
  * <p>Limitation: it only applies the timeout to unary calls
- * (streaming calls will still run without timeout).
+ * (long-running streaming calls are allowed, so they can run without this timeout limit).
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10361")
 public class ServerCallTimeoutInterceptor implements ServerInterceptor {
@@ -89,7 +89,7 @@ public class ServerCallTimeoutInterceptor implements ServerInterceptor {
     }
 
     /**
-     * Intercepts onHalfClose() because the application RPC method is called in it. See
+     * Adds interruption here because the application RPC method is called in halfClose(). See
      * io.grpc.stub.ServerCalls.UnaryServerCallHandler.UnaryServerCallListener
      */
     @Override

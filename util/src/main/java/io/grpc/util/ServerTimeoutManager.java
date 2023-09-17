@@ -39,7 +39,7 @@ public class ServerTimeoutManager {
   /**
    * Creates a builder.
    *
-   * @param timeout Configurable timeout threshold. A value less than 0 (e.g. 0 or -1) means not to
+   * @param timeout Configurable timeout threshold. A non-positive value (e.g. 0 or -1) means not to
    *     check timeout.
    * @param unit The unit of the timeout.
    */
@@ -63,7 +63,8 @@ public class ServerTimeoutManager {
   }
 
   /**
-   *  Please call shutdown() when the application exits. You can add a JVM shutdown hook.
+   *  Please call shutdown() when the application exits.
+   *  You can add a JVM shutdown hook to call it.
    */
   public void shutdown() {
     scheduler.shutdownNow();
