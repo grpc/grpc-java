@@ -104,6 +104,8 @@ public class ServerCallTimeoutInterceptor implements ServerInterceptor {
         super.onCancel();
       } finally {
         context.detach(previous);
+        // Cancel the timeout when the call is finished.
+        context.close();
       }
     }
 
@@ -114,6 +116,8 @@ public class ServerCallTimeoutInterceptor implements ServerInterceptor {
         super.onComplete();
       } finally {
         context.detach(previous);
+        // Cancel the timeout when the call is finished.
+        context.close();
       }
     }
 

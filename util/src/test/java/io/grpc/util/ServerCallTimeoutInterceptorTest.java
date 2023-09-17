@@ -30,7 +30,10 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -83,13 +86,13 @@ public class ServerCallTimeoutInterceptorTest {
   public void unary_setShouldInterrupt_exceedingTimeout_isInterrupted() {
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(100));
-    StringBuffer logBuf = new StringBuffer();
+        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(20));
+    StringWriter logWriter = new StringWriter();
 
     ServerTimeoutManager serverTimeoutManager =
         ServerTimeoutManager.newBuilder(1, TimeUnit.NANOSECONDS)
             .setShouldInterrupt(true)
-            .setLogFunction(logBuf::append)
+            .setLogFunction(new PrintWriter(logWriter)::println)
             .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
@@ -101,19 +104,20 @@ public class ServerCallTimeoutInterceptorTest {
     assertThat(serverCall.responses).isEmpty();
     assertEquals(Status.Code.CANCELLED, serverCall.status.getCode());
     assertEquals("server call timeout", serverCall.status.getDescription());
-    assertThat(logBuf.toString()).startsWith("Interrupted RPC thread ");
+    assertThat(logWriter.toString())
+        .startsWith("server call timeout for some/unary\nInterrupted RPC thread ");
   }
 
   @Test
   public void unary_byDefault_exceedingTimeout_isCancelledButNotInterrupted() {
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(100));
-    StringBuffer logBuf = new StringBuffer();
+        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(20));
+    StringWriter logWriter = new StringWriter();
 
     ServerTimeoutManager serverTimeoutManager =
         ServerTimeoutManager.newBuilder(1, TimeUnit.NANOSECONDS)
-            .setLogFunction(logBuf::append)
+            .setLogFunction(new PrintWriter(logWriter)::println)
             .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
@@ -125,7 +129,7 @@ public class ServerCallTimeoutInterceptorTest {
     assertThat(serverCall.responses).isEmpty();
     assertEquals(Status.Code.CANCELLED, serverCall.status.getCode());
     assertEquals("server call timeout", serverCall.status.getDescription());
-    assertThat(logBuf.toString()).isEmpty();
+    assertEquals("server call timeout for some/unary\n", logWriter.toString());
   }
 
   @Test
@@ -133,12 +137,12 @@ public class ServerCallTimeoutInterceptorTest {
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
         ServerCalls.asyncUnaryCall(sleepingUnaryMethod(0));
-    StringBuffer logBuf = new StringBuffer();
+    StringWriter logWriter = new StringWriter();
 
     ServerTimeoutManager serverTimeoutManager =
         ServerTimeoutManager.newBuilder(100, TimeUnit.MILLISECONDS)
             .setShouldInterrupt(true)
-            .setLogFunction(logBuf::append)
+            .setLogFunction(new PrintWriter(logWriter)::println)
             .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
@@ -149,7 +153,7 @@ public class ServerCallTimeoutInterceptorTest {
 
     assertThat(serverCall.responses).isEqualTo(Collections.singletonList(42));
     assertEquals(Status.Code.OK, serverCall.status.getCode());
-    assertThat(logBuf.toString()).isEmpty();
+    assertThat(logWriter.toString()).isEmpty();
   }
 
   @Test
@@ -166,9 +170,7 @@ public class ServerCallTimeoutInterceptorTest {
             });
 
     ServerTimeoutManager serverTimeoutManager =
-        ServerTimeoutManager.newBuilder(0, TimeUnit.NANOSECONDS)
-            .setShouldInterrupt(true)
-            .build();
+        ServerTimeoutManager.newBuilder(0, TimeUnit.NANOSECONDS).build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
     serverTimeoutManager.shutdown();
@@ -197,6 +199,83 @@ public class ServerCallTimeoutInterceptorTest {
 
     assertNotEquals(
         ServerCallTimeoutInterceptor.TimeoutServerCallListener.class, listener.getClass());
+  }
+
+  @Test
+  public void allStagesCanKnowCancellation() throws Exception {
+    List<String> cancelledStages = Collections.synchronizedList(new ArrayList<>());
+    ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
+    ServerCallHandler<Integer, Integer> callHandler = new ServerCallHandler<Integer, Integer>() {
+      private final ServerCallHandler<Integer, Integer> innerHandler =
+          ServerCalls.asyncUnaryCall(sleepingUnaryMethod(0));
+
+      @Override
+      public ServerCall.Listener<Integer> startCall(
+          ServerCall<Integer, Integer> call, Metadata headers) {
+        ServerCall.Listener<Integer> delegate = innerHandler.startCall(call, headers);
+        return new ServerCall.Listener<Integer>() {
+          @Override
+          public void onMessage(Integer message) {
+            if (Context.current().isCancelled()) {
+              cancelledStages.add("onMessage");
+            }
+            delegate.onMessage(message);
+          }
+
+          @Override
+          public void onHalfClose() {
+            if (Context.current().isCancelled()) {
+              cancelledStages.add("onHalfClose");
+            }
+            delegate.onHalfClose();
+          }
+
+          @Override
+          public void onCancel() {
+            if (Context.current().isCancelled()) {
+              cancelledStages.add("onCancel");
+            }
+            delegate.onCancel();
+          }
+
+          @Override
+          public void onComplete() {
+            if (Context.current().isCancelled()) {
+              cancelledStages.add("onComplete");
+            }
+            delegate.onComplete();
+          }
+
+          @Override
+          public void onReady() {
+            if (Context.current().isCancelled()) {
+              cancelledStages.add("onReady");
+            }
+            delegate.onReady();
+          }
+        };
+      }
+    };
+
+    ServerTimeoutManager serverTimeoutManager =
+        ServerTimeoutManager.newBuilder(1, TimeUnit.NANOSECONDS).build();
+    ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
+        .interceptCall(serverCall, new Metadata(), callHandler);
+    // Let it timeout
+    Thread.sleep(20);
+    listener.onMessage(42);
+    listener.onHalfClose();
+    listener.onReady();
+    listener.onComplete();
+    listener.onCancel();
+    serverTimeoutManager.shutdown();
+
+    assertThat(serverCall.responses).isEmpty();
+    assertEquals(Status.Code.CANCELLED, serverCall.status.getCode());
+    assertEquals("server call timeout", serverCall.status.getDescription());
+    assertEquals(
+        Arrays.asList("onMessage", "onHalfClose", "onReady", "onComplete", "onCancel"),
+        cancelledStages);
   }
 
   private static class ServerCallRecorder extends ServerCall<Integer, Integer> {

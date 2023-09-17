@@ -84,6 +84,10 @@ public class ServerTimeoutManager {
       if (c.cancellationCause() == null) {
         return;
       }
+      if (logFunction != null) {
+        logFunction.accept("server call timeout for "
+            + serverCall.getMethodDescriptor().getFullMethodName());
+      }
       serverCall.close(Status.CANCELLED.withDescription("server call timeout"), new Metadata());
     };
     Context.CancellableContext context = Context.current().withDeadline(
