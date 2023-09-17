@@ -98,6 +98,11 @@ public abstract class ForwardingReadableBuffer implements ReadableBuffer {
   }
 
   @Override
+  public void touch() {
+    buf.touch();
+  }
+
+  @Override
   public boolean markSupported() {
     return buf.markSupported();
   }

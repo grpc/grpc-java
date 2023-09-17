@@ -117,7 +117,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           }
           throw new RuntimeException(e);
         }
-  };
+      };
 
 
   @GuardedBy("this")

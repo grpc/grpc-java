@@ -784,9 +784,7 @@ public abstract class BinderTransport
         Context sourceContext, AndroidComponentAddress targetAddress) {
       return InternalLogId.allocate(
           BinderClientTransport.class,
-          sourceContext.getClass().getSimpleName()
-              + "->"
-              + targetAddress.getComponent().toShortString());
+          sourceContext.getClass().getSimpleName() + "->" + targetAddress);
     }
 
     private static Attributes buildClientAttributes(

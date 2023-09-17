@@ -24,6 +24,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -46,6 +47,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
@@ -96,6 +98,10 @@ public class OutlierDetectionLoadBalancerTest {
   private Helper mockHelper;
   @Mock
   private SocketAddress mockSocketAddress;
+  @Mock
+  private ClientStreamTracer.Factory mockStreamTracerFactory;
+  @Mock
+  private ClientStreamTracer mockStreamTracer;
 
   @Captor
   private ArgumentCaptor<ConnectivityState> connectivityStateCaptor;
@@ -192,6 +198,9 @@ public class OutlierDetectionLoadBalancerTest {
             return subchannel;
           }
         });
+
+    when(mockStreamTracerFactory.newClientStreamTracer(any(),
+        any())).thenReturn(mockStreamTracer);
 
     loadBalancer = new OutlierDetectionLoadBalancer(mockHelper, fakeClock.getTimeProvider());
   }
@@ -356,6 +365,72 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
+   * Any ClientStreamTracer.Factory set by the delegate picker should still get used.
+   */
+  @Test
+  public void delegatePickTracerFactoryPreserved() throws Exception {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+
+    // Make one of the subchannels READY.
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(2)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+
+    // Make sure that we can pick the single READY subchannel.
+    SubchannelPicker picker = pickerCaptor.getAllValues().get(1);
+    PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    // Calls to a stream tracer created with the factory in the result should make it to a stream
+    // tracer the underlying LB/picker is using.
+    ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+        .newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+    clientStreamTracer.inboundHeaders();
+    // The underlying fake LB provider is configured with a factory that returns a mock stream
+    // tracer.
+    verify(mockStreamTracer).inboundHeaders();
+  }
+
+  /**
+   * Assure the tracer works even when the underlying LB does not have a tracer to delegate to.
+   */
+  @Test
+  public void delegatePickTracerFactoryNotSet() throws Exception {
+    // We set the mock factory to null to indicate that the delegate does not have its own tracer.
+    mockStreamTracerFactory = null;
+
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+
+    // Make one of the subchannels READY.
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(2)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+
+    // Make sure that we can pick the single READY subchannel.
+    SubchannelPicker picker = pickerCaptor.getAllValues().get(1);
+    PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    // With no delegate tracers factory a call to the OD tracer should still work
+    ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+        .newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+    clientStreamTracer.inboundHeaders();
+
+    // Sanity check to make sure the delegate tracer does not get called.
+    verifyNoInteractions(mockStreamTracer);
+  }
+
+  /**
    * The success rate algorithm leaves a healthy set of addresses alone.
    */
   @Test
@@ -437,7 +512,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), 8);
+    generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), 12);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -471,7 +546,7 @@ public class OutlierDetectionLoadBalancerTest {
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
 
     // Now we produce more load, but the subchannel start working and is no longer an outlier.
-    generateLoad(ImmutableMap.of(), 8);
+    generateLoad(ImmutableMap.of(), 12);
 
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.maxEjectionTimeNanos + 1, TimeUnit.NANOSECONDS);
@@ -1121,7 +1196,7 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /** Round robin like fake load balancer. */
-  private static final class FakeLoadBalancer extends LoadBalancer {
+  private final class FakeLoadBalancer extends LoadBalancer {
     private final Helper helper;
 
     List<Subchannel> subchannelList;
@@ -1159,7 +1234,8 @@ public class OutlierDetectionLoadBalancerTest {
           if (lastPickIndex < 0 || lastPickIndex > subchannelList.size() - 1) {
             lastPickIndex = 0;
           }
-          return PickResult.withSubchannel(subchannelList.get(lastPickIndex++));
+          return PickResult.withSubchannel(subchannelList.get(lastPickIndex++),
+              mockStreamTracerFactory);
         }
       };
       helper.updateBalancingState(state, picker);

@@ -808,7 +808,7 @@ public class Context {
      * <p>Calling {@code cancel(null)} is the same as calling {@link #close}.
      *
      * @return {@code true} if this context cancelled the context and notified listeners,
-     *    {@code false} if the context was already cancelled.
+     *         {@code false} if the context was already cancelled.
      */
     @CanIgnoreReturnValue
     public boolean cancel(Throwable cause) {
@@ -1000,16 +1000,6 @@ public class Context {
    */
   public abstract static class Storage {
     /**
-     * Unused.
-     *
-     * @deprecated This is an old API that is no longer used.
-     */
-    @Deprecated
-    public void attach(Context toAttach) {
-      throw new UnsupportedOperationException("Deprecated. Do not call.");
-    }
-
-    /**
      * Implements {@link io.grpc.Context#attach}.
      *
      * <p>Caution: {@link Context#attach()} interprets a return value of {@code null} to mean
@@ -1022,13 +1012,7 @@ public class Context {
      *        as the {@code toRestore} parameter. {@code null} is a valid return value, but see
      *        caution note.
      */
-    public Context doAttach(Context toAttach) {
-      // This is a default implementation to help migrate existing Storage implementations that
-      // have an attach() method but no doAttach() method.
-      Context current = current();
-      attach(toAttach);
-      return current;
-    }
+    public abstract Context doAttach(Context toAttach);
 
     /**
      * Implements {@link io.grpc.Context#detach}.

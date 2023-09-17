@@ -270,7 +270,7 @@ final class CensusTracingModule {
           "previous-rpc-attempts", AttributeValue.longAttributeValue(info.getPreviousAttempts()));
       attemptSpan.putAttribute(
           "transparent-retry", AttributeValue.booleanAttributeValue(info.isTransparentRetry()));
-      if (info.getCallOptions().getOption(NAME_RESOLUTION_DELAYED)) {
+      if (info.getCallOptions().getOption(NAME_RESOLUTION_DELAYED) != null) {
         span.addAnnotation("Delayed name resolution complete");
       }
       return new ClientTracer(attemptSpan, span, tracingHeader, isSampledToLocalTracing);

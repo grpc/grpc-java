@@ -201,7 +201,7 @@ public class ProxyDetectorImplTest {
             anyString(),
             anyString(),
             AdditionalMatchers.or(anyString(), ArgumentMatchers.<String>any())))
-      .thenReturn(auth);
+        .thenReturn(auth);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
 
     ProxiedSocketAddress detected = proxyDetector.proxyFor(destination);

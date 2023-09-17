@@ -58,7 +58,8 @@ dependencies {
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-rls')
-    testImplementation testFixtures(project(':grpc-core'))
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-util'))
 
     annotationProcessor libraries.auto.value
     // At runtime use the epoll included in grpc-netty-shaded
@@ -140,6 +141,9 @@ tasks.named("compileJava").configure {
 
 tasks.named("jar").configure {
     archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.xds')
+    }
 }
 
 tasks.named("sourcesJar").configure {
@@ -159,6 +163,7 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/xds/FilterChainMatchingProtocolNegotiators.java'
     exclude 'io/grpc/xds/TlsContextManager.java'
     exclude 'io/grpc/xds/XdsAttributes.java'
+    exclude 'io/grpc/xds/XdsCredentialsProvider.java'
     exclude 'io/grpc/xds/XdsInitializationException.java'
     exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'

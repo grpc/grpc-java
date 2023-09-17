@@ -60,6 +60,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
@@ -70,6 +71,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import okio.Buffer;
+import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.ByteString;
 import okio.Okio;
@@ -90,15 +92,19 @@ public class OkHttpServerTransportTest {
   private static final int TIME_OUT_MS = 2000;
   private static final int INITIAL_WINDOW_SIZE = 65535;
   private static final long MAX_CONNECTION_IDLE = TimeUnit.SECONDS.toNanos(1);
-
+  private static final byte FLAG_NONE = 0x0;
+  private static final byte FLAG_PADDED = 0x8;
+  private static final byte FLAG_END_STREAM = 0x1;
+  private static final byte TYPE_DATA = 0x0;
   private MockServerTransportListener mockTransportListener = new MockServerTransportListener();
   private ServerTransportListener transportListener
       = mock(ServerTransportListener.class, delegatesTo(mockTransportListener));
   private OkHttpServerTransport serverTransport;
   private final ExecutorService threadPool = Executors.newCachedThreadPool();
   private final SocketPair socketPair = SocketPair.create(threadPool);
-  private final FrameWriter clientFrameWriter
-      = new Http2().newWriter(Okio.buffer(Okio.sink(socketPair.getClientOutputStream())), true);
+  private final BufferedSink clientWriterSink = Okio.buffer(
+      Okio.sink(socketPair.getClientOutputStream()));
+  private final FrameWriter clientFrameWriter = new Http2().newWriter(clientWriterSink, true);
   private final FrameReader clientFrameReader
       = new Http2().newReader(Okio.buffer(Okio.source(socketPair.getClientInputStream())), true);
   private final FrameReader.Handler clientFramesRead = mock(FrameReader.Handler.class);
@@ -135,7 +141,8 @@ public class OkHttpServerTransportTest {
       Buffer buf = new Buffer();
       buf.write(in.getBuffer(), length);
       clientDataFrames.data(outDone, streamId, buf);
-    })).when(clientFramesRead).data(anyBoolean(), anyInt(), any(BufferedSource.class), anyInt());
+    })).when(clientFramesRead).data(anyBoolean(), anyInt(), any(BufferedSource.class), anyInt(),
+        anyInt());
   }
 
   @After
@@ -379,7 +386,8 @@ public class OkHttpServerTransportTest {
     Buffer responseMessageFrame = createMessageFrame("Howdy client");
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
-        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()));
+        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()),
+            eq((int) responseMessageFrame.size()));
     verify(clientDataFrames).data(false, 1, responseMessageFrame);
 
     List<Header> responseTrailers = Arrays.asList(
@@ -440,7 +448,8 @@ public class OkHttpServerTransportTest {
     Buffer responseMessageFrame = createMessageFrame("Howdy client");
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
-        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()));
+        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()),
+            eq((int) responseMessageFrame.size()));
     verify(clientDataFrames).data(false, 1, responseMessageFrame);
     pingPong();
     assertThat(serverTransport.getActiveStreams().length).isEqualTo(1);
@@ -975,7 +984,8 @@ public class OkHttpServerTransportTest {
     Buffer responseDataFrame = new Buffer().writeUtf8(errorDescription.substring(0, 1));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(false), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(false), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()),
+        eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(false, 1, responseDataFrame);
 
     clientFrameWriter.windowUpdate(1, 1000);
@@ -984,13 +994,79 @@ public class OkHttpServerTransportTest {
     responseDataFrame = new Buffer().writeUtf8(errorDescription.substring(1));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(true), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(true), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()),
+        eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(true, 1, responseDataFrame);
 
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).rstStream(1, ErrorCode.NO_ERROR);
 
     shutdownAndTerminate(/*lastStreamId=*/ 1);
+  }
+
+  @Test
+  public void windowUpdate() throws Exception {
+    serverBuilder.flowControlWindow(100);
+    initTransport();
+    handshake();
+
+    List<Header> headers = Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything"));
+    clientFrameWriter.headers(1, new ArrayList<>(headers));
+    clientFrameWriter.headers(3, new ArrayList<>(headers));
+    String message = "Hello Server Pad Me!"; // length = 20, add buffer length = 5
+    writeDataDirectly(clientWriterSink, FLAG_NONE, 1, message, 0);
+    pingPong();
+
+    MockStreamListener streamListener = mockTransportListener.newStreams.pop();
+    MockStreamListener streamListener2 = mockTransportListener.newStreams.pop();
+    assertThat(streamListener.stream.getAuthority()).isEqualTo("example.com:80");
+    assertThat(streamListener.method).isEqualTo("com.example/SimpleService.doit");
+    assertThat(streamListener.headers.get(
+        Metadata.Key.of("Some-Metadata", Metadata.ASCII_STRING_MARSHALLER)))
+        .isEqualTo("this could be anything");
+    streamListener.stream.request(1);
+    pingPong();
+    assertThat(streamListener.messages.pop()).isEqualTo("Hello Server Pad Me!");
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"));
+    streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+    List<Header> responseHeaders = Arrays.asList(
+        new Header(":status", "200"),
+        CONTENT_TYPE_HEADER,
+        new Header("user-data", "best data"));
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead)
+        .headers(false, false, 1, -1, responseHeaders, HeadersMode.HTTP_20_HEADERS);
+
+    writeDataDirectly(clientWriterSink, FLAG_PADDED, 1, message, 10);
+    writeDataDirectly(clientWriterSink, FLAG_PADDED | FLAG_END_STREAM, 3, message, 40);
+    clientFrameWriter.flush();
+
+    int expectedConsumed = message.length() + 5;
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(0, expectedConsumed * 2 + 10);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(0, expectedConsumed  + 40);
+    streamListener.stream.request(2);
+    streamListener2.stream.request(1);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(1, expectedConsumed * 2 + 10);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(3, expectedConsumed + 40);
+
+    writeDataDirectly(clientWriterSink, FLAG_PADDED | FLAG_END_STREAM, 1, message, 100);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).rstStream(eq(1), eq(ErrorCode.FLOW_CONTROL_ERROR));
+    clientFrameWriter.rstStream(3, ErrorCode.CANCEL);
+    pingPong();
+    shutdownAndTerminate(/*lastStreamId=*/ 3);
   }
 
   @Test
@@ -1223,6 +1299,32 @@ public class OkHttpServerTransportTest {
     return buffer;
   }
 
+  private void writeDataDirectly(BufferedSink sink, int flag, int streamId, String message,
+                                 int paddingLength) throws IOException {
+    Buffer buffer = createMessageFrame(message);
+    int bufferLengthWithPadding = (int) buffer.size();
+    if ((flag & FLAG_PADDED) != 0) {
+      bufferLengthWithPadding += paddingLength;
+    }
+    writeLength(sink, bufferLengthWithPadding);
+    sink.writeByte(TYPE_DATA);
+    sink.writeByte(flag & 0xff);
+    sink.writeInt(streamId & 0x7fffffff);
+    if ((flag & FLAG_PADDED) != 0) {
+      sink.writeByte((short)(paddingLength - 1));
+      char[] value = new char[paddingLength - 1];
+      Arrays.fill(value, '!');
+      buffer.write(new String(value).getBytes(UTF_8));
+    }
+    sink.write(buffer, buffer.size());
+  }
+
+  private void writeLength(BufferedSink sink, int length) throws IOException {
+    sink.writeByte((length >>> 16 ) & 0xff);
+    sink.writeByte((length >>> 8 ) & 0xff);
+    sink.writeByte(length & 0xff);
+  }
+
   private Metadata metadata(String... keysAndValues) {
     Metadata metadata = new Metadata();
     assertThat(keysAndValues.length % 2).isEqualTo(0);
@@ -1279,7 +1381,8 @@ public class OkHttpServerTransportTest {
     Buffer responseDataFrame = new Buffer().writeUtf8(errorDescription);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(true), eq(streamId), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(true), eq(streamId), any(BufferedSource.class),
+        eq((int) responseDataFrame.size()), eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(true, streamId, responseDataFrame);
 
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();

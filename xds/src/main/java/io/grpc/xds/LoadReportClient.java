@@ -45,6 +45,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -361,7 +362,16 @@ final class LoadReportClient {
             .setTotalSuccessfulRequests(upstreamLocalityStats.totalSuccessfulRequests())
             .setTotalErrorRequests(upstreamLocalityStats.totalErrorRequests())
             .setTotalRequestsInProgress(upstreamLocalityStats.totalRequestsInProgress())
-            .setTotalIssuedRequests(upstreamLocalityStats.totalIssuedRequests()));
+            .setTotalIssuedRequests(upstreamLocalityStats.totalIssuedRequests())
+            .addAllLoadMetricStats(
+                upstreamLocalityStats.loadMetricStatsMap().entrySet().stream().map(
+                    e -> io.envoyproxy.envoy.config.endpoint.v3.EndpointLoadMetricStats.newBuilder()
+                        .setMetricName(e.getKey())
+                        .setNumRequestsFinishedWithMetric(
+                            e.getValue().numRequestsFinishedWithMetric())
+                        .setTotalMetricValue(e.getValue().totalMetricValue())
+                        .build())
+                .collect(Collectors.toList())));
       }
       for (DroppedRequests droppedRequests : stats.droppedRequestsList()) {
         builder.addDroppedRequests(

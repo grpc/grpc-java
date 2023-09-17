@@ -155,6 +155,6 @@ public final class MetricRecorder {
 
   MetricReport getMetricReport() {
     return new MetricReport(cpuUtilization, applicationUtilization, memoryUtilization, qps, eps,
-        Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
+        Collections.emptyMap(), Collections.unmodifiableMap(metricsData), Collections.emptyMap());
   }
 }

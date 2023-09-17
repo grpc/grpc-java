@@ -19,9 +19,13 @@ tasks.named("compileJava").configure {
             "|")
 }
 
-dependencies {
-    def cloudLoggingVersion = '3.14.5'
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.gcp.observability')
+    }
+}
 
+dependencies {
     annotationProcessor libraries.auto.value
     api project(':grpc-api')
 
@@ -32,7 +36,7 @@ dependencies {
             project(':grpc-census'),
             libraries.opencensus.contrib.grpc.metrics
     // Avoid gradle using project dependencies without configuration: shadow
-    implementation ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}") {
+    implementation (libraries.google.cloud.logging) {
         exclude group: 'io.grpc', module: 'grpc-alts'
         exclude group: 'io.grpc', module: 'grpc-netty-shaded'
         exclude group: 'io.grpc', module: 'grpc-xds'
@@ -57,10 +61,10 @@ dependencies {
             project(':grpc-grpclb'), // Align grpc versions
             project(':grpc-services'), // Align grpc versions
             libraries.animalsniffer.annotations, // Use our newer version
+            libraries.auto.value.annotations, // Use our newer version
             libraries.guava.jre, // Use our newer version
             libraries.protobuf.java.util, // Use our newer version
             libraries.re2j, // Use our newer version
-            libraries.checker.qual, // Explicit dependency to keep in step with version used by guava
             libraries.j2objc.annotations // Explicit dependency to keep in step with version used by guava
 
     testImplementation testFixtures(project(':grpc-api')),

@@ -248,8 +248,8 @@ final class OkHttpServerTransport implements ServerTransport,
             TimeUnit.NANOSECONDS);
       }
 
-      transportExecutor.execute(
-          new FrameHandler(variant.newReader(Okio.buffer(Okio.source(socket)), false)));
+      transportExecutor.execute(new FrameHandler(
+          variant.newReader(Okio.buffer(Okio.source(socket)), false)));
     } catch (Error | IOException | RuntimeException ex) {
       synchronized (lock) {
         if (!handshakeShutdown) {
@@ -708,7 +708,7 @@ final class OkHttpServerTransport implements ServerTransport,
               return;
             }
             // Ignore the trailers, but still half-close the stream
-            stream.inboundDataReceived(new Buffer(), 0, true);
+            stream.inboundDataReceived(new Buffer(), 0, 0, true);
             return;
           }
         } else {
@@ -799,7 +799,7 @@ final class OkHttpServerTransport implements ServerTransport,
         listener.streamCreated(streamForApp, method, metadata);
         stream.onStreamAllocated();
         if (inFinished) {
-          stream.inboundDataReceived(new Buffer(), 0, inFinished);
+          stream.inboundDataReceived(new Buffer(), 0, 0, inFinished);
         }
       }
     }
@@ -819,7 +819,8 @@ final class OkHttpServerTransport implements ServerTransport,
      * Handle an HTTP2 DATA frame.
      */
     @Override
-    public void data(boolean inFinished, int streamId, BufferedSource in, int length)
+    public void data(boolean inFinished, int streamId, BufferedSource in, int length,
+                     int paddedLength)
         throws IOException {
       frameLogger.logData(
           OkHttpFrameLogger.Direction.INBOUND, streamId, in.getBuffer(), length, inFinished);
@@ -853,7 +854,7 @@ final class OkHttpServerTransport implements ServerTransport,
               "Received DATA for half-closed (remote) stream. RFC7540 section 5.1");
           return;
         }
-        if (stream.inboundWindowAvailable() < length) {
+        if (stream.inboundWindowAvailable() < paddedLength) {
           in.skip(length);
           streamError(streamId, ErrorCode.FLOW_CONTROL_ERROR,
               "Received DATA size exceeded window size. RFC7540 section 6.9");
@@ -861,11 +862,11 @@ final class OkHttpServerTransport implements ServerTransport,
         }
         Buffer buf = new Buffer();
         buf.write(in.getBuffer(), length);
-        stream.inboundDataReceived(buf, length, inFinished);
+        stream.inboundDataReceived(buf, length, paddedLength - length, inFinished);
       }
 
       // connection window update
-      connectionUnacknowledgedBytesRead += length;
+      connectionUnacknowledgedBytesRead += paddedLength;
       if (connectionUnacknowledgedBytesRead
           >= config.flowControlWindow * Utils.DEFAULT_WINDOW_UPDATE_RATIO) {
         synchronized (lock) {
@@ -1064,7 +1065,7 @@ final class OkHttpServerTransport implements ServerTransport,
         }
         streams.put(streamId, stream);
         if (inFinished) {
-          stream.inboundDataReceived(new Buffer(), 0, true);
+          stream.inboundDataReceived(new Buffer(), 0, 0, true);
         }
         frameWriter.headers(streamId, headers);
         outboundFlow.data(
@@ -1122,7 +1123,7 @@ final class OkHttpServerTransport implements ServerTransport,
 
   interface StreamState {
     /** Must be holding 'lock' when calling. */
-    void inboundDataReceived(Buffer frame, int windowConsumed, boolean endOfStream);
+    void inboundDataReceived(Buffer frame, int dataLength, int paddingLength, boolean endOfStream);
 
     /** Must be holding 'lock' when calling. */
     boolean hasReceivedEndOfStream();
@@ -1159,12 +1160,12 @@ final class OkHttpServerTransport implements ServerTransport,
     @Override public void onSentBytes(int frameBytes) {}
 
     @Override public void inboundDataReceived(
-        Buffer frame, int windowConsumed, boolean endOfStream) {
+        Buffer frame, int dataLength, int paddingLength, boolean endOfStream) {
       synchronized (lock) {
         if (endOfStream) {
           receivedEndOfStream = true;
         }
-        window -= windowConsumed;
+        window -= dataLength + paddingLength;
         try {
           frame.skip(frame.size()); // Recycle segments
         } catch (IOException ex) {

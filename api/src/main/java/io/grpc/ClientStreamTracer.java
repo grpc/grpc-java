@@ -28,11 +28,11 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public abstract class ClientStreamTracer extends StreamTracer {
   /**
-   * The call was delayed due to waiting for name resolution result.
+   * Indicates how long the call was delayed, in nanoseconds, due to waiting for name resolution
+   * result. If the call option is not set, the call did not experience name resolution delay.
    */
-  public static final CallOptions.Key<Boolean> NAME_RESOLUTION_DELAYED =
-      CallOptions.Key.createWithDefault("io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED",
-          false);
+  public static final CallOptions.Key<Long> NAME_RESOLUTION_DELAYED =
+      CallOptions.Key.create("io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED");
 
   /**
    * The stream is being created on a ready transport.

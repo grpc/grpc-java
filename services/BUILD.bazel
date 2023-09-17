@@ -154,7 +154,7 @@ java_library(
         ":_health_java_grpc",
         "//api",
         "//core:internal",
-        "//core:util",
+        "//util",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
         "@io_grpc_grpc_proto//:health_java_proto",

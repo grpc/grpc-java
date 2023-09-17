@@ -8,7 +8,15 @@
   <application android:debuggable="true">
     <uses-library android:name="android.test.runner" />
 
-    <service android:name="io.grpc.binder.HostServices$HostService1" />
-    <service android:name="io.grpc.binder.HostServices$HostService2" />
+    <service android:name="io.grpc.binder.HostServices$HostService1" android:exported="false">
+      <intent-filter>
+        <action android:name="action1"/>
+      </intent-filter>
+    </service>
+    <service android:name="io.grpc.binder.HostServices$HostService2" android:exported="false">
+      <intent-filter>
+        <action android:name="action2"/>
+      </intent-filter>
+    </service>
   </application>
 </manifest>

@@ -5,20 +5,12 @@ plugins {
 
 description = "gRPC: Servlet"
 
-// javax.servlet-api 4.0 requires a minimum of Java 8, so we might as well use that source level
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
-
 def jettyVersion = '10.0.7'
 
-configurations {
-    itImplementation.extendsFrom(implementation)
-    undertowTestImplementation.extendsFrom(itImplementation)
-    tomcatTestImplementation.extendsFrom(itImplementation)
-    jettyTestImplementation.extendsFrom(itImplementation)
-}
-
 sourceSets {
+    // Testing threading is more of a brute-force test and is very slow. No need to run it as part
+    // of normal suite.
+    threadingTest {}
     // Create a test sourceset for each classpath - could be simplified if we made new test directories
     undertowTest {}
     tomcatTest {}
@@ -29,20 +21,37 @@ sourceSets {
     }
 }
 
+configurations {
+    itImplementation.extendsFrom(implementation)
+    undertowTestImplementation.extendsFrom(itImplementation)
+    tomcatTestImplementation.extendsFrom(itImplementation)
+    jettyTestImplementation.extendsFrom(itImplementation)
+}
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.servlet')
+    }
+}
+
 dependencies {
     api project(':grpc-api')
     compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
             libraries.javax.annotation // java 9, 10 needs it
 
-    implementation project(':grpc-core'),
+    implementation project(':grpc-util'),
             libraries.guava
 
-    testImplementation 'javax.servlet:javax.servlet-api:4.0.1',
+    testImplementation 'javax.servlet:javax.servlet-api:4.0.1'
+
+    threadingTestImplementation project(':grpc-servlet'),
+        libraries.truth,
+	'javax.servlet:javax.servlet-api:4.0.1',
         'org.jetbrains.kotlinx:lincheck:2.14.1'
 
     itImplementation project(':grpc-servlet'),
             project(':grpc-netty'),
-            project(':grpc-core').sourceSets.test.runtimeClasspath,
+            testFixtures(project(':grpc-core')),
             libraries.junit
     itImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency
@@ -56,11 +65,13 @@ dependencies {
 
     jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
             "org.eclipse.jetty.http2:http2-server:${jettyVersion}",
-            "org.eclipse.jetty:jetty-client:${jettyVersion}"
-            project(':grpc-testing')
+            "org.eclipse.jetty:jetty-client:${jettyVersion}",
+            project(':grpc-testing'),
+            libraries.truth,
+            libraries.protobuf.java
 }
 
-test {
+tasks.named("test").configure {
     if (JavaVersion.current().isJava9Compatible()) {
         jvmArgs += [
                 // required for Lincheck
@@ -70,13 +81,22 @@ test {
     }
 }
 
+tasks.register('threadingTest', Test) {
+    classpath = sourceSets.threadingTest.runtimeClasspath
+    testClassesDirs = sourceSets.threadingTest.output.classesDirs
+}
+
+tasks.named("assemble").configure {
+    dependsOn tasks.named('compileThreadingTestJava')
+}
+
 // Set up individual classpaths for each test, to avoid any mismatch,
 // and ensure they are only used when supported by the current jvm
-check.dependsOn(tasks.register('undertowTest', Test) {
+def undertowTest = tasks.register('undertowTest', Test) {
     classpath = sourceSets.undertowTest.runtimeClasspath
     testClassesDirs = sourceSets.undertowTest.output.classesDirs
-})
-check.dependsOn(tasks.register('tomcat9Test', Test) {
+}
+def tomcat9Test = tasks.register('tomcat9Test', Test) {
     classpath = sourceSets.tomcatTest.runtimeClasspath
     testClassesDirs = sourceSets.tomcatTest.output.classesDirs
 
@@ -93,19 +113,30 @@ check.dependsOn(tasks.register('tomcat9Test', Test) {
     if (JavaVersion.current().isJava9Compatible()) {
         jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
     }
-})
+}
+
+tasks.named("check").configure {
+    dependsOn undertowTest, tomcat9Test
+}
+
+tasks.named("jacocoTestReport").configure {
+    // Must use executionData(Task...) override. The executionData(Object...) override doesn't find
+    // execution data correctly for tasks.
+    executionData undertowTest.get(), tomcat9Test.get()
+}
 
 // Only run these tests if java 11+ is being used
 if (JavaVersion.current().isJava11Compatible()) {
-    check.dependsOn(tasks.register('jettyTest', Test) {
+    def jettyTest = tasks.register('jettyTest', Test) {
         classpath = sourceSets.jettyTest.runtimeClasspath
         testClassesDirs = sourceSets.jettyTest.output.classesDirs
-    })
-}
-
-jacocoTestReport {
-    executionData undertowTest, tomcat9Test
-    if (JavaVersion.current().isJava11Compatible()) {
-        executionData jettyTest
+    }
+    tasks.named("check").configure {
+        dependsOn jettyTest
+    }
+    tasks.named("jacocoTestReport").configure {
+        // Must use executionData(Task...) override. The executionData(Object...) override doesn't
+        // find execution data correctly for tasks.
+        executionData jettyTest.get()
     }
 }

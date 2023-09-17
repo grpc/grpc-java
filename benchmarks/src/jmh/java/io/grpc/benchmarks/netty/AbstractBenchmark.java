@@ -78,6 +78,7 @@ public abstract class AbstractBenchmark {
     SMALL(10), MEDIUM(1024), LARGE(65536), JUMBO(1048576);
 
     private final int bytes;
+
     MessageSize(int bytes) {
       this.bytes = bytes;
     }
@@ -94,6 +95,7 @@ public abstract class AbstractBenchmark {
     SMALL(16383), MEDIUM(65535), LARGE(1048575), JUMBO(8388607);
 
     private final int bytes;
+
     FlowWindowSize(int bytes) {
       this.bytes = bytes;
     }

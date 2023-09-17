@@ -20,7 +20,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.v7.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;
@@ -50,6 +50,13 @@ public class HelloworldActivity extends AppCompatActivity {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_helloworld);
     sendButton = (Button) findViewById(R.id.send_button);
+    sendButton.setOnClickListener(
+            new View.OnClickListener() {
+              @Override
+              public void onClick(View v) {
+                sendMessage(v);
+              }
+            });
     hostEdit = (EditText) findViewById(R.id.host_edit_text);
     portEdit = (EditText) findViewById(R.id.port_edit_text);
     messageEdit = (EditText) findViewById(R.id.message_edit_text);

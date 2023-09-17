@@ -72,6 +72,7 @@ public class OrcaMetricReportingServerInterceptorTest {
 
   private final Map<String, Double> applicationUtilizationMetricsMap = new HashMap<>();
   private final Map<String, Double> applicationCostMetrics = new HashMap<>();
+  private final Map<String, Double> applicationNamedMetrics = new HashMap<>();
   private double cpuUtilizationMetrics = 0;
   private double applicationUtilizationMetrics = 0;
   private double memoryUtilizationMetrics = 0;
@@ -97,6 +98,9 @@ public class OrcaMetricReportingServerInterceptorTest {
             for (Map.Entry<String, Double> entry : applicationCostMetrics.entrySet()) {
               CallMetricRecorder.getCurrent().recordRequestCostMetric(entry.getKey(),
                   entry.getValue());
+            }
+            for (Map.Entry<String, Double> entry : applicationNamedMetrics.entrySet()) {
+              CallMetricRecorder.getCurrent().recordNamedMetric(entry.getKey(), entry.getValue());
             }
             CallMetricRecorder.getCurrent().recordCpuUtilizationMetric(cpuUtilizationMetrics);
             CallMetricRecorder.getCurrent()
@@ -133,8 +137,8 @@ public class OrcaMetricReportingServerInterceptorTest {
   @Test
   public void shareCallMetricRecorderInContext() throws IOException {
     final CallMetricRecorder callMetricRecorder = new CallMetricRecorder();
-    ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory =
-        new ServerStreamTracer.Factory() {
+    ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory;
+    callMetricRecorderSharingStreamTracerFactory = new ServerStreamTracer.Factory() {
       @Override
       public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
         return new ServerStreamTracer() {
@@ -196,6 +200,9 @@ public class OrcaMetricReportingServerInterceptorTest {
     applicationUtilizationMetricsMap.put("util1", 0.1082);
     applicationUtilizationMetricsMap.put("util2", 0.4936);
     applicationUtilizationMetricsMap.put("util3", 0.5342);
+    applicationNamedMetrics.put("named1", 0.777);
+    applicationNamedMetrics.put("named2", 737.747);
+    applicationNamedMetrics.put("named3", -0.380);
     cpuUtilizationMetrics = 0.3465;
     applicationUtilizationMetrics = 0.99887;
     memoryUtilizationMetrics = 0.764;
@@ -209,6 +216,8 @@ public class OrcaMetricReportingServerInterceptorTest {
         .containsExactly("util1", 0.1082, "util2", 0.4936, "util3", 0.5342);
     assertThat(report.getRequestCostMap())
         .containsExactly("cost1", 1231.4543, "cost2", 0.1367, "cost3", 7614.145);
+    assertThat(report.getNamedMetricsMap())
+        .containsExactly("named1", 0.777, "named2", 737.747, "named3", -0.380);
     assertThat(report.getCpuUtilization()).isEqualTo(0.3465);
     assertThat(report.getApplicationUtilization()).isEqualTo(0.99887);
     assertThat(report.getMemUtilization()).isEqualTo(0.764);
@@ -221,6 +230,9 @@ public class OrcaMetricReportingServerInterceptorTest {
     applicationUtilizationMetricsMap.put("util1", 0.1482);
     applicationUtilizationMetricsMap.put("util2", 0.4036);
     applicationUtilizationMetricsMap.put("util3", 0.5742);
+    applicationNamedMetrics.put("named1", 0.777);
+    applicationNamedMetrics.put("named2", 737.747);
+    applicationNamedMetrics.put("named3", -0.380);
     cpuUtilizationMetrics = 0.3465;
     memoryUtilizationMetrics = 0.967;
     metricRecorder.setApplicationUtilizationMetric(2.718);
@@ -240,6 +252,8 @@ public class OrcaMetricReportingServerInterceptorTest {
     assertThat(report.getUtilizationMap())
         .containsExactly("util1", 0.1482, "util2", 0.4036, "util3", 0.5742, "serverUtil1", 0.7467,
             "serverUtil2", 0.2233);
+    assertThat(report.getNamedMetricsMap())
+        .containsExactly("named1", 0.777, "named2", 737.747, "named3", -0.380);
     assertThat(report.getRequestCostMap()).isEmpty();
     assertThat(report.getCpuUtilization()).isEqualTo(0.3465);
     assertThat(report.getApplicationUtilization()).isEqualTo(2.718);

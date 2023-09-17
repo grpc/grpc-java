@@ -7,6 +7,12 @@ plugins {
 
 description = 'gRPC: Census'
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.census')
+    }
+}
+
 dependencies {
     api project(':grpc-api')
     // force dependent jars to depend on latest grpc-context
