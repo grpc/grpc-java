@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.util;
 
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.Context;
+import io.grpc.Deadline;
+import io.grpc.ExperimentalApi;
+import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.Status;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import javax.annotation.Nullable;
 
 /**
  * A global manager that schedules the timeout tasks for the gRPC server.
@@ -45,9 +52,9 @@ public class ServerTimeoutManager {
   private final boolean shouldInterrupt;
   private final Consumer<String> logFunction;
 
-  private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
-  protected ServerTimeoutManager(int timeout, TimeUnit unit,
+  private ServerTimeoutManager(int timeout, TimeUnit unit,
                               boolean shouldInterrupt, Consumer<String> logFunction) {
     this.timeout = timeout;
     this.unit = unit;
@@ -56,68 +63,86 @@ public class ServerTimeoutManager {
   }
 
   /**
-   *  Please call shutdown() when the application exits.
-   *  You can add a JVM shutdown hook.
+   *  Please call shutdown() when the application exits. You can add a JVM shutdown hook.
    */
   public void shutdown() {
     scheduler.shutdownNow();
   }
 
   /**
-   * Calls the RPC method invocation with a timeout scheduled.
-   * Invalidates the timeout if the invocation completes in time.
+   * Creates a context with the timeout limit.
+   * @param serverCall Should pass in a SerializingServerCall that can be closed thread-safely.
+   * @return null if not to set a timeout for it
+   */
+  @Nullable
+  public Context.CancellableContext startTimeoutContext(ServerCall<?, ?> serverCall) {
+    if (timeout <= 0 || scheduler.isShutdown()) {
+      return null;
+    }
+    Context.CancellationListener callCloser = c -> {
+      if (c.cancellationCause() == null) {
+        return;
+      }
+      serverCall.close(Status.CANCELLED.withDescription("server call timeout"), new Metadata());
+    };
+    Context.CancellableContext context = Context.current().withDeadline(
+            Deadline.after(timeout, unit), scheduler);
+    context.addListener(callCloser, MoreExecutors.directExecutor());
+    return context;
+  }
+
+  /**
+   * Executes the application RPC invocation in the timeout context.
    *
-   * <p>When the timeout is reached: It cancels the context around the RPC method invocation. And
+   * <p>When the timeout is reached: It cancels the context around the RPC invocation. And
    * if shouldInterrupt is {@code true}, it also interrupts the current worker thread.
    *
-   * @param invocation The RPC method invocation that processes a request.
+   * @param context The timeout context.
+   * @param invocation The application RPC invocation that processes a request.
    * @return true if a timeout is scheduled
    */
-  public boolean withTimeout(Runnable invocation) {
+  public boolean withInterruption(Context.CancellableContext context, Runnable invocation) {
     if (timeout <= 0 || scheduler.isShutdown()) {
       invocation.run();
       return false;
     }
 
-    try (Context.CancellableContext context = Context.current()
-        .withDeadline(Deadline.after(timeout, unit), scheduler)) {
-      AtomicReference<Thread> threadRef =
-          shouldInterrupt ? new AtomicReference<>(Thread.currentThread()) : null;
-      Context.CancellationListener cancelled = c -> {
-        if (c.cancellationCause() == null) {
-          return;
-        }
-        System.out.println("RPC cancelled");
-        if (threadRef != null) {
-          Thread thread = threadRef.getAndSet(null);
-          if (thread != null) {
-            thread.interrupt();
-            if (logFunction != null) {
-              logFunction.accept(
-                  "Interrupted RPC thread "
-                      + thread.getName()
-                      + " for timeout at "
-                      + timeout
-                      + " "
-                      + unit);
-            }
+    AtomicReference<Thread> threadRef =
+            shouldInterrupt ? new AtomicReference<>(Thread.currentThread()) : null;
+    Context.CancellationListener interruption = c -> {
+      if (c.cancellationCause() == null) {
+        return;
+      }
+      if (threadRef != null) {
+        Thread thread = threadRef.getAndSet(null);
+        if (thread != null) {
+          thread.interrupt();
+          if (logFunction != null) {
+            logFunction.accept(
+                    "Interrupted RPC thread "
+                            + thread.getName()
+                            + " for timeout at "
+                            + timeout
+                            + " "
+                            + unit);
           }
         }
-      };
-      context.addListener(cancelled, MoreExecutors.directExecutor());
-      try {
-        context.run(invocation);
-      } finally {
-        // Clear the interruption state if this context previously caused an interruption,
-        // allowing the worker thread to be safely reused for the next task in a ForkJoinPool.
-        // For more information, refer to https://bugs.openjdk.org/browse/JDK-8223430
-        if (threadRef != null && threadRef.get() == null) {
-          Thread.interrupted();
-        }
       }
-
-      return true;
+    };
+    context.addListener(interruption, MoreExecutors.directExecutor());
+    try {
+      context.run(invocation);
+    } finally {
+      context.removeListener(interruption);
+      // Clear the interruption state if this context previously caused an interruption,
+      // allowing the worker thread to be safely reused for the next task in a ForkJoinPool.
+      // For more information, refer to https://bugs.openjdk.org/browse/JDK-8223430
+      if (threadRef != null && threadRef.get() == null) {
+        Thread.interrupted();
+      }
     }
+
+    return true;
   }
 
   /** Builder for constructing ServerTimeoutManager instances. */

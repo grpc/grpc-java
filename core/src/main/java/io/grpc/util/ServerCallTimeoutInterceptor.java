@@ -14,7 +14,15 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.util;
+
+import io.grpc.Context;
+import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerCallListener;
+import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 
 /**
  * An optional ServerInterceptor that can interrupt server calls that are running for too long time.
@@ -41,33 +49,82 @@ public class ServerCallTimeoutInterceptor implements ServerInterceptor {
       ServerCallHandler<ReqT, RespT> serverCallHandler) {
     // Only intercepts unary calls because the timeout is inapplicable to streaming calls.
     if (serverCall.getMethodDescriptor().getType().clientSendsOneMessage()) {
-      return new TimeoutServerCallListener<>(
-              serverCallHandler.startCall(serverCall, metadata), serverTimeoutManager);
-    } else {
-      return serverCallHandler.startCall(serverCall, metadata);
+      ServerCall<ReqT, RespT> serializingServerCall = new SerializingServerCall<>(serverCall);
+      Context.CancellableContext timeoutContext =
+              serverTimeoutManager.startTimeoutContext(serializingServerCall);
+      if (timeoutContext != null) {
+        return new TimeoutServerCallListener<>(
+                serverCallHandler.startCall(serializingServerCall, metadata),
+                timeoutContext,
+                serverTimeoutManager);
+      }
     }
+    return serverCallHandler.startCall(serverCall, metadata);
   }
 
-  /** A listener that intercepts the RPC method invocation for timeout control. */
-  private static class TimeoutServerCallListener<ReqT>
+  /** A listener that intercepts RPC callbacks for timeout control. */
+  static class TimeoutServerCallListener<ReqT>
       extends ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT> {
 
+    private final Context.CancellableContext context;
     private final ServerTimeoutManager serverTimeoutManager;
 
     private TimeoutServerCallListener(
         ServerCall.Listener<ReqT> delegate,
+        Context.CancellableContext context,
         ServerTimeoutManager serverTimeoutManager) {
       super(delegate);
+      this.context = context;
       this.serverTimeoutManager = serverTimeoutManager;
     }
 
+    @Override
+    public void onMessage(ReqT message) {
+      Context previous = context.attach();
+      try {
+        super.onMessage(message);
+      } finally {
+        context.detach(previous);
+      }
+    }
+
     /**
-     * Intercepts onHalfClose() because the RPC method is called in it. See
+     * Intercepts onHalfClose() because the application RPC method is called in it. See
      * io.grpc.stub.ServerCalls.UnaryServerCallHandler.UnaryServerCallListener
      */
     @Override
     public void onHalfClose() {
-      serverTimeoutManager.withTimeout(super::onHalfClose);
+      serverTimeoutManager.withInterruption(context, super::onHalfClose);
+    }
+
+    @Override
+    public void onCancel() {
+      Context previous = context.attach();
+      try {
+        super.onCancel();
+      } finally {
+        context.detach(previous);
+      }
+    }
+
+    @Override
+    public void onComplete() {
+      Context previous = context.attach();
+      try {
+        super.onComplete();
+      } finally {
+        context.detach(previous);
+      }
+    }
+
+    @Override
+    public void onReady() {
+      Context previous = context.attach();
+      try {
+        super.onReady();
+      } finally {
+        context.detach(previous);
+      }
     }
   }
 }
