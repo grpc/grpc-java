@@ -40,10 +40,11 @@ import javax.annotation.Nullable;
  * io.grpc.NameResolver}.  The channel's default behavior is used, which is walking down the address
  * list and sticking to the first that works.
  */
-final class PickFirstLoadBalancer extends LoadBalancer {
+public final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private Subchannel subchannel;
   private ConnectivityState currentState = IDLE;
+  private Status currentStatus = Status.OK;
 
   PickFirstLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -103,7 +104,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     }
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
     // for time being.
-    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)), error);
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
@@ -149,11 +150,17 @@ final class PickFirstLoadBalancer extends LoadBalancer {
         throw new IllegalArgumentException("Unsupported state:" + newState);
     }
 
-    updateBalancingState(newState, picker);
+    updateBalancingState(newState, picker, stateInfo.getStatus());
   }
 
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
+    updateBalancingState(state, picker, Status.OK);
+  }
+
+  private void updateBalancingState(ConnectivityState state, SubchannelPicker picker,
+      Status status) {
     currentState = state;
+    currentStatus = status;
     helper.updateBalancingState(state, picker);
   }
 

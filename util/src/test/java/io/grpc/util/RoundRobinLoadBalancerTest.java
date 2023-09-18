@@ -39,7 +39,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -51,7 +50,6 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import io.grpc.internal.TestUtils;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
@@ -90,9 +88,6 @@ public class RoundRobinLoadBalancerTest {
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels =
       new ConcurrentHashMap<>();
-  private final Map<Subchannel, Subchannel> mockToRealSubChannelMap = new HashMap<>();
-  private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
-      Maps.newLinkedHashMap();
   private final Attributes affinity =
       Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
 
@@ -102,7 +97,8 @@ public class RoundRobinLoadBalancerTest {
   private ArgumentCaptor<ConnectivityState> stateCaptor;
   @Captor
   private ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
-  private Helper mockHelper = mock(Helper.class, delegatesTo(new TestHelper()));
+  private TestHelper testHelperInst = new TestHelper();
+  private Helper mockHelper = mock(Helper.class, delegatesTo(testHelperInst));
 
   @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
   private PickSubchannelArgs mockArgs;
@@ -526,8 +522,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    Subchannel realSc = mockToRealSubChannelMap.get(subchannel);
-    subchannelStateListeners.get(realSc).onSubchannelState(newState);
+    testHelperInst.deliverSubchannelState(subchannel, newState);
   }
 
   private static class FakeSocketAddress extends SocketAddress {
@@ -548,16 +543,6 @@ public class RoundRobinLoadBalancerTest {
     @Override
     public Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap() {
       return subchannels;
-    }
-
-    @Override
-    public Map<Subchannel, Subchannel> getMockToRealSubChannelMap() {
-      return mockToRealSubChannelMap;
-    }
-
-    @Override
-    public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
-      return subchannelStateListeners;
     }
   }
 }

@@ -51,11 +51,12 @@ import javax.annotation.Nullable;
  * list and sticking to the first that works.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10383")
-final class PickFirstLeafLoadBalancer extends LoadBalancer {
+public final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
   private ConnectivityState currentState = IDLE;
+  private Status currentStatus = Status.OK;
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -155,8 +156,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     subchannels.clear();
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
     // for time being.
-    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)), error);
   }
+
 
   void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     ConnectivityState newState = stateInfo.getState();
@@ -222,7 +224,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           if (!addressIndex.isValid()) {
             helper.refreshNameResolution();
             updateBalancingState(TRANSIENT_FAILURE,
-                new Picker(PickResult.withError(stateInfo.getStatus())));
+                new Picker(PickResult.withError(stateInfo.getStatus())), stateInfo.getStatus());
           }
         }
         break;
@@ -232,8 +234,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
+    updateBalancingState(state, picker, Status.OK);
+  }
+
+  private void updateBalancingState(ConnectivityState state, SubchannelPicker picker,
+      Status status) {
     if (state != currentState || state == READY || state == TRANSIENT_FAILURE) {
       currentState = state;
+      currentStatus = status;
       helper.updateBalancingState(state, picker);
     }
   }

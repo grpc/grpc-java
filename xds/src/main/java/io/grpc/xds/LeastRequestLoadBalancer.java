@@ -35,7 +35,6 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Metadata;
@@ -44,11 +43,9 @@ import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 
@@ -83,6 +80,11 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   LeastRequestLoadBalancer(Helper helper, ThreadSafeRandom random) {
     super(helper);
     this.random = checkNotNull(random, "random");
+  }
+
+  @Override
+  protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
+    return null;
   }
 
   @Override
@@ -121,20 +123,22 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     if (activeList.isEmpty()) {
       // No READY subchannels, determine aggregate state and error status
       boolean isConnecting = false;
-      Status aggStatus = EMPTY_OK;
+      List<ChildLbState> childrenInTf = new ArrayList<>();
       for (ChildLbState childLbState : getChildLbStates()) {
         ConnectivityState state = childLbState.getCurrentState();
         if (state == CONNECTING || state == IDLE) {
           isConnecting = true;
-        }
-        if (aggStatus == EMPTY_OK || !aggStatus.isOk()) {
-          aggStatus = stateInfo.getStatus();
+        } else if (state == TRANSIENT_FAILURE) {
+          childrenInTf.add(childLbState);
         }
       }
-      updateBalancingState(isConnecting ? CONNECTING : TRANSIENT_FAILURE,
-          // If all subchannels are TRANSIENT_FAILURE, return the Status associated with
-          // an arbitrary subchannel, otherwise return OK.
-          new EmptyPicker(aggStatus));
+      if (isConnecting) {
+        updateBalancingState(CONNECTING, new EmptyPicker(EMPTY_OK));
+      } else {
+        // Give it all the failing children and let it randomly pick among them
+        updateBalancingState(TRANSIENT_FAILURE,
+            new ReadyPicker(childrenInTf, choiceCount, random));
+      }
     } else {
       updateBalancingState(READY, new ReadyPicker(activeList, choiceCount, random));
     }
@@ -143,20 +147,25 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
       SubchannelPicker initialPicker) {
-    return new LeastRequestLbState((key, pickFirstLbProvider, policyConfig, initialPicker);
+    return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
   }
 
   private void updateBalancingState(ConnectivityState state, LeastRequestPicker picker) {
     if (state != currentConnectivityState || !picker.isEquivalentTo(currentPicker)) {
-      updateHelperBalancingState(state, picker);
+      super.updateHelperBalancingState(state, picker);
       currentConnectivityState = state;
       currentPicker = picker;
     }
   }
 
-  @VisibleForTesting
-  Collection<Subchannel> getSubchannels() {
-    return subchannels.values();
+  @Override
+  protected Collection<ChildLbState> getChildLbStates() {
+    return super.getChildLbStates();
+  }
+
+  @Override
+  protected ChildLbState getChildLbState(Object key) {
+    return super.getChildLbState(key);
   }
 
   private static Ref<ConnectivityStateInfo> getSubchannelStateInfoRef(
@@ -166,12 +175,6 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
 
   private static AtomicInteger getInFlights(ChildLbState childLbState) {
     return ((LeastRequestLbState)childLbState).activeRequests;
-  }
-
-  private static <T> Set<T> setsDifference(Set<T> a, Set<T> b) {
-    Set<T> aCopy = new HashSet<>(a);
-    aCopy.removeAll(b);
-    return aCopy;
   }
 
   // Only subclasses are ReadyPicker or EmptyPicker
@@ -194,10 +197,22 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      final ChildLbState childLbState = nextSubchannel();
-      final OutstandingRequestsTracingFactory factory =
-          new OutstandingRequestsTracingFactory(getInFlights(childLbState));
-      return PickResult.withSubchannel(childLbState, factory);
+      final ChildLbState childLbState = nextChildToUse();
+      PickResult childResult = childLbState.getCurrentPicker().pickSubchannel(args);
+
+      if (!childResult.getStatus().isOk() || childResult.getSubchannel() == null) {
+        return childResult;
+      }
+
+      if (childResult.getStreamTracerFactory() != null) {
+        // Already wrapped, so just use the current picker for selected child
+        return childResult;
+      } else {
+        // Wrap the subchannel
+        OutstandingRequestsTracingFactory factory =
+            new OutstandingRequestsTracingFactory(getInFlights(childLbState));
+        return PickResult.withSubchannel(childResult.getSubchannel(), factory);
+      }
     }
 
     @Override
@@ -208,7 +223,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
                         .toString();
     }
 
-    private ChildLbState nextSubchannel() {
+    private ChildLbState nextChildToUse() {
       ChildLbState candidate = list.get(random.nextInt(list.size()));
       for (int i = 0; i < choiceCount - 1; ++i) {
         ChildLbState sampled = list.get(random.nextInt(list.size()));
@@ -220,7 +235,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     }
 
     @VisibleForTesting
-    List<Subchannel> getList() {
+    List<ChildLbState> getList() {
       return list;
     }
 
@@ -316,12 +331,16 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     }
   }
 
-  private class LeastRequestLbState extends ChildLbState {
+  protected class LeastRequestLbState extends ChildLbState {
+    private final AtomicInteger activeRequests = new AtomicInteger(0);
 
-    final AtomicInteger activeRequests = new AtomicInteger(0);
     public LeastRequestLbState(Object key, LoadBalancerProvider policyProvider,
         Object childConfig, SubchannelPicker initialPicker) {
       super(key, policyProvider, childConfig, initialPicker);
+    }
+
+    int getActiveRequests() {
+      return activeRequests.get();
     }
   }
 }

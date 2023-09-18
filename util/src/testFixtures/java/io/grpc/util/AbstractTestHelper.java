@@ -19,10 +19,12 @@ package io.grpc.util;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.mock;
 
+import com.google.common.collect.Maps;
 import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -30,6 +32,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -48,11 +51,29 @@ import java.util.Map;
  */
 public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
 
+  private final Map<Subchannel, Subchannel> mockToRealSubChannelMap = new HashMap<>();
+  private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
+      Maps.newLinkedHashMap();
+
   public abstract Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap();
 
-  public abstract Map<Subchannel, Subchannel> getMockToRealSubChannelMap();
+  public Map<Subchannel, Subchannel> getMockToRealSubChannelMap() {
+    return mockToRealSubChannelMap;
+  }
 
-  public abstract Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners();
+  public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
+    return subchannelStateListeners;
+  }
+
+  public void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+    Subchannel realSc = getMockToRealSubChannelMap().get(subchannel);
+    if (realSc == null) {
+      if (getSubchannelStateListeners().get(subchannel) != null) {
+        realSc = subchannel;
+      }
+    }
+    getSubchannelStateListeners().get(realSc).onSubchannelState(newState);
+  }
 
   @Override
   public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {

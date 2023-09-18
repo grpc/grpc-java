@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
@@ -136,6 +135,13 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
   }
 
+  /**
+   * Override this if your keys are not of type EquivalentAddressGroup.
+   * @param key Key to identify the ChildLbState
+   * @param resolvedAddresses list of addresses which include attributes
+   * @param childConfig a load balancing policy config. This field is optional.
+   * @return a fully loaded ResolvedAddresses object for the specified key
+   */
   protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
       Object childConfig) {
     checkArgument(key instanceof EquivalentAddressGroup, "key is wrong type");
@@ -149,15 +155,13 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       }
     }
 
-    checkNotNull(eag, key.toString() + " no longer present in load balancer children");
+    checkNotNull(eag, key + " no longer present in load balancer children");
 
     return resolvedAddresses.toBuilder()
         .setAddresses(Collections.singletonList(eag))
         .setLoadBalancingPolicyConfig(childConfig)
         .build();
   }
-
-
 
   private boolean acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
@@ -244,6 +248,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       SubchannelPicker newPicker) {
     helper.updateBalancingState(newState, newPicker);
   }
+
   @Nullable
   protected static ConnectivityState aggregateState(
       @Nullable ConnectivityState overallState, ConnectivityState childState) {
@@ -282,7 +287,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
     return activeChildren;
   }
-
 
   public class ChildLbState {
     private final Object key;
@@ -326,6 +330,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
 
     protected Subchannel getSubchannels(PickSubchannelArgs args) {
+      if (getCurrentPicker() == null) {
+        return null;
+      }
       return getCurrentPicker().pickSubchannel(args).getSubchannel();
     }
 
@@ -339,11 +346,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
     public boolean isDeactivated() {
       return deactivated;
-    }
-
-    @VisibleForTesting
-    LoadBalancer getLb() {
-      return this.lb;
     }
 
     protected void setDeactivated() {
