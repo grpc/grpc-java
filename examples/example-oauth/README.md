@@ -4,7 +4,7 @@ Authentication Example
 This example illustrates a simple OAuth2-based authentication implementation in gRPC using
  server interceptor. It uses the Google OAuth2 library since it already has the OAuth2
 semantics which makes it easy to illustrate the OAuth2 flow. The example creates an OAuth2
-credentials using the library and converts it to gRPC CallCredentials. However, if you may
+credentials using the library and converts it to gRPC CallCredentials. However, you may
 use your own OAuth2 implementation, so use of Google OAuth2 library is not necessary.
 
 The example requires grpc-java to be pre-built. Using a release tag will download the relevant binaries
