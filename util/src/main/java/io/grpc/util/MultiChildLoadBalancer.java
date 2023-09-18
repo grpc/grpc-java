@@ -111,9 +111,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     Object policyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     for (EquivalentAddressGroup eag : addresses) {
       EquivalentAddressGroup strippedEag = stripAttrs(eag); // keys need to be just addresses
-      ChildLbState childLbState = childLbMap.getOrDefault(strippedEag,
-          createChildLbState(strippedEag, policyConfig, getInitialPicker()));
-      childLbMap.put(strippedEag, childLbState);
+      if (!childLbMap.containsKey(strippedEag)) {
+        childLbMap.put(strippedEag,
+            createChildLbState(strippedEag, policyConfig, getInitialPicker()));
+      }
     }
     return childLbMap;
   }
