@@ -106,7 +106,7 @@ public class LeastRequestLoadBalancerTest {
   @Captor
   private ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
   private final TestHelper testHelperInstance = new TestHelper();
-  private Helper helper = mock(Helper.class, delegatesTo(testHelperInstance));
+  private final Helper helper = mock(Helper.class, delegatesTo(testHelperInstance));
 
   @Mock
   private ThreadSafeRandom mockRandom;
@@ -233,7 +233,9 @@ public class LeastRequestLoadBalancerTest {
   }
 
   private Subchannel getSubchannel(ChildLbState childLbState) {
-    return subchannels.get(Collections.singletonList(childLbState.getEag()));
+    List<EquivalentAddressGroup> eagList =
+        Arrays.asList((EquivalentAddressGroup) childLbState.getKey());
+    return subchannels.get(eagList);
   }
 
   private static List<Object> getChildEags(LeastRequestLoadBalancer loadBalancer) {
@@ -522,7 +524,6 @@ public class LeastRequestLoadBalancerTest {
     loadBalancer.handleNameResolutionError(error);
     loadBalancer.setResolvingAddresses(false);
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-
     LoadBalancer.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
     assertNull(pickResult.getSubchannel());
     assertEquals(error, pickResult.getStatus());
@@ -587,7 +588,7 @@ public class LeastRequestLoadBalancerTest {
     deliverSubchannelState(sc2, ConnectivityStateInfo.forNonError(IDLE));
     deliverSubchannelState(sc3, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
-    verify(helper, times(6))
+    verify(helper, times(3))
         .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
     Iterator<ConnectivityState> stateIterator = stateCaptor.getAllValues().iterator();
     Iterator<SubchannelPicker> pickers = pickerCaptor.getAllValues().iterator();

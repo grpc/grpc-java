@@ -345,7 +345,7 @@ public class RoundRobinLoadBalancerTest {
       // Simulate receiving go-away so READY subchannels transit to IDLE.
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(IDLE));
       inOrder.verify(mockHelper).refreshNameResolution();
-      verify(sc, times(1)).requestConnection();
+      verify(sc, times(2)).requestConnection();
       inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
     }
 
@@ -454,7 +454,7 @@ public class RoundRobinLoadBalancerTest {
     // The IDLE subchannel is dropped from the picker, but a reconnection is requested
     assertEquals(READY, stateIterator.next());
     assertThat(getList(pickers.next())).containsExactly(sc1, sc3);
-    verify(sc2, times(1)).requestConnection();
+    verify(sc2, times(2)).requestConnection();
     // The failing subchannel is dropped from the picker, with no requested reconnect
     assertEquals(READY, stateIterator.next());
     assertThat(getList(pickers.next())).containsExactly(sc1);

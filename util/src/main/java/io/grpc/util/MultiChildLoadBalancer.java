@@ -205,7 +205,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       ResolvedAddresses childAddresses = getChildAddresses(key, resolvedAddresses, childConfig);
       childLbStates.get(key).setResolvedAddresses(childAddresses); // update child state
       childLb.handleResolvedAddresses(childAddresses); // update child LB
-      if (childLb != entry.getValue().getLb()) {
+      if (childLb != entry.getValue().lb) {
         entry.getValue().shutdown(); // Reused old LB
       }
     }
@@ -388,11 +388,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
     public boolean isDeactivated() {
       return deactivated;
-    }
-
-    @VisibleForTesting
-    LoadBalancer getLb() {
-      return this.lb;
     }
 
     protected void setDeactivated() {
