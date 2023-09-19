@@ -314,7 +314,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(3);
     assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 10000.0 - subchannel1PickRatio))
@@ -323,15 +323,6 @@ public class WeightedRoundRobinLoadBalancerTest {
         .isAtMost(0.0002);
     assertThat(Math.abs(pickCount.get(weightedChild3.getEag()) / 10000.0 - subchannel3PickRatio ))
         .isAtMost(0.0002);
-  }
-
-  private static <T> void incrementCountInMap(Map<T, Integer> pickCount,
-      T key) {
-    Integer oldValue = pickCount.get(key);
-    if (oldValue == null) {
-      oldValue = 0;
-    }
-    pickCount.put(key, oldValue + 1);
   }
 
   private SubchannelStateListener getSubchannelStateListener(Subchannel mockSubChannel) {
@@ -524,7 +515,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(2);
     // within blackout period, fallback to simple round robin
@@ -535,7 +526,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(2);
     // after blackout period
@@ -637,7 +628,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(2);
     assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 1000.0 - 2.0 / 3))
@@ -650,7 +641,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     assertThat(pickCount.size()).isEqualTo(2);
     assertThat(Math.abs(pickCount.get(weightedChild1.getEag()) / 1000.0 - 0.5))
@@ -942,7 +933,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       int result = sss.pick();
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 2; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
@@ -959,7 +950,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       int result = sss.pick();
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
@@ -1028,7 +1019,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       int result = sss.pick();
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
@@ -1044,7 +1035,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     Map<Integer, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       int result = sss.pick();
-      incrementCountInMap(pickCount, result);
+      pickCount.put(result, pickCount.getOrDefault(result, 0) + 1);
     }
     for (int i = 0; i < 5; i++) {
       assertThat(Math.abs(pickCount.getOrDefault(i, 0) / 1000.0 - weights[i] / totalWeight))
