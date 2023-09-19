@@ -42,6 +42,8 @@ import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.common.util.concurrent.Uninterruptibles;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
@@ -124,8 +126,8 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
-  public static final String LONG_STRING_OF_A = Strings.repeat("a", 128);
-  public static final String LONG_STRING_OF_TILDE = Strings.repeat("~", 128);
+  public static final String LONG_STRING_OF_A = Strings.repeat("a", 1024);
+  public static final String LONG_STRING_OF_TILDE = Strings.repeat("~", 1024);
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final SslContext SSL_CONTEXT = createSslContext();
@@ -552,42 +554,27 @@ public class NettyClientTransportTest {
   public void huffmanCodingShouldBePerformed() throws Exception {
     startServer();
 
-    NettyClientTransport transport =
-            newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_HEADER_LIST_SIZE,
-                    1, null, true, TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
-                    new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
-    callMeMaybe(transport.start(clientTransportListener));
+    Callable<NettyClientTransport> huffmanTransport =  () -> newTransport(newNegotiator(),
+        DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_HEADER_LIST_SIZE, 1, null, true,
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
 
-    ChannelTrafficShapingHandler channelTrafficShapingHandler =
-            new ChannelTrafficShapingHandler(0);
+    Metadata aHeaders = new Metadata();
+    aHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        LONG_STRING_OF_A);
 
-    transport.channel().pipeline().addFirst(channelTrafficShapingHandler);
-
-    // Warm up the channel and get common header strings cached
-    {
-      Metadata headers = new Metadata();
-      headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
-      new Rpc(transport, headers).halfClose().waitForResponse();
-    }
-
-    // When coded using the HPACK code "a" is shorter than "~"
-    long aHeaderRpcSize = getWrittenBytes(channelTrafficShapingHandler, () -> {
-          Metadata headers = new Metadata();
-          headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-                  LONG_STRING_OF_A);
-          new Rpc(transport, headers).halfClose().waitForResponse();
-          return  null;
-        }
-    );
-
-    long tildeHeaderRpcSize = getWrittenBytes(channelTrafficShapingHandler, () -> {
-          Metadata headers = new Metadata();
-          headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+    Metadata tildeHeaders = new Metadata();
+    tildeHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
                   LONG_STRING_OF_TILDE);
-          new Rpc(transport, headers).halfClose().waitForResponse();
-          return  null;
-        }
-    );
+
+    Metadata warmupHeaders = new Metadata();
+    warmupHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
+
+    getRpcSize(huffmanTransport, warmupHeaders);
+
+    long aHeaderRpcSize = getRpcSize(huffmanTransport, aHeaders);
+
+    long tildeHeaderRpcSize = getRpcSize(huffmanTransport, tildeHeaders);
 
     assertThat(aHeaderRpcSize).isLessThan(tildeHeaderRpcSize);
   }
@@ -596,55 +583,53 @@ public class NettyClientTransportTest {
   public void huffmanCodingShouldNotBePerformed() throws Exception {
     startServer();
 
-    NettyClientTransport transport =
-            newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_HEADER_LIST_SIZE,
-                    Integer.MAX_VALUE, null, true, TimeUnit.SECONDS.toNanos(10L),
-                    TimeUnit.SECONDS.toNanos(1L),
-                    new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
-    callMeMaybe(transport.start(clientTransportListener));
+    Callable<NettyClientTransport> nonHuffmanTransport =  () -> newTransport(newNegotiator(),
+        DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_HEADER_LIST_SIZE, Integer.MAX_VALUE, null, true,
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
 
-    ChannelTrafficShapingHandler channelTrafficShapingHandler = new ChannelTrafficShapingHandler(0);
+    Metadata aHeaders = new Metadata();
+    aHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        LONG_STRING_OF_A);
 
-    transport.channel().pipeline().addFirst(channelTrafficShapingHandler);
+    Metadata tildeHeaders = new Metadata();
+    tildeHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        LONG_STRING_OF_TILDE);
 
-    // Warm up the channel and get common header strings cached
-    {
-      Metadata headers = new Metadata();
-      headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
-      new Rpc(transport, headers).halfClose().waitForResponse();
-    }
+    Metadata warmupHeaders = new Metadata();
+    warmupHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
 
-    // When coded using the HPACK code, "a" is shorter than "~"
-    long aHeaderRpcSize = getWrittenBytes(channelTrafficShapingHandler, () -> {
-          Metadata headers = new Metadata();
-          headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-                  LONG_STRING_OF_A);
-          new Rpc(transport, headers).halfClose().waitForResponse();
-          return  null;
-        }
-    );
+    //warm up hpack
+    getRpcSize(nonHuffmanTransport, warmupHeaders);
 
-    long tildeHeaderRpcSize = getWrittenBytes(channelTrafficShapingHandler, () -> {
-          Metadata headers = new Metadata();
-          headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-                  LONG_STRING_OF_TILDE);
-          new Rpc(transport, headers).halfClose().waitForResponse();
-          return  null;
-        }
-    );
+    long aHeaderRpcSize = getRpcSize(nonHuffmanTransport, aHeaders);
+    long tildeHeaderRpcSize = getRpcSize(nonHuffmanTransport, tildeHeaders);
 
     assertThat(aHeaderRpcSize).isEqualTo(tildeHeaderRpcSize);
   }
 
-  private long getWrittenBytes(ChannelTrafficShapingHandler channelTrafficShapingHandler,
-                               Callable<Void> callable) throws Exception {
-    long startBytes = 0;
-    TrafficCounter startTrafficCounter = channelTrafficShapingHandler.trafficCounter();
-    if (startTrafficCounter != null) {
-      startBytes = startTrafficCounter.cumulativeWrittenBytes();
+  @CanIgnoreReturnValue
+  private long getRpcSize(Callable<NettyClientTransport> transportSupplier, Metadata headers)
+      throws Exception {
+
+    NettyClientTransport transport = transportSupplier.call();
+
+    callMeMaybe(transport.start(clientTransportListener));
+
+    ChannelTrafficShapingHandler channelTrafficShapingHandler =
+        new ChannelTrafficShapingHandler(0);
+
+    transport.channel().pipeline().addFirst(channelTrafficShapingHandler);
+
+    new Rpc(transport, headers).halfClose().waitForResponse();
+
+    Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
+
+    TrafficCounter trafficCounter = channelTrafficShapingHandler.trafficCounter();
+    if (trafficCounter == null) {
+      fail("Could not measure size of RPC");
     }
-    callable.call();
-    return channelTrafficShapingHandler.trafficCounter().cumulativeWrittenBytes() - startBytes;
+    return trafficCounter.getRealWrittenBytes().get();
   }
 
   @Test
