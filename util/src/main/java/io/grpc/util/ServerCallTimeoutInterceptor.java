@@ -80,12 +80,7 @@ public class ServerCallTimeoutInterceptor implements ServerInterceptor {
 
     @Override
     public void onMessage(ReqT message) {
-      Context previous = context.attach();
-      try {
-        super.onMessage(message);
-      } finally {
-        context.detach(previous);
-      }
+      serverTimeoutManager.runWithContext(context, () -> super.onMessage(message));
     }
 
     /**
@@ -94,16 +89,14 @@ public class ServerCallTimeoutInterceptor implements ServerInterceptor {
      */
     @Override
     public void onHalfClose() {
-      serverTimeoutManager.withInterruption(context, super::onHalfClose);
+      serverTimeoutManager.runWithContextInterruptibly(context, super::onHalfClose);
     }
 
     @Override
     public void onCancel() {
-      Context previous = context.attach();
       try {
-        super.onCancel();
+        serverTimeoutManager.runWithContext(context, super::onCancel);
       } finally {
-        context.detach(previous);
         // Cancel the timeout when the call is finished.
         context.close();
       }
@@ -111,11 +104,9 @@ public class ServerCallTimeoutInterceptor implements ServerInterceptor {
 
     @Override
     public void onComplete() {
-      Context previous = context.attach();
       try {
-        super.onComplete();
+        serverTimeoutManager.runWithContext(context, super::onComplete);
       } finally {
-        context.detach(previous);
         // Cancel the timeout when the call is finished.
         context.close();
       }
@@ -123,12 +114,7 @@ public class ServerCallTimeoutInterceptor implements ServerInterceptor {
 
     @Override
     public void onReady() {
-      Context previous = context.attach();
-      try {
-        super.onReady();
-      } finally {
-        context.detach(previous);
-      }
+      serverTimeoutManager.runWithContext(context, super::onReady);
     }
   }
 }

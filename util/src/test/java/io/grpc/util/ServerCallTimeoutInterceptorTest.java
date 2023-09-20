@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
+import com.google.common.util.concurrent.testing.TestingExecutors;
 import io.grpc.Context;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
@@ -33,9 +34,16 @@ import io.grpc.stub.StreamObserver;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.RunnableScheduledFuture;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -60,11 +68,16 @@ public class ServerCallTimeoutInterceptorTest {
           .setFullMethodName("some/unary")
           .build();
 
-  private static ServerCalls.UnaryMethod<Integer, Integer> sleepingUnaryMethod(int sleepMillis) {
+  private static ServerCalls.UnaryMethod<Integer, Integer> sleepingUnaryMethod(
+      int sleepMillis,
+      MockTimeoutScheduler scheduler) {
     return new ServerCalls.UnaryMethod<Integer, Integer>() {
       @Override
       public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
         try {
+          if (sleepMillis > 0) {
+            scheduler.timeoutImmediately();
+          }
           Thread.sleep(sleepMillis);
           if (Context.current().isCancelled()) {
             responseObserver.onError(new StatusRuntimeException(Status.CANCELLED));
@@ -84,15 +97,17 @@ public class ServerCallTimeoutInterceptorTest {
 
   @Test
   public void unary_setShouldInterrupt_exceedingTimeout_isInterrupted() {
+    StringWriter logWriter = new StringWriter();
+    MockTimeoutScheduler scheduler = new MockTimeoutScheduler();
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(20));
-    StringWriter logWriter = new StringWriter();
+        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(20, scheduler));
 
     ServerTimeoutManager serverTimeoutManager =
-        ServerTimeoutManager.newBuilder(1, TimeUnit.NANOSECONDS)
+        ServerTimeoutManager.newBuilder(10, TimeUnit.MILLISECONDS)
             .setShouldInterrupt(true)
             .setLogFunction(new PrintWriter(logWriter)::println)
+            .setScheduler(scheduler)
             .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
@@ -110,14 +125,16 @@ public class ServerCallTimeoutInterceptorTest {
 
   @Test
   public void unary_byDefault_exceedingTimeout_isCancelledButNotInterrupted() {
+    StringWriter logWriter = new StringWriter();
+    MockTimeoutScheduler scheduler = new MockTimeoutScheduler();
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(20));
-    StringWriter logWriter = new StringWriter();
+        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(20, scheduler));
 
     ServerTimeoutManager serverTimeoutManager =
-        ServerTimeoutManager.newBuilder(1, TimeUnit.NANOSECONDS)
+        ServerTimeoutManager.newBuilder(10, TimeUnit.MILLISECONDS)
             .setLogFunction(new PrintWriter(logWriter)::println)
+            .setScheduler(scheduler)
             .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
@@ -134,15 +151,17 @@ public class ServerCallTimeoutInterceptorTest {
 
   @Test
   public void unary_setShouldInterrupt_withinTimeout_isNotCancelledOrInterrupted() {
+    StringWriter logWriter = new StringWriter();
+    MockTimeoutScheduler scheduler = new MockTimeoutScheduler();
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(0));
-    StringWriter logWriter = new StringWriter();
+        ServerCalls.asyncUnaryCall(sleepingUnaryMethod(0, scheduler));
 
     ServerTimeoutManager serverTimeoutManager =
-        ServerTimeoutManager.newBuilder(100, TimeUnit.MILLISECONDS)
+        ServerTimeoutManager.newBuilder(10, TimeUnit.MILLISECONDS)
             .setShouldInterrupt(true)
             .setLogFunction(new PrintWriter(logWriter)::println)
+            .setScheduler(scheduler)
             .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
@@ -202,67 +221,51 @@ public class ServerCallTimeoutInterceptorTest {
   }
 
   @Test
-  public void allStagesCanKnowCancellation() throws Exception {
-    List<String> cancelledStages = Collections.synchronizedList(new ArrayList<>());
+  public void canSkipEachStageUponCancellation() {
+    List<String> notSkippedStages = Collections.synchronizedList(new ArrayList<>());
+    MockTimeoutScheduler scheduler = new MockTimeoutScheduler();
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler = new ServerCallHandler<Integer, Integer>() {
-      private final ServerCallHandler<Integer, Integer> innerHandler =
-          ServerCalls.asyncUnaryCall(sleepingUnaryMethod(0));
 
       @Override
       public ServerCall.Listener<Integer> startCall(
           ServerCall<Integer, Integer> call, Metadata headers) {
-        ServerCall.Listener<Integer> delegate = innerHandler.startCall(call, headers);
         return new ServerCall.Listener<Integer>() {
           @Override
           public void onMessage(Integer message) {
-            if (Context.current().isCancelled()) {
-              cancelledStages.add("onMessage");
-            }
-            delegate.onMessage(message);
+            notSkippedStages.add("onMessage");
           }
 
           @Override
           public void onHalfClose() {
-            if (Context.current().isCancelled()) {
-              cancelledStages.add("onHalfClose");
-            }
-            delegate.onHalfClose();
+              notSkippedStages.add("onHalfClose");
           }
 
           @Override
           public void onCancel() {
-            if (Context.current().isCancelled()) {
-              cancelledStages.add("onCancel");
-            }
-            delegate.onCancel();
+              notSkippedStages.add("onCancel");
           }
 
           @Override
           public void onComplete() {
-            if (Context.current().isCancelled()) {
-              cancelledStages.add("onComplete");
-            }
-            delegate.onComplete();
+              notSkippedStages.add("onComplete");
           }
 
           @Override
           public void onReady() {
-            if (Context.current().isCancelled()) {
-              cancelledStages.add("onReady");
-            }
-            delegate.onReady();
+              notSkippedStages.add("onReady");
           }
         };
       }
     };
 
     ServerTimeoutManager serverTimeoutManager =
-        ServerTimeoutManager.newBuilder(1, TimeUnit.NANOSECONDS).build();
+        ServerTimeoutManager.newBuilder(1, TimeUnit.NANOSECONDS)
+            .setScheduler(scheduler)
+            .build();
     ServerCall.Listener<Integer> listener = new ServerCallTimeoutInterceptor(serverTimeoutManager)
         .interceptCall(serverCall, new Metadata(), callHandler);
-    // Let it timeout
-    Thread.sleep(20);
+    scheduler.timeoutImmediately();
     listener.onMessage(42);
     listener.onHalfClose();
     listener.onReady();
@@ -273,9 +276,7 @@ public class ServerCallTimeoutInterceptorTest {
     assertThat(serverCall.responses).isEmpty();
     assertEquals(Status.Code.CANCELLED, serverCall.status.getCode());
     assertEquals("server call timeout", serverCall.status.getDescription());
-    assertEquals(
-        Arrays.asList("onMessage", "onHalfClose", "onReady", "onComplete", "onCancel"),
-        cancelledStages);
+    assertEquals(Collections.emptyList(), notSkippedStages);
   }
 
   private static class ServerCallRecorder extends ServerCall<Integer, Integer> {
@@ -345,6 +346,64 @@ public class ServerCallTimeoutInterceptorTest {
     @Override
     public void onCompleted() {
       responseObserver.onCompleted();
+    }
+  }
+
+  // Enables manually controlling the schedule
+  private static class MockTimeoutScheduler extends ForwardingScheduledExecutorService {
+    private final ScheduledExecutorService delegate = TestingExecutors.noOpScheduledExecutor();
+    private final Queue<ScheduledFutureTask<?>> queue = new ConcurrentLinkedQueue<>();
+
+    private void timeoutImmediately() {
+      while (!queue.isEmpty()) {
+        queue.poll().run();
+      }
+    }
+
+    @Override
+    public ScheduledExecutorService delegate() {
+      return delegate;
+    }
+
+    @Override
+    public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
+      ScheduledFutureTask<V> futureTask = new ScheduledFutureTask<>(callable);
+      queue.add(futureTask);
+      return futureTask;
+    }
+
+    @Override
+    public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+      ScheduledFutureTask<?> futureTask = new ScheduledFutureTask<>(command, null);
+      queue.add(futureTask);
+      return futureTask;
+    }
+
+    private static class ScheduledFutureTask<V>
+        extends FutureTask<V> implements RunnableScheduledFuture<V> {
+
+      private ScheduledFutureTask(Callable<V> callable) {
+        super(callable);
+      }
+
+      private ScheduledFutureTask(Runnable runnable, V result) {
+        super(runnable, result);
+      }
+
+      @Override
+      public boolean isPeriodic() {
+        return false;
+      }
+
+      @Override
+      public long getDelay(TimeUnit unit) {
+        return 0;
+      }
+
+      @Override
+      public int compareTo(Delayed o) {
+        return 0;
+      }
     }
   }
 }

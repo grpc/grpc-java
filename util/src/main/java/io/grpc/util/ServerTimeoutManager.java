@@ -18,7 +18,6 @@ package io.grpc.util;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Context;
-import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -50,16 +49,19 @@ public class ServerTimeoutManager {
   private final int timeout;
   private final TimeUnit unit;
   private final boolean shouldInterrupt;
+  @Nullable
   private final Consumer<String> logFunction;
-
-  private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+  private final ScheduledExecutorService scheduler;
 
   private ServerTimeoutManager(int timeout, TimeUnit unit,
-                              boolean shouldInterrupt, Consumer<String> logFunction) {
+                               boolean shouldInterrupt,
+                               @Nullable Consumer<String> logFunction,
+                               @Nullable ScheduledExecutorService scheduler) {
     this.timeout = timeout;
     this.unit = unit;
     this.shouldInterrupt = shouldInterrupt;
     this.logFunction = logFunction;
+    this.scheduler = scheduler != null ? scheduler : Executors.newSingleThreadScheduledExecutor();
   }
 
   /**
@@ -90,28 +92,40 @@ public class ServerTimeoutManager {
       }
       serverCall.close(Status.CANCELLED.withDescription("server call timeout"), new Metadata());
     };
-    Context.CancellableContext context = Context.current().withDeadline(
-            Deadline.after(timeout, unit), scheduler);
+    Context.CancellableContext context = Context.current()
+        .withDeadlineAfter(timeout, unit, scheduler);
     context.addListener(callCloser, MoreExecutors.directExecutor());
     return context;
   }
 
   /**
-   * Executes the application RPC invocation in the timeout context.
+   * Executes the application invocation in the timeout context.
+   * Skips execution if context has been cancelled.
+   *
+   * @param context The timeout context.
+   * @param invocation The application invocation that processes a request.
+   */
+  public void runWithContext(Context.CancellableContext context, Runnable invocation) {
+    if (context.isCancelled()) {
+      return;
+    }
+    context.run(invocation);
+  }
+
+  /**
+   * Executes the application invocation in the timeout context, may interrupt the current thread.
+   * Skips execution if context has been cancelled.
    *
    * <p>When the timeout is reached: It cancels the context around the RPC invocation. And
    * if shouldInterrupt is {@code true}, it also interrupts the current worker thread.
    *
    * @param context The timeout context.
-   * @param invocation The application RPC invocation that processes a request.
-   * @return true if a timeout is scheduled
+   * @param invocation The application invocation that processes a request.
    */
-  public boolean withInterruption(Context.CancellableContext context, Runnable invocation) {
-    if (timeout <= 0 || scheduler.isShutdown()) {
-      invocation.run();
-      return false;
+  public void runWithContextInterruptibly(Context.CancellableContext context, Runnable invocation) {
+    if (context.isCancelled()) {
+      return;
     }
-
     AtomicReference<Thread> threadRef =
             shouldInterrupt ? new AtomicReference<>(Thread.currentThread()) : null;
     Context.CancellationListener interruption = c -> {
@@ -146,8 +160,6 @@ public class ServerTimeoutManager {
         Thread.interrupted();
       }
     }
-
-    return true;
   }
 
   /** Builder for constructing ServerTimeoutManager instances. */
@@ -157,6 +169,7 @@ public class ServerTimeoutManager {
 
     private boolean shouldInterrupt;
     private Consumer<String> logFunction;
+    private ScheduledExecutorService scheduler;
 
     private Builder(int timeout, TimeUnit unit) {
       this.timeout = timeout;
@@ -183,9 +196,19 @@ public class ServerTimeoutManager {
       return this;
     }
 
+    /**
+     * Sets a custom scheduler instance. If not set, a default scheduler is used.
+     *
+     * @param scheduler An custom scheduler.
+     */
+    public Builder setScheduler(ScheduledExecutorService scheduler) {
+      this.scheduler = scheduler;
+      return this;
+    }
+
     /** Construct new ServerTimeoutManager. */
     public ServerTimeoutManager build() {
-      return new ServerTimeoutManager(timeout, unit, shouldInterrupt, logFunction);
+      return new ServerTimeoutManager(timeout, unit, shouldInterrupt, logFunction, scheduler);
     }
   }
 }
