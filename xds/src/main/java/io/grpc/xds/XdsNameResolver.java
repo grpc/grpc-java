@@ -105,6 +105,8 @@ final class XdsNameResolver extends NameResolver {
   @Nullable
   private final String targetAuthority;
   private final String serviceAuthority;
+  // Encoded version of the service authority as per 
+  // https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
   private final String encodedServiceAuthority;
   private final String overrideAuthority;
   private final ServiceConfigParser serviceConfigParser;
