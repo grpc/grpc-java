@@ -105,6 +105,7 @@ final class XdsNameResolver extends NameResolver {
   @Nullable
   private final String targetAuthority;
   private final String serviceAuthority;
+  private final String encodedServiceAuthority;
   private final String overrideAuthority;
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
@@ -149,8 +150,9 @@ final class XdsNameResolver extends NameResolver {
     this.targetAuthority = targetAuthority;
 
     // The name might have multiple slashes so encode it before verifying.
-    String authority = GrpcUtil.AuthorityEscaper.encodeAuthority(checkNotNull(name, "name"));
-    serviceAuthority = GrpcUtil.checkAuthority(authority);
+    serviceAuthority = checkNotNull(name, "name");
+    this.encodedServiceAuthority = 
+      GrpcUtil.checkAuthority(GrpcUtil.AuthorityEscaper.encodeAuthority(serviceAuthority));
 
     this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
@@ -169,7 +171,7 @@ final class XdsNameResolver extends NameResolver {
 
   @Override
   public String getServiceAuthority() {
-    return serviceAuthority;
+    return encodedServiceAuthority;
   }
 
   @Override
