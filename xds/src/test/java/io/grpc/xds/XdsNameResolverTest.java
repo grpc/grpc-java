@@ -266,6 +266,31 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void resolving_noTargetAuthority_xdstpWithMultipleSlashes() {
+    bootstrapInfo = BootstrapInfo.builder()
+        .servers(ImmutableList.of(ServerInfo.create(
+            "td.googleapis.com", InsecureChannelCredentials.create())))
+        .node(Node.newBuilder().build())
+        .clientDefaultListenerResourceNameTemplate(
+            "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
+        .build();
+    String serviceAuthority = "path/to/service";
+    expectedLdsResourceName =
+        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+            + "path/to/service?id=1";
+    resolver = new XdsNameResolver(
+        null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+
+
+    // The Service Authority must be URL encoded, but unlike the LDS resource name.
+    assertThat(resolver.getServiceAuthority()).isEqualTo("path%2Fto%2Fservice");
+
+    resolver.start(mockListener);
+    verify(mockListener, never()).onError(any(Status.class));
+  }
+
+  @Test
   public void resolving_targetAuthorityInAuthoritiesMap() {
     String targetAuthority = "xds.authority.com";
     String serviceAuthority = "[::FFFF:129.144.52.38]:80";
