@@ -143,7 +143,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (childSwitchLb != null) {
       childSwitchLb.handleNameResolutionError(error);
     } else {
-      helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new ErrorPicker(error));
+      helper.updateBalancingState(
+          ConnectivityState.TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 

@@ -114,7 +114,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
     if (childBalancers.isEmpty()) {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
     for (LoadBalancer childBalancer : childBalancers.values()) {
       childBalancer.handleNameResolutionError(error);

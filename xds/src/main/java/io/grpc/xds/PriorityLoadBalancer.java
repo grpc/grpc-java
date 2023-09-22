@@ -126,7 +126,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
       }
     }
     if (gotoTransientFailure) {
-      updateOverallState(null, TRANSIENT_FAILURE, new ErrorPicker(error));
+      updateOverallState(
+          null, TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 
@@ -225,8 +226,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
           // The child is deactivated.
           return;
         }
-        picker = new ErrorPicker(
-            Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority));
+        picker = new FixedResultPicker(PickResult.withError(
+            Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority)));
         logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
         currentPriority = null; // reset currentPriority to guarantee failover happen
         tryNextPriority();

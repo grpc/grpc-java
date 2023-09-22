@@ -20,6 +20,8 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,8 +32,9 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.ErrorPicker;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
@@ -52,6 +55,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -78,10 +82,6 @@ public class WrrLocalityLoadBalancerTest {
 
   @Captor
   private ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor;
-  @Captor
-  private ArgumentCaptor<ConnectivityState> connectivityStateCaptor;
-  @Captor
-  private ArgumentCaptor<SubchannelPicker> errorPickerCaptor;
 
   private WrrLocalityLoadBalancer loadBalancer;
   private LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
@@ -153,18 +153,17 @@ public class WrrLocalityLoadBalancerTest {
     // With no locality weights, we should get a TRANSIENT_FAILURE.
     verify(mockHelper).getAuthority();
     verify(mockHelper).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE),
-        isA(ErrorPicker.class));
+        pickerReturns(Status.Code.UNAVAILABLE));
   }
 
   @Test
   public void handleNameResolutionError_noChildLb() {
-    loadBalancer.handleNameResolutionError(Status.DEADLINE_EXCEEDED);
+    Status status = Status.DEADLINE_EXCEEDED.withDescription("down low");
+    loadBalancer.handleNameResolutionError(status);
 
-    verify(mockHelper).updateBalancingState(connectivityStateCaptor.capture(),
-        errorPickerCaptor.capture());
-    assertThat(connectivityStateCaptor.getValue()).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
-    assertThat(errorPickerCaptor.getValue().toString()).isEqualTo(
-        new ErrorPicker(Status.DEADLINE_EXCEEDED).toString());
+    verify(mockHelper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE),
+        pickerReturns(PickResult.withError(status)));
   }
 
   @Test
@@ -172,11 +171,12 @@ public class WrrLocalityLoadBalancerTest {
     deliverAddresses(new WrrLocalityConfig(new PolicySelection(mockChildProvider, null)),
         ImmutableList.of(
             makeAddress("addr1", Locality.create("test-region1", "test-zone", "test-subzone"), 1)));
-    loadBalancer.handleNameResolutionError(Status.DEADLINE_EXCEEDED);
+    Status status = Status.DEADLINE_EXCEEDED.withDescription("too slow");
+    loadBalancer.handleNameResolutionError(status);
 
-    verify(mockHelper, never()).updateBalancingState(isA(ConnectivityState.class),
-        isA(ErrorPicker.class));
-    verify(mockWeightedTargetLb).handleNameResolutionError(Status.DEADLINE_EXCEEDED);
+    verify(mockHelper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE),
+        pickerReturns(PickResult.withError(status)));
+    verify(mockWeightedTargetLb).handleNameResolutionError(status);
   }
 
   @Test
@@ -222,6 +222,42 @@ public class WrrLocalityLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(addresses).setLoadBalancingPolicyConfig(config)
             .build());
+  }
+
+  private static SubchannelPicker pickerReturns(final PickResult result) {
+    return pickerReturns(new ArgumentMatcher<PickResult>() {
+      @Override public boolean matches(PickResult obj) {
+        return result.equals(obj);
+      }
+
+      @Override public String toString() {
+        return "[equals " + result + "]";
+      }
+    });
+  }
+
+  private static SubchannelPicker pickerReturns(Status.Code code) {
+    return pickerReturns(new ArgumentMatcher<PickResult>() {
+      @Override public boolean matches(PickResult obj) {
+        return obj.getStatus() != null && code.equals(obj.getStatus().getCode());
+      }
+
+      @Override public String toString() {
+        return "[with code " + code + "]";
+      }
+    });
+  }
+
+  private static SubchannelPicker pickerReturns(final ArgumentMatcher<PickResult> matcher) {
+    return argThat(new ArgumentMatcher<SubchannelPicker>() {
+      @Override public boolean matches(SubchannelPicker picker) {
+        return matcher.matches(picker.pickSubchannel(mock(PickSubchannelArgs.class)));
+      }
+
+      @Override public String toString() {
+        return "[picker returns: result " + matcher + "]";
+      }
+    });
   }
 
   /**

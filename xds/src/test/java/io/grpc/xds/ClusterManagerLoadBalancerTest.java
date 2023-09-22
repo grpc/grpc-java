@@ -365,7 +365,8 @@ public class ClusterManagerLoadBalancerTest {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
 
       if (failing) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.INTERNAL)));
       }
       return true;
     }
