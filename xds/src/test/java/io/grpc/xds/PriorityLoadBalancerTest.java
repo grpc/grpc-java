@@ -41,7 +41,7 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.ErrorPicker;
+import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -306,7 +306,8 @@ public class PriorityLoadBalancerTest {
     assertCurrentPickerPicksSubchannel(subchannel0);
 
     // p0 fails over to p1 immediately.
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED));
+    helper0.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.ABORTED)));
     assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(2);
     assertThat(fooHelpers).hasSize(2);
@@ -345,11 +346,13 @@ public class PriorityLoadBalancerTest {
     assertCurrentPickerPicksSubchannel(subchannel2);
 
     // p2 fails but does not affect overall picker
-    helper2.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    helper2.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.UNAVAILABLE)));
     assertCurrentPickerPicksSubchannel(subchannel2);
 
     // p0 fails over to p3 immediately since p1 already timeout and p2 already in TRANSIENT_FAILURE.
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    helper0.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.UNAVAILABLE)));
     assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(4);
     assertThat(fooHelpers).hasSize(4);
@@ -362,7 +365,8 @@ public class PriorityLoadBalancerTest {
 
     // p3 fails then the picker should have error status updated
     helper3.updateBalancingState(
-        TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS.withDescription("foo")));
+        TRANSIENT_FAILURE,
+        new FixedResultPicker(PickResult.withError(Status.DATA_LOSS.withDescription("foo"))));
     assertCurrentPickerReturnsError(Status.Code.DATA_LOSS, "foo");
 
     // p2 gets back to READY
@@ -390,7 +394,8 @@ public class PriorityLoadBalancerTest {
     assertCurrentPickerPicksSubchannel(subchannel4);
 
     // p0 fails over to p2 and picker is updated to p2's existing picker.
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    helper0.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.UNAVAILABLE)));
     assertCurrentPickerPicksSubchannel(subchannel3);
 
     // Deactivate child balancer get deleted.
@@ -564,7 +569,8 @@ public class PriorityLoadBalancerTest {
     assertCurrentPickerIsBufferPicker();
 
     // p0 fails over to p1 immediately.
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED));
+    helper0.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.ABORTED)));
     assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(2);
     assertThat(fooHelpers).hasSize(2);
@@ -591,11 +597,13 @@ public class PriorityLoadBalancerTest {
     assertCurrentPickerIsBufferPicker();
 
     // p2 fails but does not affect overall picker
-    helper2.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    helper2.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.UNAVAILABLE)));
     assertCurrentPickerIsBufferPicker();
 
     // p0 fails over to p3 immediately since p1 already timeout and p2 already in TRANSIENT_FAILURE.
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    helper0.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.UNAVAILABLE)));
     assertLatestConnectivityState(CONNECTING);
     assertThat(fooBalancers).hasSize(4);
     assertThat(fooHelpers).hasSize(4);
@@ -608,7 +616,8 @@ public class PriorityLoadBalancerTest {
 
     // p3 fails then the picker should have error status updated
     helper3.updateBalancingState(
-        TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS.withDescription("foo")));
+        TRANSIENT_FAILURE,
+        new FixedResultPicker(PickResult.withError(Status.DATA_LOSS.withDescription("foo"))));
     assertCurrentPickerReturnsError(Status.Code.DATA_LOSS, "foo");
 
     // p2 gets back to IDLE
@@ -624,7 +633,8 @@ public class PriorityLoadBalancerTest {
     assertCurrentPickerIsBufferPicker();
 
     // p0 fails over to p2 and picker is updated to p2's existing picker.
-    helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    helper0.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.UNAVAILABLE)));
     assertCurrentPickerIsBufferPicker();
 
     // Deactivate child balancer get deleted.
@@ -655,7 +665,8 @@ public class PriorityLoadBalancerTest {
     verify(helper, never()).refreshNameResolution();
 
     // Simulate fallback to priority p1.
-    priorityHelper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    priorityHelper0.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.UNAVAILABLE)));
     assertThat(fooHelpers).hasSize(2);
     Helper priorityHelper1 = Iterables.getLast(fooHelpers);
     priorityHelper1.refreshNameResolution();
@@ -780,7 +791,8 @@ public class PriorityLoadBalancerTest {
 
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.INTERNAL)));
     }
 
     @Override

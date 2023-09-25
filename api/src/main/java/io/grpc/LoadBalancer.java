@@ -1413,7 +1413,7 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * A picker that always returns a erroring pick.
+   * A picker that always returns an erring pick.
    *
    * @deprecated Use {@code new FixedResultPicker(PickResult.withError(error))} instead.
    */
