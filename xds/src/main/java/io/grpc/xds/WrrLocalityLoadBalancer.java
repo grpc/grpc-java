@@ -78,14 +78,14 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
       Integer localityWeight = eagAttrs.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT);
 
       if (locality == null) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(
-            Status.UNAVAILABLE.withDescription("wrr_locality error: no locality provided")));
+        helper.updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
+            Status.UNAVAILABLE.withDescription("wrr_locality error: no locality provided"))));
         return false;
       }
       if (localityWeight == null) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(
+        helper.updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
             Status.UNAVAILABLE.withDescription(
-                "wrr_locality error: no weight provided for locality " + locality)));
+                "wrr_locality error: no weight provided for locality " + locality))));
         return false;
       }
 

@@ -83,7 +83,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   }
 
   protected SubchannelPicker getErrorPicker(Status error)  {
-    return new ErrorPicker(error);
+    return new FixedResultPicker(PickResult.withError(error));
   }
 
   @VisibleForTesting

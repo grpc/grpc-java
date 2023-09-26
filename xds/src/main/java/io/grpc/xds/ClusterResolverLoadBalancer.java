@@ -197,7 +197,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       if (childLb != null) {
         childLb.handleNameResolutionError(error);
       } else {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
       }
     }
 
@@ -240,7 +241,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               Status.UNAVAILABLE.withCause(endpointNotFound.getCause())
                   .withDescription(endpointNotFound.getDescription());
         }
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(endpointNotFound));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(endpointNotFound)));
         if (childLb != null) {
           childLb.shutdown();
           childLb = null;
@@ -275,7 +277,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (childLb != null) {
           childLb.handleNameResolutionError(error);
         } else {
-          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          helper.updateBalancingState(
+              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
         }
       }
     }

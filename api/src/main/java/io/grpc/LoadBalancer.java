@@ -1412,6 +1412,12 @@ public abstract class LoadBalancer {
     public abstract LoadBalancer newLoadBalancer(Helper helper);
   }
 
+  /**
+   * A picker that always returns an erring pick.
+   *
+   * @deprecated Use {@code new FixedResultPicker(PickResult.withError(error))} instead.
+   */
+  @Deprecated
   public static final class ErrorPicker extends SubchannelPicker {
 
     private final Status error;
@@ -1433,4 +1439,22 @@ public abstract class LoadBalancer {
     }
   }
 
+  /** A picker that always returns the same result. */
+  public static final class FixedResultPicker extends SubchannelPicker {
+    private final PickResult result;
+
+    public FixedResultPicker(PickResult result) {
+      this.result = Preconditions.checkNotNull(result, "result");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return result;
+    }
+
+    @Override
+    public String toString() {
+      return "FixedResultPicker(" + result + ")";
+    }
+  }
 }

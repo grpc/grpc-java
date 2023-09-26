@@ -39,7 +39,7 @@ import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.ErrorPicker;
+import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -324,10 +324,10 @@ public class WeightedTargetLoadBalancerTest {
         mock(SubchannelPicker.class),
         mock(SubchannelPicker.class)};
     final SubchannelPicker[] failurePickers = new SubchannelPicker[]{
-        new ErrorPicker(Status.CANCELLED),
-        new ErrorPicker(Status.ABORTED),
-        new ErrorPicker(Status.DATA_LOSS),
-        new ErrorPicker(Status.DATA_LOSS)
+        new FixedResultPicker(PickResult.withError(Status.CANCELLED)),
+        new FixedResultPicker(PickResult.withError(Status.ABORTED)),
+        new FixedResultPicker(PickResult.withError(Status.DATA_LOSS)),
+        new FixedResultPicker(PickResult.withError(Status.DATA_LOSS))
     };
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
 
@@ -463,7 +463,8 @@ public class WeightedTargetLoadBalancerTest {
 
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.INTERNAL)));
     }
 
     @Override
