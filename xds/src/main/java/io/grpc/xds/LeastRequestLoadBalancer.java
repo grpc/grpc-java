@@ -94,16 +94,22 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (super.acceptResolvedAddresses(resolvedAddresses)) {
-      LeastRequestConfig config =
-          (LeastRequestConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      if (config != null) {
-        choiceCount = config.choiceCount;
-      }
-      return true;
-    } else {
-      return false;
+    // Need to update choiceCount before calling super so that the updateBalancingState call has the
+    // new value.  However, if the update fails we need to revert it.
+    int oldChoiceCount = choiceCount;
+    LeastRequestConfig config =
+        (LeastRequestConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (config != null) {
+      choiceCount = config.choiceCount;
     }
+
+    boolean successfulUpdate = super.acceptResolvedAddresses(resolvedAddresses);
+
+    if (!successfulUpdate) {
+      choiceCount = oldChoiceCount;
+    }
+
+    return successfulUpdate;
   }
 
   @Override

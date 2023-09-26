@@ -120,9 +120,6 @@ public class LeastRequestLoadBalancerTest {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       EquivalentAddressGroup eag = new EquivalentAddressGroup(addr);
       servers.add(eag);
-      // Subchannel sc = helper.createSubchannel(CreateSubchannelArgs.newBuilder().setAddresses(eag)
-      //     .build());
-      // subchannels.put(Arrays.asList(eag), sc);
     }
 
     loadBalancer = new LeastRequestLoadBalancer(helper, mockRandom);
@@ -304,7 +301,7 @@ public class LeastRequestLoadBalancerTest {
     verify(helper, times(2))
         .updateBalancingState(any(ConnectivityState.class), pickerCaptor.capture());
 
-    // At this point it should use a ReadyPicker with oldConfig
+    // At this point it should use a ReadyPicker with oldConfig and 1 ready subchannel
     pickerCaptor.getValue().pickSubchannel(mockArgs);
     verify(mockRandom, times(oldConfig.choiceCount)).nextInt(1);
 
