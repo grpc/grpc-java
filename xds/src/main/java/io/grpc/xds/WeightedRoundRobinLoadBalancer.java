@@ -17,20 +17,17 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkElementIndex;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Deadline.Ticker;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -43,13 +40,11 @@ import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -96,14 +91,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-  protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker) {
-    ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
-        initialPicker);
-    return childLbState;
-  }
-
-  @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getLoadBalancingPolicyConfig() == null) {
       handleNameResolutionError(Status.UNAVAILABLE.withDescription(
@@ -124,34 +111,90 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-  public RoundRobinPicker createReadyPicker(Collection<ChildLbState> activeList) {
-    return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
-        config.enableOobLoadReport, config.errorUtilizationPenalty);
+  public RoundRobinPicker createReadyPicker(List<Subchannel> activeList) {
+    return new WeightedRoundRobinPicker(activeList, config.enableOobLoadReport,
+        config.errorUtilizationPenalty);
+  }
+
+  private final class UpdateWeightTask implements Runnable {
+    @Override
+    public void run() {
+      if (currentPicker != null && currentPicker instanceof WeightedRoundRobinPicker) {
+        ((WeightedRoundRobinPicker) currentPicker).updateWeight();
+      }
+      weightUpdateTimer = syncContext.schedule(this, config.weightUpdatePeriodNanos,
+          TimeUnit.NANOSECONDS, timeService);
+    }
+  }
+
+  private void afterAcceptAddresses() {
+    for (Subchannel subchannel : getSubchannels()) {
+      WrrSubchannel weightedSubchannel = (WrrSubchannel) subchannel;
+      if (config.enableOobLoadReport) {
+        OrcaOobUtil.setListener(weightedSubchannel,
+            weightedSubchannel.new OrcaReportListener(config.errorUtilizationPenalty),
+                OrcaOobUtil.OrcaReportingConfig.newBuilder()
+                        .setReportInterval(config.oobReportingPeriodNanos, TimeUnit.NANOSECONDS)
+                        .build());
+      } else {
+        OrcaOobUtil.setListener(weightedSubchannel, null, null);
+      }
+    }
   }
 
   @Override
-  protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
-    return super.getChildLbStateEag(eag);
+  public void shutdown() {
+    if (weightUpdateTimer != null) {
+      weightUpdateTimer.cancel();
+    }
+    super.shutdown();
+  }
+
+  private static final class WrrHelper extends ForwardingLoadBalancerHelper {
+    private final Helper delegate;
+    private WeightedRoundRobinLoadBalancer wrr;
+
+    WrrHelper(Helper helper) {
+      this.delegate = helper;
+    }
+
+    void setLoadBalancer(WeightedRoundRobinLoadBalancer lb) {
+      this.wrr = lb;
+    }
+
+    @Override
+    protected Helper delegate() {
+      return delegate;
+    }
+
+    @Override
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
+      return wrr.new WrrSubchannel(delegate().createSubchannel(args));
+    }
   }
 
   @VisibleForTesting
-  final class WeightedChildLbState extends ChildLbState {
-
-    private final Set<WrrSubchannel> subchannels = new HashSet<>();
+  final class WrrSubchannel extends ForwardingSubchannel {
+    private final Subchannel delegate;
     private volatile long lastUpdated;
     private volatile long nonEmptySince;
-    private volatile double weight = 0;
+    private volatile double weight;
 
-    private OrcaReportListener orcaReportListener;
-
-    public WeightedChildLbState(Object key, LoadBalancerProvider policyProvider, Object childConfig,
-        SubchannelPicker initialPicker) {
-      super(key, policyProvider, childConfig, initialPicker);
+    WrrSubchannel(Subchannel delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
     }
 
-    @VisibleForTesting
-    EquivalentAddressGroup getEag() {
-      return stripAttrs((EquivalentAddressGroup) getKey());
+    @Override
+    public void start(SubchannelStateListener listener) {
+      delegate().start(new SubchannelStateListener() {
+        @Override
+        public void onSubchannelState(ConnectivityStateInfo newState) {
+          if (newState.getState().equals(ConnectivityState.READY)) {
+            nonEmptySince = infTime;
+          }
+          listener.onSubchannelState(newState);
+        }
+      });
     }
 
     private double getWeight() {
@@ -170,21 +213,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
     }
 
-    public void addSubchannel(WrrSubchannel wrrSubchannel) {
-      subchannels.add(wrrSubchannel);
-    }
-
-    public OrcaReportListener getOrCreateOrcaListener(float errorUtilizationPenalty) {
-      if (orcaReportListener != null
-          && orcaReportListener.errorUtilizationPenalty == errorUtilizationPenalty) {
-        return orcaReportListener;
-      }
-      orcaReportListener = new OrcaReportListener(errorUtilizationPenalty);
-      return orcaReportListener;
-    }
-
-    public void removeSubchannel(WrrSubchannel wrrSubchannel) {
-      subchannels.remove(wrrSubchannel);
+    @Override
+    protected Subchannel delegate() {
+      return delegate;
     }
 
     final class OrcaReportListener implements OrcaPerRequestReportListener, OrcaOobReportListener {
@@ -220,124 +251,23 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
   }
 
-  private final class UpdateWeightTask implements Runnable {
-    @Override
-    public void run() {
-      if (currentPicker != null && currentPicker instanceof WeightedRoundRobinPicker) {
-        ((WeightedRoundRobinPicker) currentPicker).updateWeight();
-      }
-      weightUpdateTimer = syncContext.schedule(this, config.weightUpdatePeriodNanos,
-          TimeUnit.NANOSECONDS, timeService);
-    }
-  }
-
-  private void afterAcceptAddresses() {
-    for (ChildLbState child : getChildLbStates()) {
-      WeightedChildLbState wChild = (WeightedChildLbState) child;
-      for (WrrSubchannel weightedSubchannel : wChild.subchannels) {
-        if (config.enableOobLoadReport) {
-          OrcaOobUtil.setListener(weightedSubchannel,
-              wChild.getOrCreateOrcaListener(config.errorUtilizationPenalty),
-              OrcaOobUtil.OrcaReportingConfig.newBuilder()
-                  .setReportInterval(config.oobReportingPeriodNanos, TimeUnit.NANOSECONDS)
-                  .build());
-        } else {
-          OrcaOobUtil.setListener(weightedSubchannel, null, null);
-        }
-      }
-    }
-  }
-
-  @Override
-  public void shutdown() {
-    if (weightUpdateTimer != null) {
-      weightUpdateTimer.cancel();
-    }
-    super.shutdown();
-  }
-
-  private static final class WrrHelper extends ForwardingLoadBalancerHelper {
-    private final Helper delegate;
-    private WeightedRoundRobinLoadBalancer wrr;
-
-    WrrHelper(Helper helper) {
-      this.delegate = helper;
-    }
-
-    void setLoadBalancer(WeightedRoundRobinLoadBalancer lb) {
-      this.wrr = lb;
-    }
-
-    @Override
-    protected Helper delegate() {
-      return delegate;
-    }
-
-    @Override
-    public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      checkElementIndex(0, args.getAddresses().size(), "Empty address group");
-      WeightedChildLbState childLbState =
-          (WeightedChildLbState) wrr.getChildLbStateEag(args.getAddresses().get(0));
-      return wrr.new WrrSubchannel(delegate().createSubchannel(args), childLbState);
-    }
-  }
-
-  @VisibleForTesting
-  final class WrrSubchannel extends ForwardingSubchannel {
-    private final Subchannel delegate;
-    private final WeightedChildLbState owner;
-
-    WrrSubchannel(Subchannel delegate, WeightedChildLbState owner) {
-      this.delegate = checkNotNull(delegate, "delegate");
-      this.owner = checkNotNull(owner, "owner");
-    }
-
-    @Override
-    public void start(SubchannelStateListener listener) {
-      owner.addSubchannel(this);
-      delegate().start(new SubchannelStateListener() {
-        @Override
-        public void onSubchannelState(ConnectivityStateInfo newState) {
-          if (newState.getState().equals(ConnectivityState.READY)) {
-            owner.nonEmptySince = infTime;
-          }
-          listener.onSubchannelState(newState);
-        }
-      });
-    }
-
-    @Override
-    protected Subchannel delegate() {
-      return delegate;
-    }
-
-    @Override
-    public void shutdown() {
-      super.shutdown();
-      owner.removeSubchannel(this);
-    }
-  }
-
   @VisibleForTesting
   final class WeightedRoundRobinPicker extends RoundRobinPicker {
-    private final List<ChildLbState> children;
+    private final List<Subchannel> list;
     private final Map<Subchannel, OrcaPerRequestReportListener> subchannelToReportListenerMap =
         new HashMap<>();
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
     private volatile StaticStrideScheduler scheduler;
 
-    WeightedRoundRobinPicker(List<ChildLbState> children, boolean enableOobLoadReport,
+    WeightedRoundRobinPicker(List<Subchannel> list, boolean enableOobLoadReport,
         float errorUtilizationPenalty) {
-      checkNotNull(children, "children");
-      Preconditions.checkArgument(!children.isEmpty(), "empty child list");
-      this.children = children;
-      for (ChildLbState child : children) {
-        WeightedChildLbState wChild = (WeightedChildLbState) child;
-        for (WrrSubchannel subchannel : wChild.subchannels) {
-          this.subchannelToReportListenerMap
-              .put(subchannel, wChild.getOrCreateOrcaListener(errorUtilizationPenalty));
-        }
+      checkNotNull(list, "list");
+      Preconditions.checkArgument(!list.isEmpty(), "empty list");
+      this.list = list;
+      for (Subchannel subchannel : list) {
+        this.subchannelToReportListenerMap.put(subchannel,
+            ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty));
       }
       this.enableOobLoadReport = enableOobLoadReport;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
@@ -346,24 +276,22 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      ChildLbState childLbState = children.get(scheduler.pick());
-      WeightedChildLbState wChild = (WeightedChildLbState) childLbState;
-      PickResult pickResult = childLbState.getCurrentPicker().pickSubchannel(args);
-      Subchannel subchannel = pickResult.getSubchannel();
+      Subchannel subchannel = list.get(scheduler.pick());
       if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
-            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
+                OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                 subchannelToReportListenerMap.getOrDefault(subchannel,
-                    wChild.getOrCreateOrcaListener(errorUtilizationPenalty))));
+                    ((WrrSubchannel) subchannel).new OrcaReportListener(errorUtilizationPenalty))));
       } else {
         return PickResult.withSubchannel(subchannel);
       }
     }
 
     private void updateWeight() {
-      float[] newWeights = new float[children.size()];
-      for (int i = 0; i < children.size(); i++) {
-        double newWeight = ((WeightedChildLbState)children.get(i)).getWeight();
+      float[] newWeights = new float[list.size()];
+      for (int i = 0; i < list.size(); i++) {
+        WrrSubchannel subchannel = (WrrSubchannel) list.get(i);
+        double newWeight = subchannel.getWeight();
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
       this.scheduler = new StaticStrideScheduler(newWeights, sequence);
@@ -374,12 +302,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       return MoreObjects.toStringHelper(WeightedRoundRobinPicker.class)
           .add("enableOobLoadReport", enableOobLoadReport)
           .add("errorUtilizationPenalty", errorUtilizationPenalty)
-          .add("list", children).toString();
+          .add("list", list).toString();
     }
 
     @VisibleForTesting
-    List<ChildLbState> getChildren() {
-      return children;
+    List<Subchannel> getList() {
+      return list;
     }
 
     @Override
@@ -394,8 +322,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       // the lists cannot contain duplicate subchannels
       return enableOobLoadReport == other.enableOobLoadReport
           && Float.compare(errorUtilizationPenalty, other.errorUtilizationPenalty) == 0
-          && children.size() == other.children.size() && new HashSet<>(
-          children).containsAll(other.children);
+          && list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list);
     }
   }
 
@@ -577,13 +504,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
       }
 
-      @SuppressWarnings("UnusedReturnValue")
       Builder setBlackoutPeriodNanos(long blackoutPeriodNanos) {
         this.blackoutPeriodNanos = blackoutPeriodNanos;
         return this;
       }
 
-      @SuppressWarnings("UnusedReturnValue")
       Builder setWeightExpirationPeriodNanos(long weightExpirationPeriodNanos) {
         this.weightExpirationPeriodNanos = weightExpirationPeriodNanos;
         return this;
