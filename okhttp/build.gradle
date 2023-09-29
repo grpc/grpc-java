@@ -15,8 +15,9 @@ tasks.named("jar").configure {
 }
 
 dependencies {
-    api project(':grpc-util')
-    implementation libraries.okio,
+    api project(':grpc-core')
+    implementation project(':grpc-util'),
+            libraries.okio,
             libraries.guava,
             libraries.perfmark.api
     // Make okhttp dependencies compile only
