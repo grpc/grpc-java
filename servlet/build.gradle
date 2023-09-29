@@ -40,6 +40,7 @@ dependencies {
             libraries.javax.annotation // java 9, 10 needs it
 
     implementation project(':grpc-util'),
+            project(':grpc-core'),
             libraries.guava
 
     testImplementation 'javax.servlet:javax.servlet-api:4.0.1'
