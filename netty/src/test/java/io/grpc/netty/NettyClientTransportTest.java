@@ -19,13 +19,11 @@ package io.grpc.netty;
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.TruthJUnit.assume;
-import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
-import static io.grpc.netty.NettyChannelBuilder.DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -42,7 +40,6 @@ import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -127,7 +124,7 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
   public static final String LONG_STRING_OF_A = Strings.repeat("a", 1024);
-  public static final String LONG_STRING_OF_TILDE = Strings.repeat("~", 1024);
+  public static final String LONG_STRING_OF_Z = Strings.repeat("z", 1024);
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final SslContext SSL_CONTEXT = createSslContext();
@@ -202,8 +199,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = new NettyClientTransport(
         address, new ReflectiveChannelFactory<>(NioSocketChannel.class), channelOptions, group,
         newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
-        DEFAULT_MAX_HEADER_LIST_SIZE, DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD,
-        KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
         new SocketPicker(), new FakeChannelLogger(), false, Ticker.systemTicker());
     transports.add(transport);
@@ -453,8 +449,7 @@ public class NettyClientTransportTest {
         address, new ReflectiveChannelFactory<>(CantConstructChannel.class),
         new HashMap<ChannelOption<?>, Object>(), group,
         newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
-        DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-        KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
         new FakeChannelLogger(), false, Ticker.systemTicker());
     transports.add(transport);
@@ -551,40 +546,11 @@ public class NettyClientTransportTest {
   }
 
   @Test
-  public void huffmanCodingShouldBePerformed() throws Exception {
-    startServer();
-
-    Callable<NettyClientTransport> huffmanTransport =  () -> newTransport(newNegotiator(),
-        DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_HEADER_LIST_SIZE, 1, null, true,
-        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
-        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
-
-    Metadata aHeaders = new Metadata();
-    aHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-        LONG_STRING_OF_A);
-
-    Metadata tildeHeaders = new Metadata();
-    tildeHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-                  LONG_STRING_OF_TILDE);
-
-    Metadata warmupHeaders = new Metadata();
-    warmupHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
-
-    getRpcSize(huffmanTransport, warmupHeaders);
-
-    long aHeaderRpcSize = getRpcSize(huffmanTransport, aHeaders);
-
-    long tildeHeaderRpcSize = getRpcSize(huffmanTransport, tildeHeaders);
-
-    assertThat(aHeaderRpcSize).isLessThan(tildeHeaderRpcSize);
-  }
-
-  @Test
   public void huffmanCodingShouldNotBePerformed() throws Exception {
     startServer();
 
     Callable<NettyClientTransport> nonHuffmanTransport =  () -> newTransport(newNegotiator(),
-        DEFAULT_MAX_MESSAGE_SIZE, DEFAULT_MAX_HEADER_LIST_SIZE, Integer.MAX_VALUE, null, true,
+        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, true,
         TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
         new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
 
@@ -592,9 +558,9 @@ public class NettyClientTransportTest {
     aHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
         LONG_STRING_OF_A);
 
-    Metadata tildeHeaders = new Metadata();
-    tildeHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-        LONG_STRING_OF_TILDE);
+    Metadata zHeaders = new Metadata();
+    zHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        LONG_STRING_OF_Z);
 
     Metadata warmupHeaders = new Metadata();
     warmupHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
@@ -602,10 +568,12 @@ public class NettyClientTransportTest {
     //warm up hpack
     getRpcSize(nonHuffmanTransport, warmupHeaders);
 
+    // When huffman coded via the HPACK speck, 'a' is 5 bits while 'z' is 7 bits.
+    // A 1024 character string of 'a' should be 256 bytes shorter than the same length of 'z'.
     long aHeaderRpcSize = getRpcSize(nonHuffmanTransport, aHeaders);
-    long tildeHeaderRpcSize = getRpcSize(nonHuffmanTransport, tildeHeaders);
+    long zHeaderRpcSize = getRpcSize(nonHuffmanTransport, zHeaders);
 
-    assertThat(aHeaderRpcSize).isEqualTo(tildeHeaderRpcSize);
+    assertThat(aHeaderRpcSize).isEqualTo(zHeaderRpcSize);
   }
 
   @CanIgnoreReturnValue
@@ -622,8 +590,6 @@ public class NettyClientTransportTest {
     transport.channel().pipeline().addFirst(channelTrafficShapingHandler);
 
     new Rpc(transport, headers).halfClose().waitForResponse();
-
-    Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
 
     TrafficCounter trafficCounter = channelTrafficShapingHandler.trafficCounter();
     if (trafficCounter == null) {
@@ -842,22 +808,13 @@ public class NettyClientTransportTest {
       int maxHeaderListSize, String userAgent, boolean enableKeepAlive, long keepAliveTimeNano,
       long keepAliveTimeoutNano, ChannelFactory<? extends Channel> channelFactory,
       EventLoopGroup group) {
-    return newTransport(negotiator, maxMsgSize, maxHeaderListSize,
-            DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD, userAgent, enableKeepAlive, keepAliveTimeNano,
-            keepAliveTimeoutNano, channelFactory, group);
-  }
-
-  private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
-      int maxHeaderListSize, int huffCodeThreshold, String userAgent, boolean enableKeepAlive,
-      long keepAliveTimeNano, long keepAliveTimeoutNano,
-      ChannelFactory<? extends Channel> channelFactory, EventLoopGroup group) {
     if (!enableKeepAlive) {
       keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
     }
     NettyClientTransport transport = new NettyClientTransport(
         address, channelFactory, new HashMap<ChannelOption<?>, Object>(), group,
         negotiator, false, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
-            huffCodeThreshold, keepAliveTimeNano, keepAliveTimeoutNano,
+        keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
         new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false,
         Ticker.systemTicker());

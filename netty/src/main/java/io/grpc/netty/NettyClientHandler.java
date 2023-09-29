@@ -142,7 +142,6 @@ class NettyClientHandler extends AbstractNettyHandler {
       boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
-      int hpackHuffmanCodeThreshold,
       Supplier<Stopwatch> stopwatchFactory,
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
@@ -151,12 +150,10 @@ class NettyClientHandler extends AbstractNettyHandler {
       ChannelLogger negotiationLogger,
       Ticker ticker) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
-    Preconditions.checkArgument(hpackHuffmanCodeThreshold > 0,
-        "hpackHuffmanCodeThreshold must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
     Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
-        Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, hpackHuffmanCodeThreshold);
+        Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, Integer.MAX_VALUE);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
     WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);

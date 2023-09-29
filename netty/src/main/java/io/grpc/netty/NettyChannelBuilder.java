@@ -79,7 +79,6 @@ public final class NettyChannelBuilder extends
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
   private static final boolean DEFAULT_AUTO_FLOW_CONTROL;
 
-  public static final int DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD = 512;
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
   private static final ChannelFactory<? extends Channel> DEFAULT_CHANNEL_FACTORY =
@@ -103,7 +102,6 @@ public final class NettyChannelBuilder extends
   private boolean autoFlowControl = DEFAULT_AUTO_FLOW_CONTROL;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
-  private int hpackHuffmanCodingThreshold = DEFAULT_HPACK_HUFFMAN_CODE_THRESHOLD;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private boolean keepAliveWithoutCalls;
@@ -423,22 +421,6 @@ public final class NettyChannelBuilder extends
   }
 
   /**
-   * Sets the threshold for using <a href="https://httpwg.org/specs/rfc7541.html#rfc.section.5.2">
-   * HPACK's Huffman coding</a> in metadata. The default is 512 chars.
-   *
-   * @param chars the minimum size of a string literal before applying the HPACK Huffman code.
-   * @return this
-   * @throws IllegalArgumentException if chars is non-positive
-   * @since 1.59.0
-   */
-  @CanIgnoreReturnValue
-  public NettyChannelBuilder hpackHuffmanCodingThreshold(int chars) {
-    checkArgument(chars > 0, "hpackHuffmanCodingThreshold must be > 0");
-    this.hpackHuffmanCodingThreshold = chars;
-    return this;
-  }
-
-  /**
    * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT}.
    */
   @CanIgnoreReturnValue
@@ -558,8 +540,8 @@ public final class NettyChannelBuilder extends
     return new NettyTransportFactory(
         negotiator, channelFactory, channelOptions,
         eventLoopGroupPool, autoFlowControl, flowControlWindow, maxInboundMessageSize,
-        maxHeaderListSize, hpackHuffmanCodingThreshold, keepAliveTimeNanos, keepAliveTimeoutNanos,
-            keepAliveWithoutCalls, transportTracerFactory, localSocketPicker, useGetForSafeMethods);
+        maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
+        transportTracerFactory, localSocketPicker, useGetForSafeMethods);
   }
 
   @VisibleForTesting
@@ -689,7 +671,6 @@ public final class NettyChannelBuilder extends
     private final int flowControlWindow;
     private final int maxMessageSize;
     private final int maxHeaderListSize;
-    private final int hpackHuffmanCodingThreshold;
     private final long keepAliveTimeNanos;
     private final AtomicBackoff keepAliveBackoff;
     private final long keepAliveTimeoutNanos;
@@ -705,9 +686,9 @@ public final class NettyChannelBuilder extends
         ChannelFactory<? extends Channel> channelFactory,
         Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
         boolean autoFlowControl, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
-        int hpackHuffmanCodingThreshold, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
-        boolean keepAliveWithoutCalls, TransportTracer.Factory transportTracerFactory,
-        LocalSocketPicker localSocketPicker, boolean useGetForSafeMethods) {
+        long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
+        TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
+        boolean useGetForSafeMethods) {
       this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -716,7 +697,6 @@ public final class NettyChannelBuilder extends
       this.autoFlowControl = autoFlowControl;
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
-      this.hpackHuffmanCodingThreshold = hpackHuffmanCodingThreshold;
       this.maxHeaderListSize = maxHeaderListSize;
       this.keepAliveTimeNanos = keepAliveTimeNanos;
       this.keepAliveBackoff = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
@@ -756,11 +736,10 @@ public final class NettyChannelBuilder extends
       NettyClientTransport transport = new NettyClientTransport(
           serverAddress, channelFactory, channelOptions, group,
           localNegotiator, autoFlowControl, flowControlWindow,
-          maxMessageSize, maxHeaderListSize, hpackHuffmanCodingThreshold,
-          keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls,
-          options.getAuthority(), options.getUserAgent(), tooManyPingsRunnable,
-          transportTracerFactory.create(), options.getEagAttributes(), localSocketPicker,
-          channelLogger, useGetForSafeMethods, Ticker.systemTicker());
+          maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
+          keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
+          tooManyPingsRunnable, transportTracerFactory.create(), options.getEagAttributes(),
+          localSocketPicker, channelLogger, useGetForSafeMethods, Ticker.systemTicker());
       return transport;
     }
 
@@ -778,9 +757,9 @@ public final class NettyChannelBuilder extends
       }
       ClientTransportFactory factory = new NettyTransportFactory(
           result.negotiator.newNegotiator(), channelFactory, channelOptions, groupPool,
-          autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize,
-          hpackHuffmanCodingThreshold, keepAliveTimeNanos, keepAliveTimeoutNanos,
-          keepAliveWithoutCalls, transportTracerFactory,  localSocketPicker, useGetForSafeMethods);
+          autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeNanos,
+          keepAliveTimeoutNanos, keepAliveWithoutCalls, transportTracerFactory,  localSocketPicker,
+          useGetForSafeMethods);
       return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 

@@ -253,15 +253,6 @@ public class NettyChannelBuilderTest {
   }
 
   @Test
-  public void negativeHpackHuffmanCodingThreshold() {
-    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("hpackHuffmanCodingThreshold must be > 0");
-    builder.hpackHuffmanCodingThreshold(-1);
-  }
-
-  @Test
   public void assertEventLoopAndChannelType_onlyGroupProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
     builder.eventLoopGroup(mock(EventLoopGroup.class));
