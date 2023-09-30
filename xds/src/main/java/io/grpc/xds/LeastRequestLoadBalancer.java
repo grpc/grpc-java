@@ -58,18 +58,16 @@ import javax.annotation.Nonnull;
  * the "power of two choices" (P2C).
  */
 final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
+  private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
+  private static final EmptyPicker EMPTY_LR_PICKER = new EmptyPicker(EMPTY_OK);
+
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
-  @VisibleForTesting
-  static final Attributes.Key<AtomicInteger> IN_FLIGHTS =
-      Attributes.Key.create("in-flights");
 
   private final ThreadSafeRandom random;
-  // private final Map<EquivalentAddressGroup, Subchannel> subchannels =
-  //     new HashMap<>();
 
-  private LeastRequestPicker currentPicker = new EmptyPicker(EMPTY_OK);
+  private LeastRequestPicker currentPicker = EMPTY_LR_PICKER;
   private int choiceCount = DEFAULT_CHOICE_COUNT;
 
   LeastRequestLoadBalancer(Helper helper) {
@@ -84,12 +82,8 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
-    return null;
-  }
-
-  @Override
-  protected SubchannelPicker getInitialPicker() {
-    return currentPicker;
+    throw new UnsupportedOperationException(
+        "LeastRequestLoadBalancer uses its ChildLbStates, not these child pickers directly");
   }
 
   @Override
@@ -117,10 +111,14 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     return new EmptyPicker(error);
   }
 
-  private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
-
   /**
    * Updates picker with the list of active subchannels (state == READY).
+   *
+   *  <p>
+   * If no active subchannels exist, but some are in TRANSIENT_FAILURE then returns a picker
+   * with all of the children in TF so that the application code will get an error from a varying
+   * random one when it tries to get a subchannel.
+   * </p>
    */
   @SuppressWarnings("ReferenceEquality")
   @Override
@@ -139,7 +137,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
         }
       }
       if (isConnecting) {
-        updateBalancingState(CONNECTING, new EmptyPicker(EMPTY_OK));
+        updateBalancingState(CONNECTING, EMPTY_LR_PICKER);
       } else {
         // Give it all the failing children and let it randomly pick among them
         updateBalancingState(TRANSIENT_FAILURE,
@@ -164,6 +162,12 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     }
   }
 
+  // This should only be used by tests
+  @VisibleForTesting
+  void setResolvingAddresses(boolean newValue) {
+    super.resolvingAddresses = newValue;
+  }
+
   @Override
   protected Collection<ChildLbState> getChildLbStates() {
     return super.getChildLbStates();
@@ -174,18 +178,15 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     return super.getChildLbState(key);
   }
 
-  private static Ref<ConnectivityStateInfo> getSubchannelStateInfoRef(
-      Subchannel subchannel) {
-    return checkNotNull(subchannel.getAttributes().get(STATE_INFO), "STATE_INFO");
-  }
-
   private static AtomicInteger getInFlights(ChildLbState childLbState) {
     return ((LeastRequestLbState)childLbState).activeRequests;
   }
 
-  // Only subclasses are ReadyPicker or EmptyPicker
-  private abstract static class LeastRequestPicker extends SubchannelPicker {
+  @VisibleForTesting
+  abstract static class LeastRequestPicker extends SubchannelPicker {
     abstract boolean isEquivalentTo(LeastRequestPicker picker);
+
+    abstract String getStatusString();
   }
 
   @VisibleForTesting
@@ -246,6 +247,27 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     }
 
     @Override
+    String getStatusString() {
+      if (list == null || list.isEmpty()) {
+        return "";
+      };
+
+      String pickerStr = list.get(0).getCurrentPicker().toString();
+      int beg = pickerStr.indexOf(", status=Status{");
+      if (beg < 0) {
+        return "";
+      }
+      int end = pickerStr.indexOf('}', beg);
+      if (end < 0) {
+        return "";
+      }
+      return pickerStr.substring(beg + ", status=".length(), end + 1);
+    }
+
+    @VisibleForTesting
+
+
+    @Override
     boolean isEquivalentTo(LeastRequestPicker picker) {
       if (!(picker instanceof ReadyPicker)) {
         return false;
@@ -281,6 +303,14 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(EmptyPicker.class).add("status", status).toString();
+    }
+
+    @Override
+    String getStatusString() {
+      if (status == null) {
+        return "";
+      }
+      return status.toString();
     }
   }
 

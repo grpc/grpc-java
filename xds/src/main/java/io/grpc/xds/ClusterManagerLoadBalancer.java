@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -106,6 +107,26 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
         return MoreObjects.toStringHelper(this).add("pickers", childPickers).toString();
       }
     };
+  }
+
+  @Override
+  public void handleNameResolutionError(Status error) {
+    logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
+    boolean gotoTransientFailure = true;
+    for (ChildLbState state : getChildLbStates()) {
+      if (!state.isDeactivated()) {
+        gotoTransientFailure = false;
+        handleNameResolutionError(state, error);
+      }
+    }
+    if (gotoTransientFailure) {
+      getHelper().updateBalancingState(TRANSIENT_FAILURE, getErrorPicker(error));
+    }
+  }
+
+  @Override
+  protected boolean reconnectOnIdle() {
+    return false;
   }
 
   private class ClusterManagerLbState extends ChildLbState {

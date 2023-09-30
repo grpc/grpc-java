@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.LeastRequestLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -56,6 +55,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.AbstractTestHelper;
@@ -63,8 +63,8 @@ import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.LeastRequestLoadBalancer.EmptyPicker;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestLbState;
+import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestPicker;
 import io.grpc.xds.LeastRequestLoadBalancer.ReadyPicker;
-import io.grpc.xds.LeastRequestLoadBalancer.Ref;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -163,10 +163,6 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void pickAfterResolvedUpdatedHosts() throws Exception {
-    Subchannel removedSubchannel = mock(Subchannel.class);
-    Subchannel oldSubchannel = mock(Subchannel.class);
-    Subchannel newSubchannel = mock(Subchannel.class);
-
     Attributes.Key<String> key = Attributes.Key.create("check-that-it-is-propagated");
     FakeSocketAddress removedAddr = new FakeSocketAddress("removed");
     EquivalentAddressGroup removedEag = new EquivalentAddressGroup(removedAddr);
@@ -178,10 +174,6 @@ public class LeastRequestLoadBalancerTest {
     EquivalentAddressGroup newEag = new EquivalentAddressGroup(
         newAddr, Attributes.newBuilder().set(key, "newattr").build());
 
-    subchannels.put(Collections.singletonList(removedEag), removedSubchannel);
-    subchannels.put(Collections.singletonList(oldEag1), oldSubchannel);
-    subchannels.put(Collections.singletonList(newEag), newSubchannel);
-
     List<EquivalentAddressGroup> currentServers = Lists.newArrayList(removedEag, oldEag1);
 
     InOrder inOrder = inOrder(helper);
@@ -190,6 +182,11 @@ public class LeastRequestLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(currentServers).setAttributes(affinity)
             .build());
     assertThat(addressesAccepted).isTrue();
+    Subchannel removedSubchannel = getSubchannel(removedEag);
+    Subchannel oldSubchannel = getSubchannel(oldEag1);
+    SubchannelStateListener removedListener =
+        testHelperInstance.getSubchannelStateListeners()
+            .get(testHelperInstance.getRealForMockSubChannel(removedSubchannel));
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
@@ -212,11 +209,13 @@ public class LeastRequestLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(latestServers).setAttributes(affinity).build());
     assertThat(addressesAccepted).isTrue();
 
+    Subchannel newSubchannel = getSubchannel(newEag);
+
     verify(newSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).updateAddresses(Arrays.asList(oldEag2));
     verify(removedSubchannel, times(1)).shutdown();
 
-    deliverSubchannelState(removedSubchannel, ConnectivityStateInfo.forNonError(SHUTDOWN));
+    removedListener.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
     deliverSubchannelState(newSubchannel, ConnectivityStateInfo.forNonError(READY));
 
     assertThat(getChildEags(loadBalancer)).containsExactly(oldEag1, newEag);
@@ -224,10 +223,17 @@ public class LeastRequestLoadBalancerTest {
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
 
-    picker = pickerCaptor.getValue();
-    assertThat(getList(picker)).containsExactly(oldSubchannel, newSubchannel);
+    assertThat(getList(pickerCaptor.getValue())).containsExactly(oldSubchannel, newSubchannel);
 
     verifyNoMoreInteractions(helper);
+  }
+
+  private Subchannel getSubchannel(EquivalentAddressGroup removedEag) {
+    return subchannels.get(Collections.singletonList(removedEag));
+  }
+
+  private Subchannel getSubchannel(ChildLbState childLbState) {
+    return subchannels.get(Collections.singletonList(childLbState.getEag()));
   }
 
   private static List<Object> getChildEags(LeastRequestLoadBalancer loadBalancer) {
@@ -254,24 +260,23 @@ public class LeastRequestLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
     assertThat(addressesAccepted).isTrue();
-    Subchannel subchannel = getSubchannels(loadBalancer).get(0);
-    Ref<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(STATE_INFO);
+    ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
+    Subchannel subchannel = getSubchannel(childLbState);
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
-    assertThat(subchannelStateInfo.value).isEqualTo(ConnectivityStateInfo.forNonError(IDLE));
+    assertThat(childLbState.getCurrentState()).isEqualTo(CONNECTING);
 
     deliverSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(ReadyPicker.class);
-    assertThat(subchannelStateInfo.value).isEqualTo(
-        ConnectivityStateInfo.forNonError(READY));
+    assertThat(childLbState.getCurrentState()).isEqualTo(READY);
 
     Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
     deliverSubchannelState(subchannel,
         ConnectivityStateInfo.forTransientFailure(error));
-    assertThat(subchannelStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(subchannelStateInfo.value.getStatus()).isEqualTo(error);
+    assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
     inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(EmptyPicker.class);
@@ -279,8 +284,8 @@ public class LeastRequestLoadBalancerTest {
     deliverSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(helper).refreshNameResolution();
-    assertThat(subchannelStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
-    assertThat(subchannelStateInfo.value.getStatus()).isEqualTo(error);
+    assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
+    assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
 
     verify(subchannel, times(2)).requestConnection();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -349,28 +354,24 @@ public class LeastRequestLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
     // Simulate state transitions for each subchannel individually.
-    for (Subchannel sc : getSubchannels(loadBalancer)) {
+    for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
+      Subchannel sc = getSubchannel(childLbState);
       Status error = Status.UNKNOWN.withDescription("connection broken");
-      deliverSubchannelState(
-          sc,
-          ConnectivityStateInfo.forTransientFailure(error));
+      deliverSubchannelState(sc, ConnectivityStateInfo.forTransientFailure(error));
       inOrder.verify(helper).refreshNameResolution();
-      deliverSubchannelState(
-          sc,
-          ConnectivityStateInfo.forNonError(CONNECTING));
-      Ref<ConnectivityStateInfo> scStateInfo = sc.getAttributes().get(
-          STATE_INFO);
-      assertThat(scStateInfo.value.getState()).isEqualTo(TRANSIENT_FAILURE);
-      assertThat(scStateInfo.value.getStatus()).isEqualTo(error);
+      deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(CONNECTING));
+      assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     }
-    inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), isA(EmptyPicker.class));
+    inOrder.verify(helper)
+        .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertThat(((LeastRequestPicker)pickerCaptor.getValue()).getStatusString())
+        .contains("Status{code=UNKNOWN, description=connection broken");
     inOrder.verifyNoMoreInteractions();
 
-    Subchannel subchannel = getSubchannels(loadBalancer).iterator().next();
+    ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
+    Subchannel subchannel = getSubchannel(childLbState);
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    Ref<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
-        STATE_INFO);
-    assertThat(subchannelStateInfo.value).isEqualTo(ConnectivityStateInfo.forNonError(READY));
+    assertThat(childLbState.getCurrentState()).isEqualTo(READY);
     inOrder.verify(helper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -482,7 +483,9 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void nameResolutionErrorWithNoChannels() throws Exception {
     Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
+    loadBalancer.setResolvingAddresses(true);
     loadBalancer.handleNameResolutionError(error);
+    loadBalancer.setResolvingAddresses(false);
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
 
     LoadBalancer.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
@@ -502,7 +505,12 @@ public class LeastRequestLoadBalancerTest {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
 
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+    // TODO This test assumes that existing subchannels are left unchanged while the logic we have
+    // is to tell all of the children that there was a nameResolutionError.  This seems to me to
+    // make more sense, just ignore a bad update.
+    loadBalancer.setResolvingAddresses(true);
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
+    loadBalancer.setResolvingAddresses(false);
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper, times(2))
@@ -544,7 +552,7 @@ public class LeastRequestLoadBalancerTest {
     deliverSubchannelState(sc2, ConnectivityStateInfo.forNonError(IDLE));
     deliverSubchannelState(sc3, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
-    verify(helper, times(3))
+    verify(helper, times(6))
         .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
     Iterator<ConnectivityState> stateIterator = stateCaptor.getAllValues().iterator();
     Iterator<SubchannelPicker> pickers = pickerCaptor.getAllValues().iterator();
@@ -618,12 +626,6 @@ public class LeastRequestLoadBalancerTest {
             .setAttributes(affinity)
             .build()))
         .isFalse();
-  }
-
-  private Subchannel getSubchannel(ChildLbState childLbState) {
-    List<EquivalentAddressGroup> eagList =
-        Arrays.asList((EquivalentAddressGroup) childLbState.getKey());
-    return subchannels.get(eagList);
   }
 
   private List<Subchannel> getList(SubchannelPicker picker) {

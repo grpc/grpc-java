@@ -61,6 +61,14 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
     return mockToRealSubChannelMap;
   }
 
+  public Subchannel getRealForMockSubChannel(Subchannel mock) {
+    Subchannel realSc = getMockToRealSubChannelMap().get(mock);
+    if (realSc == null) {
+      realSc = mock;
+    }
+    return realSc;
+  }
+
   public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
     return subchannelStateListeners;
   }
@@ -68,11 +76,13 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   public void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     Subchannel realSc = getMockToRealSubChannelMap().get(subchannel);
     if (realSc == null) {
-      if (getSubchannelStateListeners().get(subchannel) != null) {
-        realSc = subchannel;
-      }
+      realSc = subchannel;
     }
-    getSubchannelStateListeners().get(realSc).onSubchannelState(newState);
+    SubchannelStateListener listener = getSubchannelStateListeners().get(realSc);
+    if (listener == null) {
+      throw new IllegalArgumentException("subchannel does not have a matching listener");
+    }
+    listener.onSubchannelState(newState);
   }
 
   @Override
@@ -113,7 +123,7 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   }
 
   private class TestSubchannel extends ForwardingSubchannel {
-    final CreateSubchannelArgs args;
+    CreateSubchannelArgs args;
     Channel channel;
 
     public TestSubchannel(CreateSubchannelArgs args) {
@@ -142,7 +152,16 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
 
     @Override
     public void updateAddresses(List<EquivalentAddressGroup> addrs) {
-      // Do nothing, will be handled in wrappers
+      if (args.getAddresses().equals(addrs)) {
+        return; // no changes so it's a no-op
+      }
+
+      List<EquivalentAddressGroup> oldAddrs = args.getAddresses();
+      Subchannel oldTarget = getSubchannelMap().get(oldAddrs);
+
+      this.args = args.toBuilder().setAddresses(addrs).build();
+      getSubchannelMap().put(addrs, oldTarget);
+      getSubchannelMap().remove(oldAddrs);
     }
 
     @Override

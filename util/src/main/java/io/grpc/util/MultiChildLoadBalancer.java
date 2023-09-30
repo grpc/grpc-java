@@ -26,7 +26,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
@@ -34,10 +33,13 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
+import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -52,11 +54,11 @@ import javax.annotation.Nullable;
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
-  private final Map<Object, ChildLbState> childLbStates = new HashMap<>();
+  private final Map<Object, ChildLbState> childLbStates = new LinkedHashMap<>();
   private final Helper helper;
   // Set to true if currently in the process of handling resolved addresses.
   @VisibleForTesting
-  boolean resolvingAddresses;
+  protected boolean resolvingAddresses;
 
   protected final PickFirstLoadBalancerProvider pickFirstLbProvider =
       new PickFirstLoadBalancerProvider();
@@ -66,15 +68,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   protected MultiChildLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
     logger.log(Level.FINE, "Created");
-  }
-
-  @SuppressWarnings("ReferenceEquality")
-  protected static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
-    if (eag.getAttributes() == Attributes.EMPTY) {
-      return eag;
-    } else {
-      return new EquivalentAddressGroup(eag.getAddresses());
-    }
   }
 
   protected abstract SubchannelPicker getSubchannelPicker(
@@ -97,11 +90,14 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     if (key == null) {
       return null;
     }
+    if (key instanceof EquivalentAddressGroup) {
+      key = new Endpoint((EquivalentAddressGroup) key);
+    }
     return childLbStates.get(key);
   }
 
   protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
-    return getChildLbState(stripAttrs(eag));
+    return getChildLbState(new Endpoint(eag));
   }
 
   /**
@@ -111,10 +107,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     Map<Object, ChildLbState> childLbMap = new HashMap<>();
     List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
     for (EquivalentAddressGroup eag : addresses) {
-      EquivalentAddressGroup strippedEag = stripAttrs(eag); // keys need to be just addresses
-      ChildLbState childLbState = childLbMap.getOrDefault(strippedEag,
-          createChildLbState(strippedEag, null, getInitialPicker()));
-      childLbMap.put(strippedEag, childLbState);
+      Endpoint endpoint = new Endpoint(eag); // keys need to be just addresses
+      ChildLbState childLbState = childLbMap.getOrDefault(endpoint,
+          createChildLbState(endpoint, null, getInitialPicker()));
+      childLbMap.put(endpoint, childLbState);
     }
     return childLbMap;
   }
@@ -143,21 +139,24 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    */
   protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
       Object childConfig) {
-    checkArgument(key instanceof EquivalentAddressGroup, "key is wrong type");
+    if (key instanceof EquivalentAddressGroup) {
+      key = new Endpoint((EquivalentAddressGroup) key);
+    }
+    checkArgument(key instanceof Endpoint, "key is wrong type");
 
     // Retrieve the non-stripped version
-    EquivalentAddressGroup eag = null;
-    for (EquivalentAddressGroup equivalentAddressGroup : resolvedAddresses.getAddresses()) {
-      if (stripAttrs(equivalentAddressGroup).equals(key)) {
-        eag = equivalentAddressGroup;
+    EquivalentAddressGroup eagToUse = null;
+    for (EquivalentAddressGroup currEag : resolvedAddresses.getAddresses()) {
+      if (key.equals(currEag)) {
+        eagToUse = currEag;
         break;
       }
     }
 
-    checkNotNull(eag, key + " no longer present in load balancer children");
+    checkNotNull(eagToUse, key + " no longer present in load balancer children");
 
     return resolvedAddresses.toBuilder()
-        .setAddresses(Collections.singletonList(eag))
+        .setAddresses(Collections.singletonList(eagToUse))
         .setLoadBalancingPolicyConfig(childConfig)
         .build();
   }
@@ -188,7 +187,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       }
 
       LoadBalancer childLb = childLbStates.get(key).lb;
-      childLb.handleResolvedAddresses(getChildAddresses(key, resolvedAddresses, childConfig));
+      ResolvedAddresses childAddresses = getChildAddresses(key, resolvedAddresses, childConfig);
+      childLbStates.get(key).setResolvedAddresses(childAddresses); // update child state
+      childLb.handleResolvedAddresses(childAddresses); // update child LB
     }
 
     // Do removals
@@ -205,17 +206,21 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    logger.log(Level.WARNING, "Received name resolution error: {0}", error);
-    boolean gotoTransientFailure = true;
-    for (ChildLbState state : childLbStates.values()) {
-      if (!state.deactivated) {
-        gotoTransientFailure = false;
-        state.lb.handleNameResolutionError(error);
-      }
+    if (currentConnectivityState != READY)  {
+      updateHelperBalancingState(TRANSIENT_FAILURE, getErrorPicker(error));
     }
-    if (gotoTransientFailure) {
-      helper.updateBalancingState(TRANSIENT_FAILURE, getErrorPicker(error));
-    }
+  }
+
+  protected void handleNameResolutionError(ChildLbState child, Status error) {
+    child.lb.handleNameResolutionError(error);
+  }
+
+  /**
+   * If true, then when a subchannel state changes to idle, the corresponding child will
+   * have requestConnection called on its LB.
+   */
+  protected boolean reconnectOnIdle() {
+    return true;
   }
 
   @Override
@@ -289,6 +294,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   public class ChildLbState {
     private final Object key;
+    private ResolvedAddresses resolvedAddresses;
     private final Object config;
     private final GracefulSwitchLoadBalancer lb;
     private LoadBalancerProvider policyProvider;
@@ -305,7 +311,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       currentPicker = initialPicker;
       config = childConfig;
     }
-
 
     @Override
     public String toString() {
@@ -343,12 +348,24 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return currentPicker;
     }
 
+    public EquivalentAddressGroup getEag() {
+      if (resolvedAddresses == null || resolvedAddresses.getAddresses().isEmpty()) {
+        return null;
+      }
+      return resolvedAddresses.getAddresses().get(0);
+    }
+
     public boolean isDeactivated() {
       return deactivated;
     }
 
     protected void setDeactivated() {
       deactivated = true;
+    }
+
+    protected void setResolvedAddresses(ResolvedAddresses newAddresses) {
+      checkNotNull(newAddresses, "Missing address list for child");
+      resolvedAddresses = newAddresses;
     }
 
     protected void deactivate() {
@@ -397,6 +414,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         currentState = newState;
         currentPicker = newPicker;
         if (!deactivated && !resolvingAddresses) {
+          if (newState == IDLE && reconnectOnIdle()) {
+            lb.requestConnection();
+          }
           updateOverallBalancingState();
         }
       }
@@ -405,6 +425,67 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       protected Helper delegate() {
         return helper;
       }
+    }
+  }
+
+  protected static class Endpoint {
+    final String[] addrs;
+    final int hashCode;
+
+    Endpoint(EquivalentAddressGroup eag) {
+      checkNotNull(eag, "eag");
+
+      addrs = new String[eag.getAddresses().size()];
+      int i = 0;
+      for (SocketAddress address : eag.getAddresses()) {
+        addrs[i] = address.toString();
+      }
+      Arrays.sort(addrs);
+
+      int hash = 1;
+      for (String address : addrs) {
+        hash = 31 * hash + address.hashCode();
+      }
+      hashCode = hash;
+    }
+
+    @Override
+    public int hashCode() {
+      return hashCode;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (this == other) {
+        return true;
+      }
+      if (other == null) {
+        return false;
+      }
+
+      // Handling eags is convenient for tests
+      if (other instanceof EquivalentAddressGroup) {
+        other = new Endpoint((EquivalentAddressGroup) other);
+      } else if (!(other instanceof Endpoint)) {
+        return false;
+      }
+      Endpoint o = (Endpoint) other;
+      if (o.hashCode != hashCode || o.addrs.length != addrs.length) {
+        return false;
+      }
+
+      for (int i = 0; i < addrs.length; i++) {
+        if (!addrs[i].equals(o.addrs[i])) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    @Override
+    public String toString() {
+      return Arrays.toString(addrs);
     }
   }
 }

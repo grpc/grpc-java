@@ -149,11 +149,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       super(key, policyProvider, childConfig, initialPicker);
     }
 
-    @VisibleForTesting
-    EquivalentAddressGroup getEag() {
-      return stripAttrs((EquivalentAddressGroup) getKey());
-    }
-
     private double getWeight() {
       if (config == null) {
         return 0;
