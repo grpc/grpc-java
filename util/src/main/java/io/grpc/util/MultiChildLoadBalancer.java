@@ -94,6 +94,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     if (key == null) {
       return null;
     }
+    if (key instanceof EquivalentAddressGroup) {
+      key = new Endpoint((EquivalentAddressGroup) key);
+    }
     return childLbStates.get(key);
   }
 

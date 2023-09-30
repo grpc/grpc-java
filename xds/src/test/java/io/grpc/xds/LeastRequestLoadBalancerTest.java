@@ -233,9 +233,7 @@ public class LeastRequestLoadBalancerTest {
   }
 
   private Subchannel getSubchannel(ChildLbState childLbState) {
-    List<EquivalentAddressGroup> eagList =
-        Arrays.asList((EquivalentAddressGroup) childLbState.getKey());
-    return subchannels.get(eagList);
+    return subchannels.get(Collections.singletonList(childLbState.getEag()));
   }
 
   private static List<Object> getChildEags(LeastRequestLoadBalancer loadBalancer) {
@@ -588,7 +586,7 @@ public class LeastRequestLoadBalancerTest {
     deliverSubchannelState(sc2, ConnectivityStateInfo.forNonError(IDLE));
     deliverSubchannelState(sc3, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
-    verify(helper, times(3))
+    verify(helper, times(6))
         .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
     Iterator<ConnectivityState> stateIterator = stateCaptor.getAllValues().iterator();
     Iterator<SubchannelPicker> pickers = pickerCaptor.getAllValues().iterator();
