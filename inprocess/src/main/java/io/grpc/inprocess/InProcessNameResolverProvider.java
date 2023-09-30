@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,26 @@
  * limitations under the License.
  */
 
-package io.grpc.netty;
+package io.grpc.inprocess;
 
 import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
-import io.netty.channel.unix.DomainSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
 
 @Internal
-public final class UdsNameResolverProvider extends NameResolverProvider {
+public final class InProcessNameResolverProvider extends NameResolverProvider {
 
-  private static final String SCHEME = "unix";
+  private static final String SCHEME = "inprocess";
 
   @Override
-  public UdsNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+  public InProcessNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
-      return new UdsNameResolver(targetUri.getAuthority(), getTargetPathFromUri(targetUri));
+      return new InProcessNameResolver(targetUri.getAuthority(), getTargetPathFromUri(targetUri));
     } else {
       return null;
     }
@@ -66,6 +65,6 @@ public final class UdsNameResolverProvider extends NameResolverProvider {
 
   @Override
   public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
-    return Collections.singleton(DomainSocketAddress.class);
+    return Collections.singleton(InProcessSocketAddress.class);
   }
 }

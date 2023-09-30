@@ -122,6 +122,7 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.ForwardingSubchannel;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -287,6 +288,8 @@ public class ManagedChannelImplTest {
       ClientInterceptor... interceptors) {
     checkState(channel == null);
 
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
@@ -472,6 +475,8 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
@@ -534,6 +539,8 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
@@ -2041,11 +2048,11 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void lbHelper_getNameResolverRegistry() {
+  public void lbHelper_getNonDefaultNameResolverRegistry() {
     createChannel();
 
     assertThat(helper.getNameResolverRegistry())
-        .isSameInstanceAs(NameResolverRegistry.getDefaultRegistry());
+        .isNotSameInstanceAs(NameResolverRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -3744,6 +3751,8 @@ public class ManagedChannelImplTest {
           }
         },
         null);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     customBuilder.executorPool = executorPool;
     customBuilder.channelz = channelz;
     ManagedChannel mychannel = customBuilder.nameResolverFactory(factory).build();

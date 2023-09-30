@@ -284,6 +284,11 @@ public final class CronetChannelBuilder
         SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
       }
     }
+
+    @Override
+    public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      return Collections.singleton(InetSocketAddress.class);
+    }
   }
 
   /**

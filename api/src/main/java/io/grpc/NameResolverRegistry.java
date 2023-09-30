@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -157,6 +158,22 @@ public final class NameResolverRegistry {
       logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
     }
     return Collections.unmodifiableList(list);
+  }
+
+  public static NameResolverProvider getNameResolverProvider(
+      NameResolverRegistry nameResolverRegistry, String target) {
+    NameResolverProvider nameResolverProvider = null;
+    try {
+      URI uri = new URI(target);
+      nameResolverProvider = nameResolverRegistry.providers().get(uri.getScheme());
+    } catch (URISyntaxException ignore) {
+      // bad URI found, just ignore and continue
+    }
+    if (nameResolverProvider == null) {
+      nameResolverProvider = nameResolverRegistry.providers().get(
+          nameResolverRegistry.asFactory().getDefaultScheme());
+    }
+    return nameResolverProvider;
   }
 
   private final class NameResolverFactory extends NameResolver.Factory {

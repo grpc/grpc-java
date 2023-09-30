@@ -61,7 +61,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
 
       @Override
       public Channel getObject() {
-        return InProcessChannelBuilder.forName("test").build();
+        return InProcessChannelBuilder.forName("inprocess:///test").build();
       }
 
       @Override

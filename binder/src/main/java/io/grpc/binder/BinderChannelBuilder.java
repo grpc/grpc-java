@@ -400,5 +400,10 @@ public final class BinderChannelBuilder
       executorService = scheduledExecutorPool.returnObject(executorService);
       offloadExecutor = offloadExecutorPool.returnObject(offloadExecutor);
     }
+
+    @Override
+    public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      return Collections.singleton(AndroidComponentAddress.class);
+    }
   }
 }

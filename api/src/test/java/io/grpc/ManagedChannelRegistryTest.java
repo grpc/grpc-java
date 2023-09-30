@@ -173,13 +173,13 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return Collections.singleton(SocketAddress1.class);
       }
     });
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 6, "sc2") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         fail("Should not be called");
         throw new AssertionError();
       }
@@ -234,7 +234,7 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return ImmutableSet.of(SocketAddress1.class, SocketAddress2.class);
       }
     });
@@ -314,7 +314,7 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return Collections.singleton(SocketAddress1.class);
       }
     });

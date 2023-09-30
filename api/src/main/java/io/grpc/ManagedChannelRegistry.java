@@ -19,8 +19,6 @@ package io.grpc;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import java.net.SocketAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -158,17 +156,8 @@ public final class ManagedChannelRegistry {
   @VisibleForTesting
   ManagedChannelBuilder<?> newChannelBuilder(NameResolverRegistry nameResolverRegistry,
       String target, ChannelCredentials creds) {
-    NameResolverProvider nameResolverProvider = null;
-    try {
-      URI uri = new URI(target);
-      nameResolverProvider = nameResolverRegistry.providers().get(uri.getScheme());
-    } catch (URISyntaxException ignore) {
-      // bad URI found, just ignore and continue
-    }
-    if (nameResolverProvider == null) {
-      nameResolverProvider = nameResolverRegistry.providers().get(
-          nameResolverRegistry.asFactory().getDefaultScheme());
-    }
+    NameResolverProvider nameResolverProvider = NameResolverRegistry
+        .getNameResolverProvider(nameResolverRegistry, target);
     Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
         = (nameResolverProvider != null)
         ? nameResolverProvider.getProducedSocketAddressTypes() :
