@@ -145,6 +145,7 @@ public final class TestUtils {
     return captor;
   }
 
+  @SuppressWarnings("ReferenceEquality")
   public static final EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
     if (eag.getAttributes() == Attributes.EMPTY) {
       return eag;
