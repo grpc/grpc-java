@@ -51,7 +51,7 @@ import javax.annotation.Nullable;
  * list and sticking to the first that works.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10383")
-public final class PickFirstLeafLoadBalancer extends LoadBalancer {
+final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
@@ -160,7 +160,6 @@ public final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // for time being.
     updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
-
 
   void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     ConnectivityState newState = stateInfo.getState();

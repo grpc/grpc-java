@@ -40,7 +40,7 @@ import javax.annotation.Nullable;
  * io.grpc.NameResolver}.  The channel's default behavior is used, which is walking down the address
  * list and sticking to the first that works.
  */
-public final class PickFirstLoadBalancer extends LoadBalancer {
+final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private Subchannel subchannel;
   private ConnectivityState currentState = IDLE;
