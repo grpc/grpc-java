@@ -108,9 +108,12 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
     for (EquivalentAddressGroup eag : addresses) {
       Endpoint endpoint = new Endpoint(eag); // keys need to be just addresses
-      ChildLbState childLbState = childLbMap.getOrDefault(endpoint,
-          createChildLbState(endpoint, null, getInitialPicker()));
-      childLbMap.put(endpoint, childLbState);
+      ChildLbState existingChildLbState = childLbStates.get(endpoint);
+      if (existingChildLbState != null) {
+        childLbMap.put(endpoint, existingChildLbState);
+      } else if (!childLbMap.containsKey(endpoint)) {
+        childLbMap.put(endpoint, createChildLbState(endpoint, null, getInitialPicker()));
+      }
     }
     return childLbMap;
   }
