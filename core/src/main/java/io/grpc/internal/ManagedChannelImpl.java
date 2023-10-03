@@ -49,7 +49,7 @@ import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.ForwardingClientCall;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
@@ -1593,7 +1593,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkNotNull(channelCreds, "channelCreds");
 
       final class ResolvingOobChannelBuilder
-          extends ForwardingChannelBuilder<ResolvingOobChannelBuilder> {
+          extends ForwardingChannelBuilder2<ResolvingOobChannelBuilder> {
         final ManagedChannelBuilder<?> delegate;
 
         ResolvingOobChannelBuilder() {

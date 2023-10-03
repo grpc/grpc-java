@@ -32,6 +32,7 @@ import org.junit.runners.JUnit4;
  * Unit tests for {@link ForwardingChannelBuilder}.
  */
 @RunWith(JUnit4.class)
+@SuppressWarnings("deprecation")
 public class ForwardingChannelBuilderTest {
   private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
 

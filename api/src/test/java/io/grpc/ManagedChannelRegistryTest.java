@@ -125,7 +125,7 @@ public class ManagedChannelRegistryTest {
         return NewChannelBuilderResult.error("dodging");
       }
     });
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
@@ -199,7 +199,7 @@ public class ManagedChannelRegistryTest {
         throw new AssertionError();
       }
     });
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
@@ -282,7 +282,7 @@ public class ManagedChannelRegistryTest {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
 
     ManagedChannelRegistry registry = new ManagedChannelRegistry();
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
@@ -320,7 +320,7 @@ public class ManagedChannelRegistryTest {
     });
 
     ManagedChannelRegistry registry = new ManagedChannelRegistry();
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
@@ -351,7 +351,7 @@ public class ManagedChannelRegistryTest {
 
     ManagedChannelRegistry registry = new ManagedChannelRegistry();
 
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }

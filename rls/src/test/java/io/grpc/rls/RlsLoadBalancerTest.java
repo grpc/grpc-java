@@ -36,7 +36,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -519,7 +519,7 @@ public class RlsLoadBalancerTest {
       final InProcessChannelBuilder builder =
           InProcessChannelBuilder.forName(target).directExecutor();
 
-      class CleaningChannelBuilder extends ForwardingChannelBuilder<CleaningChannelBuilder> {
+      class CleaningChannelBuilder extends ForwardingChannelBuilder2<CleaningChannelBuilder> {
 
         @Override
         protected ManagedChannelBuilder<?> delegate() {

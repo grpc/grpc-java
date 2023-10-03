@@ -16,7 +16,7 @@
 
 package io.grpc.alts;
 
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.netty.NettyChannelBuilder;
@@ -26,7 +26,7 @@ import io.grpc.netty.NettyChannelBuilder;
  * using ALTS if applicable and using TLS as fallback.
  */
 public final class ComputeEngineChannelBuilder
-    extends ForwardingChannelBuilder<ComputeEngineChannelBuilder> {
+    extends ForwardingChannelBuilder2<ComputeEngineChannelBuilder> {
 
   private final NettyChannelBuilder delegate;
 
