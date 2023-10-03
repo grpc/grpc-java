@@ -34,7 +34,6 @@ import javax.annotation.Nullable;
  * @param <T> The type of the subclass extending this abstract class.
  * @since 1.59.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10585")
 public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<T>>
     extends ManagedChannelBuilder<T> {
 
