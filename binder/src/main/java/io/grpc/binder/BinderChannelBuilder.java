@@ -26,7 +26,7 @@ import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.binder.internal.BinderTransport;
@@ -51,8 +51,7 @@ import javax.annotation.Nullable;
  *     Services</a>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
-public final class BinderChannelBuilder
-    extends ForwardingChannelBuilder<BinderChannelBuilder> {
+public final class BinderChannelBuilder extends ForwardingChannelBuilder2<BinderChannelBuilder> {
 
   /**
    * Creates a channel builder that will bind to a remote Android service.

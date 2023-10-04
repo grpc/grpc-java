@@ -32,7 +32,7 @@ import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
 import io.grpc.ExperimentalApi;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.InternalManagedChannelProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -53,7 +53,7 @@ import javax.annotation.concurrent.GuardedBy;
  *
  * @since 1.12.0
  */
-public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
+public final class AndroidChannelBuilder extends ForwardingChannelBuilder2<AndroidChannelBuilder> {
 
   private static final String LOG_TAG = "AndroidChannelBuilder";
 
