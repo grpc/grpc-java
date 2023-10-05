@@ -24,7 +24,10 @@ import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class OpenTelemetryModuleTest {
   private final InMemoryMetricReader inMemoryMetricReader = InMemoryMetricReader.create();
   private final SdkMeterProvider meterProvider =
