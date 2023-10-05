@@ -17,6 +17,8 @@
 package io.grpc.binder;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Status;
 import java.util.HashMap;
 import java.util.Map;
@@ -44,15 +46,36 @@ public final class ServerSecurityPolicy {
   /**
    * Return whether the given Android UID is authorized to access a particular service.
    *
-   * <b>IMPORTANT</b>: This method may block for extended periods of time.
+   * <p><b>IMPORTANT</b>: This method may block for extended periods of time.
+   *
+   * @param uid The Android UID to authenticate.
+   * @param serviceName The name of the gRPC service being called.
+   * @deprecated prefer calling {@link BinderInternal#createPolicyChecker(ServerSecurityPolicy)}
+   *     then {@link
+   *     io.grpc.binder.internal.BinderTransportSecurity.ServerPolicyChecker#checkAuthorizationForServiceAsync(int,
+   *     String)}.
+   */
+  @CheckReturnValue
+  @Deprecated
+  public Status checkAuthorizationForService(int uid, String serviceName) {
+    return perServicePolicies.getOrDefault(serviceName, defaultPolicy).checkAuthorization(uid);
+  }
+
+  /**
+   * Return whether the given Android UID is authorized to access a particular service.
    *
    * @param uid The Android UID to authenticate.
    * @param serviceName The name of the gRPC service being called.
    */
   @CheckReturnValue
-  public Status checkAuthorizationForService(int uid, String serviceName) {
-    return perServicePolicies.getOrDefault(serviceName, defaultPolicy).checkAuthorization(uid);
+  ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName) {
+    SecurityPolicy securityPolicy = perServicePolicies.getOrDefault(serviceName, defaultPolicy);
+    if (securityPolicy instanceof AsyncSecurityPolicy) {
+      return ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(uid);
+    }
+    return Futures.immediateFuture(securityPolicy.checkAuthorization(uid));
   }
+
 
   public static Builder newBuilder() {
     return new Builder();

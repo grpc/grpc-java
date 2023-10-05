@@ -23,6 +23,7 @@ import android.app.Service;
 import android.os.IBinder;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.binder.internal.BinderServer;
@@ -32,6 +33,7 @@ import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.SharedResourcePool;
 import java.io.File;
 import java.util.concurrent.ScheduledExecutorService;
@@ -84,7 +86,7 @@ public final class BinderServerBuilder
           listenAddress,
           schedulerPool,
           streamTracerFactories,
-          securityPolicy,
+          BinderInternal.createPolicyChecker(securityPolicy),
           inboundParcelablePolicy);
       BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;

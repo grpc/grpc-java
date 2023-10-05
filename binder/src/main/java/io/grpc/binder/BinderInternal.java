@@ -17,7 +17,9 @@
 package io.grpc.binder;
 
 import android.os.IBinder;
+import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
+import io.grpc.binder.internal.BinderTransportSecurity;
 
 /**
  * Helper class to expose IBinderReceiver methods for legacy internal builders.
@@ -30,5 +32,11 @@ public class BinderInternal {
    */
   public static void setIBinder(IBinderReceiver receiver, IBinder binder) {
     receiver.set(binder);
+  }
+
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10566")
+  public static BinderTransportSecurity.ServerPolicyChecker createPolicyChecker(
+          ServerSecurityPolicy securityPolicy) {
+    return securityPolicy::checkAuthorizationForServiceAsync;
   }
 }
