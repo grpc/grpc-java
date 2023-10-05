@@ -55,6 +55,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -85,6 +87,7 @@ public class StressTestClient {
     try {
       client.startMetricsService();
       client.runStressTest();
+      client.startMetricsLogging();
       client.blockUntilStressTestComplete();
     } catch (Exception e) {
       log.log(Level.WARNING, "The stress test client encountered an error!", e);
@@ -106,6 +109,7 @@ public class StressTestClient {
   private int channelsPerServer = 1;
   private int stubsPerChannel = 1;
   private int metricsPort = 8081;
+  private int metricsLogRateSecs = -1;
 
   private Server metricsServer;
   private final Map<String, Metrics.GaugeResponse> gauges =
@@ -120,6 +124,7 @@ public class StressTestClient {
       new ArrayList<>();
   private final List<ManagedChannel> channels = new ArrayList<>();
   private ListeningExecutorService threadpool;
+  private ScheduledExecutorService metricsLoggingThreadpool;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -162,6 +167,8 @@ public class StressTestClient {
         stubsPerChannel = Integer.valueOf(value);
       } else if ("metrics_port".equals(key)) {
         metricsPort = Integer.valueOf(value);
+      } else if ("metrics_log_rate_secs".equals(key)) {
+        metricsLogRateSecs = Integer.valueOf(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -198,6 +205,8 @@ public class StressTestClient {
               + "\n  --num_stubs_per_channel=INT    Default: " + c.stubsPerChannel
               + "\n  --metrics_port=PORT            Listening port of the metrics server."
               + " Default: " + c.metricsPort
+              + "\n  --metrics_log_rate_secs=INT    The rate (in secs) to log collected metrics"
+              + " Default: " + c.metricsLogRateSecs
       );
       System.exit(1);
     }
@@ -211,6 +220,24 @@ public class StressTestClient {
         .addService(new MetricsServiceImpl())
         .build()
         .start();
+  }
+
+  /** Starts logging gauge information at a given rate (if rate > -1). */
+  @SuppressWarnings("FutureReturnValueIgnored")
+  void startMetricsLogging() {
+    if (metricsLogRateSecs > -1) {
+      metricsLoggingThreadpool = Executors.newScheduledThreadPool(1);
+      metricsLoggingThreadpool.scheduleAtFixedRate(() -> {
+        long totalQps = 0;
+        for (Metrics.GaugeResponse gauge : gauges.values()) {
+          log.info("GAUGE: " + gauge);
+          if (gauge.getName().endsWith("/qps")) {
+            totalQps += gauge.getLongValue();
+          }
+        }
+        log.info("TOTAL QPS: " + totalQps);
+      }, metricsLogRateSecs, metricsLogRateSecs, SECONDS);
+    }
   }
 
   @VisibleForTesting
@@ -282,6 +309,14 @@ public class StressTestClient {
       }
     } catch (Throwable t) {
       log.log(Level.WARNING, "Error shutting down threadpool.", t);
+    }
+
+    try {
+      if (metricsLoggingThreadpool != null) {
+        metricsLoggingThreadpool.shutdownNow();
+      }
+    } catch (Throwable t) {
+      log.log(Level.WARNING, "Error shutting down metrics logging threadpool.", t);
     }
   }
 
@@ -660,5 +695,10 @@ public class StressTestClient {
   @VisibleForTesting
   int metricsPort() {
     return metricsPort;
+  }
+
+  @VisibleForTesting
+  int metricsLogRateSecs() {
+    return metricsLogRateSecs;
   }
 }
