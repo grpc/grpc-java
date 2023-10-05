@@ -1,0 +1,20 @@
+plugins {
+    id "java-library"
+}
+
+description = 'gRPC: OpenTelemetry'
+
+def opentelemetry_version = '1.28.0'
+
+dependencies {
+    api project(':grpc-api')
+    implementation libraries.guava,
+            project(':grpc-core'),
+            ("io.opentelemetry:opentelemetry-api:${opentelemetry_version}"),
+            ("io.opentelemetry:opentelemetry-sdk:${opentelemetry_version}")
+
+    testImplementation testFixtures(project(':grpc-core')),
+            project(':grpc-testing'),
+            ("io.opentelemetry:opentelemetry-sdk-testing:${opentelemetry_version}"),
+            ("org.assertj:assertj-core:3.24.2")
+}
