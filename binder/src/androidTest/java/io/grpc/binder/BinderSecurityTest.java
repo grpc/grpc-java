@@ -23,6 +23,9 @@ import android.content.Context;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.base.Function;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
@@ -155,7 +158,7 @@ public final class BinderSecurityTest {
   }
 
   @Test
-  public void testServerDisllowsCalls() throws Exception {
+  public void testServerDisallowsCalls() throws Exception {
     createChannel(
         ServerSecurityPolicy.newBuilder()
             .servicePolicy("foo", policy((uid) -> false))
@@ -198,6 +201,25 @@ public final class BinderSecurityTest {
   }
 
   @Test
+  public void testPerServicePolicyAsync() throws Exception {
+    createChannel(
+            ServerSecurityPolicy.newBuilder()
+                    .servicePolicy("foo", asyncPolicy((uid) -> Futures.immediateFuture(true)))
+                    .servicePolicy("bar", asyncPolicy((uid) -> Futures.immediateFuture(false)))
+                    .build(),
+            SecurityPolicies.internalOnly());
+
+    assertThat(methods).isNotEmpty();
+    for (MethodDescriptor<Empty, Empty> method : methods.values()) {
+      if (method.getServiceName().equals("bar")) {
+        assertCallFailure(method, Status.PERMISSION_DENIED);
+      } else {
+        assertCallSuccess(method);
+      }
+    }
+  }
+
+  @Test
   public void testSecurityInterceptorIsClosestToTransport() throws Exception {
     createChannel(
         ServerSecurityPolicy.newBuilder()
@@ -223,6 +245,20 @@ public final class BinderSecurityTest {
       @Override
       public Status checkAuthorization(int uid) {
         return func.apply(uid) ? Status.OK : Status.PERMISSION_DENIED;
+      }
+    };
+  }
+
+  private static AsyncSecurityPolicy asyncPolicy(
+      Function<Integer, ListenableFuture<Boolean>> func) {
+    return new AsyncSecurityPolicy() {
+      @Override
+      public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+        return Futures
+            .transform(
+                func.apply(uid),
+                allowed -> allowed ? Status.OK : Status.PERMISSION_DENIED,
+                MoreExecutors.directExecutor());
       }
     };
   }
