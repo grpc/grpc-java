@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableList;
@@ -65,6 +66,8 @@ public class StressTestClientTest {
     assertEquals(1, client.channelsPerServer());
     assertEquals(1, client.stubsPerChannel());
     assertEquals(8081, client.metricsPort());
+    assertEquals(-1, client.metricsLogRateSecs());
+    assertNull((client.customCredentialsType()));
   }
 
   @Test
