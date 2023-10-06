@@ -67,7 +67,7 @@ public class StressTestClientTest {
     assertEquals(1, client.stubsPerChannel());
     assertEquals(8081, client.metricsPort());
     assertEquals(-1, client.metricsLogRateSecs());
-    assertNull((client.customCredentialsType()));
+    assertNull(client.customCredentialsType());
   }
 
   @Test
