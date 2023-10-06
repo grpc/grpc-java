@@ -80,6 +80,7 @@ public class StressTestClientTest {
         "--server_host_override=foo.test.google.fr",
         "--use_tls=true",
         "--use_test_ca=true",
+        "--custom_credentials_type=google_default_credentials",
         "--metrics_log_rate_secs=60"
     });
 
@@ -100,6 +101,7 @@ public class StressTestClientTest {
     assertEquals(10, client.channelsPerServer());
     assertEquals(5, client.stubsPerChannel());
     assertEquals(9090, client.metricsPort());
+    assertEquals("google_default_credentials", client.customCredentialsType());
     assertEquals(60, client.metricsLogRateSecs());
   }
 

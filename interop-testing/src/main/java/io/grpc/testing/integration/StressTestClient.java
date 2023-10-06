@@ -42,6 +42,8 @@ import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.alts.ComputeEngineChannelCredentials;
+import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TlsTesting;
 import java.io.IOException;
@@ -105,6 +107,7 @@ public class StressTestClient {
   private String serverHostOverride;
   private boolean useTls = false;
   private boolean useTestCa = false;
+  private String customCredentialsType;
   private int durationSecs = -1;
   private int channelsPerServer = 1;
   private int stubsPerChannel = 1;
@@ -157,6 +160,8 @@ public class StressTestClient {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_test_ca".equals(key)) {
         useTestCa = Boolean.parseBoolean(value);
+      } else if ("custom_credentials_type".equals(key)) {
+        customCredentialsType = value;
       } else if ("test_cases".equals(key)) {
         testCaseWeightPairs = parseTestCases(value);
       } else if ("test_duration_secs".equals(key)) {
@@ -199,6 +204,8 @@ public class StressTestClient {
               + "\n  --use_test_ca=true|false       Whether to trust our fake CA. Requires"
               + " --use_tls=true"
               + "\n                                 to have effect. Default: " + c.useTestCa
+              + "\n  --custom_credentials_type   Custom credentials type to use. Default "
+              + c.customCredentialsType
               + "\n  --test_duration_secs=SECONDS   '-1' for no limit. Default: " + c.durationSecs
               + "\n  --num_channels_per_server=INT  Number of connections to each server address."
               + " Default: " + c.channelsPerServer
@@ -365,7 +372,16 @@ public class StressTestClient {
 
   private ManagedChannel createChannel(InetSocketAddress address) {
     ChannelCredentials channelCredentials;
-    if (useTls) {
+    if (customCredentialsType != null) {
+      if (customCredentialsType.equals("google_default_credentials")) {
+        channelCredentials = GoogleDefaultChannelCredentials.create();
+      } else if (customCredentialsType.equals("compute_engine_channel_creds")) {
+        channelCredentials = ComputeEngineChannelCredentials.create();
+      } else {
+        throw new IllegalArgumentException(
+            "Unknown custom credentials: " + customCredentialsType);
+      }
+    } else if (useTls) {
       if (useTestCa) {
         try {
           channelCredentials = TlsChannelCredentials.newBuilder()
@@ -380,8 +396,14 @@ public class StressTestClient {
     } else {
       channelCredentials = InsecureChannelCredentials.create();
     }
-    ManagedChannelBuilder<?> builder = Grpc.newChannelBuilderForAddress(
-        address.getHostString(), address.getPort(), channelCredentials);
+    ManagedChannelBuilder<?> builder;
+    if (address.getPort() == 0) {
+      builder = Grpc.newChannelBuilder(address.getHostString(), channelCredentials);
+    } else {
+      builder = Grpc.newChannelBuilderForAddress(address.getHostString(), address.getPort(),
+          channelCredentials);
+    }
+
     if (serverHostOverride != null) {
       builder.overrideAuthority(serverHostOverride);
     }
@@ -670,6 +692,11 @@ public class StressTestClient {
   @VisibleForTesting
   boolean useTestCa() {
     return useTestCa;
+  }
+
+  @VisibleForTesting
+  String customCredentialsType() {
+    return customCredentialsType;
   }
 
   @VisibleForTesting
