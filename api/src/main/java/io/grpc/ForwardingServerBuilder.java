@@ -30,7 +30,6 @@ import javax.annotation.Nullable;
  * @param <T> The type of the subclass extending this abstract class.
  * @since 1.34.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7393")
 public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extends ServerBuilder<T> {
 
   /** The default constructor. */
