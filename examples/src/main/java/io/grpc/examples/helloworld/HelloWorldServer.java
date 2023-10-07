@@ -15,6 +15,8 @@
  */
 
 package io.grpc.examples.helloworld;
+import java.util.ArrayList;
+import java.util.List;
 
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
@@ -83,9 +85,59 @@ public class HelloWorldServer {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-      HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
+    String language = req.getLanguage();
+    String greeting = "";
+  
+    switch (language) {
+      case "ENGLISH":
+       greeting = "Hello ";
+       break;
+       case "FRENCH":
+        greeting = "Salut ";
+         break;
+       case "ARABIC":
+        greeting = "Marhaba ";
+        break;
+       default:
+        greeting = "Hello ";
+  }
+      HelloReply reply = HelloReply.newBuilder().setMessage(greeting + req.getName()).build();
       responseObserver.onNext(reply);
       responseObserver.onCompleted();
     }
+   
+@Override
+public void sayHelloStream(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
+    try {
+        // Get the name and language from the request
+        String name = request.getName();
+        String language = request.getLanguage();
+
+        // Greet the client multiple times based on their preferred language
+        if (language.equals("ENGLISH")) {
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("Hello, " + name + "!").build());
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("How are you doing today?").build());
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("Have a nice day!").build());
+        } else if (language.equals("FRENCH")) {
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("Bonjour, " + name + "!").build());
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("Comment allez-vous?").build());
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("Bonne journée!").build());
+        } else if (language.equals("ARABIC")) {
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("marhaba " + name + "!").build());
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("labes?").build());
+            responseObserver.onNext(HelloReply.newBuilder().setMessage("nharek zin").build());
+        }
+
+        // Indicate that the response stream has completed
+        responseObserver.onCompleted();
+    } catch (RuntimeException e) {
+        // Handle any exceptions that occur during processing of the request
+        responseObserver.onError(e);
+        throw e;
+    }
+}
+
+
+
   }
 }

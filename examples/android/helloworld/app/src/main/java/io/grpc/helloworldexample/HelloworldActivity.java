@@ -15,7 +15,8 @@
  */
 
 package io.grpc.helloworldexample;
-
+import java.util.concurrent.CountDownLatch;
+import io.grpc.stub.StreamObserver;
 import android.app.Activity;
 import android.content.Context;
 import android.os.AsyncTask;
@@ -43,7 +44,7 @@ public class HelloworldActivity extends AppCompatActivity {
   private EditText hostEdit;
   private EditText portEdit;
   private EditText messageEdit;
-  private TextView resultText;
+  private static TextView resultText;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -77,26 +78,72 @@ public class HelloworldActivity extends AppCompatActivity {
       this.activityReference = new WeakReference<Activity>(activity);
     }
 
-    @Override
-    protected String doInBackground(String... params) {
-      String host = params[0];
-      String message = params[1];
-      String portStr = params[2];
-      int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
-      try {
-        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
-        GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
-        HelloRequest request = HelloRequest.newBuilder().setName(message).build();
-        HelloReply reply = stub.sayHello(request);
-        return reply.getMessage();
-      } catch (Exception e) {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        e.printStackTrace(pw);
-        pw.flush();
-        return String.format("Failed... : %n%s", sw);
-      }
-    }
+@Override
+protected String doInBackground(String... params) {
+  String user = "world";
+  String language = "English";
+  String host = params[0];
+  String portStr = params[2];
+  boolean type = false;
+  String[] b = params[1].split(" ");
+  if (b.length > 0) {
+      user = b[0];
+  }
+  if (b.length > 1) {
+      language = b[1];
+  }
+  if (b.length > 2) {
+      type = Boolean.parseBoolean(b[2]);
+  }
+  int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
+  try {
+    channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
+    GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
+    HelloRequest request = HelloRequest.newBuilder().setName(user).setLanguage(language).build();
+  if (type) {
+    resultText.setText("");
+    GreeterGrpc.GreeterStub asyncStub = GreeterGrpc.newStub(channel);
+    CountDownLatch finishLatch = new CountDownLatch(1);
+    StreamObserver<HelloReply> responseObserver = new StreamObserver<HelloReply>() {
+        @Override
+        public void onNext(HelloReply reply) {
+            resultText.append(reply.getMessage() + "\n");
+        }
+
+        @Override
+        public void onError(Throwable t) {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            t.printStackTrace(pw);
+            pw.flush();
+            resultText.append(String.format("Failed with {0}: {1}\n", t.getClass().getSimpleName(), sw));
+            finishLatch.countDown();
+        }
+
+        @Override
+        public void onCompleted() {
+            resultText.append("\n");
+            finishLatch.countDown();
+        }
+    };
+   asyncStub.sayHelloStream(request, responseObserver);
+  finishLatch.await();
+  return resultText.getText().toString();
+} else {
+    GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
+    HelloReply reply = stub.sayHello(request);
+    return reply.getMessage();
+}
+
+  } catch (Exception e) {
+    StringWriter sw = new StringWriter();
+    PrintWriter pw = new PrintWriter(sw);
+    e.printStackTrace(pw);
+    pw.flush();
+    return String.format("Failed... : %n%s", sw);
+  }
+}
+
 
     @Override
     protected void onPostExecute(String result) {
