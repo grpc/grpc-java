@@ -83,7 +83,7 @@ class OkHttpServerStream extends AbstractServerStream {
 
   class Sink implements AbstractServerStream.Sink {
     @Override
-    public void writeHeaders(Metadata metadata) {
+    public void writeHeaders(Metadata metadata, boolean flush) {
       try (TaskCloseable ignore =
                PerfMark.traceTask("OkHttpServerStream$Sink.writeHeaders")) {
         List<Header> responseHeaders = Headers.createResponseHeaders(metadata);
