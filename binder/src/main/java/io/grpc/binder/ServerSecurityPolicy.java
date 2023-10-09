@@ -50,10 +50,7 @@ public final class ServerSecurityPolicy {
    *
    * @param uid The Android UID to authenticate.
    * @param serviceName The name of the gRPC service being called.
-   * @deprecated prefer calling {@link BinderInternal#createPolicyChecker(ServerSecurityPolicy)}
-   *     then {@link
-   *     io.grpc.binder.internal.BinderTransportSecurity.ServerPolicyChecker#checkAuthorizationForServiceAsync(int,
-   *     String)}.
+   * @deprecated Application code should not need to call this method.
    */
   @CheckReturnValue
   @Deprecated

@@ -43,8 +43,7 @@ public abstract class SecurityPolicy {
   /**
    * Decides whether the given Android UID is authorized. (Validity is implementation dependent).
    *
-   * <p><b>IMPORTANT</b>: This method may block for extended periods of time. For slow or
-   * asynchronous implementations, prefer {@link AsyncSecurityPolicy}.
+   * <p><b>IMPORTANT</b>: This method may block for extended periods of time.
    *
    * <p>As long as any given UID has active processes, this method should return the same value for
    * that UID. In order words, policy changes which occur while a transport instance is active, will

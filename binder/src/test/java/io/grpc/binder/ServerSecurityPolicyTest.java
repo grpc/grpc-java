@@ -18,16 +18,22 @@ package io.grpc.binder;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.junit.Assert.fail;
 import android.os.Process;
 import com.google.common.base.Function;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
-
 import io.grpc.Status;
+import io.grpc.StatusException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
 
 @RunWith(RobolectricTestRunner.class)
 public final class ServerSecurityPolicyTest {
@@ -109,6 +115,63 @@ public final class ServerSecurityPolicyTest {
   }
 
   @Test
+  public void testPerService_throwingExceptionAsynchronously_propagatesStatusFromException() {
+    policy =
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(SERVICE1, asyncPolicy(uid ->
+                Futures
+                    .immediateFailedFuture(
+                        new StatusException(Status.fromCode(Status.Code.ALREADY_EXISTS)))
+            ))
+            .build();
+
+    assertThat(policy.checkAuthorizationForService(MY_UID, SERVICE1).getCode())
+        .isEqualTo(Status.ALREADY_EXISTS.getCode());
+  }
+
+  @Test
+  public void testPerServiceAsync_cancelledFuture_propagatesStatus() {
+    policy =
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(SERVICE1, asyncPolicy(unused -> Futures.immediateCancelledFuture()))
+            .build();
+
+    assertThat(policy.checkAuthorizationForService(MY_UID, SERVICE1).getCode())
+        .isEqualTo(Status.CANCELLED.getCode());
+  }
+
+  @Test
+  public void testPerServiceAsync_interrupted_cancelledStatus() {
+    ListeningExecutorService listeningExecutorService =
+        MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor());
+    CountDownLatch unsatisfiedLatch = new CountDownLatch(1);
+    ListenableFuture<Status> toBeInterruptedFuture = listeningExecutorService.submit(() -> {
+        unsatisfiedLatch.await();  // waits forever
+        return null;
+    });
+
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    Thread testThread = Thread.currentThread();
+    new Thread(() -> {
+        awaitOrFail(barrier);
+        testThread.interrupt();
+    }).start();
+
+    policy =
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(SERVICE1, asyncPolicy(unused -> {
+                awaitOrFail(barrier);
+                return toBeInterruptedFuture;
+            }))
+            .build();
+
+    assertThat(policy.checkAuthorizationForService(MY_UID, SERVICE1).getCode())
+        .isEqualTo(Status.CANCELLED.getCode());
+    assertThat(Thread.currentThread().isInterrupted()).isTrue();
+    listeningExecutorService.shutdownNow();
+  }
+
+  @Test
   public void testPerServiceNoDefault() {
     policy =
         ServerSecurityPolicy.newBuilder()
@@ -135,7 +198,6 @@ public final class ServerSecurityPolicyTest {
     assertThat(policy.checkAuthorizationForService(OTHER_UID, SERVICE3).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
   }
-
 
   @Test
   public void testPerServiceNoDefaultAsync() {
@@ -188,6 +250,7 @@ public final class ServerSecurityPolicyTest {
       }
     };
   }
+
   private static AsyncSecurityPolicy asyncPolicy(Function<Integer, ListenableFuture<Status>> func) {
     return new AsyncSecurityPolicy() {
       @Override
@@ -195,5 +258,16 @@ public final class ServerSecurityPolicyTest {
         return func.apply(uid);
       }
     };
+  }
+
+  private static void awaitOrFail(CyclicBarrier barrier) {
+    try {
+        barrier.await();
+    } catch (BrokenBarrierException e) {
+        fail(e.getMessage());
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        fail(e.getMessage());
+    }
   }
 }

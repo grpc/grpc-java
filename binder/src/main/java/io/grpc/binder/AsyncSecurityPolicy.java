@@ -19,6 +19,8 @@ package io.grpc.binder;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
+
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import javax.annotation.CheckReturnValue;
 
@@ -42,13 +44,16 @@ public abstract class AsyncSecurityPolicy extends SecurityPolicy {
 @Override
 @Deprecated
 public final Status checkAuthorization(int uid) {
-    try {
-        return checkAuthorizationAsync(uid).get();
-    } catch (ExecutionException e) {
-        return Status.fromThrowable(e);
-    } catch (InterruptedException e) {
-        return Status.CANCELLED.withCause(e);
-    }
+  try {
+    return checkAuthorizationAsync(uid).get();
+  } catch (ExecutionException e) {
+    return Status.fromThrowable(e);
+  } catch (CancellationException e) {
+    return Status.CANCELLED.withCause(e);
+  } catch (InterruptedException e) {
+    Thread.currentThread().interrupt();  // re-set the current thread's interruption state
+    return Status.CANCELLED.withCause(e);
+  }
 }
 
   /**
