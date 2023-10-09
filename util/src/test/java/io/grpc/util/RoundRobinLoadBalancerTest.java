@@ -74,6 +74,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -350,6 +351,19 @@ public class RoundRobinLoadBalancerTest {
     }
 
     verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void removingAddressShutsdownSubchannel() {
+    acceptAddresses(servers, affinity);
+    final Subchannel subchannel2 = subchannels.get(Collections.singletonList(servers.get(2)));
+
+    InOrder inOrder = Mockito.inOrder(mockHelper, subchannel2);
+    // send LB only the first 2 addresses
+    List<EquivalentAddressGroup> svs2 = Arrays.asList(servers.get(0), servers.get(1));
+    acceptAddresses(svs2, affinity);
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any());
+    inOrder.verify(subchannel2).shutdown();
   }
 
   @Test

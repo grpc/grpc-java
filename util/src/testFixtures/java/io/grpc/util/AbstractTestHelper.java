@@ -52,6 +52,7 @@ import java.util.Map;
 public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
 
   private final Map<Subchannel, Subchannel> mockToRealSubChannelMap = new HashMap<>();
+  protected final Map<Subchannel, Subchannel> realToMockSubChannelMap = new HashMap<>();
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
       Maps.newLinkedHashMap();
 
@@ -99,13 +100,18 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   public Subchannel createSubchannel(CreateSubchannelArgs args) {
     Subchannel subchannel = getSubchannelMap().get(args.getAddresses());
     if (subchannel == null) {
-      TestSubchannel delegate = new TestSubchannel(args);
+      TestSubchannel delegate = createRealSubchannel(args);
       subchannel = mock(Subchannel.class, delegatesTo(delegate));
       getSubchannelMap().put(args.getAddresses(), subchannel);
       getMockToRealSubChannelMap().put(subchannel, delegate);
+      realToMockSubChannelMap.put(delegate, subchannel);
     }
 
     return subchannel;
+  }
+
+  protected TestSubchannel createRealSubchannel(CreateSubchannelArgs args) {
+    return new TestSubchannel(args);
   }
 
   @Override
@@ -122,7 +128,7 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
     return "Test Helper";
   }
 
-  private class TestSubchannel extends ForwardingSubchannel {
+  protected class TestSubchannel extends ForwardingSubchannel {
     CreateSubchannelArgs args;
     Channel channel;
 

@@ -145,13 +145,13 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker) {
+      SubchannelPicker initialPicker, ResolvedAddresses unused) {
     return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
   }
 
   private void updateBalancingState(ConnectivityState state, LeastRequestPicker picker) {
     if (state != currentConnectivityState || !picker.isEquivalentTo(currentPicker)) {
-      super.updateHelperBalancingState(state, picker);
+      getHelper().updateBalancingState(state, picker);
       currentConnectivityState = state;
       currentPicker = picker;
     }
