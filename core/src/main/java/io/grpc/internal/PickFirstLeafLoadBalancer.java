@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.HealthUtil.HEALTH_LISTENER_ARG_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -31,6 +32,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
+import io.grpc.HealthUtil;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import java.net.SocketAddress;
@@ -43,6 +45,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -52,10 +56,12 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10383")
 final class PickFirstLeafLoadBalancer extends LoadBalancer {
+  private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
   private ConnectivityState currentState = IDLE;
+  //  private ConnectivityState concludedState = IDLE;
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -231,6 +237,28 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
+  private void onSubchannelHealth(HealthUtil.HealthCheckingListener hcListener,
+                                  HealthUtil.HealthStatus hcStatus) {
+    log.log(Level.FINE, "getting health" + hcStatus);
+    Subchannel find = null;
+    for (SubchannelData subchannelData : subchannels.values()) {
+      if (subchannelData.healthCheckingListener == hcListener
+            && subchannelData.getState() == READY) {
+        find = subchannelData.subchannel;
+        break;
+      }
+    }
+    if (find == null) {
+      return;
+    }
+    if (hcStatus.servingStatus() != HealthUtil.ServingStatus.SERVING) {
+      helper.updateBalancingState(TRANSIENT_FAILURE,
+          new ErrorPicker(Status.UNAVAILABLE.withDescription("unhealthy")));
+    } else {
+      helper.updateBalancingState(READY, new Picker(PickResult.withSubchannel(find)));
+    }
+  }
+
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
     if (state != currentState || state == READY || state == TRANSIENT_FAILURE) {
       currentState = state;
@@ -251,13 +279,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   * that all other subchannels must be shutdown.
   */
   private void shutdownRemaining(Subchannel activeSubchannel) {
+    SubchannelData activeSubchannelData = null;
     for (SubchannelData subchannelData : subchannels.values()) {
       if (!subchannelData.getSubchannel().equals(activeSubchannel)) {
         subchannelData.getSubchannel().shutdown();
+      } else {
+        activeSubchannelData = subchannelData;
       }
     }
     subchannels.clear();
-    subchannels.put(getAddress(activeSubchannel), new SubchannelData(activeSubchannel, READY));
+    activeSubchannelData.updateState(READY);
+    subchannels.put(getAddress(activeSubchannel), activeSubchannelData);
   }
 
   /**
@@ -287,12 +319,20 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private Subchannel createNewSubchannel(SocketAddress addr) {
+    HealthUtil.HealthCheckingListener hcListener =
+        new HealthUtil.HealthCheckingListener() {
+          @Override
+          public void onHealthStatus(HealthUtil.HealthStatus healthStatus) {
+            onSubchannelHealth(this, healthStatus);
+          }
+        };
     final Subchannel subchannel = helper.createSubchannel(
         CreateSubchannelArgs.newBuilder()
         .setAddresses(Lists.newArrayList(
             new EquivalentAddressGroup(addr)))
+        .addOption(HEALTH_LISTENER_ARG_KEY, hcListener)
             .build());
-    subchannels.put(addr, new SubchannelData(subchannel, IDLE));
+    subchannels.put(addr, new SubchannelData(subchannel, IDLE, hcListener));
     subchannel.start(new SubchannelStateListener() {
       @Override
       public void onSubchannelState(ConnectivityStateInfo stateInfo) {
@@ -436,10 +476,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final class SubchannelData {
     private final Subchannel subchannel;
     private ConnectivityState state;
+    private final HealthUtil.HealthCheckingListener healthCheckingListener;
 
-    public SubchannelData(Subchannel subchannel, ConnectivityState state) {
+    public SubchannelData(Subchannel subchannel, ConnectivityState state,
+                          HealthUtil.HealthCheckingListener healthCheckingListener) {
       this.subchannel = subchannel;
       this.state = state;
+      this.healthCheckingListener = healthCheckingListener;
     }
 
     public Subchannel getSubchannel() {

@@ -16,7 +16,9 @@
 
 package io.grpc.protobuf.services;
 
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
+import io.grpc.HealthUtil;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -29,6 +31,10 @@ import io.grpc.internal.GrpcUtil;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5025")
 public final class HealthCheckingLoadBalancerUtil {
+
+  static final Attributes.Key<HealthUtil.HealthCheckingListener> HEALTH_CHECKING_LISTENER_KEY =
+      Attributes.Key.create("health-checking-listener");
+
   private HealthCheckingLoadBalancerUtil() {
   }
 

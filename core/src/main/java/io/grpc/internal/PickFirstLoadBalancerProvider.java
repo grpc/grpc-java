@@ -50,6 +50,8 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+    //  health check pick first load balancer in multi child LB policy.
+    //  dependency issue: health util is in service package.
     return new PickFirstLoadBalancer(helper);
   }
 

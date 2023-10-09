@@ -52,6 +52,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ForwardingClientCall;
 import io.grpc.Grpc;
+import io.grpc.HealthUtil;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
@@ -1447,7 +1448,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.throwIfNotInThisSynchronizationContext();
       // No new subchannel should be created after load balancer has been shutdown.
       checkState(!terminating, "Channel is being terminated");
-      return new SubchannelImpl(args);
+      AbstractSubchannel subchannelImp = new SubchannelImpl(args);
+      HealthUtil.HealthCheckingListener rootHcListener =
+          args.getOption(HealthUtil.HEALTH_LISTENER_ARG_KEY);
+      if (rootHcListener != null) {
+        rootHcListener.onHealthStatus(new HealthUtil.HealthStatus(
+            HealthUtil.ServingStatus.SERVING));
+      }
+      return subchannelImp;
     }
 
     @Override

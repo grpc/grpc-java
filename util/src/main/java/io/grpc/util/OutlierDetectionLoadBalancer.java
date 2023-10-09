@@ -19,6 +19,7 @@ package io.grpc.util;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.HealthUtil.HEALTH_LISTENER_ARG_KEY;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -33,6 +34,7 @@ import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.HealthUtil;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
@@ -211,9 +213,19 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       // Subchannels are wrapped so that we can monitor call results and to trigger failures when
       // we decide to eject the subchannel.
-      OutlierDetectionSubchannel subchannel = new OutlierDetectionSubchannel(
-          delegate.createSubchannel(args));
-
+      HealthUtil.HealthCheckingListener hcListener = args.getOption(HEALTH_LISTENER_ARG_KEY);
+      HealthUtil.ChainedHealthListener chainedHealthListener =
+          new HealthUtil.ChainedHealthListener(hcListener);
+      Subchannel originalSubchannel = delegate.createSubchannel(args.toBuilder()
+          .addOption(HEALTH_LISTENER_ARG_KEY, chainedHealthListener).build());
+      OutlierDetectionSubchannel subchannel = new OutlierDetectionSubchannel(originalSubchannel,
+          new HealthUtil.HealthCheckingListener() {
+            @Override
+            public void onHealthStatus(HealthUtil.HealthStatus healthStatus) {
+              chainedHealthListener.thisHealthStatus(healthStatus);
+            }
+          }
+      );
       // If the subchannel is associated with a single address that is also already in the map
       // the subchannel will be added to the map and be included in outlier detection.
       List<EquivalentAddressGroup> addressGroups = args.getAddresses();
@@ -244,11 +256,18 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
     private SubchannelStateListener subchannelStateListener;
+    private HealthUtil.HealthCheckingListener healthListener;
     private final ChannelLogger logger;
 
     OutlierDetectionSubchannel(Subchannel delegate) {
       this.delegate = delegate;
       this.logger = delegate.getChannelLogger();
+    }
+
+    OutlierDetectionSubchannel(Subchannel delegate, HealthUtil.HealthCheckingListener hcListener) {
+      this.delegate = delegate;
+      this.logger = delegate.getChannelLogger();
+      this.healthListener = hcListener;
     }
 
     @Override
@@ -325,16 +344,30 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     void eject() {
       ejected = true;
+      if (healthListener != null) {
+        healthListener.onHealthStatus(HealthUtil.HealthStatus.create(
+            HealthUtil.ServingStatus.NOT_SERVING, "Subchannel ejected"
+        ));
+      } else {
       subchannelStateListener.onSubchannelState(
           ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+      }
+      lastSubchannelState = null;
       logger.log(ChannelLogLevel.INFO, "Subchannel ejected: {0}", this);
     }
 
     void uneject() {
       ejected = false;
+      // stateListener needs to be notified first, this avoids subchannel from using stale
+      // connectivity state with the new health status
       if (lastSubchannelState != null) {
         subchannelStateListener.onSubchannelState(lastSubchannelState);
         logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
+      }
+      if (healthListener != null) {
+        healthListener.onHealthStatus(HealthUtil.HealthStatus.create(
+            HealthUtil.ServingStatus.SERVING, "subchannel unejected"
+        ));
       }
     }
 
