@@ -61,8 +61,11 @@ junit = "junit:junit:4.13.2"
 # Update notes / 2023-07-19 sergiitk:
 #    Couldn't update to 5.4.0, updated to the last in 4.x line. Version 5.x breaks some tests.
 #    Error log: https://github.com/grpc/grpc-java/pull/10359#issuecomment-1632834435
-mockito-android = "org.mockito:mockito-android:4.11.0"
-mockito-core = "org.mockito:mockito-core:4.11.0"
+# Update notes / 2023-10-09 temawi:
+#    4.11.0 Has been breaking the android integration tests as mockito now uses streams
+#    (not available in API levels < 24). https://github.com/grpc/grpc-java/issues/10457
+mockito-android = "org.mockito:mockito-android:4.4.0"
+mockito-core = "org.mockito:mockito-core:4.4.0"
 netty-codec-http2 = { module = "io.netty:netty-codec-http2", version.ref = "netty" }
 netty-handler-proxy = { module = "io.netty:netty-handler-proxy", version.ref = "netty" }
 netty-tcnative = { module = "io.netty:netty-tcnative-boringssl-static", version.ref = "nettytcnative" }
