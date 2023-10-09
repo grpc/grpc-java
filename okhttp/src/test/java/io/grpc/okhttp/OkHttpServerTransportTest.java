@@ -371,7 +371,7 @@ public class OkHttpServerTransportTest {
     assertThat(streamListener.messages.pop()).isEqualTo("Hello server");
     assertThat(streamListener.halfClosedCalled).isTrue();
 
-    streamListener.stream.writeHeaders(metadata("User-Data", "best data"));
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"), false);
     streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
     streamListener.stream.close(Status.OK, metadata("End-Metadata", "bye"));
 
@@ -434,7 +434,7 @@ public class OkHttpServerTransportTest {
     assertThat(streamListener.messages.pop()).isEqualTo("Hello server");
     assertThat(streamListener.halfClosedCalled).isTrue();
 
-    streamListener.stream.writeHeaders(new Metadata());
+    streamListener.stream.writeHeaders(new Metadata(), false);
     streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
     streamListener.stream.flush();
 
@@ -1034,7 +1034,7 @@ public class OkHttpServerTransportTest {
     streamListener.stream.request(1);
     pingPong();
     assertThat(streamListener.messages.pop()).isEqualTo("Hello Server Pad Me!");
-    streamListener.stream.writeHeaders(metadata("User-Data", "best data"));
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"), false);
     streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
     List<Header> responseHeaders = Arrays.asList(
         new Header(":status", "200"),
@@ -1211,7 +1211,7 @@ public class OkHttpServerTransportTest {
     pingPong();
     assertThat(streamListener.messages.pop()).isEqualTo("Hello server");
 
-    streamListener.stream.writeHeaders(metadata("User-Data", "best data"));
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"), false);
     streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
     streamListener.stream.flush();
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();

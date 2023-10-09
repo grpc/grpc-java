@@ -153,7 +153,7 @@ public class ServerCallImplTest {
 
     call.sendHeaders(headers);
 
-    verify(stream).writeHeaders(headers);
+    verify(stream).writeHeaders(headers, false);
   }
 
   @Test
@@ -162,7 +162,7 @@ public class ServerCallImplTest {
     headers.put(CONTENT_LENGTH_KEY, "123");
     call.sendHeaders(headers);
 
-    verify(stream).writeHeaders(headers);
+    verify(stream).writeHeaders(headers, false);
     assertNull(headers.get(CONTENT_LENGTH_KEY));
   }
 

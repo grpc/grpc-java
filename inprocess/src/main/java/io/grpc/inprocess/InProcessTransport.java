@@ -546,7 +546,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
-      public void writeHeaders(Metadata headers) {
+      public void writeHeaders(Metadata headers, boolean flush) {
         if (clientMaxInboundMetadataSize != Integer.MAX_VALUE) {
           int metadataSize = metadataSize(headers);
           if (metadataSize > clientMaxInboundMetadataSize) {

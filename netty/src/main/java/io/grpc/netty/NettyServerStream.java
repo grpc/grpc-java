@@ -94,13 +94,13 @@ class NettyServerStream extends AbstractServerStream {
 
   private class Sink implements AbstractServerStream.Sink {
     @Override
-    public void writeHeaders(Metadata headers) {
+    public void writeHeaders(Metadata headers, boolean flush) {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeHeaders")) {
         writeQueue.enqueue(
             SendResponseHeadersCommand.createHeaders(
                 transportState(),
                 Utils.convertServerHeaders(headers)),
-            true);
+            flush);
       }
     }
 
