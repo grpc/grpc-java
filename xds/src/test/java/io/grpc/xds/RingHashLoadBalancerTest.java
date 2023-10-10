@@ -25,7 +25,10 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.DO_NOT_RESET_HELPER;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.DO_NOT_VERIFY;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.RESET_SUBCHANNEL_MOCKS;
+<<<<<<< HEAD
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.STAY_IN_CONNECTING;
+=======
+>>>>>>> c5829f334 (Complete fixing implementation and tests so that all tests pass as expected.)
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -886,8 +889,8 @@ public class RingHashLoadBalancerTest {
     assertThat(description).contains("Address: FakeSocketAddress-server2, count: 3");
   }
 
-  private List<Subchannel> initializeLbSubchannels(RingHashConfig config,
-      List<EquivalentAddressGroup> servers, InitializationFlags... initFlags) {
+  private List<Subchannel> initializeLbSubchannels(RingHashConfig config, List<EquivalentAddressGroup> servers,
+      InitializationFlags... initFlags) {
 
     boolean doVerifies = true;
     boolean resetSubchannels = false;

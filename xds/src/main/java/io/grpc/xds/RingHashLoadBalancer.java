@@ -29,6 +29,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multiset;
+import com.google.common.collect.Sets;
 import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -86,6 +87,16 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     Status addressValidityStatus = validateAddrList(addrList);
     if (!addressValidityStatus.isOk()) {
       return addressValidityStatus;
+    }
+
+    Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
+    Set<EquivalentAddressGroup> removedAddrs =
+        Sets.newHashSet(Sets.difference(getStrippedChildEags(getChildLbStates()), latestAddrs.keySet()));
+
+    // Shut down subchannels for delisted addresses.
+    List<RingHashChildLbState> removedChildLbStates = new ArrayList<>();
+    for (EquivalentAddressGroup addr : removedAddrs) {
+      removedChildLbStates.add((RingHashChildLbState) getChildLbState(addr));
     }
 
     AcceptResolvedAddressRetVal acceptRetVal;
@@ -158,7 +169,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
    * <ol>
    *   <li>If there is at least one subchannel in READY state, overall state is READY</li>
    *   <li>If there are <em>2 or more</em> subchannels in TRANSIENT_FAILURE, overall state is
+<<<<<<< HEAD
    *   TRANSIENT_FAILURE (to allow timely failover to another policy)</li>
+=======
+   *   TRANSIENT_FAILURE</li>
+>>>>>>> c5829f334 (Complete fixing implementation and tests so that all tests pass as expected.)
    *   <li>If there is at least one subchannel in CONNECTING state, overall state is
    *   CONNECTING</li>
    *   <li> If there is one subchannel in TRANSIENT_FAILURE state and there is
@@ -175,48 +190,46 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       logger.log(XdsLogLevel.DEBUG, "UpdateOverallBalancingState called after shutdown");
       return;
     }
+    boolean startConnectionAttempt = false;
 
-    // Calculate the current overall state to report
+    // Calculate the current overall state and whether we should attempt a connection
     int numIdle = 0;
     int numReady = 0;
     int numConnecting = 0;
-    int numTF = 0;
-    forloop:
+    int numTransientFailure = 0;
     for (ChildLbState childLbState : getChildLbStates()) {
       ConnectivityState state = childLbState.getCurrentState();
-      switch (state) {
-        case READY:
-          numReady++;
-          break forloop;
-        case CONNECTING:
-          numConnecting++;
-          break;
-        case IDLE:
-          numIdle++;
-          break;
-        case TRANSIENT_FAILURE:
-          numTF++;
-          break;
-        default:
-          // ignore it
+      if (state == READY) {
+        numReady++;
+        break;
+      } else if (state == TRANSIENT_FAILURE) {
+        numTransientFailure++;
+      } else if (state == CONNECTING ) {
+        numConnecting++;
+      } else if (state == IDLE) {
+        numIdle++;
       }
     }
     ConnectivityState overallState;
     if (numReady > 0) {
       overallState = READY;
-    } else if (numTF >= 2) {
+    } else if (numTransientFailure >= 2) {
       overallState = TRANSIENT_FAILURE;
+      startConnectionAttempt = (numConnecting == 0);
     } else if (numConnecting > 0) {
       overallState = CONNECTING;
-    } else if (numTF == 1 && getChildLbStates().size() > 1) {
+    } else if (numTransientFailure == 1 && getChildLbStates().size() > 1) {
       overallState = CONNECTING;
+      startConnectionAttempt = true;
     } else if (numIdle > 0) {
       overallState = IDLE;
     } else {
       overallState = TRANSIENT_FAILURE;
+      startConnectionAttempt = true;
     }
 
     RingHashPicker picker = new RingHashPicker(syncContext, ring, getImmutableChildMap());
+    // TODO(chengyuanzhang): avoid unnecessary reprocess caused by duplicated server addr updates
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
   }
@@ -338,6 +351,20 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
     Collections.sort(ring);
     return Collections.unmodifiableList(ring);
+  }
+
+  /**
+   * Converts list of {@link EquivalentAddressGroup} to {@link EquivalentAddressGroup} set and
+   * remove all attributes. The values are the original EAGs.
+   */
+  private static Map<EquivalentAddressGroup, EquivalentAddressGroup> stripAttrs(
+      List<EquivalentAddressGroup> groupList) {
+    Map<EquivalentAddressGroup, EquivalentAddressGroup> addrs =
+        new HashMap<>(groupList.size() * 2);
+    for (EquivalentAddressGroup group : groupList) {
+      addrs.put(stripAttrs(group), group);
+    }
+    return addrs;
   }
 
   @SuppressWarnings("ReferenceEquality")
