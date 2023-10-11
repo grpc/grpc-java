@@ -67,9 +67,6 @@ public final class ServerSecurityPolicy {
   @CheckReturnValue
   ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName) {
     SecurityPolicy securityPolicy = perServicePolicies.getOrDefault(serviceName, defaultPolicy);
-    if (securityPolicy instanceof AsyncSecurityPolicy) {
-      return ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(uid);
-    }
     return Futures.immediateFuture(securityPolicy.checkAuthorization(uid));
   }
 
