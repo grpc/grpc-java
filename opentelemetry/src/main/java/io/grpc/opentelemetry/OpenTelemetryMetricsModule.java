@@ -54,11 +54,11 @@ import javax.annotation.concurrent.GuardedBy;
  * <p>On the client-side, a factory is created for each call, and the factory creates a stream
  * tracer for each attempt. If there is no stream created when the call is ended, we still create a
  * tracer. It's the tracer that reports per-attempt stats, and the factory that reports the stats
- * of the overall RPC, such as RETRIES_PER_CALL, to Census.
+ * of the overall RPC, such as RETRIES_PER_CALL, to OpenTelemetry.
  *
  * <p>On the server-side, there is only one ServerStream per each ServerCall, and ServerStream
  * starts earlier than the ServerCall.  Therefore, only one tracer is created per stream/call and
- * it's the tracer that reports the summary to Census.
+ * it's the tracer that reports the summary to OpenTelemetry.
  */
 final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
@@ -122,19 +122,17 @@ final class OpenTelemetryMetricsModule {
     final OpenTelemetryMetricsModule module;
     final StreamInfo info;
     final String fullMethodName;
-    final boolean isGeneratedMethod;
     volatile long outboundWireSize;
     volatile long inboundWireSize;
     long attemptNanos;
     Code statusCode;
 
     ClientTracer(CallAttemptsTracerFactory attemptsState, OpenTelemetryMetricsModule module,
-        StreamInfo info, String fullMethodName, boolean isGeneratedMethod) {
+        StreamInfo info, String fullMethodName) {
       this.attemptsState = attemptsState;
       this.module = module;
       this.info = info;
       this.fullMethodName = fullMethodName;
-      this.isGeneratedMethod = isGeneratedMethod;
       this.stopwatch = module.stopwatchSupplier.get().start();
     }
 
@@ -195,8 +193,7 @@ final class OpenTelemetryMetricsModule {
     void recordFinishedAttempt() {
       // TODO(dnvindhya) : add target as an attribute
       io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
-          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY),
-          recordMethodName(fullMethodName, isGeneratedMethod),
+          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName,
           AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), statusCode.toString());
 
       module.state.clientAttemptDuration.record(attemptNanos / NANOS_PER_SECOND, attribute);
@@ -214,7 +211,6 @@ final class OpenTelemetryMetricsModule {
     @GuardedBy("lock")
     private boolean callEnded;
     private final String fullMethodName;
-    private final boolean isGeneratedMethod;
     private Status status;
     private long callLatencyNanos;
     private final Object lock = new Object();
@@ -224,18 +220,15 @@ final class OpenTelemetryMetricsModule {
     @GuardedBy("lock")
     private boolean finishedCallToBeRecorded;
 
-    CallAttemptsTracerFactory(OpenTelemetryMetricsModule module, String fullMethodName,
-        Boolean isGeneratedMethod ) {
+    CallAttemptsTracerFactory(OpenTelemetryMetricsModule module, String fullMethodName) {
       this.module = checkNotNull(module, "module");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
-      this.isGeneratedMethod = isGeneratedMethod;
       this.attemptStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
       // TODO(dnvindhya) : add target as an attribute
       io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
-          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY),
-          recordMethodName(fullMethodName, isGeneratedMethod));
+          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName);
 
       // Record here in case mewClientStreamTracer() would never be called.
       module.state.clientAttemptCount.add(1, attribute);
@@ -256,12 +249,11 @@ final class OpenTelemetryMetricsModule {
         // TODO(dnvindhya): Add target as an attribute
         io.opentelemetry.api.common.Attributes attribute =
             io.opentelemetry.api.common.Attributes.of(
-                AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY),
-                recordMethodName(fullMethodName, isGeneratedMethod));
+                AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName);
         module.state.clientAttemptCount.add(1, attribute);
       }
       attemptsPerCall.incrementAndGet();
-      return new ClientTracer(this, module, info, fullMethodName, isGeneratedMethod);
+      return new ClientTracer(this, module, info, fullMethodName);
     }
 
     // Called whenever each attempt is ended.
@@ -303,8 +295,7 @@ final class OpenTelemetryMetricsModule {
 
     void recordFinishedCall() {
       if (attemptsPerCall.get() == 0) {
-        ClientTracer tracer = new ClientTracer(this, module, null, fullMethodName,
-            isGeneratedMethod);
+        ClientTracer tracer = new ClientTracer(this, module, null, fullMethodName);
         tracer.attemptNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
         tracer.recordFinishedAttempt();
@@ -317,8 +308,7 @@ final class OpenTelemetryMetricsModule {
       // TODO(dnvindhya): record target as an attribute
       io.opentelemetry.api.common.Attributes attribute
           = io.opentelemetry.api.common.Attributes.of(
-          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY),
-          recordMethodName(fullMethodName, isGeneratedMethod),
+          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName,
           AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), status.getCode().toString());
 
       module.state.clientCallDuration.record(callLatencyNanos / NANOS_PER_SECOND, attribute);
@@ -454,8 +444,8 @@ final class OpenTelemetryMetricsModule {
       // which is true for all generated methods. Otherwise, programatically
       // created methods result in high cardinality metrics.
       final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
-          OpenTelemetryMetricsModule.this, method.getFullMethodName(),
-          method.isSampledToLocalTracing());
+          OpenTelemetryMetricsModule.this, recordMethodName(method.getFullMethodName(),
+          method.isSampledToLocalTracing()));
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {

@@ -21,7 +21,7 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import javax.annotation.Nullable;
 
-class OpenTelemetryState {
+final class OpenTelemetryState {
 
   /* Client Metrics */
   DoubleHistogram clientCallDuration;

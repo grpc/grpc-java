@@ -194,8 +194,7 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, method.getFullMethodName(),
-            method.isSampledToLocalTracing());
+        new CallAttemptsTracerFactory(module, method.getFullMethodName());
     Metadata headers = new Metadata();
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
@@ -330,7 +329,7 @@ public class OpenTelemetryMetricsModuleTest {
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module,
-            method.getFullMethodName(), method.isSampledToLocalTracing());
+            method.getFullMethodName());
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
 
@@ -752,7 +751,7 @@ public class OpenTelemetryMetricsModuleTest {
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module,
-            method.getFullMethodName(), method.isSampledToLocalTracing());
+            method.getFullMethodName());
     ClientStreamTracer streamTracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     fakeClock.forwardTime(3000, MILLISECONDS);
