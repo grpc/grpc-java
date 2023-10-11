@@ -129,6 +129,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         config.enableOobLoadReport, config.errorUtilizationPenalty);
   }
 
+  // Expose for tests in this package.
   @Override
   protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
     return super.getChildLbStateEag(eag);
