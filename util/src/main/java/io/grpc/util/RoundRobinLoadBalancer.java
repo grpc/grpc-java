@@ -127,28 +127,30 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
     private static final AtomicIntegerFieldUpdater<ReadyPicker> indexUpdater =
         AtomicIntegerFieldUpdater.newUpdater(ReadyPicker.class, "index");
 
-    private final List<SubchannelPicker> list; // non-empty
+    private final List<SubchannelPicker> subchannelPickers; // non-empty
     @SuppressWarnings("unused")
     private volatile int index;
 
     public ReadyPicker(List<SubchannelPicker> list, int startIndex) {
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
-      this.list = list;
+      this.subchannelPickers = list;
       this.index = startIndex - 1;
     }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return list.get(nextIndex()).pickSubchannel(args);
+      return subchannelPickers.get(nextIndex()).pickSubchannel(args);
     }
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(ReadyPicker.class).add("list", list).toString();
+      return MoreObjects.toStringHelper(ReadyPicker.class)
+          .add("subchannelPickers", subchannelPickers)
+          .toString();
     }
 
     private int nextIndex() {
-      int size = list.size();
+      int size = subchannelPickers.size();
       int i = indexUpdater.incrementAndGet(this);
       if (i >= size) {
         int oldi = i;
@@ -159,8 +161,8 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
     }
 
     @VisibleForTesting
-    List<SubchannelPicker> getList() {
-      return list;
+    List<SubchannelPicker> getSubchannelPickers() {
+      return subchannelPickers;
     }
 
     @Override
@@ -171,7 +173,8 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
       ReadyPicker other = (ReadyPicker) picker;
       // the lists cannot contain duplicate subchannels
       return other == this
-          || (list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list));
+          || (subchannelPickers.size() == other.subchannelPickers.size() && new HashSet<>(
+          subchannelPickers).containsAll(other.subchannelPickers));
     }
   }
 

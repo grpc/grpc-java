@@ -218,7 +218,7 @@ public class LeastRequestLoadBalancerTest {
     removedListener.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
     deliverSubchannelState(newSubchannel, ConnectivityStateInfo.forNonError(READY));
 
-    assertThat(getChildEags(loadBalancer)).containsExactly(oldEag1, newEag);
+    assertThat(getChildEags(loadBalancer)).containsExactly(oldEag2, newEag);
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -238,7 +238,8 @@ public class LeastRequestLoadBalancerTest {
 
   private static List<Object> getChildEags(LeastRequestLoadBalancer loadBalancer) {
     return loadBalancer.getChildLbStates().stream()
-        .map(ChildLbState::getKey)
+        .map(ChildLbState::getEag)
+        // .map(EquivalentAddressGroup::getAddresses)
         .collect(Collectors.toList());
   }
 
@@ -364,7 +365,7 @@ public class LeastRequestLoadBalancerTest {
     }
     inOrder.verify(helper)
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertThat(((LeastRequestPicker)pickerCaptor.getValue()).getStatusString())
+    assertThat(getStatusString((LeastRequestPicker)pickerCaptor.getValue()))
         .contains("Status{code=UNKNOWN, description=connection broken");
     inOrder.verifyNoMoreInteractions();
 
@@ -376,6 +377,40 @@ public class LeastRequestLoadBalancerTest {
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verifyNoMoreInteractions(helper);
+  }
+
+  private String getStatusString(LeastRequestPicker picker) {
+    if (picker == null) {
+      return "";
+    }
+
+    if (picker instanceof EmptyPicker) {
+      if (((EmptyPicker) picker).getStatus() == null) {
+        return "";
+      }
+      return ((EmptyPicker) picker).getStatus().toString();
+    } else if (picker instanceof ReadyPicker) {
+      List<ChildLbState> childLbStates = ((ReadyPicker)picker).getChildLbStates();
+      if (childLbStates == null || childLbStates.isEmpty()) {
+        return "";
+      };
+
+      // Note that this is dependent on PickFirst's picker toString retaining the representation
+      // of the status, but since it is a test and we don't want to expose this value it seems
+      // a reasonable tradeoff
+      String pickerStr = childLbStates.get(0).getCurrentPicker().toString();
+      int beg = pickerStr.indexOf(", status=Status{");
+      if (beg < 0) {
+        return "";
+      }
+      int end = pickerStr.indexOf('}', beg);
+      if (end < 0) {
+        return "";
+      }
+      return pickerStr.substring(beg + ", status=".length(), end + 1);
+    }
+
+    throw new IllegalArgumentException("Unrecognized picker: " + picker);
   }
 
   @Test
@@ -439,7 +474,7 @@ public class LeastRequestLoadBalancerTest {
 
     ReadyPicker picker = (ReadyPicker) pickerCaptor.getValue();
 
-    assertThat(picker.getList()).containsExactlyElementsIn(childLbStates);
+    assertThat(picker.getChildLbStates()).containsExactlyElementsIn(childLbStates);
 
     // Make random return 0, then 2 for the sample indexes.
     when(mockRandom.nextInt(childLbStates.size())).thenReturn(0, 2);
@@ -630,7 +665,7 @@ public class LeastRequestLoadBalancerTest {
 
   private List<Subchannel> getList(SubchannelPicker picker) {
     if (picker instanceof ReadyPicker) {
-      return ((ReadyPicker) picker).getList().stream()
+      return ((ReadyPicker) picker).getChildLbStates().stream()
           .map(this::getSubchannel)
           .collect(Collectors.toList());
     } else {

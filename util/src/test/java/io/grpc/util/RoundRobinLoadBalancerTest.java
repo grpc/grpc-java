@@ -512,7 +512,7 @@ public class RoundRobinLoadBalancerTest {
 
     if (picker instanceof ReadyPicker) {
       List<Subchannel> subchannelList = new ArrayList<>();
-      for (SubchannelPicker childPicker : ((ReadyPicker) picker).getList()) {
+      for (SubchannelPicker childPicker : ((ReadyPicker) picker).getSubchannelPickers()) {
         subchannelList.add(childPicker.pickSubchannel(mockArgs).getSubchannel());
       }
       return subchannelList;

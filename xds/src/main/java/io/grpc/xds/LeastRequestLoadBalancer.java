@@ -34,7 +34,6 @@ import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Metadata;
@@ -60,10 +59,6 @@ import javax.annotation.Nonnull;
 final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
   private static final EmptyPicker EMPTY_LR_PICKER = new EmptyPicker(EMPTY_OK);
-
-  @VisibleForTesting
-  static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
-      Attributes.Key.create("state-info");
 
   private final ThreadSafeRandom random;
 
@@ -185,19 +180,17 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   @VisibleForTesting
   abstract static class LeastRequestPicker extends SubchannelPicker {
     abstract boolean isEquivalentTo(LeastRequestPicker picker);
-
-    abstract String getStatusString();
   }
 
   @VisibleForTesting
   static final class ReadyPicker extends LeastRequestPicker {
-    private final List<ChildLbState> list; // non-empty
+    private final List<ChildLbState> childLbStates; // non-empty
     private final int choiceCount;
     private final ThreadSafeRandom random;
 
-    ReadyPicker(List<ChildLbState> list, int choiceCount, ThreadSafeRandom random) {
-      checkArgument(!list.isEmpty(), "empty list");
-      this.list = list;
+    ReadyPicker(List<ChildLbState> childLbStates, int choiceCount, ThreadSafeRandom random) {
+      checkArgument(!childLbStates.isEmpty(), "empty list");
+      this.childLbStates = childLbStates;
       this.choiceCount = choiceCount;
       this.random = checkNotNull(random, "random");
     }
@@ -225,15 +218,15 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(ReadyPicker.class)
-                        .add("list", list)
+                        .add("list", childLbStates)
                         .add("choiceCount", choiceCount)
                         .toString();
     }
 
     private ChildLbState nextChildToUse() {
-      ChildLbState candidate = list.get(random.nextInt(list.size()));
+      ChildLbState candidate = childLbStates.get(random.nextInt(childLbStates.size()));
       for (int i = 0; i < choiceCount - 1; ++i) {
-        ChildLbState sampled = list.get(random.nextInt(list.size()));
+        ChildLbState sampled = childLbStates.get(random.nextInt(childLbStates.size()));
         if (getInFlights(sampled).get() < getInFlights(candidate).get()) {
           candidate = sampled;
         }
@@ -242,31 +235,11 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     }
 
     @VisibleForTesting
-    List<ChildLbState> getList() {
-      return list;
-    }
-
-    @Override
-    String getStatusString() {
-      if (list == null || list.isEmpty()) {
-        return "";
-      };
-
-      String pickerStr = list.get(0).getCurrentPicker().toString();
-      int beg = pickerStr.indexOf(", status=Status{");
-      if (beg < 0) {
-        return "";
-      }
-      int end = pickerStr.indexOf('}', beg);
-      if (end < 0) {
-        return "";
-      }
-      return pickerStr.substring(beg + ", status=".length(), end + 1);
+    List<ChildLbState> getChildLbStates() {
+      return childLbStates;
     }
 
     @VisibleForTesting
-
-
     @Override
     boolean isEquivalentTo(LeastRequestPicker picker) {
       if (!(picker instanceof ReadyPicker)) {
@@ -275,7 +248,8 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
       ReadyPicker other = (ReadyPicker) picker;
       // the lists cannot contain duplicate subchannels
       return other == this
-          || ((list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list))
+          || ((childLbStates.size() == other.childLbStates.size() && new HashSet<>(
+          childLbStates).containsAll(other.childLbStates))
                 && choiceCount == other.choiceCount);
     }
   }
@@ -305,23 +279,9 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
       return MoreObjects.toStringHelper(EmptyPicker.class).add("status", status).toString();
     }
 
-    @Override
-    String getStatusString() {
-      if (status == null) {
-        return "";
-      }
-      return status.toString();
-    }
-  }
-
-  /**
-   * A lighter weight Reference than AtomicReference.
-   */
-  static final class Ref<T> {
-    T value;
-
-    Ref(T value) {
-      this.value = value;
+    @VisibleForTesting
+    Status getStatus() {
+      return status;
     }
   }
 

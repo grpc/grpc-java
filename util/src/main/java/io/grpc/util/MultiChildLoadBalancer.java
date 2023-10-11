@@ -81,10 +81,19 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return new FixedResultPicker(PickResult.withError(error));
   }
 
+  /**
+   * Generally, the only reason to override this is to expose it to a test of a LB in a different
+   * package.
+   */
   @VisibleForTesting
   protected Collection<ChildLbState> getChildLbStates() {
     return childLbStates.values();
   }
+
+  /**
+   * Generally, the only reason to override this is to expose it to a test of a LB in a
+   * different package.
+    */
 
   protected ChildLbState getChildLbState(Object key) {
     if (key == null) {
@@ -96,6 +105,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates.get(key);
   }
 
+  /**
+   * Generally, the only reason to override this is to expose it to a test of a LB in a different
+   * package.
+   */
   protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
     return getChildLbState(new Endpoint(eag));
   }
@@ -111,18 +124,24 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       ChildLbState existingChildLbState = childLbStates.get(endpoint);
       if (existingChildLbState != null) {
         childLbMap.put(endpoint, existingChildLbState);
-      } else if (!childLbMap.containsKey(endpoint)) {
+      } else {
         childLbMap.put(endpoint, createChildLbState(endpoint, null, getInitialPicker()));
       }
     }
     return childLbMap;
   }
 
+  /**
+   * Override to create an instance of a subclass.
+   */
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
       SubchannelPicker initialPicker) {
     return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
   }
 
+  /**
+   *   Override to completely replace the default logic or to do additional activities.
+   */
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
@@ -134,7 +153,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Override this if your keys are not of type EquivalentAddressGroup.
+   * Override this if your keys are not of type Endpoint.
    * @param key Key to identify the ChildLbState
    * @param resolvedAddresses list of addresses which include attributes
    * @param childConfig a load balancing policy config. This field is optional.
@@ -150,7 +169,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     // Retrieve the non-stripped version
     EquivalentAddressGroup eagToUse = null;
     for (EquivalentAddressGroup currEag : resolvedAddresses.getAddresses()) {
-      if (key.equals(currEag)) {
+      if (key.equals(new Endpoint(currEag))) {
         eagToUse = currEag;
         break;
       }
@@ -295,6 +314,19 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return activeChildren;
   }
 
+  /**
+   * This represents the state of load balancer children.  Each endpoint (represented by an
+   * EquivalentAddressGroup or EDS string) will have a separate ChildLbState which in turn will
+   * define a GracefulSwitchLoadBalancer.  When the GracefulSwitchLoadBalancer is activated, a
+   * single PickFirstLoadBalancer will be created which will then create a subchannel and start
+   * trying to connect to it.
+   *
+   * <p>A ChildLbStateHelper is the glue between ChildLbState and the helpers associated with the
+   * petiole policy above and the PickFirstLoadBalancer's helper below.
+   *
+   * <p>If you wish to store additional state information related to each subchannel, then extend
+   * this class.
+   */
   public class ChildLbState {
     private final Object key;
     private ResolvedAddresses resolvedAddresses;
@@ -402,6 +434,13 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       logger.log(Level.FINE, "Child balancer {0} deleted", key);
     }
 
+    /**
+     * ChildLbStateHelper is the glue between ChildLbState and the helpers associated with the
+     * petiole policy above and the PickFirstLoadBalancer's helper below.
+     *
+     * <p>The ChildLbState updates happen during updateBalancingState.  Otherwise, it is doing
+     * simple forwarding.
+     */
     private final class ChildLbStateHelper extends ForwardingLoadBalancerHelper {
 
       @Override
@@ -431,6 +470,12 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
   }
 
+  /**
+   * Endpoint is an optimization to quickly lookup and compare EquivalentAddressGroup address sets.
+   * Ignores the attributes, orders the addresses in a deterministic manner and converts each
+   * address into a string for easy comparison.  Also caches the hashcode.
+   * Is used as a key for ChildLbState for most load balancers (ClusterManagerLB uses a String).
+   */
   protected static class Endpoint {
     final String[] addrs;
     final int hashCode;
@@ -445,11 +490,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       }
       Arrays.sort(addrs);
 
-      int hash = 1;
-      for (String address : addrs) {
-        hash = 31 * hash + address.hashCode();
-      }
-      hashCode = hash;
+      hashCode = Arrays.hashCode(addrs);
     }
 
     @Override
@@ -466,10 +507,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         return false;
       }
 
-      // Handling eags is convenient for tests
-      if (other instanceof EquivalentAddressGroup) {
-        other = new Endpoint((EquivalentAddressGroup) other);
-      } else if (!(other instanceof Endpoint)) {
+      if (!(other instanceof Endpoint)) {
         return false;
       }
       Endpoint o = (Endpoint) other;
@@ -477,13 +515,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         return false;
       }
 
-      for (int i = 0; i < addrs.length; i++) {
-        if (!addrs[i].equals(o.addrs[i])) {
-          return false;
-        }
-      }
-
-      return true;
+      return Arrays.equals(o.addrs, this.addrs);
     }
 
     @Override

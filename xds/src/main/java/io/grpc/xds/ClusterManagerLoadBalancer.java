@@ -38,10 +38,18 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * The top-level load balancing policy.
+ * The top-level load balancing policy for use in XDS.
+ * This policy does not immediately delete its children.  Instead, it marks them deactivated
+ * and starts a timer for deletion.  If a subsequent address update restores the child, then it is
+ * simply reactivated instead of built from scratch.  This is necessary because XDS can frequently
+ * remove and then add back a server as machines are rebooted or repurposed for load management.
+ *
+ * <p>Note that this LB does not automatically reconnect children who go into IDLE status
  */
 class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
 
+  // 15 minutes is long enough for a reboot and the services to restart while not so long that
+  // many children are waiting for cleanup.
   @VisibleForTesting
   public static final int DELAYED_CHILD_DELETION_TIME_MINUTES = 15;
   protected final SynchronizationContext syncContext;
@@ -129,6 +137,12 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     return false;
   }
 
+  /**
+   * This differs from the base class in the use of the deletion timer.  When it is deactivated,
+   * rather than immediately calling shutdown it starts a timer.  If shutdown or reactivate
+   * are called before the timer fires, the timer is canceled.  Otherwise, time timer calls shutdown
+   * and removes the child from the petiole policy when it is triggered.
+   */
   private class ClusterManagerLbState extends ChildLbState {
     @Nullable
     ScheduledHandle deletionTimer;
