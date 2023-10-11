@@ -157,22 +157,27 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     }
   }
 
-  // This should only be used by tests
+  /**
+   * This should ONLY be used by tests.
+   */
   @VisibleForTesting
   void setResolvingAddresses(boolean newValue) {
     super.resolvingAddresses = newValue;
   }
 
+  // Expose for tests in this package.
   @Override
   protected Collection<ChildLbState> getChildLbStates() {
     return super.getChildLbStates();
   }
 
+  // Expose for tests in this package.
   @Override
   protected ChildLbState getChildLbState(Object key) {
     return super.getChildLbState(key);
   }
 
+  // Expose for tests in this package.
   private static AtomicInteger getInFlights(ChildLbState childLbState) {
     return ((LeastRequestLbState)childLbState).activeRequests;
   }
