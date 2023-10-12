@@ -17,7 +17,6 @@
 package io.grpc.binder;
 
 import android.os.IBinder;
-import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.binder.internal.BinderTransportSecurity;
 
@@ -34,7 +33,6 @@ public class BinderInternal {
     receiver.set(binder);
   }
 
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10566")
   public static BinderTransportSecurity.ServerPolicyChecker createPolicyChecker(
           ServerSecurityPolicy securityPolicy) {
     return securityPolicy::checkAuthorizationForServiceAsync;

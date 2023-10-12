@@ -28,7 +28,6 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
-import io.grpc.binder.ServerSecurityPolicy;
 import io.grpc.internal.GrpcAttributes;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -63,7 +62,7 @@ public final class BinderTransportSecurity {
    *
    * @param builder The {@link Attributes.Builder} for the transport being created.
    * @param remoteUid The remote UID of the transport.
-   * @param serverPolicyChecker The policy enforcer for this transport.
+   * @param serverPolicyChecker The policy checker for this transport.
    */
   @Internal
   public static void attachAuthAttrs(
