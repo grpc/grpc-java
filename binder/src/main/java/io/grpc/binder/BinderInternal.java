@@ -33,6 +33,11 @@ public class BinderInternal {
     receiver.set(binder);
   }
 
+  /**
+   * Creates a {@link BinderTransportSecurity.ServerPolicyChecker} from a
+   * {@link ServerSecurityPolicy}. This exposes to callers an interface to check security policies
+   * without causing hard dependencies on a specific class.
+   */
   public static BinderTransportSecurity.ServerPolicyChecker createPolicyChecker(
           ServerSecurityPolicy securityPolicy) {
     return securityPolicy::checkAuthorizationForServiceAsync;

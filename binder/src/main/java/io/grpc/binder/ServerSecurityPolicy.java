@@ -44,7 +44,7 @@ public final class ServerSecurityPolicy {
   }
 
   /**
-   * Return whether the given Android UID is authorized to access a particular service.
+   * Returns whether the given Android UID is authorized to access a particular service.
    *
    * <p><b>IMPORTANT</b>: This method may block for extended periods of time.
    *
@@ -59,7 +59,7 @@ public final class ServerSecurityPolicy {
   }
 
   /**
-   * Return whether the given Android UID is authorized to access a particular service.
+   * Returns whether the given Android UID is authorized to access a particular service.
    *
    * @param uid The Android UID to authenticate.
    * @param serviceName The name of the gRPC service being called.
