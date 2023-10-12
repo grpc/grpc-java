@@ -48,19 +48,23 @@ final class OpenTelemetryState {
         builder.serverTotalReceivedCompressedMessageSizeCounter);
   }
 
-  OpenTelemetryState(@Nullable DoubleHistogram a, @Nullable LongCounter b,
-      @Nullable DoubleHistogram c, @Nullable LongHistogram d,
-      @Nullable LongHistogram e, @Nullable LongCounter f, @Nullable DoubleHistogram g,
-      @Nullable LongHistogram h, @Nullable LongHistogram i) {
-    this.clientCallDuration = a;
-    this.clientAttemptCount = b;
-    this.clientAttemptDuration = c;
-    this.clientTotalSentCompressedMessageSize = d;
-    this.clientTotalReceivedCompressedMessageSize = e;
-    this.serverCallCount = f;
-    this.serverCallDuration = g;
-    this.serverTotalSentCompressedMessageSize = h;
-    this.serverTotalReceivedCompressedMessageSize = i;
+  OpenTelemetryState(@Nullable DoubleHistogram clientCallDuration,
+      @Nullable LongCounter clientAttemptCount,
+      @Nullable DoubleHistogram clientAttemptDuration,
+      @Nullable LongHistogram clientTotalSentCompressedMessageSize,
+      @Nullable LongHistogram clientTotalReceivedCompressedMessageSize,
+      @Nullable LongCounter serverCallCount, @Nullable DoubleHistogram serverCallDuration,
+      @Nullable LongHistogram serverTotalSentCompressedMessageSize,
+      @Nullable LongHistogram serverTotalReceivedCompressedMessageSize) {
+    this.clientCallDuration = clientCallDuration;
+    this.clientAttemptCount = clientAttemptCount;
+    this.clientAttemptDuration = clientAttemptDuration;
+    this.clientTotalSentCompressedMessageSize = clientTotalSentCompressedMessageSize;
+    this.clientTotalReceivedCompressedMessageSize = clientTotalReceivedCompressedMessageSize;
+    this.serverCallCount = serverCallCount;
+    this.serverCallDuration = serverCallDuration;
+    this.serverTotalSentCompressedMessageSize = serverTotalSentCompressedMessageSize;
+    this.serverTotalReceivedCompressedMessageSize = serverTotalReceivedCompressedMessageSize;
   }
 
   public static class Builder {
