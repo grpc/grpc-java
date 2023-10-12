@@ -26,6 +26,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -33,6 +34,8 @@ import java.util.logging.Logger;
  * Represents a bidirectional streaming call from a client.  Allows in a blocking manner, sending
  * over the stream and receiving from the stream.  Also supports terminating the call.
  * Wraps a ClientCall and converts from async communication to the public sync paradigm.
+ *
+ * <p>Supports separate threads for reads and writes, but only 1 of each</p>
  *
  * @param <ReqT> Type of the Request Message
  * @param <RespT> Type of the Response Message
@@ -42,19 +45,17 @@ public final class BlockingClientCall<ReqT, RespT> {
   private static final Logger logger = Logger.getLogger(BlockingClientCall.class.getName());
 
   private final BlockingQueue<RespT> buffer;
-  private final ClientCall.Listener<RespT> listener;
   private final ClientCall<ReqT, RespT> call;
 
   private final ThreadlessExecutor executor;
 
-  private volatile boolean writeClosed;
+  private boolean writeClosed;
   private Status closedStatus;
 
   BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadlessExecutor executor) {
     this.call = call;
     this.executor = executor;
     buffer = new ArrayBlockingQueue<>(1);
-    listener = new QueuingListener(buffer);
   }
 
   /**
@@ -67,9 +68,10 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public RespT read() throws InterruptedException {
     try {
-      return read(Integer.MAX_VALUE, TimeUnit.DAYS);
+      return read(true, Integer.MAX_VALUE, TimeUnit.DAYS);
     } catch (TimeoutException e) {
-      throw new RuntimeException(e); // should never happen
+      throw new AssertionError("Timed out even though we wanted to wait forever."
+              + "  This implies that time was advanced over 200 years.");
     }
   }
 
@@ -85,22 +87,20 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
    */
   public RespT read(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException {
+    return read(false, timeout, unit);
+  }
+
+  private RespT read(boolean waitForever, long timeout, TimeUnit unit)
+      throws InterruptedException, TimeoutException {
     long start = System.nanoTime();
+    long end = start + unit.toNanos(timeout);
 
     executor.drain();
 
-    if (buffer.isEmpty() && closedStatus != null) {
-      if (closedStatus.isOk()) {
-        return null;
-      } else {
-        throw closedStatus.asRuntimeException();
-      }
-    }
-
-    long duration = unit.toNanos(timeout);
     RespT bufferedValue;
     while ((bufferedValue = buffer.poll()) == null && closedStatus == null) {
-      waitAndDrainExecutorOrTimeout(start, duration);
+      Predicate<BlockingClientCall<ReqT, RespT>> predicate = BlockingClientCall::skipWaitingForRead;
+      waitAndDrainExecutorOrTimeout(waitForever, end, predicate, this);
     }
 
     if (logger.isLoggable(Level.FINER)) {
@@ -114,6 +114,10 @@ public final class BlockingClientCall<ReqT, RespT> {
     }
 
     return bufferedValue;
+  }
+
+  boolean skipWaitingForRead() {
+    return closedStatus != null || !buffer.isEmpty();
   }
 
   /**
@@ -172,7 +176,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public boolean write(ReqT request) throws InterruptedException {
     try {
-      return write(request, Integer.MAX_VALUE, TimeUnit.DAYS);
+      return write(true, request, Integer.MAX_VALUE, TimeUnit.DAYS);
     } catch (TimeoutException e) {
       throw new RuntimeException(e); // should never happen
     }
@@ -204,6 +208,11 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public boolean write(ReqT request, long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
+    return write(false, request, timeout, unit);
+  }
+
+  public boolean write(boolean waitForever, ReqT request, long timeout, TimeUnit unit)
+      throws InterruptedException, TimeoutException {
 
     if (writeClosed) {
       throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
@@ -211,14 +220,15 @@ public final class BlockingClientCall<ReqT, RespT> {
 
     boolean writeDone = false;
     long start = System.nanoTime();
-    long duration = unit.toNanos(timeout);
+    long end = start + unit.toNanos(timeout);
 
     while (!writeDone && isWriteLegal()) {
       if (call.isReady()) {
         call.sendMessage(request);
         writeDone = true;
       } else {
-        waitAndDrainExecutorOrTimeout(start, duration);
+        Predicate<ClientCall<ReqT, RespT>> predicate = ClientCall::isReady;
+        waitAndDrainExecutorOrTimeout(waitForever, end, predicate, call);
       }
     }
 
@@ -242,9 +252,6 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
    */
   public void cancel(String message, Throwable cause) {
-    if (message == null) {
-      message = "User requested a cancel";
-    }
     call.cancel(message, cause);
     writeClosed = true;
     executor.add(NoOpRunnable.INSTANCE);
@@ -322,34 +329,35 @@ public final class BlockingClientCall<ReqT, RespT> {
   }
 
   /**
-   * calls this.executor's waitAndDrain or waitAndDrainWithTimeout.
+   * Calls this.executor's waitAndDrain or waitAndDrainWithTimeout.
    *
+   * @param end The time in nanoseconds to trigger timeout
    * @throws TimeoutException If no events become available on the queue within the specified
    *     timeout or processing them exceeds the timeout
    */
-  private void waitAndDrainExecutorOrTimeout(long start, long duration)
+  private <T> void waitAndDrainExecutorOrTimeout(boolean waitForever, long end,
+      Predicate<T> predicate, T testTarget)
       throws InterruptedException, TimeoutException {
-    long soFar = System.nanoTime() - start;
-    if (soFar >= duration) {
+    long timeLeft = end - System.nanoTime();
+    if (!waitForever && timeLeft <= 0) {
       throw new TimeoutException();
     }
     // Let threadless executor do stuff until there is something for us to check
-    executor.waitAndDrainWithTimeout(duration - soFar);
+    executor.waitAndDrainWithTimeout(waitForever, timeLeft, predicate, testTarget);
 
-    if (System.nanoTime() - start > duration) {
+    if (!waitForever && end - System.nanoTime() <= 0) {
       throw new TimeoutException();
     }
   }
 
   ClientCall.Listener<RespT> getListener() {
-    return listener;
+    return new QueuingListener();
   }
 
   private void drainQuietly() {
     try {
       executor.drain();
     } catch (InterruptedException e) {
-      logger.warning("Draining interrupted: " + e.getMessage());
       Thread.currentThread().interrupt();
     }
   }
@@ -362,25 +370,18 @@ public final class BlockingClientCall<ReqT, RespT> {
   }
 
   private final class QueuingListener extends ClientCall.Listener<RespT> {
-    private boolean done = false;
-    private final BlockingQueue<RespT> buffer;
-
-    QueuingListener(BlockingQueue<RespT> bufferArg) {
-      this.buffer = bufferArg;
-    }
-
     @Override
     public void onMessage(RespT value) {
-      Preconditions.checkState(!done, "ClientCall already closed");
+      Preconditions.checkState(closedStatus == null, "ClientCall already closed");
       buffer.add(value);
       executor.add(NoOpRunnable.INSTANCE);
     }
 
     @Override
     public void onClose(Status status, Metadata trailers) {
-      Preconditions.checkState(!done, "ClientCall already closed");
+      Preconditions.checkState(closedStatus == null, "ClientCall already closed");
       closedStatus = status;
-      done = true;
+      executor.add(NoOpRunnable.INSTANCE);
     }
 
     @Override

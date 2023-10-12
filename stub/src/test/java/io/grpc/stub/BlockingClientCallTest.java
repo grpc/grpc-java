@@ -204,29 +204,28 @@ public class BlockingClientCallTest {
     // Write interrupted by cancel
     try {
       assertFalse(biDiStream.write(30)); // this is interrupted by cancel
+      fail("No exception thrown when write was interrupted by cancel");
     } catch (StatusRuntimeException e) {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
     }
 
     // Write after cancel
     try {
+      start = System.currentTimeMillis();
       biDiStream.write(30);
       fail("No exception doing write after cancel");
     } catch (IllegalStateException e) {
+      assertThat(System.currentTimeMillis() - start).isLessThan(200);
       assertThat(e.getMessage()).contains("cancel");
-    } catch (StatusRuntimeException e) {
-      assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
-      assertThat(System.currentTimeMillis() - start).isLessThan(2 * DELAY_MILLIS);
-      assertThat(System.currentTimeMillis() - start).isAtLeast(DELAY_MILLIS);
     }
 
     // new read after cancel immediately throws an exception
-    start = System.currentTimeMillis();
     try {
+      start = System.currentTimeMillis();
       assertNull(biDiStream.read(2, TimeUnit.SECONDS));
-      assertThat(System.currentTimeMillis() - start).isLessThan(2 * DELAY_MILLIS);
     } catch (StatusRuntimeException e) {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
+      assertThat(System.currentTimeMillis() - start).isLessThan(200);
     }
 
   }

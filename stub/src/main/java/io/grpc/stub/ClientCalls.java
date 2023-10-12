@@ -34,10 +34,10 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -46,6 +46,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -757,6 +758,33 @@ public final class ClientCalls {
     }
   }
 
+  /**
+   * Represents a thread and a function with object to determine if the thread is ready to be
+   * released (or skip waiting).
+   */
+  static final class ValidatingThread<T> {
+    private Thread thread;
+    private Predicate<T> predicate;
+    private T testTarget;
+
+    public ValidatingThread(Thread thread, Predicate<T> predicate, T testTarget) {
+      this.thread = thread;
+      this.predicate = predicate;
+      this.testTarget = testTarget;
+    }
+
+    public Thread getThread() {
+      return thread;
+    }
+
+    public boolean skipWaiting() {
+      if (predicate == null) {
+        return true;
+      }
+      return predicate.test(testTarget);
+    }
+  }
+
   @SuppressWarnings("serial")
   static final class ThreadlessExecutor extends ConcurrentLinkedQueue<Runnable>
       implements Executor {
@@ -766,42 +794,54 @@ public final class ClientCalls {
 
     // Set to the calling thread while it's parked, SHUTDOWN on RPC completion
     private volatile Object waiter;
-    private final Queue<Thread> waitingThreads = new ConcurrentLinkedQueue<>();
+    private final Collection<Thread> waitingThreads = new ArrayList<>();
+    private final List<ValidatingThread<?>> validatingThreadList = new ArrayList<>();
 
     // Non private to avoid synthetic class
     ThreadlessExecutor() {}
 
     /**
      * Waits until there is a Runnable, then executes it and all queued Runnables after it.
-     * This, {@link #drain}, and {@link #waitAndDrainWithTimeout(long)} must only be called by one
-     * thread at a time.
+     * This, {@link #drain}, and {@link #waitAndDrainWithTimeout(boolean, long, Predicate, Object)}
+     * must only be called by one thread at a time.
      */
     public void waitAndDrain() throws InterruptedException {
-      waitAndDrainWithTimeout(0);
+      waitAndDrainWithTimeout(true, 0, null, null);
     }
 
     /**
      * Waits for up to specified nanoseconds until there is a Runnable, then executes it and all
      * queued Runnables after it.
+     *
+     * <p>This method and {@link #drain}, must only be called by one thread at a time.
+     * @param waitForever ignore the rest of the arguments and wait until there is a task to run
+     * @param end System.nanoTime() to stop waiting if haven't been woken up yet
+     * @param predicate condition to test for skipping wake or waking up threads
      */
-    public void waitAndDrainWithTimeout(long nanos) throws InterruptedException {
-      long start = System.nanoTime();
+    public <T> void waitAndDrainWithTimeout(boolean waitForever, long end,
+        Predicate<T> predicate, T testTarget) throws InterruptedException {
       throwIfInterrupted();
       Runnable runnable = poll();
       if (runnable == null) {
         synchronized (this) {
+          if (predicate != null && predicate.test(testTarget)) {
+            return; // The condition for which we were waiting is now satisfied
+          }
+          validatingThreadList.add(
+              new ValidatingThread<>(Thread.currentThread(), predicate, testTarget));
           waitingThreads.add(Thread.currentThread());
           if (waiter != SHUTDOWN) {
             waiter = Thread.currentThread();
           }
           try {
-            if (nanos == 0) {
+            if (waitForever) {
               LockSupport.park(this);
             } else {
-              if (System.nanoTime() - start > nanos) {
+              long waitNanos = end - System.nanoTime();
+              if (waitNanos <= 0) {
                 return;
               }
-              LockSupport.parkNanos(this, nanos);
+              LockSupport.parkNanos(this, waitNanos);
               throwIfInterrupted();
             }
           } finally {
@@ -810,7 +850,10 @@ public final class ClientCalls {
             }
             List<Thread> threads = new ArrayList<>(waitingThreads);
             waitingThreads.clear();
-            threads.forEach(thread -> LockSupport.unpark(thread));
+            validatingThreadList.clear(); // they should have all been in waitingThreads
+            for (Thread thread : threads) {
+              LockSupport.unpark(thread);
+            }
           }
         }
         runnable = poll();
@@ -822,6 +865,20 @@ public final class ClientCalls {
       do {
         runQuietly(runnable);
       } while ((runnable = poll()) != null);
+
+      // The do loop above may have satisfied something that was putting itself on the queue
+      // after we left the synchronized block, so test them all to make sure they weren't missed
+      // TODO(lsafran) does this block really need to be synchronized
+      synchronized (this) {
+        Iterator<ValidatingThread<?>> iterator = validatingThreadList.iterator();
+        while (iterator.hasNext()) {
+          ValidatingThread<?> validatingThread = iterator.next();
+          if (validatingThread.skipWaiting()) {
+            LockSupport.unpark(validatingThread.thread);
+            iterator.remove();
+          }
+        }
+      }
     }
 
     /**
