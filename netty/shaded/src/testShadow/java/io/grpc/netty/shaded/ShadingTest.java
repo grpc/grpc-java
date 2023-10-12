@@ -41,8 +41,6 @@ import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceBlockingStub;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceImplBase;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
@@ -80,12 +78,7 @@ public final class ShadingTest {
         .getResourceAsStream(
             "META-INF/native-image/io.grpc.netty.shaded.io.netty/netty-transport/"
                 + "reflection-config.json");
-    assertThat(inputStream).isNotNull();
-
-    Scanner s = new Scanner(inputStream, StandardCharsets.UTF_8.name()).useDelimiter("\\A");
-    String reflectionConfig = s.hasNext() ? s.next() : "";
-
-    assertThat(reflectionConfig).contains("io.grpc.netty.shaded.io.netty");
+    assertThat(inputStream).isNull();
   }
 
   @Test

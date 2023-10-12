@@ -148,25 +148,16 @@ class NettyResourceTransformer implements Transformer {
 
     @Override
     void transform(TransformerContext context) {
-        String updatedPath = context.path.replace("io.netty", "io.grpc.netty.shaded.io.netty")
-        String updatedContent = context.is.getText().replace("io.netty", "io.grpc.netty.shaded.io.netty")
-        resources.put(updatedPath, updatedContent)
+        // don't include any file under META-INF/native-image/io.netty
     }
 
     @Override
     boolean hasTransformedResource() {
-        resources.size() > 0
+        return false
     }
 
     @Override
     void modifyOutputStream(ZipOutputStream outputStream, boolean preserveFileTimestamps) {
-        for (resourceEntry in resources) {
-            ZipEntry entry = new ZipEntry(resourceEntry.key)
-            entry.time = TransformerContext.getEntryTimestamp(preserveFileTimestamps, entry.time)
-
-            outputStream.putNextEntry(entry)
-            outputStream.write(resourceEntry.value.getBytes())
-            outputStream.closeEntry()
-        }
+        
     }
 }
