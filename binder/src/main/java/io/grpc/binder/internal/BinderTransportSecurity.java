@@ -135,6 +135,7 @@ public final class BinderTransportSecurity {
         return Status.fromThrowable(e);
       } catch (InterruptedException e) {
         // Do not cache this failure since it may be transient.
+        Thread.currentThread().interrupt();
         return Status.CANCELLED.withCause(e);
       }
       if (useCache) {
