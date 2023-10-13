@@ -129,7 +129,7 @@ public final class BinderTransportSecurity {
         // TODO(10566): provide a synchronous version of "checkAuthorization" to avoid blocking the
         // calling thread on the completion of the future.
         authorization =
-                serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName).get();
+            serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName).get();
       } catch (ExecutionException e) {
         // Do not cache this failure since it may be transient.
         return Status.fromThrowable(e);
@@ -144,8 +144,26 @@ public final class BinderTransportSecurity {
     }
   }
 
+  /*
+   * Decides whether a given Android UID is authorized to access some resource.
+   *
+   * <p>This class provides the asynchronous version of {@link SecurityPolicy}, allowing
+   * implementations of authorization logic that involves slow or asynchronous calls without
+   * necessarily blocking the calling thread.
+   *
+   * @see SecurityPolicy
+   */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10566")
   public interface ServerPolicyChecker {
+    /**
+     * Returns whether the given Android UID is authorized to access a particular service.
+     *
+     * <p>This method never throws an exception. If the execution of the security policy check
+     * fails, a failed future with such exception is returned.
+     *
+     * @param uid The Android UID to authenticate.
+     * @param serviceName The name of the gRPC service being called.
+     */
     ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName);
   }
 }

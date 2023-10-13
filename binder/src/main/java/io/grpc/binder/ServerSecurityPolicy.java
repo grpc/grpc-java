@@ -61,15 +61,22 @@ public final class ServerSecurityPolicy {
   /**
    * Returns whether the given Android UID is authorized to access a particular service.
    *
+   * <p>This method never throws an exception. If the execution of the security policy check
+   * fails, a failed future with such exception is returned.
+   *
    * @param uid The Android UID to authenticate.
    * @param serviceName The name of the gRPC service being called.
    */
   @CheckReturnValue
   ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName) {
     SecurityPolicy securityPolicy = perServicePolicies.getOrDefault(serviceName, defaultPolicy);
-    return Futures.immediateFuture(securityPolicy.checkAuthorization(uid));
+    try {
+      Status status = securityPolicy.checkAuthorization(uid);
+      return Futures.immediateFuture(status);
+    } catch (Exception e) {
+      return Futures.immediateFailedFuture(e);
+    }
   }
-
 
   public static Builder newBuilder() {
     return new Builder();
