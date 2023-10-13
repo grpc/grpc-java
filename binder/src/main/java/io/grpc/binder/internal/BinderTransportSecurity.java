@@ -145,7 +145,7 @@ public final class BinderTransportSecurity {
     }
   }
 
-  /*
+  /**
    * Decides whether a given Android UID is authorized to access some resource.
    *
    * <p>This class provides the asynchronous version of {@link SecurityPolicy}, allowing
@@ -164,6 +164,8 @@ public final class BinderTransportSecurity {
      *
      * @param uid The Android UID to authenticate.
      * @param serviceName The name of the gRPC service being called.
+     * @return a future with the result of the authorization check. A failed future represents a
+     *    failure to perform the authorization check, not that the access is denied.
      */
     ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName);
   }
