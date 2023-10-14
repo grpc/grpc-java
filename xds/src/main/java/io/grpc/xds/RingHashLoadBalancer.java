@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
-import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
@@ -33,6 +32,7 @@ import com.google.common.collect.Sets;
 import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -48,8 +48,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -71,9 +73,15 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
   private List<RingEntry> ring;
+  private Iterator<ChildLbState> connectionAttemptIterator = getChildLbStates().iterator();
+  private final Random random;
 
   RingHashLoadBalancer(Helper helper) {
+    this(helper, new Random());
+  }
+  RingHashLoadBalancer(Helper helper, Random random) {
     super(helper);
+    this.random = checkNotNull(random, "random");
     syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     logger = XdsLogger.withLogId(InternalLogId.allocate("ring_hash_lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
@@ -81,12 +89,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
 
   @Override
-  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     List<EquivalentAddressGroup> addrList = resolvedAddresses.getAddresses();
-    Status addressValidityStatus = validateAddrList(addrList);
-    if (!addressValidityStatus.isOk()) {
-      return addressValidityStatus;
+    if (!validateAddrList(addrList)) {
+      return false;
     }
 
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
@@ -99,24 +106,18 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       removedChildLbStates.add((RingHashChildLbState) getChildLbState(addr));
     }
 
-    AcceptResolvedAddressRetVal acceptRetVal;
     try {
       resolvingAddresses = true;
       // Update the child list by creating-adding, updating addresses, and removing
-      acceptRetVal = super.acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        addressValidityStatus = Status.UNAVAILABLE.withDescription(
-            "Ring hash lb error: EDS resolution was successful, but was not accepted by base class"
-                + " (" + acceptRetVal.status + ")");
-        handleNameResolutionError(addressValidityStatus);
-        return addressValidityStatus;
+      if (!super.acceptResolvedAddressesInternal(resolvedAddresses, false)) {
+        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+            "Ring hash lb error: EDS resolution was successful, but was not. accepted by base class")
+        );
+        return false;
       }
 
       // Now do the ringhash specific logic with weights and building the ring
       RingHashConfig config = (RingHashConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      if (config == null) {
-        throw new IllegalArgumentException("Missing RingHash configuration");
-      }
       Map<EquivalentAddressGroup, Long> serverWeights = new HashMap<>();
       long totalWeight = 0L;
       for (EquivalentAddressGroup eag : addrList) {
@@ -147,19 +148,31 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       double scale = Math.min(
           Math.ceil(normalizedMinWeight * config.minRingSize) / normalizedMinWeight,
           (double) config.maxRingSize);
+
       // Build the ring
       ring = buildRing(serverWeights, totalWeight, scale);
 
-      // Must update channel picker before return so that new RPCs will not be routed to deleted
-      // clusters and resolver can remove them in service config.
-      updateOverallBalancingState();
+      // If we need to proactively start connecting, iterate through all the subchannels, starting
+      // at a random position.
+      // Alternatively, we should better start at the same position.
+      Collection<ChildLbState> childLbStates = getChildLbStates();
+      connectionAttemptIterator = childLbStates.iterator();
+      int randomAdvance = random.nextInt(childLbStates.size());
+      while (randomAdvance-- > 0) {
+        connectionAttemptIterator.next();
+      }
 
-      shutdownRemoved(acceptRetVal.removedChildren);
+      // Update the picker before shutting down the subchannels, to reduce the chance of race
+      // between picking a subchannel and shutting it down.
+      updateOverallBalancingState();
+      for (RingHashChildLbState childLbState : removedChildLbStates) {
+        childLbState.shutdown();
+      }
     } finally {
       this.resolvingAddresses = false;
     }
 
-    return Status.OK;
+    return true;
   }
 
   /**
@@ -169,11 +182,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
    * <ol>
    *   <li>If there is at least one subchannel in READY state, overall state is READY</li>
    *   <li>If there are <em>2 or more</em> subchannels in TRANSIENT_FAILURE, overall state is
-<<<<<<< HEAD
-   *   TRANSIENT_FAILURE (to allow timely failover to another policy)</li>
-=======
    *   TRANSIENT_FAILURE</li>
->>>>>>> c5829f334 (Complete fixing implementation and tests so that all tests pass as expected.)
    *   <li>If there is at least one subchannel in CONNECTING state, overall state is
    *   CONNECTING</li>
    *   <li> If there is one subchannel in TRANSIENT_FAILURE state and there is
@@ -185,11 +194,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   @Override
   protected void updateOverallBalancingState() {
     checkState(!getChildLbStates().isEmpty(), "no subchannel has been created");
-    if (this.currentConnectivityState == SHUTDOWN) {
-      // Ignore changes that happen after shutdown is called
-      logger.log(XdsLogLevel.DEBUG, "UpdateOverallBalancingState called after shutdown");
-      return;
-    }
     boolean startConnectionAttempt = false;
 
     // Calculate the current overall state and whether we should attempt a connection
@@ -225,13 +229,37 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       overallState = IDLE;
     } else {
       overallState = TRANSIENT_FAILURE;
-      startConnectionAttempt = true;
     }
 
     RingHashPicker picker = new RingHashPicker(syncContext, ring, getImmutableChildMap());
     // TODO(chengyuanzhang): avoid unnecessary reprocess caused by duplicated server addr updates
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
+
+    // While the ring_hash policy is reporting TRANSIENT_FAILURE, it will
+    // not be getting any pick requests from the priority policy.
+    // However, because the ring_hash policy does not attempt to
+    // reconnect to subchannels unless it is getting pick requests,
+    // it will need special handling to ensure that it will eventually
+    // recover from TRANSIENT_FAILURE state once the problem is resolved.
+    // Specifically, it will make sure that it is attempting to connect to
+    // at least one subchannel at any given time.  After a given subchannel
+    // fails a connection attempt, it will move on to the next subchannel
+    // in the ring.  It will keep doing this until one of the subchannels
+    // successfully connects, at which point it will report READY and stop
+    // proactively trying to connect.  The policy will remain in
+    // TRANSIENT_FAILURE until at least one subchannel becomes connected,
+    // even if subchannels are in state CONNECTING during that time.
+    //
+    // Note that we do the same thing when the policy is in state
+    // CONNECTING, just to ensure that we don't remain in CONNECTING state
+    // indefinitely if there are no new picks coming in.
+    if (startConnectionAttempt) {
+      if (!connectionAttemptIterator.hasNext()) {
+        connectionAttemptIterator = getChildLbStates().iterator();
+      }
+      ((RingHashChildLbState)connectionAttemptIterator.next()).getLb().requestConnection();
+    }
   }
 
   @Override
@@ -239,32 +267,42 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     return false;
   }
 
+  /**
+   * Create RingHashChildLbState objects with resolvedAddresses filled in
+   * @return Map of {@link Endpoint} -> {@link RingHashChildLbState}
+   */
   @Override
-  protected boolean reactivateChildOnReuse() {
-    return false;
+  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
+    Map<Object, ChildLbState> childLbMap = new HashMap<>();
+
+    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
+    for (EquivalentAddressGroup eag : addresses) {
+      Endpoint endpoint = new Endpoint(eag); // keys need to be just addresses
+
+      ChildLbState existingChildLbState = getChildLbState(endpoint);
+      if (existingChildLbState != null) {
+        childLbMap.put(endpoint, existingChildLbState);
+      } else {
+        childLbMap.put(endpoint,
+            new RingHashChildLbState(endpoint,
+                getChildAddresses(endpoint, resolvedAddresses, null)));
+      }
+    }
+    return childLbMap;
   }
 
-  @Override
-  protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
-    return new RingHashChildLbState((Endpoint)key,
-        getChildAddresses(key, resolvedAddresses, null));
-  }
-
-  private Status validateAddrList(List<EquivalentAddressGroup> addrList) {
+  private boolean validateAddrList(List<EquivalentAddressGroup> addrList) {
     if (addrList.isEmpty()) {
-      Status unavailableStatus = Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
-              + "resolution was successful, but returned server addresses are empty.");
-      handleNameResolutionError(unavailableStatus);
-      return unavailableStatus;
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+          + "resolution was successful, but returned server addresses are empty."));
+      return false;
     }
 
     String dupAddrString = validateNoDuplicateAddresses(addrList);
     if (dupAddrString != null) {
-      Status unavailableStatus = Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
-              + "resolution was successful, but there were duplicate addresses: " + dupAddrString);
-      handleNameResolutionError(unavailableStatus);
-      return unavailableStatus;
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+          + "resolution was successful, but there were duplicate addresses: " + dupAddrString));
+      return false;
     }
 
     long totalWeight = 0;
@@ -276,32 +314,29 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       }
 
       if (weight < 0) {
-        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
-                String.format("Ring hash lb error: EDS resolution was successful, but returned a "
-                        + "negative weight for %s.", stripAttrs(eag)));
-        handleNameResolutionError(unavailableStatus);
-        return unavailableStatus;
+        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+            String.format("Ring hash lb error: EDS resolution was successful, but returned a "
+                + "negative weight for %s.", stripAttrs(eag))));
+        return false;
       }
       if (weight > UnsignedInteger.MAX_VALUE.longValue()) {
-        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
             String.format("Ring hash lb error: EDS resolution was successful, but returned a weight"
-                + " too large to fit in an unsigned int for %s.", stripAttrs(eag)));
-        handleNameResolutionError(unavailableStatus);
-        return unavailableStatus;
+                + " too large to fit in an unsigned int for %s.", stripAttrs(eag))));
+        return false;
       }
       totalWeight += weight;
     }
 
     if (totalWeight > UnsignedInteger.MAX_VALUE.longValue()) {
-      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
           String.format(
               "Ring hash lb error: EDS resolution was successful, but returned a sum of weights too"
-                  + " large to fit in an unsigned int (%d).", totalWeight));
-      handleNameResolutionError(unavailableStatus);
-      return unavailableStatus;
+              + " large to fit in an unsigned int (%d).", totalWeight)));
+      return false;
     }
 
-    return Status.OK;
+    return true;
   }
 
   @Nullable
@@ -368,23 +403,21 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @SuppressWarnings("ReferenceEquality")
-  public static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
+  public static final EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
     if (eag.getAttributes() == Attributes.EMPTY) {
       return eag;
     }
     return new EquivalentAddressGroup(eag.getAddresses());
   }
 
-
   private static final class RingHashPicker extends SubchannelPicker {
-
     private final SynchronizationContext syncContext;
     private final List<RingEntry> ring;
     // Avoid synchronization between pickSubchannel and subchannel's connectivity state change,
     // freeze picker's view of subchannel's connectivity state.
     // TODO(chengyuanzhang): can be more performance-friendly with
     //  IdentityHashMap<Subchannel, ConnectivityStateInfo> and RingEntry contains Subchannel.
-    private final Map<Endpoint, SubchannelView> pickableSubchannels;  // read-only
+    private final Map<Endpoint, RingHashChildLbState> pickableSubchannels;  // read-only
 
     private RingHashPicker(
         SynchronizationContext syncContext, List<RingEntry> ring,
@@ -394,8 +427,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       pickableSubchannels = new HashMap<>(subchannels.size());
       for (Map.Entry<Object, ChildLbState> entry : subchannels.entrySet()) {
         RingHashChildLbState childLbState = (RingHashChildLbState) entry.getValue();
-        pickableSubchannels.put((Endpoint) entry.getKey(),
-            new SubchannelView(childLbState, childLbState.getCurrentState()));
+        pickableSubchannels.put((Endpoint)entry.getKey(), childLbState);
       }
     }
 
@@ -412,12 +444,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         long midVal = ring.get(mid).hash;
         long midValL = mid == 0 ? 0 : ring.get(mid - 1).hash;
         if (requestHash <= midVal && requestHash > midValL) {
-          break;
+          return mid;
         }
         if (midVal < requestHash) {
           low = mid + 1;
         } else {
-          high = mid - 1;
+          high =  mid - 1;
         }
         mid = (low + high) / 2;
       } while (mid < ring.size() && low <= high);
@@ -439,33 +471,52 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // IDLE, we initiate a connection.
       for (int i = 0; i < ring.size(); i++) {
         int index = (targetIndex + i) % ring.size();
-        SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
-        RingHashChildLbState childLbState = subchannelView.childLbState;
+        RingHashChildLbState childLbState = pickableSubchannels.get(ring.get(index).addrKey);
 
-        if (subchannelView.connectivityState == READY) {
+        if (childLbState.getCurrentState()  == READY) {
           return childLbState.getCurrentPicker().pickSubchannel(args);
         }
 
         // RPCs can be buffered if the next subchannel is pending (per A62). Otherwise, RPCs
         // are failed unless there is a READY connection.
-        if (subchannelView.connectivityState == CONNECTING) {
+        if (childLbState.getCurrentState() == CONNECTING) {
           return PickResult.withNoResult();
         }
-        if (subchannelView.connectivityState == IDLE || childLbState.isDeactivated()) {
+
+        if (childLbState.getCurrentState() == IDLE || childLbState.isDeactivated()) {
           if (childLbState.isDeactivated()) {
             childLbState.activate();
           } else {
-            syncContext.execute(() -> childLbState.getLb().requestConnection());
+            childLbState.getLb().requestConnection();
           }
-
-          return PickResult.withNoResult(); // Indicates that this should be retried after backoff
+          return PickResult.withNoResult();
         }
       }
 
       // return the pick from the original subchannel hit by hash, which is probably an error
       RingHashChildLbState originalSubchannel =
-          pickableSubchannels.get(ring.get(targetIndex).addrKey).childLbState;
+          pickableSubchannels.get(ring.get(targetIndex).addrKey);
       return originalSubchannel.getCurrentPicker().pickSubchannel(args);
+    }
+
+    @Nullable
+    private PickResult pickSubchannelsNonReady(RingHashChildLbState subchannel) {
+
+      // Request a connection if in IDLE or diabled
+      if (subchannel.isDeactivated()) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            subchannel.activate(); // will request a connection
+          }
+        });
+      }
+
+      if (subchannel.getCurrentState()  == CONNECTING || subchannel.getCurrentState()  == IDLE) {
+        return PickResult.withNoResult();
+      } else {
+        return null;
+      }
     }
   }
 
@@ -474,21 +525,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     throw new UnsupportedOperationException("Not used by RingHash");
   }
 
-  /**
-   * An unmodifiable view of a subchannel with state not subject to its real connectivity
-   * state changes.
-   */
-  private static final class SubchannelView {
-    private final RingHashChildLbState childLbState;
-    private final ConnectivityState connectivityState;
-
-    private SubchannelView(RingHashChildLbState childLbState, ConnectivityState state) {
-      this.childLbState = childLbState;
-      this.connectivityState = state;
-    }
-  }
-
-  private static final class RingEntry implements Comparable<RingEntry> {
+   private static final class RingEntry implements Comparable<RingEntry> {
     private final long hash;
     private final Endpoint addrKey;
 
@@ -551,6 +588,27 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       super(key, pickFirstLbProvider, null, EMPTY_PICKER, resolvedAddresses, true);
     }
 
+    void updateAddresses(List<EquivalentAddressGroup> addresses, Attributes attributes) {
+      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+          .setAddresses(addresses)
+          .setAttributes(attributes)
+          .build();
+      setResolvedAddresses(resolvedAddresses);
+      handleResolvedAddresses(resolvedAddresses);
+    }
+
+    @Override
+    protected void deactivate() {
+      if (isDeactivated()) {
+        return;
+      }
+
+      // Remove yourself, but don't shutdown yet
+      removeChild(getKey());
+      setDeactivated();
+      logger.log(XdsLogLevel.DEBUG, "Child balancer {0} deactivated", getKey());
+    }
+
     @Override
     protected void reactivate(LoadBalancerProvider policyProvider) {
       if (!isDeactivated()) {
@@ -568,7 +626,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       reactivate(pickFirstLbProvider);
     }
 
-    // Need to expose this to the LB class
+  // Need to expose this to the LB class
     @Override
     protected void shutdown() {
       super.shutdown();
