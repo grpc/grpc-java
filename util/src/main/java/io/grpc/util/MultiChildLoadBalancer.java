@@ -423,6 +423,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         this.policyProvider = policyProvider;
       } else {
         logger.log(Level.FINE, "Child balancer {0} reactivated", key);
+        lb.acceptResolvedAddresses(resolvedAddresses);
       }
 
       deactivated = false;
