@@ -99,9 +99,7 @@ class SerializingServerCall<ReqT, RespT> extends
     });
     try {
       return retVal.get();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(ERROR_MSG, e);
-    } catch (ExecutionException e) {
+    } catch (InterruptedException | ExecutionException e) {
       throw new RuntimeException(ERROR_MSG, e);
     }
   }
@@ -117,9 +115,7 @@ class SerializingServerCall<ReqT, RespT> extends
     });
     try {
       return retVal.get();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(ERROR_MSG, e);
-    } catch (ExecutionException e) {
+    } catch (InterruptedException | ExecutionException e) {
       throw new RuntimeException(ERROR_MSG, e);
     }
   }
@@ -155,9 +151,7 @@ class SerializingServerCall<ReqT, RespT> extends
     });
     try {
       return retVal.get();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(ERROR_MSG, e);
-    } catch (ExecutionException e) {
+    } catch (InterruptedException | ExecutionException e) {
       throw new RuntimeException(ERROR_MSG, e);
     }
   }
@@ -174,9 +168,7 @@ class SerializingServerCall<ReqT, RespT> extends
     });
     try {
       return retVal.get();
-    } catch (InterruptedException e) {
-      throw new RuntimeException(ERROR_MSG, e);
-    } catch (ExecutionException e) {
+    } catch (InterruptedException | ExecutionException e) {
       throw new RuntimeException(ERROR_MSG, e);
     }
   }

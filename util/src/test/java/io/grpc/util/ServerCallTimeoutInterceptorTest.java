@@ -63,9 +63,11 @@ public class ServerCallTimeoutInterceptorTest {
           .build();
 
   private static final MethodDescriptor<Integer, Integer> UNARY_METHOD =
-      STREAMING_METHOD.toBuilder()
+      MethodDescriptor.<Integer, Integer>newBuilder()
           .setType(MethodDescriptor.MethodType.UNARY)
           .setFullMethodName("some/unary")
+          .setRequestMarshaller(new IntegerMarshaller())
+          .setResponseMarshaller(new IntegerMarshaller())
           .build();
 
   private static ServerCalls.UnaryMethod<Integer, Integer> sleepingUnaryMethod(
