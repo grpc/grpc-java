@@ -156,8 +156,8 @@ public final class ManagedChannelRegistry {
   @VisibleForTesting
   ManagedChannelBuilder<?> newChannelBuilder(NameResolverRegistry nameResolverRegistry,
       String target, ChannelCredentials creds) {
-    NameResolverProvider nameResolverProvider = NameResolverRegistry
-        .getNameResolverProvider(nameResolverRegistry, target);
+    NameResolverProvider nameResolverProvider = nameResolverRegistry
+        .getNameResolverProvider(target);
     Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
         = (nameResolverProvider != null)
         ? nameResolverProvider.getProducedSocketAddressTypes() :

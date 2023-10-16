@@ -708,8 +708,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private static NameResolver getNameResolver(
       String target, NameResolverRegistry nameResolverRegistry, NameResolver.Args nameResolverArgs,
       Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
-    NameResolverProvider nameResolverProvider = NameResolverRegistry
-        .getNameResolverProvider(nameResolverRegistry, target);
+    NameResolverProvider nameResolverProvider = nameResolverRegistry
+        .getNameResolverProvider(target);
     if (nameResolverProvider == null) {
       throw new IllegalArgumentException(String.format(
           "cannot find a NameResolver for %s", target));

@@ -59,6 +59,22 @@ public final class NameResolverRegistry {
   @GuardedBy("this")
   private ImmutableMap<String, NameResolverProvider> effectiveProviders = ImmutableMap.of();
 
+  public NameResolverProvider getNameResolverProvider(
+      String target) {
+    NameResolverProvider nameResolverProvider = null;
+    try {
+      URI uri = new URI(target);
+      nameResolverProvider = providers().get(uri.getScheme());
+    } catch (URISyntaxException ignore) {
+      // bad URI found, just ignore and continue
+    }
+    if (nameResolverProvider == null) {
+      nameResolverProvider = providers().get(
+          asFactory().getDefaultScheme());
+    }
+    return nameResolverProvider;
+  }
+
 
   /**
    * Register a provider.
@@ -158,22 +174,6 @@ public final class NameResolverRegistry {
       logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
     }
     return Collections.unmodifiableList(list);
-  }
-
-  public static NameResolverProvider getNameResolverProvider(
-      NameResolverRegistry nameResolverRegistry, String target) {
-    NameResolverProvider nameResolverProvider = null;
-    try {
-      URI uri = new URI(target);
-      nameResolverProvider = nameResolverRegistry.providers().get(uri.getScheme());
-    } catch (URISyntaxException ignore) {
-      // bad URI found, just ignore and continue
-    }
-    if (nameResolverProvider == null) {
-      nameResolverProvider = nameResolverRegistry.providers().get(
-          nameResolverRegistry.asFactory().getDefaultScheme());
-    }
-    return nameResolverProvider;
   }
 
   private final class NameResolverFactory extends NameResolver.Factory {
