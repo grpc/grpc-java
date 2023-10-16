@@ -466,6 +466,10 @@ public class StressTestClient {
 
       Tester tester = new Tester();
       tester.setUp();
+      // The client stream tracers that AbstractInteropTest installs by default would fill up the
+      // heap in no time in a long running stress test with many requests.
+      tester.setEnableClientStreamTracers(false);
+
       WeightedTestCaseSelector testCaseSelector = new WeightedTestCaseSelector(testCaseWeightPairs);
       Long endTime = durationSec == null ? null : System.nanoTime() + SECONDS.toNanos(durationSecs);
       long lastMetricsCollectionTime = initLastMetricsCollectionTime();
