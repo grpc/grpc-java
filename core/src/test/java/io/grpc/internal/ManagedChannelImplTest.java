@@ -161,7 +161,7 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link ManagedChannelImpl}. */
 @RunWith(JUnit4.class)
 // TODO(creamsoup) remove backward compatible check when fully migrated
-@SuppressWarnings({"deprecation", "DataFlowIssue"})
+@SuppressWarnings("deprecation")
 public class ManagedChannelImplTest {
   private static final int DEFAULT_PORT = 447;
 

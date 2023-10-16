@@ -23,9 +23,9 @@ import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -47,7 +47,8 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1783")
 public final class InProcessChannelBuilder extends
-    AbstractManagedChannelImplBuilder<InProcessChannelBuilder> {
+    ForwardingChannelBuilder2<InProcessChannelBuilder> {
+
   /**
    * Create a channel builder that will connect to the server with the given name.
    *

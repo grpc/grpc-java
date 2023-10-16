@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.base.Defaults;
-import io.grpc.ForwardingTestUtil;
-import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Collections;
@@ -32,17 +29,17 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link AbstractServerImplBuilderTest}.
+ * Unit tests for {@link ForwardingChannelBuilder2}.
  */
 @RunWith(JUnit4.class)
-public class AbstractServerImplBuilderTest {
-  private final ServerBuilder<?> mockDelegate = mock(ServerBuilder.class);
+public class ForwardingChannelBuilder2Test {
+  private final ManagedChannelBuilder<?> mockDelegate = mock(ManagedChannelBuilder.class);
 
-  private final AbstractServerImplBuilder<?> testServerBuilder = new TestBuilder();
+  private final ForwardingChannelBuilder2<?> testChannelBuilder = new TestBuilder();
 
-  private final class TestBuilder extends AbstractServerImplBuilder<TestBuilder> {
+  private final class TestBuilder extends ForwardingChannelBuilder2<TestBuilder> {
     @Override
-    protected ServerBuilder<?> delegate() {
+    protected ManagedChannelBuilder<?> delegate() {
       return mockDelegate;
     }
   }
@@ -50,18 +47,26 @@ public class AbstractServerImplBuilderTest {
   @Test
   public void allMethodsForwarded() throws Exception {
     ForwardingTestUtil.testMethodsForwarded(
-        ServerBuilder.class,
+        ManagedChannelBuilder.class,
         mockDelegate,
-        testServerBuilder,
-        Collections.<Method>emptyList());
+        testChannelBuilder,
+        Collections.emptyList(),
+        new ForwardingTestUtil.ArgumentProvider() {
+          @Override
+          public Object get(Method method, int argPos, Class<?> clazz) {
+            if (method.getName().equals("maxInboundMetadataSize")) {
+              assertThat(argPos).isEqualTo(0);
+              return 1; // an arbitrary positive number
+            }
+            return null;
+          }
+        });
   }
 
   @Test
   public void allBuilderMethodsReturnThis() throws Exception {
-    for (Method method : ServerBuilder.class.getDeclaredMethods()) {
-      if (Modifier.isStatic(method.getModifiers())
-          || Modifier.isPrivate(method.getModifiers())
-          || Modifier.isFinal(method.getModifiers())) {
+    for (Method method : ManagedChannelBuilder.class.getDeclaredMethods()) {
+      if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
         continue;
       }
       if (method.getName().equals("build")) {
@@ -72,18 +77,21 @@ public class AbstractServerImplBuilderTest {
       for (int i = 0; i < argTypes.length; i++) {
         args[i] = Defaults.defaultValue(argTypes[i]);
       }
+      if (method.getName().equals("maxInboundMetadataSize")) {
+        args[0] = 1; // an arbitrary positive number
+      }
 
-      Object returnedValue = method.invoke(testServerBuilder, args);
+      Object returnedValue = method.invoke(testChannelBuilder, args);
 
-      assertThat(returnedValue).isSameInstanceAs(testServerBuilder);
+      assertThat(returnedValue).isSameInstanceAs(testChannelBuilder);
     }
   }
 
   @Test
   public void buildReturnsDelegateBuildByDefault() {
-    Server server = mock(Server.class);
-    doReturn(server).when(mockDelegate).build();
+    ManagedChannel mockChannel = mock(ManagedChannel.class);
+    doReturn(mockChannel).when(mockDelegate).build();
 
-    assertThat(testServerBuilder.build()).isSameInstanceAs(server);
+    assertThat(testChannelBuilder.build()).isSameInstanceAs(mockChannel);
   }
 }

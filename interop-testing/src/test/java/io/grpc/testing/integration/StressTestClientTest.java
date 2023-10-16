@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableList;
@@ -65,6 +66,8 @@ public class StressTestClientTest {
     assertEquals(1, client.channelsPerServer());
     assertEquals(1, client.stubsPerChannel());
     assertEquals(8081, client.metricsPort());
+    assertEquals(-1, client.metricsLogRateSecs());
+    assertNull(client.customCredentialsType());
   }
 
   @Test
@@ -79,7 +82,9 @@ public class StressTestClientTest {
         "--metrics_port=9090",
         "--server_host_override=foo.test.google.fr",
         "--use_tls=true",
-        "--use_test_ca=true"
+        "--use_test_ca=true",
+        "--custom_credentials_type=google_default_credentials",
+        "--metrics_log_rate_secs=60"
     });
 
     List<InetSocketAddress> addresses = Arrays.asList(new InetSocketAddress("localhost", 8080),
@@ -99,6 +104,8 @@ public class StressTestClientTest {
     assertEquals(10, client.channelsPerServer());
     assertEquals(5, client.stubsPerChannel());
     assertEquals(9090, client.metricsPort());
+    assertEquals("google_default_credentials", client.customCredentialsType());
+    assertEquals(60, client.metricsLogRateSecs());
   }
 
   @Test

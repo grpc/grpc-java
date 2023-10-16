@@ -923,7 +923,7 @@ public class NettyClientTransportTest {
         public void streamCreated(ServerStream stream, String method, Metadata headers) {
           EchoServerStreamListener listener = new EchoServerStreamListener(stream, headers);
           stream.setListener(listener);
-          stream.writeHeaders(new Metadata());
+          stream.writeHeaders(new Metadata(), true);
           stream.request(1);
           streamListeners.add(listener);
         }
