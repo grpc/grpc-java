@@ -93,6 +93,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates.values();
   }
 
+  /**
+   * Generally, the only reason to override this is to expose it to a test of a LB in a
+   * different package.
+   */
   protected ChildLbState getChildLbState(Object key) {
     if (key == null) {
       return null;

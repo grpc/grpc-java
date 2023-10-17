@@ -111,8 +111,7 @@ public class RingHashLoadBalancerTest {
   @Before
   public void setUp() {
     loadBalancer = new RingHashLoadBalancer(helper, new Random(0));
-    // Skip uninterested interactions.
-    System.out.println(helper.getClass());
+    // Consume calls not relevant for tests that would otherwise fail verifyNoMoreInteractions
     verify(helper).getAuthority();
     verify(helper).getSynchronizationContext();
   }
