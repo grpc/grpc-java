@@ -61,7 +61,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
   private ConnectivityState currentState = IDLE;
-  //  private ConnectivityState concludedState = IDLE;
+  private ConnectivityState concludedState = IDLE;
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -191,7 +191,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // However, every time there is an address update, we will perform a pass through for the new
     // addresses in the updated list.
     subchannels.get(getAddress(subchannel)).updateState(newState);
-    if (currentState == TRANSIENT_FAILURE) {
+    if (currentState == TRANSIENT_FAILURE || concludedState == TRANSIENT_FAILURE)  {
       if (newState == CONNECTING) {
         // each subchannel is responsible for its own backoff
         return;
@@ -239,7 +239,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   private void onSubchannelHealth(HealthUtil.HealthCheckingListener hcListener,
                                   HealthUtil.HealthStatus hcStatus) {
-    log.log(Level.FINE, "getting health" + hcStatus);
+    log.log(Level.FINE, "Received health status: " + hcStatus + " listener:" + hcListener);
     Subchannel find = null;
     for (SubchannelData subchannelData : subchannels.values()) {
       if (subchannelData.healthCheckingListener == hcListener
@@ -253,15 +253,19 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
     if (hcStatus.servingStatus() != HealthUtil.ServingStatus.SERVING) {
       helper.updateBalancingState(TRANSIENT_FAILURE,
-          new ErrorPicker(Status.UNAVAILABLE.withDescription("unhealthy")));
+          new FixedResultPicker(PickResult.withError(
+              Status.UNAVAILABLE.withDescription("unhealthy"))));
+      concludedState = TRANSIENT_FAILURE;
     } else {
       helper.updateBalancingState(READY, new Picker(PickResult.withSubchannel(find)));
+      concludedState = READY;
     }
   }
 
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
     if (state != currentState || state == READY || state == TRANSIENT_FAILURE) {
       currentState = state;
+      concludedState = state;
       helper.updateBalancingState(state, picker);
     }
   }
@@ -324,6 +328,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           @Override
           public void onHealthStatus(HealthUtil.HealthStatus healthStatus) {
             onSubchannelHealth(this, healthStatus);
+          }
+
+          @Override
+          public int getGeneration() {
+            return 0;
           }
         };
     final Subchannel subchannel = helper.createSubchannel(

@@ -117,18 +117,15 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
       // createSubchannel() from the SynchronizationContext.
       syncContext.throwIfNotInThisSynchronizationContext();
       HealthUtil.HealthCheckingListener hcListener = args.getOption(HEALTH_LISTENER_ARG_KEY);
-      HealthUtil.ChainedHealthListener chainedHealthListener =
-          new HealthUtil.ChainedHealthListener(hcListener);
-      Subchannel originalSubchannel = super.createSubchannel(
-          args.toBuilder().addOption(HEALTH_LISTENER_ARG_KEY, chainedHealthListener).build());
+      HealthUtil.ChainedHealthListener chainedHealthListener = null;
+      if (hcListener != null) {
+        chainedHealthListener = new HealthUtil.ChainedHealthListener(hcListener);
+        args = args.toBuilder().addOption(HEALTH_LISTENER_ARG_KEY, chainedHealthListener).build();
+      }
+      Subchannel originalSubchannel = super.createSubchannel(args);
       HealthCheckState hcState = new HealthCheckState(
           this, originalSubchannel, syncContext, delegate.getScheduledExecutorService(),
-          new HealthUtil.HealthCheckingListener() {
-            @Override
-            public void onHealthStatus(HealthUtil.HealthStatus healthStatus) {
-              chainedHealthListener.thisHealthStatus(healthStatus);
-            }
-          });
+          chainedHealthListener);
       hcStates.add(hcState);
       Subchannel subchannel = new SubchannelImpl(originalSubchannel, hcState);
       if (healthCheckedService != null) {
@@ -219,7 +216,8 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
     private final Subchannel subchannel;
     private final ChannelLogger subchannelLogger;
     private SubchannelStateListener stateListener;
-    private final HealthUtil.HealthCheckingListener healthListener;
+    @Nullable
+    private final HealthUtil.ChainedHealthListener healthListener;
 
     // Set when RPC started. Cleared when the RPC has closed or abandoned.
     @Nullable
@@ -243,13 +241,13 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
         HelperImpl helperImpl,
         Subchannel subchannel, SynchronizationContext syncContext,
         ScheduledExecutorService timerService,
-        HealthUtil.HealthCheckingListener healthListener) {
+        @Nullable HealthUtil.ChainedHealthListener healthListener) {
       this.helperImpl = checkNotNull(helperImpl, "helperImpl");
       this.subchannel = checkNotNull(subchannel, "subchannel");
       this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
       this.syncContext = checkNotNull(syncContext, "syncContext");
       this.timerService = checkNotNull(timerService, "timerService");
-      this.healthListener = checkNotNull(healthListener, "healthListener");
+      this.healthListener = healthListener;
     }
 
     void init(SubchannelStateListener listener) {
@@ -413,7 +411,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
           subchannelLogger.log(ChannelLogLevel.INFO, "READY: health-check responded SERVING");
           if (healthListener != null) {
             healthListener
-                .onHealthStatus(HealthUtil.HealthStatus.create(HealthUtil.ServingStatus.SERVING));
+                .thisHealthStatus(HealthUtil.HealthStatus.create(HealthUtil.ServingStatus.SERVING));
           }
           gotoState(ConnectivityStateInfo.forNonError(READY));
         } else {
@@ -424,7 +422,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
           if (healthListener != null) {
             HealthUtil.ServingStatus hcStatus = fromProto(status);
             healthListener
-                .onHealthStatus(new HealthUtil.HealthStatus(hcStatus, errorDescription));
+                .thisHealthStatus(HealthUtil.HealthStatus.create(hcStatus, errorDescription));
             concludedState = ConnectivityStateInfo.forTransientFailure(
                 Status.UNAVAILABLE.withDescription(errorDescription));
           } else { //backward compatibility
@@ -444,6 +442,8 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
       }
 
       void handleStreamClosed(Status status) {
+        //TODO: disable health status in health listener. Because this breaks outlier detection
+        // to deliver health status.
         if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
           disabled = true;
           logger.log(
@@ -460,7 +460,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
         String errorDescription = "Health-check stream unexpectedly closed with "
             + status + " for '" + callServiceName + "'";
         if (healthListener != null) {
-          healthListener.onHealthStatus(HealthUtil.HealthStatus.create(
+          healthListener.thisHealthStatus(HealthUtil.HealthStatus.create(
               HealthUtil.ServingStatus.NOT_SERVING, errorDescription));
           concludedState = ConnectivityStateInfo.forTransientFailure(
               Status.UNAVAILABLE.withDescription(errorDescription));
