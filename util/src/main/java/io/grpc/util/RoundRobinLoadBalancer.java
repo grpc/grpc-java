@@ -16,6 +16,7 @@
 
 package io.grpc.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -25,9 +26,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
@@ -48,10 +47,6 @@ import javax.annotation.Nonnull;
  */
 @Internal
 public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
-  @VisibleForTesting
-  static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
-      Attributes.Key.create("state-info");
-
   private final Random random;
   protected RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
 
@@ -132,7 +127,7 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
     private volatile int index;
 
     public ReadyPicker(List<SubchannelPicker> list, int startIndex) {
-      Preconditions.checkArgument(!list.isEmpty(), "empty list");
+      checkArgument(!list.isEmpty(), "empty list");
       this.subchannelPickers = list;
       this.index = startIndex - 1;
     }

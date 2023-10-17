@@ -73,6 +73,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   protected abstract SubchannelPicker getSubchannelPicker(
       Map<Object, SubchannelPicker> childPickers);
 
+  protected static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
+    return new EquivalentAddressGroup(eag.getAddresses());
+  }
+
   protected SubchannelPicker getInitialPicker() {
     return EMPTY_PICKER;
   }
@@ -94,6 +98,50 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    * Generally, the only reason to override this is to expose it to a test of a LB in a
    * different package.
     */
+  @VisibleForTesting
+  protected Collection<ChildLbState> getChildren() {
+    return childLbStates.values();
+  }
+
+  protected ChildLbState getChild(EquivalentAddressGroup eag) {
+    return childLbStates.get(eag);
+  }
+
+  /**
+   * Override to utilize parsing of the policy configuration or alternative helper/lb generation.
+   */
+  protected Map<Object, ChildLbState> getChildLbMap(ResolvedAddresses resolvedAddresses) {
+    Map<Object, ChildLbState> childLbMap = new HashMap<>();
+    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
+    Object policyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    for (EquivalentAddressGroup eag : addresses) {
+      EquivalentAddressGroup key = stripAttrs(eag);
+      ChildLbState childLbState = new ChildLbState(key, pickFirstLbProvider, policyConfig,
+          getInitialPicker());
+      childLbMap.put(key, childLbState);
+    }
+    return childLbMap;
+  }
+
+
+  protected static ResolvedAddresses pickResolvedAddress(EquivalentAddressGroup key,
+      ResolvedAddresses resolvedAddresses, Object childConfig) {
+    // Retrieve the non-stripped version
+    EquivalentAddressGroup eag = null;
+    for (EquivalentAddressGroup equivalentAddressGroup : resolvedAddresses.getAddresses()) {
+      if (stripAttrs(equivalentAddressGroup).equals(key)) {
+        eag = equivalentAddressGroup;
+        break;
+      }
+    }
+
+    checkNotNull(eag, key.toString() + " no longer present in load balancer children");
+
+    return resolvedAddresses.toBuilder()
+        .setAddresses(Collections.singletonList(eag))
+        .setLoadBalancingPolicyConfig(childConfig)
+        .build();
+  }
 
   protected ChildLbState getChildLbState(Object key) {
     if (key == null) {
@@ -213,6 +261,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       ResolvedAddresses childAddresses = getChildAddresses(key, resolvedAddresses, childConfig);
       childLbStates.get(key).setResolvedAddresses(childAddresses); // update child state
       childLb.handleResolvedAddresses(childAddresses); // update child LB
+      if (childLb != entry.getValue().getLb()) {
+        entry.getValue().shutdown(); // Reused old LB
+      }
     }
 
     // Do removals
@@ -393,6 +444,11 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
     public boolean isDeactivated() {
       return deactivated;
+    }
+
+    @VisibleForTesting
+    LoadBalancer getLb() {
+      return this.lb;
     }
 
     protected void setDeactivated() {
