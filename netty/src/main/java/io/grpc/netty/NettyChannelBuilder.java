@@ -264,7 +264,6 @@ public final class NettyChannelBuilder extends
    * your application won't start.
    */
   @CanIgnoreReturnValue
-  @SuppressWarnings("unchecked")
   public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
     checkNotNull(channelType, "channelType");
     try {
@@ -272,8 +271,8 @@ public final class NettyChannelBuilder extends
       checkNotNull(method, "method for remoteAddress");
       Class<?> returnType = method.getReturnType();
       checkState(SocketAddress.class.isAssignableFrom(returnType),
-          "Unexpected return type:" + returnType.getSimpleName());
-      this.transportSocketType = (Class<? extends SocketAddress>) returnType;
+          "Unexpected return type: %s", returnType.getSimpleName());
+      this.transportSocketType = returnType.asSubclass(SocketAddress.class);
     } catch (NoSuchMethodException e) {
       throw new RuntimeException(e);
     }
