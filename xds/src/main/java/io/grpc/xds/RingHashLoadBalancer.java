@@ -32,7 +32,6 @@ import com.google.common.collect.Sets;
 import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -79,6 +78,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   RingHashLoadBalancer(Helper helper) {
     this(helper, new Random());
   }
+
   RingHashLoadBalancer(Helper helper, Random random) {
     super(helper);
     this.random = checkNotNull(random, "random");
@@ -98,7 +98,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
     Set<EquivalentAddressGroup> removedAddrs =
-        Sets.newHashSet(Sets.difference(getStrippedChildEags(getChildLbStates()), latestAddrs.keySet()));
+        Sets.newHashSet(
+            Sets.difference(getStrippedChildEags(getChildLbStates()), latestAddrs.keySet()));
 
     // Shut down subchannels for delisted addresses.
     List<RingHashChildLbState> removedChildLbStates = new ArrayList<>();
@@ -111,8 +112,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // Update the child list by creating-adding, updating addresses, and removing
       if (!super.acceptResolvedAddressesInternal(resolvedAddresses, false)) {
         handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-            "Ring hash lb error: EDS resolution was successful, but was not. accepted by base class")
-        );
+            "Ring hash lb error: EDS resolution was successful, but was not accepted by base class"
+            ));
         return false;
       }
 
@@ -268,7 +269,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   /**
-   * Create RingHashChildLbState objects with resolvedAddresses filled in
+   * Create RingHashChildLbState objects with resolvedAddresses filled in.
    * @return Map of {@link Endpoint} -> {@link RingHashChildLbState}
    */
   @Override
@@ -403,7 +404,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @SuppressWarnings("ReferenceEquality")
-  public static final EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
+  public static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
     if (eag.getAttributes() == Attributes.EMPTY) {
       return eag;
     }
@@ -487,9 +488,10 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           if (childLbState.isDeactivated()) {
             childLbState.activate();
           } else {
-            childLbState.getLb().requestConnection();
+            syncContext.execute(() -> childLbState.getLb().requestConnection());
           }
-          return PickResult.withNoResult();
+
+          return PickResult.withNoResult(); // Indicates that this should be retried after backoff
         }
       }
 
@@ -499,25 +501,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       return originalSubchannel.getCurrentPicker().pickSubchannel(args);
     }
 
-    @Nullable
-    private PickResult pickSubchannelsNonReady(RingHashChildLbState subchannel) {
-
-      // Request a connection if in IDLE or diabled
-      if (subchannel.isDeactivated()) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            subchannel.activate(); // will request a connection
-          }
-        });
-      }
-
-      if (subchannel.getCurrentState()  == CONNECTING || subchannel.getCurrentState()  == IDLE) {
-        return PickResult.withNoResult();
-      } else {
-        return null;
-      }
-    }
   }
 
   @Override
@@ -525,7 +508,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     throw new UnsupportedOperationException("Not used by RingHash");
   }
 
-   private static final class RingEntry implements Comparable<RingEntry> {
+  private static final class RingEntry implements Comparable<RingEntry> {
     private final long hash;
     private final Endpoint addrKey;
 
@@ -626,7 +609,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       reactivate(pickFirstLbProvider);
     }
 
-  // Need to expose this to the LB class
+    // Need to expose this to the LB class
     @Override
     protected void shutdown() {
       super.shutdown();
