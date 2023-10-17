@@ -313,6 +313,11 @@ public abstract class AbstractInteropTest {
 
   private final LinkedBlockingQueue<TestClientStreamTracer> clientStreamTracers =
       new LinkedBlockingQueue<>();
+  private boolean enableClientStreamTracers = true;
+
+  void setEnableClientStreamTracers(boolean enableClientStreamTracers) {
+    this.enableClientStreamTracers = enableClientStreamTracers;
+  }
 
   private final ClientStreamTracer.Factory clientStreamTracerFactory =
       new ClientStreamTracer.Factory() {
@@ -343,9 +348,14 @@ public abstract class AbstractInteropTest {
     startServer(serverBuilder);
     channel = createChannel();
 
-    blockingStub =
-        TestServiceGrpc.newBlockingStub(channel).withInterceptors(tracerSetupInterceptor);
-    asyncStub = TestServiceGrpc.newStub(channel).withInterceptors(tracerSetupInterceptor);
+    if (enableClientStreamTracers) {
+      blockingStub =
+          TestServiceGrpc.newBlockingStub(channel).withInterceptors(tracerSetupInterceptor);
+      asyncStub = TestServiceGrpc.newStub(channel).withInterceptors(tracerSetupInterceptor);
+    } else {
+      blockingStub = TestServiceGrpc.newBlockingStub(channel);
+      asyncStub = TestServiceGrpc.newStub(channel);
+    }
 
     ClientInterceptor[] additionalInterceptors = getAdditionalInterceptors();
     if (additionalInterceptors != null) {
