@@ -32,6 +32,7 @@ import io.grpc.netty.ProtocolNegotiators.PlaintextProtocolNegotiatorClientFactor
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
@@ -270,7 +271,7 @@ public class NettyChannelBuilderTest {
   @Test
   public void assertEventLoopAndChannelType_onlyTypeProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-    builder.channelType(LocalChannel.class);
+    builder.channelType(LocalChannel.class, LocalAddress.class);
     thrown.expect(IllegalStateException.class);
     thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
@@ -303,7 +304,7 @@ public class NettyChannelBuilderTest {
   public void assertEventLoopAndChannelType_bothProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
     builder.eventLoopGroup(mock(EventLoopGroup.class));
-    builder.channelType(LocalChannel.class);
+    builder.channelType(LocalChannel.class, LocalAddress.class);
 
     builder.assertEventLoopAndChannelType();
   }

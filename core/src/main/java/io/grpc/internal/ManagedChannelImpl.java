@@ -714,12 +714,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
       throw new IllegalArgumentException(String.format(
           "cannot find a NameResolver for %s", target));
     }
-    Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
-        = nameResolverProvider.getProducedSocketAddressTypes();
-    if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
-      throw new IllegalArgumentException(String.format(
-          "Address types of NameResolver '%s' for '%s' not supported by transport",
-          nameResolverProvider.getDefaultScheme(), target));
+    if (channelTransportSocketAddressTypes != null) {
+      Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
+          = nameResolverProvider.getProducedSocketAddressTypes();
+      if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+        throw new IllegalArgumentException(String.format(
+            "Address types of NameResolver '%s' for '%s' not supported by transport",
+            nameResolverProvider.getDefaultScheme(), target));
+      }
     }
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".

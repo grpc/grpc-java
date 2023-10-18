@@ -57,7 +57,6 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
-import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collection;
@@ -265,18 +264,23 @@ public final class NettyChannelBuilder extends
    */
   @CanIgnoreReturnValue
   public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
+    return channelType(channelType, null);
+  }
+
+  /**
+   * Similar to {@link #channelType(Class)} above but allows the
+   * caller to specify the socket-type associated with the channelType.
+   *
+   * @param channelType the type of {@link Channel} to use.
+   * @param transportSocketType the associated {@link SocketAddress} type. If {@code null}, then
+   *     no compatibility check is performed between channel transport and name-resolver addresses.
+   */
+  @CanIgnoreReturnValue
+  public NettyChannelBuilder channelType(Class<? extends Channel> channelType,
+      @Nullable Class<? extends SocketAddress> transportSocketType) {
     checkNotNull(channelType, "channelType");
-    try {
-      Method method = channelType.getMethod("remoteAddress");
-      checkNotNull(method, "method for remoteAddress");
-      Class<?> returnType = method.getReturnType();
-      checkState(SocketAddress.class.isAssignableFrom(returnType),
-          "Unexpected return type: %s", returnType.getSimpleName());
-      this.transportSocketType = returnType.asSubclass(SocketAddress.class);
-    } catch (NoSuchMethodException e) {
-      throw new RuntimeException(e);
-    }
-    return channelFactory(new ReflectiveChannelFactory<>(channelType));
+    return channelFactory(new ReflectiveChannelFactory<>(channelType),
+        transportSocketType);
   }
 
   /**
@@ -294,7 +298,22 @@ public final class NettyChannelBuilder extends
    */
   @CanIgnoreReturnValue
   public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory) {
+    return channelFactory(channelFactory, null);
+  }
+
+  /**
+   * Similar to {@link #channelFactory(ChannelFactory)} above but allows the
+   * caller to specify the socket-type associated with the channelFactory.
+   *
+   * @param channelFactory the {@link ChannelFactory} to use.
+   * @param transportSocketType the associated {@link SocketAddress} type. If {@code null}, then
+   *     no compatibility check is performed between channel transport and name-resolver addresses.
+   */
+  @CanIgnoreReturnValue
+  public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory,
+      @Nullable Class<? extends SocketAddress> transportSocketType) {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
+    this.transportSocketType = transportSocketType;
     return this;
   }
 
@@ -797,7 +816,8 @@ public final class NettyChannelBuilder extends
 
     @Override
     public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-      return Collections.singleton(transportSocketType);
+      return transportSocketType == null ? null
+          : Collections.singleton(transportSocketType);
     }
   }
 }
