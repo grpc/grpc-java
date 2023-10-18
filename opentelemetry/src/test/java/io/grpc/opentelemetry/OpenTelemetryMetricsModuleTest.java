@@ -135,7 +135,7 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void testClientInterceptors() {
-    OpenTelemetryState state = registerTestInstruments(testMeter, true, false);
+    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
     grpcServerRule.getServiceRegistry().addService(
@@ -190,7 +190,7 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void clientBasicMetrics() {
-    OpenTelemetryState state = registerTestInstruments(testMeter, true, false);
+    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);;
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
@@ -264,7 +264,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -310,7 +310,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_CALL_DURATION)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -324,7 +324,7 @@ public class OpenTelemetryMetricsModuleTest {
   // This test is only unit-testing the metrics recording logic. The retry behavior is faked.
   @Test
   public void recordAttemptMetrics() {
-    OpenTelemetryState state = registerTestInstruments(testMeter, true, false);
+    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
@@ -388,7 +388,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -469,7 +469,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -556,7 +556,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -679,7 +679,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_CALL_DURATION)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -694,7 +694,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -742,25 +742,19 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasAttributes(clientAttributes2))));
   }
 
-
-
   @Test
   public void clientStreamNeverCreatedStillRecordMetrics() {
-    OpenTelemetryState state = registerTestInstruments(testMeter, true, false);
+    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module,
             method.getFullMethodName());
-    ClientStreamTracer streamTracer =
-        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     fakeClock.forwardTime(3000, MILLISECONDS);
     Status status = Status.DEADLINE_EXCEEDED.withDescription("5 seconds");
-    streamTracer.streamClosed(status);
     callAttemptsTracerFactory.callEnded(status);
 
-    // Upstart record
-    io.opentelemetry.api.common.Attributes attributes
+    io.opentelemetry.api.common.Attributes attemptStartedAttributes
         = io.opentelemetry.api.common.Attributes.of(
         AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName());
 
@@ -785,7 +779,7 @@ public class OpenTelemetryMetricsModuleTest {
                                     point ->
                                         point
                                             .hasValue(1)
-                                            .hasAttributes(attributes))),
+                                            .hasAttributes(attemptStartedAttributes))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -806,7 +800,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_CALL_DURATION)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -820,14 +814,14 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
                                 point ->
                                     point
                                         .hasCount(1)
-                                        .hasSum(3D)
+                                        .hasSum(0)
                                         .hasAttributes(clientAttributes))),
             metric ->
                 assertThat(metric)
@@ -851,7 +845,7 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void serverBasicMetrics() {
-    OpenTelemetryState state = registerTestInstruments(testMeter, false, true);
+    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), state);
     ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
@@ -934,7 +928,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(OpenTelemetryConstants.SERVER_CALL_DURATION)
-                    .hasUnit("By")
+                    .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
                             histogram.hasPointsSatisfying(
@@ -961,75 +955,6 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasSum(34L + 154)
                                             .hasAttributes(serverAttributes))));
 
-  }
-
-  static OpenTelemetryState registerTestInstruments(Meter meter, boolean clientMetrics,
-      boolean serverMetrics) {
-    OpenTelemetryState.Builder openTelemetryStatebuilder = new OpenTelemetryState.Builder();
-
-    if (clientMetrics) {
-      openTelemetryStatebuilder.clientAttemptCountCounter(
-          meter.counterBuilder(
-                  OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
-              .setUnit("{attempt}")
-              .setDescription("Number of client call attempts started")
-              .build());
-      openTelemetryStatebuilder.clientAttemptDurationCounter(
-          meter.histogramBuilder(
-                  OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
-              .setUnit("By")
-              .setDescription("Time taken to complete a client call attempt")
-              .build());
-      openTelemetryStatebuilder.clientTotalSentCompressedMessageSizeCounter(
-          meter.histogramBuilder(
-                  OpenTelemetryConstants.CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
-              .setUnit("By")
-              .setDescription("Compressed message bytes sent per client call attempt")
-              .ofLongs()
-              .build());
-      openTelemetryStatebuilder.clientTotalReceivedCompressedMessageSizeCounter(
-          meter.histogramBuilder(
-                  OpenTelemetryConstants.CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
-              .setUnit("By")
-              .setDescription("Compressed message bytes received per call attempt")
-              .ofLongs()
-              .build());
-      openTelemetryStatebuilder.clientCallDurationCounter(
-          meter.histogramBuilder(OpenTelemetryConstants.CLIENT_CALL_DURATION)
-              .setUnit("By")
-              .setDescription(
-                  "Time taken by gRPC to complete an RPC from application's perspective")
-              .build());
-    }
-
-    if (serverMetrics) {
-      openTelemetryStatebuilder.serverCallCountCounter(
-          meter.counterBuilder(OpenTelemetryConstants.SERVER_CALL_COUNT)
-              .setUnit("{call}")
-              .setDescription("Number of server calls started")
-              .build());
-      openTelemetryStatebuilder.serverCallDurationCounter(
-          meter.histogramBuilder(OpenTelemetryConstants.SERVER_CALL_DURATION)
-              .setUnit("By")
-              .setDescription(
-                  "Time taken to complete a call from server transport's perspective")
-              .build());
-      openTelemetryStatebuilder.serverTotalSentCompressedMessageSizeCounter(
-          meter.histogramBuilder(
-                  OpenTelemetryConstants.SERVER_CALL_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
-              .setUnit("By")
-              .setDescription("Compressed message bytes sent per server call")
-              .ofLongs()
-              .build());
-      openTelemetryStatebuilder.serverTotalReceivedCompressedMessageSizeCounter(
-          meter.histogramBuilder(
-                  OpenTelemetryConstants.SERVER_CALL_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
-              .setUnit("By")
-              .setDescription("Compressed message bytes received per server call")
-              .ofLongs()
-              .build());
-    }
-    return openTelemetryStatebuilder.build();
   }
 
   static class CallInfo<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {

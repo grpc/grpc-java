@@ -64,10 +64,11 @@ final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
   private static final double NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
 
-  private final OpenTelemetryState state;
+  private final OpenTelemetryMetricsState state;
   private final Supplier<Stopwatch> stopwatchSupplier;
 
-  OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier, OpenTelemetryState state) {
+  OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
+      OpenTelemetryMetricsState state) {
     this.state = checkNotNull(state, "state");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
@@ -196,9 +197,12 @@ final class OpenTelemetryMetricsModule {
           AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName,
           AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), statusCode.toString());
 
-      module.state.clientAttemptDuration.record(attemptNanos / NANOS_PER_SECOND, attribute);
-      module.state.clientTotalSentCompressedMessageSize.record(outboundWireSize, attribute);
-      module.state.clientTotalReceivedCompressedMessageSize.record(inboundWireSize, attribute);
+      module.state.clientAttemptDurationCounter()
+          .record(attemptNanos / NANOS_PER_SECOND, attribute);
+      module.state.clientTotalSentCompressedMessageSizeCounter()
+          .record(outboundWireSize, attribute);
+      module.state.clientTotalReceivedCompressedMessageSizeCounter()
+          .record(inboundWireSize, attribute);
     }
   }
 
@@ -231,7 +235,7 @@ final class OpenTelemetryMetricsModule {
           AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName);
 
       // Record here in case mewClientStreamTracer() would never be called.
-      module.state.clientAttemptCount.add(1, attribute);
+      module.state.clientAttemptCountCounter().add(1, attribute);
     }
 
     @Override
@@ -250,7 +254,7 @@ final class OpenTelemetryMetricsModule {
         io.opentelemetry.api.common.Attributes attribute =
             io.opentelemetry.api.common.Attributes.of(
                 AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName);
-        module.state.clientAttemptCount.add(1, attribute);
+        module.state.clientAttemptCountCounter().add(1, attribute);
       }
       attemptsPerCall.incrementAndGet();
       return new ClientTracer(this, module, info, fullMethodName);
@@ -311,7 +315,8 @@ final class OpenTelemetryMetricsModule {
           AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName,
           AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), status.getCode().toString());
 
-      module.state.clientCallDuration.record(callLatencyNanos / NANOS_PER_SECOND, attribute);
+      module.state.clientCallDurationCounter()
+          .record(callLatencyNanos / NANOS_PER_SECOND, attribute);
     }
   }
 
@@ -372,7 +377,7 @@ final class OpenTelemetryMetricsModule {
               AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY),
               recordMethodName(fullMethodName, isGeneratedMethod));
 
-      module.state.serverCallCount.add(1, attribute);
+      module.state.serverCallCountCounter().add(1, attribute);
     }
 
     @Override
@@ -421,9 +426,12 @@ final class OpenTelemetryMetricsModule {
           recordMethodName(fullMethodName, isGeneratedMethod),
           AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), status.getCode().toString());
 
-      module.state.serverCallDuration.record(elapsedTimeNanos / NANOS_PER_SECOND, attributes);
-      module.state.serverTotalSentCompressedMessageSize.record(outboundWireSize, attributes);
-      module.state.serverTotalReceivedCompressedMessageSize.record(inboundWireSize, attributes);
+      module.state.serverCallDurationCounter()
+          .record(elapsedTimeNanos / NANOS_PER_SECOND, attributes);
+      module.state.serverTotalSentCompressedMessageSizeCounter()
+          .record(outboundWireSize, attributes);
+      module.state.serverTotalReceivedCompressedMessageSizeCounter()
+          .record(inboundWireSize, attributes);
     }
   }
 

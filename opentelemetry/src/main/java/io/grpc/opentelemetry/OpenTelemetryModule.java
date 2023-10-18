@@ -44,7 +44,7 @@ public final class OpenTelemetryModule {
   private final OpenTelemetry openTelemetryInstance;
   private final MeterProvider meterProvider;
   private final Meter meter;
-  private final OpenTelemetryState state;
+  private final OpenTelemetryMetricsState state;
 
   public static Builder builder() {
     return new Builder();
@@ -62,20 +62,23 @@ public final class OpenTelemetryModule {
     this.state = createMetricInstruments(meter);
   }
 
+  @VisibleForTesting
   OpenTelemetry getOpenTelemetryInstance() {
     return this.openTelemetryInstance;
   }
 
+  @VisibleForTesting
   MeterProvider getMeterProvider() {
     return this.meterProvider;
   }
 
+  @VisibleForTesting
   Meter getMeter() {
     return this.meter;
   }
 
   @VisibleForTesting
-  OpenTelemetryState getState() {
+  OpenTelemetryMetricsState getState() {
     return this.state;
   }
 
@@ -101,8 +104,9 @@ public final class OpenTelemetryModule {
     return openTelemetryMetricsModule.getServerTracerFactory();
   }
 
-  static OpenTelemetryState createMetricInstruments(Meter meter) {
-    OpenTelemetryState.Builder builder = new OpenTelemetryState.Builder();
+  @VisibleForTesting
+  static OpenTelemetryMetricsState createMetricInstruments(Meter meter) {
+    OpenTelemetryMetricsState.Builder builder = OpenTelemetryMetricsState.builder();
 
     builder.clientCallDurationCounter(
         meter.histogramBuilder(OpenTelemetryConstants.CLIENT_CALL_DURATION)
