@@ -382,6 +382,21 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
+  public void transportAddressTypeCompatibilityCheckSkipped() {
+    when(mockClientTransportFactory.getScheduledExecutorService())
+        .thenReturn(clock.getScheduledExecutorService());
+    when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
+        .thenReturn(mockClientTransportFactory);
+    when(mockClientTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(null);
+
+    builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
+        mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
+    // should not fail
+    ManagedChannel unused = grpcCleanupRule.register(builder.build());
+  }
+
+  @Test
   public void overrideAuthority_default() {
     assertNull(builder.authorityOverride);
   }
