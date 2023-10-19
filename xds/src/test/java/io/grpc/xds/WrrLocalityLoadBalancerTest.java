@@ -17,11 +17,10 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.LoadBalancerMatchers.pickerReturns;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.Mockito.argThat;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,9 +33,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
-import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
@@ -55,7 +52,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatcher;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -222,42 +218,6 @@ public class WrrLocalityLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(addresses).setLoadBalancingPolicyConfig(config)
             .build());
-  }
-
-  private static SubchannelPicker pickerReturns(final PickResult result) {
-    return pickerReturns(new ArgumentMatcher<PickResult>() {
-      @Override public boolean matches(PickResult obj) {
-        return result.equals(obj);
-      }
-
-      @Override public String toString() {
-        return "[equals " + result + "]";
-      }
-    });
-  }
-
-  private static SubchannelPicker pickerReturns(Status.Code code) {
-    return pickerReturns(new ArgumentMatcher<PickResult>() {
-      @Override public boolean matches(PickResult obj) {
-        return obj.getStatus() != null && code.equals(obj.getStatus().getCode());
-      }
-
-      @Override public String toString() {
-        return "[with code " + code + "]";
-      }
-    });
-  }
-
-  private static SubchannelPicker pickerReturns(final ArgumentMatcher<PickResult> matcher) {
-    return argThat(new ArgumentMatcher<SubchannelPicker>() {
-      @Override public boolean matches(SubchannelPicker picker) {
-        return matcher.matches(picker.pickSubchannel(mock(PickSubchannelArgs.class)));
-      }
-
-      @Override public String toString() {
-        return "[picker returns: result " + matcher + "]";
-      }
-    });
   }
 
   /**

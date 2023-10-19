@@ -73,7 +73,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       Map<Object, SubchannelPicker> childPickers);
 
   protected SubchannelPicker getInitialPicker() {
-    return EMPTY_PICKER;
+    return new FixedResultPicker(PickResult.withNoResult());
   }
 
   protected SubchannelPicker getErrorPicker(Status error)  {

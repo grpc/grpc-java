@@ -116,6 +116,12 @@ public abstract class LoadBalancer {
   public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
       Attributes.Key.create("internal:health-checking-config");
 
+  /**
+   * A picker that always returns an erring pick.
+   *
+   * @deprecated Use {@code new FixedResultPicker(PickResult.withNoResult())} instead.
+   */
+  @Deprecated
   public static final SubchannelPicker EMPTY_PICKER = new SubchannelPicker() {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
