@@ -589,6 +589,7 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(0))),
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied again")));
+    verify(helper, times(2)).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
     assertThat(result.getStatus().getCode())

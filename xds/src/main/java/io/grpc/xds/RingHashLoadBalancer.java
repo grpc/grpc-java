@@ -119,6 +119,9 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
       // Now do the ringhash specific logic with weights and building the ring
       RingHashConfig config = (RingHashConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+      if (config == null) {
+        throw new IllegalArgumentException("Missing RingHash configuration");
+      }
       Map<EquivalentAddressGroup, Long> serverWeights = new HashMap<>();
       long totalWeight = 0L;
       for (EquivalentAddressGroup eag : addrList) {
@@ -418,7 +421,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     // freeze picker's view of subchannel's connectivity state.
     // TODO(chengyuanzhang): can be more performance-friendly with
     //  IdentityHashMap<Subchannel, ConnectivityStateInfo> and RingEntry contains Subchannel.
-    private final Map<Endpoint, RingHashChildLbState> pickableSubchannels;  // read-only
+    private final Map<Endpoint, SubchannelView> pickableSubchannels;  // read-only
 
     private RingHashPicker(
         SynchronizationContext syncContext, List<RingEntry> ring,
@@ -428,7 +431,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       pickableSubchannels = new HashMap<>(subchannels.size());
       for (Map.Entry<Object, ChildLbState> entry : subchannels.entrySet()) {
         RingHashChildLbState childLbState = (RingHashChildLbState) entry.getValue();
-        pickableSubchannels.put((Endpoint)entry.getKey(), childLbState);
+        pickableSubchannels.put((Endpoint)entry.getKey(),
+            new SubchannelView(childLbState, childLbState.getCurrentState()));
       }
     }
 
@@ -472,19 +476,20 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // IDLE, we initiate a connection.
       for (int i = 0; i < ring.size(); i++) {
         int index = (targetIndex + i) % ring.size();
-        RingHashChildLbState childLbState = pickableSubchannels.get(ring.get(index).addrKey);
+        SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
+        RingHashChildLbState childLbState = subchannelView.childLbState;
 
-        if (childLbState.getCurrentState()  == READY) {
+        if (subchannelView.connectivityState  == READY) {
           return childLbState.getCurrentPicker().pickSubchannel(args);
         }
 
         // RPCs can be buffered if the next subchannel is pending (per A62). Otherwise, RPCs
         // are failed unless there is a READY connection.
-        if (childLbState.getCurrentState() == CONNECTING) {
+        if (subchannelView.connectivityState == CONNECTING) {
           return PickResult.withNoResult();
         }
 
-        if (childLbState.getCurrentState() == IDLE || childLbState.isDeactivated()) {
+        if (subchannelView.connectivityState == IDLE || childLbState.isDeactivated()) {
           if (childLbState.isDeactivated()) {
             childLbState.activate();
           } else {
@@ -497,7 +502,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
       // return the pick from the original subchannel hit by hash, which is probably an error
       RingHashChildLbState originalSubchannel =
-          pickableSubchannels.get(ring.get(targetIndex).addrKey);
+          pickableSubchannels.get(ring.get(targetIndex).addrKey).childLbState;
       return originalSubchannel.getCurrentPicker().pickSubchannel(args);
     }
 
@@ -506,6 +511,16 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   @Override
   protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
     throw new UnsupportedOperationException("Not used by RingHash");
+  }
+
+  private static final class SubchannelView {
+    private final RingHashChildLbState childLbState;
+    private final ConnectivityState connectivityState;
+
+    private SubchannelView(RingHashChildLbState subchannel, ConnectivityState connectivityState) {
+      this.childLbState = subchannel;
+      this.connectivityState = connectivityState;
+    }
   }
 
   private static final class RingEntry implements Comparable<RingEntry> {
@@ -569,15 +584,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     public RingHashChildLbState(Endpoint key, ResolvedAddresses resolvedAddresses) {
       super(key, pickFirstLbProvider, null, EMPTY_PICKER, resolvedAddresses, true);
-    }
-
-    void updateAddresses(List<EquivalentAddressGroup> addresses, Attributes attributes) {
-      ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-          .setAddresses(addresses)
-          .setAttributes(attributes)
-          .build();
-      setResolvedAddresses(resolvedAddresses);
-      handleResolvedAddresses(resolvedAddresses);
     }
 
     @Override
