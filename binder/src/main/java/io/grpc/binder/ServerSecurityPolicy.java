@@ -17,6 +17,8 @@
 package io.grpc.binder;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Status;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,16 +44,40 @@ public final class ServerSecurityPolicy {
   }
 
   /**
-   * Return whether the given Android UID is authorized to access a particular service.
+   * Returns whether the given Android UID is authorized to access a particular service.
    *
-   * <b>IMPORTANT</b>: This method may block for extended periods of time.
+   * <p><b>IMPORTANT</b>: This method may block for extended periods of time.
    *
    * @param uid The Android UID to authenticate.
    * @param serviceName The name of the gRPC service being called.
+   * @deprecated Application code should not need to call this method.
    */
   @CheckReturnValue
+  @Deprecated
   public Status checkAuthorizationForService(int uid, String serviceName) {
     return perServicePolicies.getOrDefault(serviceName, defaultPolicy).checkAuthorization(uid);
+  }
+
+  /**
+   * Returns whether the given Android UID is authorized to access a particular service.
+   *
+   * <p>This method never throws an exception. If the execution of the security policy check
+   * fails, a failed future with such exception is returned.
+   *
+   * @param uid The Android UID to authenticate.
+   * @param serviceName The name of the gRPC service being called.
+   * @return a future with the result of the authorization check. A failed future represents a
+   *     failure to perform the authorization check, not that the access is denied.
+   */
+  @CheckReturnValue
+  ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName) {
+    SecurityPolicy securityPolicy = perServicePolicies.getOrDefault(serviceName, defaultPolicy);
+    try {
+      Status status = securityPolicy.checkAuthorization(uid);
+      return Futures.immediateFuture(status);
+    } catch (Exception e) {
+      return Futures.immediateFailedFuture(e);
+    }
   }
 
   public static Builder newBuilder() {

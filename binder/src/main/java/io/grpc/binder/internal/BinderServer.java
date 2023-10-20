@@ -58,7 +58,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private final ImmutableList<ServerStreamTracer.Factory> streamTracerFactories;
   private final AndroidComponentAddress listenAddress;
   private final LeakSafeOneWayBinder hostServiceBinder;
-  private final ServerSecurityPolicy serverSecurityPolicy;
+  private final BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker;
   private final InboundParcelablePolicy inboundParcelablePolicy;
 
   @GuardedBy("this")
@@ -74,13 +74,13 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       AndroidComponentAddress listenAddress,
       ObjectPool<ScheduledExecutorService> executorServicePool,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      ServerSecurityPolicy serverSecurityPolicy,
+      BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker,
       InboundParcelablePolicy inboundParcelablePolicy) {
     this.listenAddress = listenAddress;
     this.executorServicePool = executorServicePool;
     this.streamTracerFactories =
         ImmutableList.copyOf(checkNotNull(streamTracerFactories, "streamTracerFactories"));
-    this.serverSecurityPolicy = checkNotNull(serverSecurityPolicy, "serverSecurityPolicy");
+    this.serverPolicyChecker = checkNotNull(serverPolicyChecker, "serverPolicyChecker");
     this.inboundParcelablePolicy = inboundParcelablePolicy;
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
@@ -150,7 +150,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
                   .set(BinderTransport.REMOTE_UID, callingUid)
                   .set(BinderTransport.SERVER_AUTHORITY, listenAddress.getAuthority())
                   .set(BinderTransport.INBOUND_PARCELABLE_POLICY, inboundParcelablePolicy);
-          BinderTransportSecurity.attachAuthAttrs(attrsBuilder, callingUid, serverSecurityPolicy);
+          BinderTransportSecurity.attachAuthAttrs(attrsBuilder, callingUid, serverPolicyChecker);
           // Create a new transport and let our listener know about it.
           BinderTransport.BinderServerTransport transport =
               new BinderTransport.BinderServerTransport(
