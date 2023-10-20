@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.DO_NOT_RESET_HELPER;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.DO_NOT_VERIFY;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.RESET_SUBCHANNEL_MOCKS;
+import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.STAY_IN_CONNECTING;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -621,6 +622,23 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(1));  // with server1
     assertThat(picker.pickSubchannel(getDefaultPickSubchannelArgsForServer(0))).isEqualTo(result);
     assertThat(picker.pickSubchannel(getDefaultPickSubchannelArgsForServer(2))).isEqualTo(result);
+  }
+
+  @Test
+  public void removingAddressShutdownSubchannel() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> svs1 = createWeightedServerAddrs(1, 1, 1);
+    List<Subchannel> subchannels1 = initializeLbSubchannels(config, svs1, STAY_IN_CONNECTING);
+
+    List<EquivalentAddressGroup> svs2 = createWeightedServerAddrs(1, 1);
+    InOrder inOrder = Mockito.inOrder(helper, subchannels1.get(2));
+    // send LB the missing address
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(svs2).setLoadBalancingPolicyConfig(config).build());
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any());
+    inOrder.verify(subchannels1.get(2)).shutdown();
   }
 
   @Test
