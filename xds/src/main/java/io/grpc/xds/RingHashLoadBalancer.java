@@ -271,6 +271,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     return false;
   }
 
+  @Override
+  protected boolean shutdownInAcceptResolvedAddresses() {
+    return false;
+  }
+
   /**
    * Create RingHashChildLbState objects with resolvedAddresses filled in.
    * @return Map of {@link Endpoint} -> {@link RingHashChildLbState}
@@ -584,18 +589,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     public RingHashChildLbState(Endpoint key, ResolvedAddresses resolvedAddresses) {
       super(key, pickFirstLbProvider, null, EMPTY_PICKER, resolvedAddresses, true);
-    }
-
-    @Override
-    protected void deactivate() {
-      if (isDeactivated()) {
-        return;
-      }
-
-      // Remove yourself, but don't shutdown yet
-      removeChild(getKey());
-      setDeactivated();
-      logger.log(XdsLogLevel.DEBUG, "Child balancer {0} deactivated", getKey());
     }
 
     @Override

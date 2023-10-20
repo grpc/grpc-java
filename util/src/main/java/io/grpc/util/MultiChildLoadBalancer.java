@@ -127,8 +127,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       if (existingChildLbState != null) {
         childLbMap.put(endpoint, existingChildLbState);
       } else {
-        childLbMap.put(endpoint,
-            createChildLbState(endpoint, null, getInitialPicker(), resolvedAddresses));
+        childLbMap.put(endpoint, createChildLbState(endpoint, null, getInitialPicker()));
       }
     }
     return childLbMap;
@@ -138,7 +137,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    * Override to create an instance of a subclass.
    */
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
+      SubchannelPicker initialPicker) {
     return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
   }
 
@@ -146,23 +145,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    *   Override to completely replace the default logic or to do additional activities.
    */
   @Override
-  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
-
-      // process resolvedAddresses to update children
-      AcceptResolvedAddressRetVal acceptRetVal =
-          acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        return acceptRetVal.status;
-      }
-
-      // Update the picker and our connectivity state
-      updateOverallBalancingState();
-
-      // shutdown removed children
-      shutdownRemoved(acceptRetVal.removedChildren);
-      return acceptRetVal.status;
+      return acceptResolvedAddressesInternal(resolvedAddresses, true);
     } finally {
       resolvingAddresses = false;
     }
@@ -202,21 +188,15 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         .build();
   }
 
-  /**
-   *   This does the work to update the child map and calculate which children have been removed.
-   *   You must call {@link #updateOverallBalancingState} to update the picker
-   *   and call {@link #shutdownRemoved(List)} to shutdown the endpoints that have been removed.
-   */
-  protected AcceptResolvedAddressRetVal acceptResolvedAddressesInternal(
-      ResolvedAddresses resolvedAddresses) {
+  protected boolean acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses,
+      boolean updateBalancingState) {
     logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
     Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
 
     if (newChildren.isEmpty()) {
-      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
-              "NameResolver returned no usable address. " + resolvedAddresses);
-      handleNameResolutionError(unavailableStatus);
-      return new AcceptResolvedAddressRetVal(unavailableStatus, null);
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+          "NameResolver returned no usable address. " + resolvedAddresses));
+      return false;
     }
 
     // Do adds and updates
@@ -229,7 +209,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       } else {
         // Reuse the existing one
         ChildLbState existingChildLbState = childLbStates.get(key);
-        if (existingChildLbState.isDeactivated() && reactivateChildOnReuse()) {
+        if (existingChildLbState.isDeactivated() && updateBalancingState) {
           existingChildLbState.reactivate(childPolicyProvider);
         }
       }
@@ -251,15 +231,22 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         removedChildren.add(childLbState);
       }
     }
-    return new AcceptResolvedAddressRetVal(Status.OK, removedChildren);
-  }
 
-  protected void shutdownRemoved(List<ChildLbState> removedChildren) {
-    // Do shutdowns after updating picker to reduce the chance of failing an RPC by picking a
-    // subchannel that has been shutdown.
-    for (ChildLbState childLbState : removedChildren) {
-      childLbState.shutdown();
+    if (updateBalancingState) {
+      // Must update channel picker before return so that new RPCs will not be routed to deleted
+      // clusters and resolver can remove them in service config.
+      updateOverallBalancingState();
     }
+
+    // Do shutdowns after updating picker to reduce the chance of failing an RPC by picking a
+    // shutdown subchannel
+    if (shutdownInAcceptResolvedAddresses()) {
+      for (ChildLbState childLbState : removedChildren) {
+        childLbState.shutdown();
+      }
+    }
+
+    return true;
   }
 
   @Override
@@ -275,19 +262,19 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   /**
    * If true, then when a subchannel state changes to idle, the corresponding child will
-   * have requestConnection called on its LB. Also causes the PickFirstLB to be created when
-   * the child is created or reused.
+   * have requestConnection called on its LB.
    */
   protected boolean reconnectOnIdle() {
     return true;
   }
 
   /**
-   * If true, then when {@link #acceptResolvedAddresses} sees a key that was already part of the
-   * child map which is deactivated, it will call reactivate on the child.
-   * If false, it will leave it deactivated.
+   * If true, then at the end of AcceptResolvedAddresses it will call shutdown on all
+   * children that were removed.
+   * If false, then it is the responsibility of the subclass to ensure that removed children are
+   * shutdown.
    */
-  protected boolean reactivateChildOnReuse() {
+  protected boolean shutdownInAcceptResolvedAddresses() {
     return true;
   }
 
@@ -310,7 +297,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       childPickers.put(childLbState.key, childLbState.currentPicker);
       overallState = aggregateState(overallState, childLbState.currentState);
     }
-
     if (overallState != null) {
       helper.updateBalancingState(overallState, getSubchannelPicker(childPickers));
       currentConnectivityState = overallState;
@@ -375,7 +361,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     private final Object config;
 
     private final GracefulSwitchLoadBalancer lb;
-    private final LoadBalancerProvider policyProvider;
+    private LoadBalancerProvider policyProvider;
     private ConnectivityState currentState;
     private SubchannelPicker currentPicker;
     private boolean deactivated;
@@ -592,15 +578,4 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return Arrays.toString(addrs);
     }
   }
-
-  protected static class AcceptResolvedAddressRetVal {
-    public final Status status;
-    public final List<ChildLbState> removedChildren;
-
-    public AcceptResolvedAddressRetVal(Status status, List<ChildLbState> removedChildren) {
-      this.status = status;
-      this.removedChildren = removedChildren;
-    }
-  }
-
 }

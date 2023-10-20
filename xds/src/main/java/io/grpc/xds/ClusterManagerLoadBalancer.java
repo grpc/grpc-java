@@ -162,6 +162,11 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     return false;
   }
 
+  @Override
+  protected boolean shutdownInAcceptResolvedAddresses() {
+    return false;
+  }
+
   /**
    * This differs from the base class in the use of the deletion timer.  When it is deactivated,
    * rather than immediately calling shutdown it starts a timer.  If shutdown or reactivate
