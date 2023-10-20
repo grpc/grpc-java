@@ -18,7 +18,6 @@ package io.grpc.binder.internal;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
-import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -148,13 +147,12 @@ public final class BinderTransportSecurity {
   /**
    * Decides whether a given Android UID is authorized to access some resource.
    *
-   * <p>This class provides the asynchronous version of {@link SecurityPolicy}, allowing
-   * implementations of authorization logic that involves slow or asynchronous calls without
-   * necessarily blocking the calling thread.
+   * <p>This class provides the asynchronous version of {@link io.grpc.binder.SecurityPolicy},
+   * allowing implementations of authorization logic that involves slow or asynchronous calls
+   * without necessarily blocking the calling thread.
    *
-   * @see SecurityPolicy
+   * @see io.grpc.binder.SecurityPolicy
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10566")
   public interface ServerPolicyChecker {
     /**
      * Returns whether the given Android UID is authorized to access a particular service.
