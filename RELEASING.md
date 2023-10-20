@@ -194,14 +194,10 @@ Tagging the Release
     rm -r javadoc/META-INF/
     git add -A javadoc
     git commit -m "Javadoc for $MAJOR.$MINOR.$PATCH"
-    ```
-
-    Push gh-pages to the main repository and verify the current version is
-    [live on grpc.io](https://grpc.io/grpc-java/javadoc/).
-
-    ```bash
     git push upstream gh-pages
     ```
+
+    Verify the current version is [live on grpc.io](https://grpc.io/grpc-java/javadoc/).
 
 12. Add [Release Notes](https://github.com/grpc/grpc-java/releases) for the new tag.
     *Make sure that any backports are reflected in the release notes.*
