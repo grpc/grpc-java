@@ -156,8 +156,11 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         return false;
       }
 
-      // Update the picker and shutdown (if appropriate) removed children
-      updateLbStateAndShutdownRemoved(acceptRetVal.removedChildren);
+      // Update the picker and
+      updateOverallBalancingState();
+
+      // shutdown removed children
+      shutdownRemoved(acceptRetVal.removedChildren);
       return true;
     } finally {
       resolvingAddresses = false;
@@ -200,8 +203,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   /**
    *   This does the work to update the child map and calculate which children have been removed.
-   *   You must call {@link #updateLbStateAndShutdownRemoved} to update the picker
-   *   and shutdown the endpoints that have been removed.
+   *   You must call {@link #updateOverallBalancingState} to update the picker
+   *   and call {@link #shutdownRemoved(List)} to shutdown the endpoints that have been removed.
     */
   protected AcceptResolvedAddressRetVal acceptResolvedAddressesInternal(
       ResolvedAddresses resolvedAddresses) {
@@ -250,17 +253,11 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return new AcceptResolvedAddressRetVal(true, removedChildren);
   }
 
-  protected void updateLbStateAndShutdownRemoved(List<ChildLbState> removedChildren) {
-    // Must update channel picker before return so that new RPCs will not be routed to deleted
-    // clusters and resolver can remove them in service config.
-    updateOverallBalancingState();
-
+  protected void shutdownRemoved(List<ChildLbState> removedChildren) {
     // Do shutdowns after updating picker to reduce the chance of failing an RPC by picking a
     // subchannel that has been shutdown.
-    if (shutdownInAcceptResolvedAddresses()) {
-      for (ChildLbState childLbState : removedChildren) {
-        childLbState.shutdown();
-      }
+    for (ChildLbState childLbState : removedChildren) {
+      childLbState.shutdown();
     }
   }
 
@@ -293,16 +290,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return true;
   }
 
-  /**
-   * If true, then at the end of AcceptResolvedAddresses it will call shutdown on all
-   * children that were removed.
-   * If false, then it is the responsibility of the subclass to ensure that removed children are
-   * shutdown.
-   */
-  protected boolean shutdownInAcceptResolvedAddresses() {
-    return true;
-  }
-
   @Override
   public void shutdown() {
     logger.log(Level.INFO, "Shutdown");
@@ -322,6 +309,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       childPickers.put(childLbState.key, childLbState.currentPicker);
       overallState = aggregateState(overallState, childLbState.currentState);
     }
+
     if (overallState != null) {
       helper.updateBalancingState(overallState, getSubchannelPicker(childPickers));
       currentConnectivityState = overallState;

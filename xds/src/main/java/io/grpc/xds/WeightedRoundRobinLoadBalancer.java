@@ -128,7 +128,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       updateWeightTask.run();
 
       createAndApplyOrcaListeners();
-      updateLbStateAndShutdownRemoved(acceptRetVal.removedChildren);
+
+      // Must update channel picker before return so that new RPCs will not be routed to deleted
+      // clusters and resolver can remove them in service config.
+      updateOverallBalancingState();
+
+      shutdownRemoved(acceptRetVal.removedChildren);
     } finally {
       resolvingAddresses = false;
     }
