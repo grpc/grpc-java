@@ -28,7 +28,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multiset;
-import com.google.common.collect.Sets;
 import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -96,21 +95,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       return false;
     }
 
-    Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
-    Set<EquivalentAddressGroup> removedAddrs =
-        Sets.newHashSet(
-            Sets.difference(getStrippedChildEags(getChildLbStates()), latestAddrs.keySet()));
-
-    // Shut down subchannels for delisted addresses.
-    List<RingHashChildLbState> removedChildLbStates = new ArrayList<>();
-    for (EquivalentAddressGroup addr : removedAddrs) {
-      removedChildLbStates.add((RingHashChildLbState) getChildLbState(addr));
-    }
-
+    AcceptResolvedAddressRetVal acceptRetVal;
     try {
       resolvingAddresses = true;
       // Update the child list by creating-adding, updating addresses, and removing
-      if (!super.acceptResolvedAddressesInternal(resolvedAddresses, false)) {
+      acceptRetVal = super.acceptResolvedAddressesInternal(resolvedAddresses);
+      if (!acceptRetVal.valid) {
         handleNameResolutionError(Status.UNAVAILABLE.withDescription(
             "Ring hash lb error: EDS resolution was successful, but was not accepted by base class"
             ));
@@ -166,12 +156,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         connectionAttemptIterator.next();
       }
 
-      // Update the picker before shutting down the subchannels, to reduce the chance of race
-      // between picking a subchannel and shutting it down.
-      updateOverallBalancingState();
-      for (RingHashChildLbState childLbState : removedChildLbStates) {
-        childLbState.shutdown();
-      }
+      updateLbStateAndShutdownRemoved(acceptRetVal.removedChildren);
     } finally {
       this.resolvingAddresses = false;
     }
@@ -272,7 +257,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected boolean shutdownInAcceptResolvedAddresses() {
+  protected boolean reactivateChildOnReuse() {
     return false;
   }
 
@@ -395,20 +380,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
     Collections.sort(ring);
     return Collections.unmodifiableList(ring);
-  }
-
-  /**
-   * Converts list of {@link EquivalentAddressGroup} to {@link EquivalentAddressGroup} set and
-   * remove all attributes. The values are the original EAGs.
-   */
-  private static Map<EquivalentAddressGroup, EquivalentAddressGroup> stripAttrs(
-      List<EquivalentAddressGroup> groupList) {
-    Map<EquivalentAddressGroup, EquivalentAddressGroup> addrs =
-        new HashMap<>(groupList.size() * 2);
-    for (EquivalentAddressGroup group : groupList) {
-      addrs.put(stripAttrs(group), group);
-    }
-    return addrs;
   }
 
   @SuppressWarnings("ReferenceEquality")

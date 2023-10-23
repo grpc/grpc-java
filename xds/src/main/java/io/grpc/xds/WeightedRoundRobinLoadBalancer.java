@@ -97,30 +97,29 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses unused) {
+      SubchannelPicker initialPicker) {
     ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
         initialPicker);
     return childLbState;
   }
 
   @Override
-  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getLoadBalancingPolicyConfig() == null) {
-      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
               "NameResolver returned no WeightedRoundRobinLoadBalancerConfig. addrs="
                       + resolvedAddresses.getAddresses()
-                      + ", attrs=" + resolvedAddresses.getAttributes());
-      handleNameResolutionError(unavailableStatus);
-      return unavailableStatus;
+                      + ", attrs=" + resolvedAddresses.getAttributes()));
+      return false;
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    AcceptResolvedAddressRetVal acceptRetVal;
     try {
       resolvingAddresses = true;
-      acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        return acceptRetVal.status;
+      AcceptResolvedAddressRetVal acceptRetVal =
+          acceptResolvedAddressesInternal(resolvedAddresses);
+      if (!acceptRetVal.valid) {
+        return false;
       }
 
       if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
@@ -129,17 +128,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       updateWeightTask.run();
 
       createAndApplyOrcaListeners();
-
-      // Must update channel picker before return so that new RPCs will not be routed to deleted
-      // clusters and resolver can remove them in service config.
-      updateOverallBalancingState();
-
-      shutdownRemoved(acceptRetVal.removedChildren);
+      updateLbStateAndShutdownRemoved(acceptRetVal.removedChildren);
     } finally {
       resolvingAddresses = false;
     }
 
-    return acceptRetVal.status;
+    return true;
   }
 
   @Override
