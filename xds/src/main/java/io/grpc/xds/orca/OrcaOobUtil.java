@@ -58,8 +58,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -68,7 +66,6 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9129")
 public final class OrcaOobUtil {
-  private static final Logger logger = Logger.getLogger(OrcaPerRequestUtil.class.getName());
 
   private OrcaOobUtil() {}
 
@@ -472,8 +469,8 @@ public final class OrcaOobUtil {
         void handleStreamClosed(Status status) {
           if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
             disabled = true;
-            logger.log(
-                Level.SEVERE,
+            subchannelLogger.log(
+                ChannelLogLevel.ERROR,
                 "Backend {0} OpenRcaService is disabled. Server returned: {1}",
                 new Object[] {subchannel.getAllAddresses(), status});
             subchannelLogger.log(ChannelLogLevel.ERROR, "OpenRcaService disabled: {0}", status);
