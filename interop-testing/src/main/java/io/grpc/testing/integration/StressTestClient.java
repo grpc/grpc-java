@@ -59,6 +59,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -91,6 +92,7 @@ public class StressTestClient {
       client.runStressTest();
       client.startMetricsLogging();
       client.blockUntilStressTestComplete();
+      log.log(Level.INFO, "Total calls made: {0}", client.getTotalCallCount());
     } catch (Exception e) {
       log.log(Level.WARNING, "The stress test client encountered an error!", e);
     } finally {
@@ -117,6 +119,7 @@ public class StressTestClient {
   private Server metricsServer;
   private final Map<String, Metrics.GaugeResponse> gauges =
       new ConcurrentHashMap<>();
+  private final AtomicLong totalCallCount = new AtomicLong(0);
 
   private volatile boolean shutdown;
 
@@ -410,6 +413,10 @@ public class StressTestClient {
     return builder.build();
   }
 
+  private long getTotalCallCount() {
+    return totalCallCount.get();
+  }
+
   private static String serverAddressesToString(List<InetSocketAddress> addresses) {
     List<String> tmp = new ArrayList<>();
     for (InetSocketAddress address : addresses) {
@@ -485,6 +492,7 @@ public class StressTestClient {
         }
 
         testCasesSinceLastMetricsCollection++;
+        totalCallCount.incrementAndGet();
 
         double durationSecs = computeDurationSecs(lastMetricsCollectionTime);
         if (durationSecs >= METRICS_COLLECTION_INTERVAL_SECS) {
