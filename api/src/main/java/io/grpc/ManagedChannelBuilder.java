@@ -422,7 +422,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T maxRetryAttempts(int maxRetryAttempts) {
     throw new UnsupportedOperationException();
   }
@@ -437,7 +436,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T maxHedgedAttempts(int maxHedgedAttempts) {
     throw new UnsupportedOperationException();
   }
@@ -455,7 +453,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.10.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T retryBufferSize(long bytes) {
     throw new UnsupportedOperationException();
   }
@@ -472,7 +469,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.10.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T perRpcBufferLimit(long bytes) {
     throw new UnsupportedOperationException();
   }
