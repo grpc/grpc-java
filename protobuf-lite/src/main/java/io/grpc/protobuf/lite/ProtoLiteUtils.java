@@ -40,7 +40,7 @@ import java.lang.ref.WeakReference;
  * Utility methods for using protobuf with grpc.
  *
  * <p>Note that this class will remain experimental for the foreseeable future as the proto lite
- * API, which this class depends on, is noy guaranteed to be stable. This is explained in protobuf
+ * API, which this class depends on, is not guaranteed to be stable. This is explained in protobuf
  * documentation at: https://github.com/protocolbuffers/protobuf/blob/main/java/lite.md
  */
 @ExperimentalApi("Will remain experimental as protobuf lite API is not stable")
