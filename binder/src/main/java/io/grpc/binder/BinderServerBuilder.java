@@ -171,7 +171,7 @@ public final class BinderServerBuilder
     checkState(!isBuilt, "BinderServerBuilder can only be used to build one server instance.");
     isBuilt = true;
     // We install the security interceptor last, so it's closest to the transport.
-    BinderTransportSecurity.installAuthInterceptor(this);
+    BinderTransportSecurity.installAuthInterceptor(this, serverImplBuilder.getExecutorPool());
     return super.build();
   }
 }

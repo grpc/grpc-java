@@ -28,9 +28,11 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.ObjectPool;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import javax.annotation.CheckReturnValue;
+import javax.annotation.Nullable;
 
 /**
  * Manages security for an Android Service hosted gRPC server.
@@ -51,8 +53,8 @@ public final class BinderTransportSecurity {
    * @param serverBuilder The ServerBuilder being used to create the server.
    */
   @Internal
-  public static void installAuthInterceptor(ServerBuilder<?> serverBuilder) {
-    serverBuilder.intercept(new ServerAuthInterceptor());
+  public static void installAuthInterceptor(ServerBuilder<?> serverBuilder, ObjectPool<? extends Executor> executorPool) {
+    serverBuilder.intercept(new ServerAuthInterceptor(executorPool));
   }
 
   /**
@@ -78,30 +80,33 @@ public final class BinderTransportSecurity {
    * Authentication state is fetched from the call attributes, inherited from the transport.
    */
   private static final class ServerAuthInterceptor implements ServerInterceptor {
+
+    private final ObjectPool<? extends Executor> executorPool;
+
+    ServerAuthInterceptor(ObjectPool<? extends Executor> executorPool) {
+      this.executorPool = executorPool;
+    }
+
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      Status authStatus =
+      ListenableFuture<Status> authStatusFuture =
           call.getAttributes()
               .get(TRANSPORT_AUTHORIZATION_STATE)
               .checkAuthorization(call.getMethodDescriptor());
-      if (authStatus.isOk()) {
-        return next.startCall(call, headers);
-      } else {
-        call.close(authStatus, new Metadata());
-        return new ServerCall.Listener<ReqT>() {};
-      }
+
+      return new PendingAuthListener<>(authStatusFuture, executorPool, call, headers, next);
     }
   }
 
   /**
-   * Maintaines the authorization state for a single transport instance. This class lives for the
+   * Maintains the authorization state for a single transport instance. This class lives for the
    * lifetime of a single transport.
    */
   private static final class TransportAuthorizationState {
     private final int uid;
     private final ServerPolicyChecker serverPolicyChecker;
-    private final ConcurrentHashMap<String, Status> serviceAuthorization;
+    private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
 
     TransportAuthorizationState(int uid, ServerPolicyChecker serverPolicyChecker) {
       this.uid = uid;
@@ -111,32 +116,20 @@ public final class BinderTransportSecurity {
 
     /** Get whether we're authorized to make this call. */
     @CheckReturnValue
-    Status checkAuthorization(MethodDescriptor<?, ?> method) {
+    ListenableFuture<Status> checkAuthorization(MethodDescriptor<?, ?> method) {
       String serviceName = method.getServiceName();
       // Only cache decisions if the method can be sampled for tracing,
-      // which is true for all generated methods. Otherwise, programatically
-      // created methods could casue this cahe to grow unbounded.
+      // which is true for all generated methods. Otherwise, programmatically
+      // created methods could case this cache to grow unbounded.
       boolean useCache = method.isSampledToLocalTracing();
-      Status authorization;
       if (useCache) {
-        authorization = serviceAuthorization.get(serviceName);
+        @Nullable ListenableFuture<Status> authorization = serviceAuthorization.get(serviceName);
         if (authorization != null) {
           return authorization;
         }
       }
-      try {
-        // TODO(10566): provide a synchronous version of "checkAuthorization" to avoid blocking the
-        // calling thread on the completion of the future.
-        authorization =
-            serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName).get();
-      } catch (ExecutionException e) {
-        // Do not cache this failure since it may be transient.
-        return Status.fromThrowable(e);
-      } catch (InterruptedException e) {
-        // Do not cache this failure since it may be transient.
-        Thread.currentThread().interrupt();
-        return Status.CANCELLED.withCause(e);
-      }
+      ListenableFuture<Status> authorization =
+          serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
       if (useCache) {
         serviceAuthorization.putIfAbsent(serviceName, authorization);
       }
