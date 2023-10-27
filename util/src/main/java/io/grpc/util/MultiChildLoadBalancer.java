@@ -157,7 +157,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         return false;
       }
 
-      // Update the picker and
+      // Update the picker and our connectivity state
       updateOverallBalancingState();
 
       // shutdown removed children
