@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
@@ -46,10 +47,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -71,21 +70,13 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
   private List<RingEntry> ring;
-  private Iterator<ChildLbState> connectionAttemptIterator = getChildLbStates().iterator();
-  private final Random random;
 
   RingHashLoadBalancer(Helper helper) {
-    this(helper, new Random());
-  }
-
-  RingHashLoadBalancer(Helper helper, Random random) {
     super(helper);
-    this.random = checkNotNull(random, "random");
     syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     logger = XdsLogger.withLogId(InternalLogId.allocate("ring_hash_lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
-
 
   @Override
   public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -146,16 +137,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // Build the ring
       ring = buildRing(serverWeights, totalWeight, scale);
 
-      // If we need to proactively start connecting, iterate through all the subchannels, starting
-      // at a random position.
-      // Alternatively, we should better start at the same position.
-      Collection<ChildLbState> childLbStates = getChildLbStates();
-      connectionAttemptIterator = childLbStates.iterator();
-      int randomAdvance = random.nextInt(childLbStates.size());
-      while (randomAdvance-- > 0) {
-        connectionAttemptIterator.next();
-      }
-
       // Must update channel picker before return so that new RPCs will not be routed to deleted
       // clusters and resolver can remove them in service config.
       updateOverallBalancingState();
@@ -187,37 +168,39 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   @Override
   protected void updateOverallBalancingState() {
     checkState(!getChildLbStates().isEmpty(), "no subchannel has been created");
-    boolean startConnectionAttempt = false;
+    if (this.currentConnectivityState == SHUTDOWN) {
+      // Ignore changes that happen after shutdown is called
+      return;
+    }
 
-    // Calculate the current overall state and whether we should attempt a connection
+    // Calculate the current overall state considering sticky TF
     int numIdle = 0;
     int numReady = 0;
     int numConnecting = 0;
-    int numTransientFailure = 0;
+
+    forloop:
     for (ChildLbState childLbState : getChildLbStates()) {
       ConnectivityState state = childLbState.getCurrentState();
-      if (state == READY) {
-        numReady++;
-        break;
-      } else if (state == TRANSIENT_FAILURE) {
-        numTransientFailure++;
-      } else if (state == CONNECTING ) {
-        numConnecting++;
-      } else if (state == IDLE) {
-        numIdle++;
+      switch (state) {
+        case READY:
+          numReady++;
+          break forloop;
+        case CONNECTING:
+          numConnecting++;
+          break;
+        case IDLE:
+          numIdle++;
+          break;
+        default:
+          // ignore it
       }
     }
+
     ConnectivityState overallState;
     if (numReady > 0) {
       overallState = READY;
-    } else if (numTransientFailure >= 2) {
-      overallState = TRANSIENT_FAILURE;
-      startConnectionAttempt = (numConnecting == 0);
     } else if (numConnecting > 0) {
       overallState = CONNECTING;
-    } else if (numTransientFailure == 1 && getChildLbStates().size() > 1) {
-      overallState = CONNECTING;
-      startConnectionAttempt = true;
     } else if (numIdle > 0) {
       overallState = IDLE;
     } else {
@@ -225,34 +208,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
 
     RingHashPicker picker = new RingHashPicker(syncContext, ring, getImmutableChildMap());
-    // TODO(chengyuanzhang): avoid unnecessary reprocess caused by duplicated server addr updates
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
-
-    // While the ring_hash policy is reporting TRANSIENT_FAILURE, it will
-    // not be getting any pick requests from the priority policy.
-    // However, because the ring_hash policy does not attempt to
-    // reconnect to subchannels unless it is getting pick requests,
-    // it will need special handling to ensure that it will eventually
-    // recover from TRANSIENT_FAILURE state once the problem is resolved.
-    // Specifically, it will make sure that it is attempting to connect to
-    // at least one subchannel at any given time.  After a given subchannel
-    // fails a connection attempt, it will move on to the next subchannel
-    // in the ring.  It will keep doing this until one of the subchannels
-    // successfully connects, at which point it will report READY and stop
-    // proactively trying to connect.  The policy will remain in
-    // TRANSIENT_FAILURE until at least one subchannel becomes connected,
-    // even if subchannels are in state CONNECTING during that time.
-    //
-    // Note that we do the same thing when the policy is in state
-    // CONNECTING, just to ensure that we don't remain in CONNECTING state
-    // indefinitely if there are no new picks coming in.
-    if (startConnectionAttempt) {
-      if (!connectionAttemptIterator.hasNext()) {
-        connectionAttemptIterator = getChildLbStates().iterator();
-      }
-      ((RingHashChildLbState)connectionAttemptIterator.next()).getLb().requestConnection();
-    }
   }
 
   @Override
@@ -265,28 +222,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     return false;
   }
 
-  /**
-   * Create RingHashChildLbState objects with resolvedAddresses filled in.
-   * @return Map of {@link Endpoint} -> {@link RingHashChildLbState}
-   */
   @Override
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
-    Map<Object, ChildLbState> childLbMap = new HashMap<>();
-
-    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
-    for (EquivalentAddressGroup eag : addresses) {
-      Endpoint endpoint = new Endpoint(eag); // keys need to be just addresses
-
-      ChildLbState existingChildLbState = getChildLbState(endpoint);
-      if (existingChildLbState != null) {
-        childLbMap.put(endpoint, existingChildLbState);
-      } else {
-        childLbMap.put(endpoint,
-            new RingHashChildLbState(endpoint,
-                getChildAddresses(endpoint, resolvedAddresses, null)));
-      }
-    }
-    return childLbMap;
+  protected ChildLbState createChildLbState(Object key, Object policyConfig,
+      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
+    return new RingHashChildLbState((Endpoint)key,
+        getChildAddresses(key, resolvedAddresses, null));
   }
 
   private boolean validateAddrList(List<EquivalentAddressGroup> addrList) {

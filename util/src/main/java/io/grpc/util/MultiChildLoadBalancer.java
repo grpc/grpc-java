@@ -127,7 +127,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       if (existingChildLbState != null) {
         childLbMap.put(endpoint, existingChildLbState);
       } else {
-        childLbMap.put(endpoint, createChildLbState(endpoint, null, getInitialPicker()));
+        childLbMap.put(endpoint,
+            createChildLbState(endpoint, null, getInitialPicker(), resolvedAddresses));
       }
     }
     return childLbMap;
@@ -137,7 +138,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    * Override to create an instance of a subclass.
    */
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker) {
+      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
     return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
   }
 
