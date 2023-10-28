@@ -303,7 +303,7 @@ final class LbPolicyConfiguration {
             @Override
             public void run() {
               if (!lb.acceptResolvedAddresses(
-                  childLbResolvedAddressFactory.create(lbConfig.getConfig()))) {
+                  childLbResolvedAddressFactory.create(lbConfig.getConfig())).isOk()) {
                 helper.refreshNameResolution();
               }
               lb.requestConnection();

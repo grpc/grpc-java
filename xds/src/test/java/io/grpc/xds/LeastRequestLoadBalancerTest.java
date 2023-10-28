@@ -133,9 +133,9 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void pickAfterResolved() throws Exception {
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     final Subchannel readySubchannel = subchannels.values().iterator().next();
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
 
@@ -178,10 +178,10 @@ public class LeastRequestLoadBalancerTest {
 
     InOrder inOrder = inOrder(helper);
 
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(currentServers).setAttributes(affinity)
             .build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     Subchannel removedSubchannel = getSubchannel(removedEag);
     Subchannel oldSubchannel = getSubchannel(oldEag1);
     SubchannelStateListener removedListener =
@@ -205,9 +205,9 @@ public class LeastRequestLoadBalancerTest {
     // This time with Attributes
     List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
 
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(latestServers).setAttributes(affinity).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     Subchannel newSubchannel = getSubchannel(newEag);
 
@@ -257,10 +257,10 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(helper);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
     Subchannel subchannel = getSubchannel(childLbState);
 
@@ -297,10 +297,10 @@ public class LeastRequestLoadBalancerTest {
   public void pickAfterConfigChange() {
     final LeastRequestConfig oldConfig = new LeastRequestConfig(4);
     final LeastRequestConfig newConfig = new LeastRequestConfig(6);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
             .setLoadBalancingPolicyConfig(oldConfig).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     final Subchannel readySubchannel = subchannels.values().iterator().next();
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
@@ -311,10 +311,10 @@ public class LeastRequestLoadBalancerTest {
     pickerCaptor.getValue().pickSubchannel(mockArgs);
     verify(mockRandom, times(oldConfig.choiceCount)).nextInt(1);
 
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
             .setLoadBalancingPolicyConfig(newConfig).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3))
         .updateBalancingState(any(ConnectivityState.class), pickerCaptor.capture());
 
@@ -327,10 +327,10 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void ignoreShutdownSubchannelStateChange() {
     InOrder inOrder = inOrder(helper);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
     loadBalancer.shutdown();
@@ -347,10 +347,10 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void stayTransientFailureUntilReady() {
     InOrder inOrder = inOrder(helper);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
@@ -416,10 +416,10 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void refreshNameResolutionWhenSubchannelConnectionBroken() {
     InOrder inOrder = inOrder(helper);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
@@ -447,11 +447,11 @@ public class LeastRequestLoadBalancerTest {
   public void pickerLeastRequest() throws Exception {
     int choiceCount = 2;
     // This should add inFlight counters to all subchannels.
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .setLoadBalancingPolicyConfig(new LeastRequestConfig(choiceCount))
             .build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     assertEquals(3, loadBalancer.getChildLbStates().size());
 
@@ -532,11 +532,11 @@ public class LeastRequestLoadBalancerTest {
   @Test
   public void nameResolutionErrorWithActiveChannels() throws Exception {
     int choiceCount = 8;
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setLoadBalancingPolicyConfig(new LeastRequestConfig(choiceCount))
             .setAddresses(servers).setAttributes(affinity).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     final Subchannel readySubchannel = subchannels.values().iterator().next();
 
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
@@ -568,10 +568,10 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void subchannelStateIsolation() throws Exception {
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
     Subchannel sc1 = subchannelIterator.next();
     Subchannel sc2 = subchannelIterator.next();
@@ -659,7 +659,7 @@ public class LeastRequestLoadBalancerTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(affinity)
-            .build()))
+            .build()).isOk())
         .isFalse();
   }
 

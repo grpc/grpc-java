@@ -104,23 +104,24 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getLoadBalancingPolicyConfig() == null) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
               "NameResolver returned no WeightedRoundRobinLoadBalancerConfig. addrs="
                       + resolvedAddresses.getAddresses()
-                      + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    boolean accepted = super.acceptResolvedAddresses(resolvedAddresses);
+    Status addressAcceptanceStatus = super.acceptResolvedAddresses(resolvedAddresses);
     if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
       weightUpdateTimer.cancel();
     }
     updateWeightTask.run();
     afterAcceptAddresses();
-    return accepted;
+    return addressAcceptanceStatus;
   }
 
   @Override

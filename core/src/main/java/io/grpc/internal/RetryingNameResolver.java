@@ -114,8 +114,8 @@ final class RetryingNameResolver extends ForwardingNameResolver {
    * the Listener2.onResult() API can be changed to return a boolean for this purpose.
    */
   class ResolutionResultListener {
-    public void resolutionAttempted(boolean successful) {
-      if (successful) {
+    public void resolutionAttempted(Status successStatus) {
+      if (successStatus.isOk()) {
         retryScheduler.reset();
       } else {
         retryScheduler.schedule(new DelayedNameResolverRefresh());

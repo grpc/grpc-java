@@ -86,11 +86,12 @@ final class RingHashLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     List<EquivalentAddressGroup> addrList = resolvedAddresses.getAddresses();
-    if (!validateAddrList(addrList)) {
-      return false;
+    Status addressValidityStatus = validateAddrList(addrList);
+    if (!addressValidityStatus.isOk()) {
+      return addressValidityStatus;
     }
 
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
@@ -167,21 +168,23 @@ final class RingHashLoadBalancer extends LoadBalancer {
       shutdownSubchannel(subchann);
     }
 
-    return true;
+    return Status.OK;
   }
 
-  private boolean validateAddrList(List<EquivalentAddressGroup> addrList) {
+  private Status validateAddrList(List<EquivalentAddressGroup> addrList) {
     if (addrList.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
-          + "resolution was successful, but returned server addresses are empty."));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+              + "resolution was successful, but returned server addresses are empty.");
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
 
     String dupAddrString = validateNoDuplicateAddresses(addrList);
     if (dupAddrString != null) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
-          + "resolution was successful, but there were duplicate addresses: " + dupAddrString));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+              + "resolution was successful, but there were duplicate addresses: " + dupAddrString);
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
 
     long totalWeight = 0;
@@ -193,29 +196,32 @@ final class RingHashLoadBalancer extends LoadBalancer {
       }
 
       if (weight < 0) {
-        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-            String.format("Ring hash lb error: EDS resolution was successful, but returned a "
-                + "negative weight for %s.", stripAttrs(eag))));
-        return false;
+        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+                String.format("Ring hash lb error: EDS resolution was successful, but returned a "
+                        + "negative weight for %s.", stripAttrs(eag)));
+        handleNameResolutionError(unavailableStatus);
+        return unavailableStatus;
       }
       if (weight > UnsignedInteger.MAX_VALUE.longValue()) {
-        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
             String.format("Ring hash lb error: EDS resolution was successful, but returned a weight"
-                + " too large to fit in an unsigned int for %s.", stripAttrs(eag))));
-        return false;
+                + " too large to fit in an unsigned int for %s.", stripAttrs(eag)));
+        handleNameResolutionError(unavailableStatus);
+        return unavailableStatus;
       }
       totalWeight += weight;
     }
 
     if (totalWeight > UnsignedInteger.MAX_VALUE.longValue()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
           String.format(
               "Ring hash lb error: EDS resolution was successful, but returned a sum of weights too"
-              + " large to fit in an unsigned int (%d).", totalWeight)));
-      return false;
+                  + " large to fit in an unsigned int (%d).", totalWeight));
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
 
-    return true;
+    return Status.OK;
   }
 
   @Nullable

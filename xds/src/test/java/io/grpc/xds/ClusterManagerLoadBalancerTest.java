@@ -361,14 +361,14 @@ public class ClusterManagerLoadBalancerTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
 
       if (failing) {
         helper.updateBalancingState(
             TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.INTERNAL)));
       }
-      return true;
+      return Status.OK;
     }
 
     @Override

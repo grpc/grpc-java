@@ -157,10 +157,10 @@ public class RingHashLoadBalancerTest {
   public void subchannelLazyConnectUntilPicked() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
     verify(subchannel, never()).requestConnection();
@@ -189,10 +189,10 @@ public class RingHashLoadBalancerTest {
   public void subchannelNotAutoReconnectAfterReenteringIdle() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
@@ -220,10 +220,10 @@ public class RingHashLoadBalancerTest {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
     InOrder inOrder = Mockito.inOrder(helper);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -282,10 +282,10 @@ public class RingHashLoadBalancerTest {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1);
     InOrder inOrder = Mockito.inOrder(helper);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(helper, times(4)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -341,10 +341,10 @@ public class RingHashLoadBalancerTest {
   public void subchannelStayInTransientFailureUntilBecomeReady() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
     reset(helper);
@@ -384,10 +384,10 @@ public class RingHashLoadBalancerTest {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     InOrder inOrder = Mockito.inOrder(helper);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -401,10 +401,10 @@ public class RingHashLoadBalancerTest {
     verifyConnection(1);
 
     servers = createWeightedServerAddrs(1,1);
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(helper)
         .updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     verifyConnection(1);
@@ -430,10 +430,10 @@ public class RingHashLoadBalancerTest {
   public void ignoreShutdownSubchannelStateChange() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -451,10 +451,10 @@ public class RingHashLoadBalancerTest {
   public void deterministicPickWithHostsPartiallyRemoved() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     InOrder inOrder = Mockito.inOrder(helper);
     inOrder.verify(helper, times(5)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
@@ -480,10 +480,10 @@ public class RingHashLoadBalancerTest {
       Attributes attr = addr.getAttributes().toBuilder().set(CUSTOM_KEY, "custom value").build();
       updatedServers.add(new EquivalentAddressGroup(addr.getAddresses(), attr));
     }
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(updatedServers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(subchannels.get(Collections.singletonList(servers.get(0))))
         .updateAddresses(Collections.singletonList(updatedServers.get(0)));
     verify(subchannels.get(Collections.singletonList(servers.get(1))))
@@ -498,10 +498,10 @@ public class RingHashLoadBalancerTest {
   public void deterministicPickWithNewHostsAdded() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);  // server0 and server1
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     InOrder inOrder = Mockito.inOrder(helper);
     inOrder.verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
@@ -523,10 +523,10 @@ public class RingHashLoadBalancerTest {
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
 
     servers = createWeightedServerAddrs(1, 1, 1, 1, 1);  // server2, server3, server4 added
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(args).getSubchannel())
@@ -539,10 +539,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
     reset(helper);
@@ -601,10 +601,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
     reset(helper);
@@ -668,10 +668,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -707,10 +707,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -739,10 +739,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -771,10 +771,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
     // ring:
@@ -807,10 +807,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
     // ring:
@@ -846,10 +846,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
     // ring:
@@ -889,10 +889,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
     // ring:
@@ -934,10 +934,10 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -971,49 +971,49 @@ public class RingHashLoadBalancerTest {
     RingHashConfig config = new RingHashConfig(10000, 100000);  // large ring
     List<EquivalentAddressGroup> servers =
         createWeightedServerAddrs(Integer.MAX_VALUE, 10, 100); // MAX:10:100
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Try value between max signed and max unsigned int
     servers = createWeightedServerAddrs(Integer.MAX_VALUE + 100L, 100); // (MAX+100):100
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Try a negative value
     servers = createWeightedServerAddrs(10, -20, 100); // 10:-20:100
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isFalse();
+    assertThat(addressesAcceptanceStatus.isOk()).isFalse();
 
     // Try an individual value larger than max unsigned int
     long maxUnsigned = UnsignedInteger.MAX_VALUE.longValue();
     servers = createWeightedServerAddrs(maxUnsigned + 10, 10, 100); // uMAX+10:10:100
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isFalse();
+    assertThat(addressesAcceptanceStatus.isOk()).isFalse();
 
     // Try a sum of values larger than max unsigned int
     servers = createWeightedServerAddrs(Integer.MAX_VALUE, Integer.MAX_VALUE, 100); // MAX:MAX:100
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isFalse();
+    assertThat(addressesAcceptanceStatus.isOk()).isFalse();
   }
 
   @Test
   public void hostSelectionProportionalToWeights() {
     RingHashConfig config = new RingHashConfig(10000, 100000);  // large ring
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 10, 100); // 1:10:100
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
@@ -1059,10 +1059,10 @@ public class RingHashLoadBalancerTest {
   public void nameResolutionErrorWithActiveSubchannels() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
@@ -1083,10 +1083,10 @@ public class RingHashLoadBalancerTest {
   public void duplicateAddresses() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createRepeatedServerAddrs(1, 2, 3);
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isFalse();
+    assertThat(addressesAcceptanceStatus.isOk()).isFalse();
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
 
     PickSubchannelArgs args = new PickSubchannelArgsImpl(

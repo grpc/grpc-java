@@ -703,7 +703,7 @@ public class CachingRlsLbClientTest {
       LoadBalancer loadBalancer = new LoadBalancer() {
 
         @Override
-        public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           Map<?, ?> config = (Map<?, ?>) resolvedAddresses.getLoadBalancingPolicyConfig();
           if (DEFAULT_TARGET.equals(config.get("target"))) {
             helper.updateBalancingState(
@@ -727,7 +727,7 @@ public class CachingRlsLbClientTest {
                 });
           }
 
-          return true;
+          return Status.OK;
         }
 
         @Override

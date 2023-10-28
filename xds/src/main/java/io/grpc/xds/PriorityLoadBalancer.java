@@ -85,7 +85,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
     PriorityLbConfig config = (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -111,7 +111,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     }
     handlingResolvedAddresses = false;
     tryNextPriority();
-    return true;
+    return Status.OK;
   }
 
   @Override
