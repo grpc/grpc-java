@@ -1,8 +1,8 @@
 package io.grpc.binder.internal;
 
+import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -11,7 +11,11 @@ import io.grpc.ServerCallHandler;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
+
+import javax.annotation.Nullable;
 
 /**
  * A {@link ServerCall.Listener} that can be returned by a {@link io.grpc.ServerInterceptor} to
@@ -19,10 +23,9 @@ import java.util.concurrent.Executor;
  */
 final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
 
-    private final ListenableFuture<Listener<ReqT>> authStatusFuture;
-    private final Executor sequentialExecutor;
-    private final ObjectPool<? extends Executor> executorPool;
-    private final Executor executor;
+    private final ConcurrentLinkedQueue<ListenerConsumer<ReqT>> pendingSteps =
+        new ConcurrentLinkedQueue<>();
+    private final AtomicReference<Listener<ReqT>> delegateRef = new AtomicReference<>(null);
 
     /**
      * @param authStatusFuture a ListenableFuture holding the result status of the authorization
@@ -39,59 +42,85 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
     PendingAuthListener(
             ListenableFuture<Status> authStatusFuture,
             ObjectPool<? extends Executor> executorPool,
-            ServerCall<ReqT, RespT> call, Metadata headers,
+            ServerCall<ReqT, RespT> call,
+            Metadata headers,
             ServerCallHandler<ReqT, RespT> next) {
-        this.executorPool = executorPool;
-        this.executor = executorPool.getObject();
-        this.authStatusFuture = Futures.transform(authStatusFuture, authStatus -> {
-            if (authStatus.isOk()) {
-                return next.startCall(call, headers);
-            }
-            call.close(authStatus, new Metadata());
-            throw new IllegalStateException("Auth failed", authStatus.asException());
-        }, executor);
-        this.sequentialExecutor = MoreExecutors.newSequentialExecutor(executor);
+        Executor executor = executorPool.getObject();
+
+        Futures.addCallback(authStatusFuture,
+            new FutureCallback<Status>() {
+                @Override
+                public void onSuccess(Status authStatus) {
+                    if (authStatus.isOk()) {
+                        delegateRef.set(next.startCall(call, headers));
+                        maybeRunPendingSteps();
+                    } else {
+                        call.close(authStatus, new Metadata());
+                    }
+                    executorPool.returnObject(executor);
+                }
+
+                @Override
+                public void onFailure(Throwable t) {
+                    call.close(
+                        Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
+                        new Metadata());
+                    executorPool.returnObject(executor);
+                }
+            }, executor);
+    }
+
+    /**
+     * Runs any enqueued step in this ServerCall listener as long as the authorization check is
+     * complete. Otherwise, no-op and returns immediately.
+     */
+    private void maybeRunPendingSteps() {
+        @Nullable Listener<ReqT> delegate = delegateRef.get();
+        if (delegate == null) {
+            return;
+        }
+
+        ListenerConsumer<ReqT> nextStep;
+        while ((nextStep = pendingSteps.poll()) != null) {
+            nextStep.accept(delegate);
+        }
     }
 
     @Override
     public void onCancel() {
-        ListenableFuture<?> unused = Futures.transform(authStatusFuture, delegate -> {
-            delegate.onCancel();
-            executorPool.returnObject(executor);
-            return null;
-        }, sequentialExecutor);
+        pendingSteps.offer(Listener::onCancel);
+        maybeRunPendingSteps();
     }
 
     @Override
     public void onComplete() {
-        ListenableFuture<?> unused = Futures.transform(authStatusFuture, delegate -> {
-            delegate.onComplete();
-            executorPool.returnObject(executor);
-            return null;
-        }, sequentialExecutor);
+        pendingSteps.offer(Listener::onComplete);
+        maybeRunPendingSteps();
     }
 
     @Override
     public void onHalfClose() {
-        ListenableFuture<?> unused = Futures.transform(authStatusFuture, delegate -> {
-            delegate.onHalfClose();
-            return null;
-        }, sequentialExecutor);
+        pendingSteps.offer(Listener::onHalfClose);
+        maybeRunPendingSteps();
     }
 
     @Override
     public void onMessage(ReqT message) {
-        ListenableFuture<?> unused = Futures.transform(authStatusFuture, delegate -> {
-            delegate.onMessage(message);
-            return null;
-        }, sequentialExecutor);
+        pendingSteps.offer(delegate -> delegate.onMessage(message));
+        maybeRunPendingSteps();
     }
 
     @Override
     public void onReady() {
-        ListenableFuture<?> unused = Futures.transform(authStatusFuture, delegate -> {
-            delegate.onReady();
-            return null;
-        }, sequentialExecutor);
+        pendingSteps.offer(Listener::onReady);
+        maybeRunPendingSteps();
+    }
+
+    /**
+     * Similar to Java8's {@link java.util.function.Consumer}, but redeclared in order to support
+     * Android SDK 21.
+     */
+    private interface ListenerConsumer<ReqT> {
+        void accept(Listener<ReqT> listener);
     }
 }

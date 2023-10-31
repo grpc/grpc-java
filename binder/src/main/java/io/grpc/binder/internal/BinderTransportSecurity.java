@@ -17,6 +17,8 @@
 package io.grpc.binder.internal;
 
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.Uninterruptibles;
+
 import io.grpc.Attributes;
 import io.grpc.Internal;
 import io.grpc.Metadata;
@@ -29,7 +31,10 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
+
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -87,6 +92,32 @@ public final class BinderTransportSecurity {
       this.executorPool = executorPool;
     }
 
+    /**
+     * @param authStatusFuture a Future that is known to be complete, for which it's safe to call
+     *                         {@link ListenableFuture#get()} without blocking the current thread.
+     */
+    private <ReqT, RespT> ServerCall.Listener<ReqT> shortCircuitAuthFuture(
+        ListenableFuture<Status> authStatusFuture,
+        ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next) {
+      Status authStatus;
+      try {
+        authStatus = Uninterruptibles.getUninterruptibly(authStatusFuture);
+      } catch (ExecutionException e) {
+        authStatus = Status.INTERNAL.withCause(e);
+      } catch (CancellationException e) {
+        authStatus = Status.CANCELLED.withCause(e);
+      }
+
+      if (authStatus.isOk()) {
+        return next.startCall(call, headers);
+      }
+      call.close(authStatus, new Metadata());
+      return new ServerCall.Listener<ReqT>() {
+      };
+    }
+
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
@@ -94,6 +125,13 @@ public final class BinderTransportSecurity {
           call.getAttributes()
               .get(TRANSPORT_AUTHORIZATION_STATE)
               .checkAuthorization(call.getMethodDescriptor());
+
+      // Most SecurityPolicy will have synchronous implementations that provide an
+      // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
+      // and asynchronous code.
+      if (authStatusFuture.isDone()) {
+        return shortCircuitAuthFuture(authStatusFuture, call, headers, next);
+      }
 
       return new PendingAuthListener<>(authStatusFuture, executorPool, call, headers, next);
     }
@@ -120,7 +158,7 @@ public final class BinderTransportSecurity {
       String serviceName = method.getServiceName();
       // Only cache decisions if the method can be sampled for tracing,
       // which is true for all generated methods. Otherwise, programmatically
-      // created methods could case this cache to grow unbounded.
+      // created methods could cause this cache to grow unbounded.
       boolean useCache = method.isSampledToLocalTracing();
       if (useCache) {
         @Nullable ListenableFuture<Status> authorization = serviceAuthorization.get(serviceName);
