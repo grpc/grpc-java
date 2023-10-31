@@ -92,7 +92,7 @@ public class StressTestClient {
       client.runStressTest();
       client.startMetricsLogging();
       client.blockUntilStressTestComplete();
-      log.log(Level.INFO, "Total calls made: {0}", client.getTotalCallCount());
+      log.log(Level.INFO, "Total calls made: " + client.getTotalCallCount());
     } catch (Exception e) {
       log.log(Level.WARNING, "The stress test client encountered an error!", e);
     } finally {
