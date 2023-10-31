@@ -1724,7 +1724,7 @@ public class ManagedChannelImplTest {
     // Verify that resolving oob channel does not
     oob = helper.createResolvingOobChannelBuilder("oobauthority")
         .nameResolverFactory(
-            new FakeNameResolverFactory.Builder(URI.create("oobauthority")).build())
+            new FakeNameResolverFactory.Builder(URI.create("fake:///oobauthority")).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
         .disableRetry() // irrelevant to what we test, disable retry to make verification easy
@@ -2617,7 +2617,7 @@ public class ManagedChannelImplTest {
       }
 
       @Override public String getDefaultScheme() {
-        return "fakescheme";
+        return "fake";
       }
     });
     createChannel();
@@ -3833,7 +3833,7 @@ public class ManagedChannelImplTest {
 
         @Override
         public String getDefaultScheme() {
-          return "fakescheme";
+          return "fake";
         }
       };
     channelBuilder.nameResolverFactory(factory).proxyDetector(neverProxy);

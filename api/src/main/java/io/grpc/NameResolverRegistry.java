@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -59,22 +58,16 @@ public final class NameResolverRegistry {
   @GuardedBy("this")
   private ImmutableMap<String, NameResolverProvider> effectiveProviders = ImmutableMap.of();
 
-  public NameResolverProvider getNameResolverProvider(
-      String target) {
-    NameResolverProvider nameResolverProvider = null;
-    try {
-      URI uri = new URI(target);
-      nameResolverProvider = providers().get(uri.getScheme());
-    } catch (URISyntaxException ignore) {
-      // bad URI found, just ignore and continue
-    }
-    if (nameResolverProvider == null) {
-      nameResolverProvider = providers().get(
-          asFactory().getDefaultScheme());
-    }
-    return nameResolverProvider;
+  public synchronized String getDefaultScheme() {
+    return defaultScheme;
   }
 
+  public NameResolverProvider get(String scheme) {
+    if (scheme == null) {
+      return null;
+    }
+    return providers().get(scheme.toLowerCase(Locale.US));
+  }
 
   /**
    * Register a provider.
@@ -180,19 +173,13 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      String scheme = targetUri.getScheme();
-      if (scheme == null) {
-        return null;
-      }
-      NameResolverProvider provider = providers().get(scheme.toLowerCase(Locale.US));
+      NameResolverProvider provider = get(targetUri.getScheme());
       return provider == null ? null : provider.newNameResolver(targetUri, args);
     }
 
     @Override
     public String getDefaultScheme() {
-      synchronized (NameResolverRegistry.this) {
-        return defaultScheme;
-      }
+      return NameResolverRegistry.this.getDefaultScheme();
     }
   }
 

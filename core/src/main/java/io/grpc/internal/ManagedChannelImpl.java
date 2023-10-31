@@ -708,62 +708,58 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private static NameResolver getNameResolver(
       String target, NameResolverRegistry nameResolverRegistry, NameResolver.Args nameResolverArgs,
       Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
-    NameResolverProvider nameResolverProvider = nameResolverRegistry
-        .getNameResolverProvider(target);
-    if (nameResolverProvider == null) {
-      throw new IllegalArgumentException(String.format(
-          "cannot find a NameResolver for %s", target));
-    }
-    if (channelTransportSocketAddressTypes != null) {
-      Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
-          = nameResolverProvider.getProducedSocketAddressTypes();
-      if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
-        throw new IllegalArgumentException(String.format(
-            "Address types of NameResolver '%s' for '%s' not supported by transport",
-            nameResolverProvider.getDefaultScheme(), target));
-      }
-    }
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
+    NameResolverProvider provider = null;
     URI targetUri = null;
     StringBuilder uriSyntaxErrors = new StringBuilder();
     try {
       targetUri = new URI(target);
-      // For "localhost:8080" this would likely cause newNameResolver to return null, because
-      // "localhost" is parsed as the scheme. Will fall into the next branch and try
-      // "dns:///localhost:8080".
     } catch (URISyntaxException e) {
       // Can happen with ip addresses like "[::1]:1234" or 127.0.0.1:1234.
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = nameResolverProvider.newNameResolver(targetUri, nameResolverArgs);
-      if (resolver != null) {
-        return resolver;
-      }
-      // "foo.googleapis.com:8080" cause resolver to be null, because "foo.googleapis.com" is an
-      // unmapped scheme. Just fall through and will try "dns:///foo.googleapis.com:8080"
+      // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
+      // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
+      provider = nameResolverRegistry.get(targetUri.getScheme());
     }
 
-    // If we reached here, the targetUri couldn't be used.
-    if (!URI_PATTERN.matcher(target).matches()) {
+    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
       // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
       // scheme from the factory.
       try {
-        targetUri = new URI(
-            nameResolverRegistry.asFactory().getDefaultScheme(), "",
-            "/" + target, null);
+        targetUri = new URI(nameResolverRegistry.getDefaultScheme(), "", "/" + target, null);
       } catch (URISyntaxException e) {
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      NameResolver resolver = nameResolverProvider.newNameResolver(targetUri, nameResolverArgs);
-      if (resolver != null) {
-        return resolver;
+      provider = nameResolverRegistry.get(targetUri.getScheme());
+    }
+
+    if (provider == null) {
+      throw new IllegalArgumentException(String.format(
+          "Could not find a NameResolverProvider for %s%s",
+          target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+    }
+
+    if (channelTransportSocketAddressTypes != null) {
+      Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
+          = provider.getProducedSocketAddressTypes();
+      if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+        throw new IllegalArgumentException(String.format(
+            "Address types of NameResolver '%s' for '%s' not supported by transport",
+            targetUri.getScheme(), target));
       }
     }
+
+    NameResolver resolver = provider.newNameResolver(targetUri, nameResolverArgs);
+    if (resolver != null) {
+      return resolver;
+    }
+
     throw new IllegalArgumentException(String.format(
-        "cannot find a NameResolver for %s%s",
+        "cannot create a NameResolver for %s%s",
         target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
   }
 

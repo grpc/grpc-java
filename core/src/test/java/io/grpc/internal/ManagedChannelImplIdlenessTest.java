@@ -168,7 +168,7 @@ public class ManagedChannelImplIdlenessTest {
     when(mockTransportFactory.getSupportedSocketAddressTypes())
         .thenReturn(Collections.singleton(InetSocketAddress.class));
 
-    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("fake://target",
+    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("mockscheme:///target",
         new UnsupportedClientTransportFactoryBuilder(), null);
 
     builder
