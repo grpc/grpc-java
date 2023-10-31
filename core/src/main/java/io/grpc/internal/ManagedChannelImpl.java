@@ -1449,7 +1449,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       // No new subchannel should be created after load balancer has been shutdown.
       checkState(!terminating, "Channel is being terminated");
       AbstractSubchannel subchannelImp = new SubchannelImpl(args);
-      HealthUtil.HealthCheckingListener rootHcListener =
+      HealthUtil.SubchannelHealthListener rootHcListener =
           args.getOption(HealthUtil.HEALTH_LISTENER_ARG_KEY);
       if (rootHcListener != null) {
         rootHcListener.onHealthStatus(new HealthUtil.HealthStatus(

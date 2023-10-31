@@ -33,8 +33,8 @@ public class HealthUtil {
     private String description;
 
     private HealthStatus(ServingStatus servingStatus, String description) {
-      this.servingStatus = servingStatus;
-      this.description = description;
+      this.servingStatus = checkNotNull(servingStatus, "servingStatus");
+      this.description = checkNotNull(description, "description");
     }
 
     public static HealthStatus create(ServingStatus status, String description) {
@@ -80,11 +80,11 @@ public class HealthUtil {
     }
   }
 
-  public static final LoadBalancer.CreateSubchannelArgs.Key<HealthUtil.HealthCheckingListener>
+  public static final LoadBalancer.CreateSubchannelArgs.Key<SubchannelHealthListener>
       HEALTH_LISTENER_ARG_KEY =
       LoadBalancer.CreateSubchannelArgs.Key.create("health-check-listener");
 
-  public interface HealthCheckingListener {
+  public interface SubchannelHealthListener {
 
     void onHealthStatus(HealthStatus healthStatus);
 
@@ -97,19 +97,25 @@ public class HealthUtil {
    * 1. At subchannel creation time, a health producer system should construct a
    * ChainedHealthListener and provide to parent health producer's createSubchannelArgs. The parent
    * health producer system then will call {@link #upperStreamHealthStatus} to notify health status
-   * change, because of 2.
-   * 2. In health producer's runtime, the health producer system should call
-   * {@link #thisHealthStatus} to notify health status change.
+   * change, and {@link #thisHealthStatus} is used for the current child health producer.
+   * 2. In the health producer's runtime, this health producer system should call
+   * {@link #thisHealthStatus} to notify health status change of its own health status change.
    * */
-  public static final class ChainedHealthListener implements HealthUtil.HealthCheckingListener {
+  public static final class ChainedHealthListener implements SubchannelHealthListener {
 
-    private HealthStatus upperStreamHealthStatus = HealthStatus.create(ServingStatus.UNKNOWN);
-    private HealthStatus thisHealthStatus = HealthStatus.create(ServingStatus.UNKNOWN);
-    private HealthCheckingListener delegate;
+    private HealthStatus upperStreamHealthStatus = HealthStatus.create(ServingStatus.UNKNOWN,
+        "upstream initial unknown Health Status");
+    private HealthStatus thisHealthStatus;
+    private final String healthProducerName;
+    private SubchannelHealthListener delegate;
     private final int generation;
 
-    public ChainedHealthListener(HealthUtil.HealthCheckingListener delegate) {
+    public ChainedHealthListener(SubchannelHealthListener delegate,
+                                 HealthStatus initialHealthStatus,
+                                 String thisHealthProducerName) {
       this.delegate = checkNotNull(delegate, "delegate");
+      this.thisHealthStatus = checkNotNull(initialHealthStatus, "initialHealthStatus");
+      this.healthProducerName = checkNotNull(thisHealthProducerName, "thisHealthProducerName");
       this.generation = delegate.getGeneration() + 1;
     }
 
@@ -130,14 +136,17 @@ public class HealthUtil {
     }
 
     private void notifyHealth() {
+      ServingStatus aggregatedStatus;
       if (ServingStatus.SERVING == upperStreamHealthStatus.servingStatus
           && ServingStatus.SERVING == thisHealthStatus.servingStatus) {
-        delegate.onHealthStatus(HealthStatus.create(ServingStatus.SERVING,
-            upperStreamHealthStatus.description + thisHealthStatus.description));
+        aggregatedStatus = ServingStatus.SERVING;
       } else {
-        delegate.onHealthStatus(HealthStatus.create(ServingStatus.NOT_SERVING,
-            upperStreamHealthStatus.description + thisHealthStatus.description));
+        aggregatedStatus = ServingStatus.NOT_SERVING;
       }
+      delegate.onHealthStatus(HealthStatus.create(aggregatedStatus, String.format(
+          "%sHealth producer [%s] information: %s",
+          upperStreamHealthStatus.description, healthProducerName,
+          thisHealthStatus.description.equals("") ? "None" : thisHealthStatus.description)));
     }
   }
 }

@@ -116,10 +116,13 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
       // HealthCheckState is not thread-safe, we are requiring the original LoadBalancer calls
       // createSubchannel() from the SynchronizationContext.
       syncContext.throwIfNotInThisSynchronizationContext();
-      HealthUtil.HealthCheckingListener hcListener = args.getOption(HEALTH_LISTENER_ARG_KEY);
+      HealthUtil.SubchannelHealthListener hcListener = args.getOption(HEALTH_LISTENER_ARG_KEY);
       HealthUtil.ChainedHealthListener chainedHealthListener = null;
       if (hcListener != null) {
-        chainedHealthListener = new HealthUtil.ChainedHealthListener(hcListener);
+        HealthUtil.HealthStatus initialHealthStatus = HealthUtil.HealthStatus.create(
+            HealthUtil.ServingStatus.NOT_SERVING, "Initial value is unhealthy");
+        chainedHealthListener = new HealthUtil.ChainedHealthListener(hcListener,
+            initialHealthStatus,"Client Health Check");
         args = args.toBuilder().addOption(HEALTH_LISTENER_ARG_KEY, chainedHealthListener).build();
       }
       Subchannel originalSubchannel = super.createSubchannel(args);

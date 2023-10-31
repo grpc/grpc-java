@@ -114,8 +114,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
   private final List<EquivalentAddressGroup>[] eagLists = new List[NUM_SUBCHANNELS];
   private final SubchannelStateListener[] mockStateListeners =
       new SubchannelStateListener[NUM_SUBCHANNELS];
-  private final HealthUtil.HealthCheckingListener[] mockHealthListeners =
-      new HealthUtil.HealthCheckingListener[NUM_SUBCHANNELS];
+  private final HealthUtil.SubchannelHealthListener[] mockHealthListeners =
+      new HealthUtil.SubchannelHealthListener[NUM_SUBCHANNELS];
   private List<EquivalentAddressGroup> resolvedAddressList;
   private final FakeSubchannel[] subchannels = new FakeSubchannel[NUM_SUBCHANNELS];
   private final ManagedChannel[] channels = new ManagedChannel[NUM_SUBCHANNELS];
@@ -177,7 +177,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       List<EquivalentAddressGroup> eagList = Arrays.asList(eag);
       eagLists[i] = eagList;
       mockStateListeners[i] = mock(SubchannelStateListener.class);
-      mockHealthListeners[i] = mock(HealthUtil.HealthCheckingListener.class);
+      mockHealthListeners[i] = mock(HealthUtil.SubchannelHealthListener.class);
     }
     resolvedAddressList = Arrays.asList(eags);
 
@@ -281,7 +281,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       FakeSubchannel subchannel = subchannels[i];
       HealthImpl healthImpl = healthImpls[i];
       SubchannelStateListener mockStateListener = mockStateListeners[i];
-      HealthUtil.HealthCheckingListener mockHealthListener = mockHealthListeners[i];
+      HealthUtil.SubchannelHealthListener mockHealthListener = mockHealthListeners[i];
       InOrder inOrder = inOrder(mockStateListener, mockHealthListener);
       deliverSubchannelState(i, ConnectivityStateInfo.forNonError(CONNECTING));
       deliverSubchannelState(i, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
@@ -326,7 +326,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
         } else {
           HealthUtil.HealthStatus expectedHealth = HealthUtil.HealthStatus.create(
               HealthUtil.ServingStatus.NOT_SERVING,
-              "Health-check service responded " + servingStatus + " for 'FooService'"
+              "Health producer [Client Health Check] information: "
+              + "Health-check service responded " + servingStatus + " for 'FooService'"
           );
           inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
           assertThat(subchannel.logs).containsExactly(
@@ -391,10 +392,14 @@ public class HealthCheckingLoadBalancerFactoryTest {
         mockHealthListeners[1]);
     inOrder.verify(mockHealthListeners[0]).getGeneration();
     inOrder.verify(mockHealthListeners[0]).onHealthStatus(
-        HealthUtil.HealthStatus.create(HealthUtil.ServingStatus.NOT_SERVING));
+        HealthUtil.HealthStatus.create(HealthUtil.ServingStatus.NOT_SERVING,
+            "Health producer [Client Health Check] information: Initial value is unhealthy"
+        ));
     inOrder.verify(mockHealthListeners[1]).getGeneration();
     inOrder.verify(mockHealthListeners[1]).onHealthStatus(
-        HealthUtil.HealthStatus.create(HealthUtil.ServingStatus.NOT_SERVING));
+        HealthUtil.HealthStatus.create(HealthUtil.ServingStatus.NOT_SERVING,
+            "Health producer [Client Health Check] information: Initial value is unhealthy"
+        ));
 
     for (int i = 0; i < 2; i++) {
       deliverSubchannelState(i, ConnectivityStateInfo.forNonError(READY));
@@ -422,7 +427,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     serverCall1.responseObserver.onNext(makeResponse(ServingStatus.NOT_SERVING));
     HealthUtil.HealthStatus expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-            "Health-check service responded NOT_SERVING for 'BarService'"
+        "Health producer [Client Health Check] information: "
+            + "Health-check service responded NOT_SERVING for 'BarService'"
     );
     inOrder.verify(mockHealthListeners[1]).onHealthStatus(eq(expectedHealth));
 
@@ -445,7 +451,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     serverCall0.responseObserver.onNext(makeResponse(ServingStatus.SERVICE_UNKNOWN));
     expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-        "Health-check service responded SERVICE_UNKNOWN for 'BarService'"
+        "Health producer [Client Health Check] information: "
+        + "Health-check service responded SERVICE_UNKNOWN for 'BarService'"
     );
     inOrder.verify(mockHealthListeners[0]).onHealthStatus(eq(expectedHealth));
 
@@ -466,7 +473,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
 
-    HealthUtil.HealthCheckingListener mockHealthListener = mockHealthListeners[0];
+    HealthUtil.SubchannelHealthListener mockHealthListener = mockHealthListeners[0];
     FakeSubchannel subchannel = unwrap(createSubchannel(0, Attributes.EMPTY, mockHealthListener));
     assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     SubchannelStateListener mockListener = mockStateListeners[0];
@@ -487,7 +494,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // notify unhealthy
     HealthUtil.HealthStatus expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-        "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"
+        "Health producer [Client Health Check] information: "
+        + "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
 
@@ -510,7 +518,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // notify unhealthy with a different description
     expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-        "Health-check stream unexpectedly closed with "
+        "Health producer [Client Health Check] information: "
+        + "Health-check stream unexpectedly closed with "
             + Status.CANCELLED + " for 'TeeService'"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
@@ -545,7 +554,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     SubchannelStateListener mockStateListener = mockStateListeners[0];
-    HealthUtil.HealthCheckingListener mockHealthListener = mockHealthListeners[0];
+    HealthUtil.SubchannelHealthListener mockHealthListener = mockHealthListeners[0];
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY, mockHealthListener);
 
     assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
@@ -566,7 +575,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // notify unhealthy
     HealthUtil.HealthStatus expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-        "Health-check stream unexpectedly closed with " + Status.CANCELLED + " for 'TeeService'"
+        "Health producer [Client Health Check] information: "
+            + "Health-check stream unexpectedly closed with "
+            + Status.CANCELLED + " for 'TeeService'"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
 
@@ -582,7 +593,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     healthImpl.calls.peek().responseObserver.onNext(makeResponse(ServingStatus.SERVING));
     expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.SERVING,
-        ""
+        "Health producer [Client Health Check] information: None"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
     inOrder.verify(mockStateListener).onSubchannelState(
@@ -595,7 +606,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-        "Health-check stream unexpectedly closed with "
+        "Health producer [Client Health Check] information: "
+            + "Health-check stream unexpectedly closed with "
             + Status.UNAVAILABLE + " for 'TeeService'"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
@@ -614,7 +626,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-        "Health-check stream unexpectedly closed with "
+        "Health producer [Client Health Check] information: "
+        + "Health-check stream unexpectedly closed with "
             + Status.UNAVAILABLE + " for 'TeeService'"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
@@ -740,7 +753,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
 
-    HealthUtil.HealthCheckingListener mockHealthListener = mockHealthListeners[0];
+    HealthUtil.SubchannelHealthListener mockHealthListener = mockHealthListeners[0];
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY, mockHealthListener);
     assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockStateListeners[0], mockHealthListener);
@@ -759,7 +772,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // notify unhealthy
     HealthUtil.HealthStatus expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-        "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"
+        "Health producer [Client Health Check] information: "
+        + "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
 
@@ -843,7 +857,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb);
 
-    HealthUtil.HealthCheckingListener mockHealthListener = mockHealthListeners[0];
+    HealthUtil.SubchannelHealthListener mockHealthListener = mockHealthListeners[0];
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY, mockHealthListener);
     SubchannelStateListener mockListener = mockStateListeners[0];
     assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
@@ -864,7 +878,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Health check responded
     serverCall.responseObserver.onNext(makeResponse(ServingStatus.SERVING));
     HealthUtil.HealthStatus expectedHealth = HealthUtil.HealthStatus.create(
-        HealthUtil.ServingStatus.SERVING
+        HealthUtil.ServingStatus.SERVING,
+        "Health producer [Client Health Check] information: None"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
     inOrder.verify(mockListener).onSubchannelState(
@@ -910,7 +925,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb);
 
-    HealthUtil.HealthCheckingListener mockHealthListener = mockHealthListeners[0];
+    HealthUtil.SubchannelHealthListener mockHealthListener = mockHealthListeners[0];
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY, mockHealthListener);
     SubchannelStateListener mockListener = mockStateListeners[0];
     assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
@@ -934,7 +949,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // notify unhealthy
     HealthUtil.HealthStatus expectedHealth = HealthUtil.HealthStatus.create(
         HealthUtil.ServingStatus.NOT_SERVING,
-        "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"
+        "Health producer [Client Health Check] information: "
+        + "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"
     );
     inOrder.verify(mockHealthListener).onHealthStatus(eq(expectedHealth));
 
@@ -1270,7 +1286,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       }
       checkState(index >= 0, "addrs " + args.getAddresses() + " not found");
       FakeSubchannel subchannel = new FakeSubchannel(index, args, channels[index]);
-      HealthUtil.HealthCheckingListener healthListener =
+      HealthUtil.SubchannelHealthListener healthListener =
           args.getOption(HealthUtil.HEALTH_LISTENER_ARG_KEY);
       if (healthListener != null) {
         healthListener.onHealthStatus(HealthUtil.HealthStatus.create(
@@ -1328,12 +1344,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   private Subchannel createSubchannel(final int index, final Attributes attrs,
-      final HealthUtil.HealthCheckingListener healthCheckingListener) {
+      final HealthUtil.SubchannelHealthListener subchannelHealthListener) {
     CreateSubchannelArgs.Builder subchannelArgsBuilder = CreateSubchannelArgs.newBuilder()
         .setAddresses(eagLists[index])
         .setAttributes(attrs);
-    if (healthCheckingListener != null) {
-      subchannelArgsBuilder.addOption(HealthUtil.HEALTH_LISTENER_ARG_KEY, healthCheckingListener);
+    if (subchannelHealthListener != null) {
+      subchannelArgsBuilder.addOption(HealthUtil.HEALTH_LISTENER_ARG_KEY, subchannelHealthListener);
     }
     final AtomicReference<Subchannel> returnedSubchannel = new AtomicReference<>();
     syncContext.execute(new Runnable() {

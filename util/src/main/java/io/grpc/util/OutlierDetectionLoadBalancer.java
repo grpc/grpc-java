@@ -213,11 +213,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       // Subchannels are wrapped so that we can monitor call results and to trigger failures when
       // we decide to eject the subchannel.
-      HealthUtil.HealthCheckingListener hcListener = args.getOption(HEALTH_LISTENER_ARG_KEY);
+      HealthUtil.SubchannelHealthListener hcListener = args.getOption(HEALTH_LISTENER_ARG_KEY);
       HealthUtil.ChainedHealthListener outlierListener = null;
       if (hcListener != null ) {
+        HealthUtil.HealthStatus initialHealthStatus = HealthUtil.HealthStatus.create(
+            HealthUtil.ServingStatus.SERVING, "Initial value is healthy");
         HealthUtil.ChainedHealthListener chainedHealthListener =
-            new HealthUtil.ChainedHealthListener(hcListener);
+            new HealthUtil.ChainedHealthListener(hcListener, initialHealthStatus,
+                "Outlier Detection");
         args = args.toBuilder()
             .addOption(HEALTH_LISTENER_ARG_KEY, chainedHealthListener).build();
         if (hcListener.getGeneration() > 0) {
