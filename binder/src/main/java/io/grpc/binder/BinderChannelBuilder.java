@@ -51,6 +51,7 @@ import javax.annotation.Nullable;
  *     Services</a>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
+@SuppressWarnings("deprecation")
 public final class BinderChannelBuilder
     extends ForwardingChannelBuilder<BinderChannelBuilder> {
 

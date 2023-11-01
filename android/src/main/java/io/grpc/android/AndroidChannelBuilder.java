@@ -53,6 +53,7 @@ import javax.annotation.concurrent.GuardedBy;
  *
  * @since 1.12.0
  */
+@SuppressWarnings("deprecation")
 public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
 
   private static final String LOG_TAG = "AndroidChannelBuilder";
