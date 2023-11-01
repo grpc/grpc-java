@@ -230,7 +230,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   }
 
   @Override
-  @SuppressWarnings("deprecation") // Not extending ForwardingChannelBuilder to preserve ABI.
+  @SuppressWarnings("deprecation") // Not extending ForwardingChannelBuilder2 to preserve ABI.
   protected ManagedChannelBuilder<?> delegate() {
     return managedChannelImplBuilder;
   }

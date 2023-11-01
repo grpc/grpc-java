@@ -156,7 +156,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   }
 
   @Override
-  @SuppressWarnings("deprecation") // Not extending ForwardingChannelBuilder to preserve ABI.
+  @SuppressWarnings("deprecation") // Not extending ForwardingChannelBuilder2 to preserve ABI.
   protected ManagedChannelBuilder<?> delegate() {
     return delegateBuilder;
   }
