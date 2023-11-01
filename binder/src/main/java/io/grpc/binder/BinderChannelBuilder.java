@@ -51,7 +51,8 @@ import javax.annotation.Nullable;
  *     Services</a>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
-public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderChannelBuilder> {
+public final class BinderChannelBuilder
+    extends ForwardingChannelBuilder<BinderChannelBuilder> {
 
   /**
    * Creates a channel builder that will bind to a remote Android service.
