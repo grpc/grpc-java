@@ -35,7 +35,7 @@ import javax.annotation.Nullable;
  *
  * @param <T> The type of the subclass extending this abstract class.
  * @since 1.7.0
- * @deprecated Use {@link ForwardingChannelBuilder2} instead.
+ * @deprecated As of 1.60.0, use {@link ForwardingChannelBuilder2} instead.
  */
 @Deprecated
 public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilder<T>>
