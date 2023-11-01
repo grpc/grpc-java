@@ -64,7 +64,6 @@ public class ChannelAndServerBuilderTest {
     // Exceptions from the check classes themselves, and ForwardingChannelBuilder.
     // ForwardingChannelBuilder is deprecated and was stripped off of unnecessary methods,
     // which it inherits from ForwardingChannelBuilder2.
-    @SuppressWarnings("deprecation")
     ImmutableSet<Class<?>> ignoreClasses = ImmutableSet.of(
         ServerBuilder.class,
         ManagedChannelBuilder.class,
