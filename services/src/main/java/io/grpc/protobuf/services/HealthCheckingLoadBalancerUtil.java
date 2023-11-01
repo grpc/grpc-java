@@ -31,10 +31,6 @@ import io.grpc.internal.GrpcUtil;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5025")
 public final class HealthCheckingLoadBalancerUtil {
-
-  static final Attributes.Key<HealthUtil.SubchannelHealthListener> HEALTH_CHECKING_LISTENER_KEY =
-      Attributes.Key.create("health-checking-listener");
-
   private HealthCheckingLoadBalancerUtil() {
   }
 

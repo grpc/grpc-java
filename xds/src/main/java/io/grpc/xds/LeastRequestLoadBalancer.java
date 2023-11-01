@@ -146,7 +146,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
       SubchannelPicker initialPicker) {
-    return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
+    return new LeastRequestLbState(key, childLbProvider, policyConfig, initialPicker);
   }
 
   private void updateBalancingState(ConnectivityState state, LeastRequestPicker picker) {

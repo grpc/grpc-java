@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -54,14 +55,18 @@ import javax.annotation.Nullable;
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
+
+  static boolean enableNewPickFirst =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST"))
+          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST"));
+
   private final Map<Object, ChildLbState> childLbStates = new LinkedHashMap<>();
   private final Helper helper;
   // Set to true if currently in the process of handling resolved addresses.
   @VisibleForTesting
   protected boolean resolvingAddresses;
 
-  protected final PickFirstLoadBalancerProvider pickFirstLbProvider =
-      new PickFirstLoadBalancerProvider();
+  protected final LoadBalancerProvider childLbProvider = new HealthCheckingPickFirstLBProvider();
 
   protected ConnectivityState currentConnectivityState;
 
@@ -79,6 +84,35 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   protected SubchannelPicker getErrorPicker(Status error)  {
     return new FixedResultPicker(PickResult.withError(error));
+  }
+
+  private static final class HealthCheckingPickFirstLBProvider extends LoadBalancerProvider {
+    private final PickFirstLoadBalancerProvider delegate = new PickFirstLoadBalancerProvider();
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      if (enableNewPickFirst) {
+        // dependency issue: this package can not depend on service package, circular dependency.
+        // return HealthCheckingLoadBalancerUtil.newHealthCheckingLoadBalancer(delegate, helper);
+         return null;
+      }
+      return delegate.newLoadBalancer(helper);
+    }
+
+    @Override
+    public boolean isAvailable() {
+      return delegate.isAvailable();
+    }
+
+    @Override
+    public int getPriority() {
+      return delegate.getPriority();
+    }
+
+    @Override
+    public String getPolicyName() {
+      return delegate.getPolicyName();
+    }
   }
 
   /**
@@ -136,7 +170,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    */
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
       SubchannelPicker initialPicker) {
-    return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
+    return new ChildLbState(key, childLbProvider, policyConfig, initialPicker);
   }
 
   /**

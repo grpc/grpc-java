@@ -98,7 +98,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
       SubchannelPicker initialPicker) {
-    ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
+    ChildLbState childLbState = new WeightedChildLbState(key, childLbProvider, policyConfig,
         initialPicker);
     return childLbState;
   }
