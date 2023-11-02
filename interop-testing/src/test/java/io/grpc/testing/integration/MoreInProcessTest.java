@@ -251,7 +251,7 @@ public class MoreInProcessTest {
     assertTrue(finishLatch.await(900, TimeUnit.MILLISECONDS));
     Status actualStatus = Status.fromThrowable(throwableRef.get());
     Status expectedStatus = Status.UNKNOWN.withDescription(
-        "Internal Application Error @ task ServerCallListener(app).messagesAvailable");
+        "Application Error @ task ServerCallListener(app).messagesAvailable");
     assertEquals(expectedStatus.getCode(), actualStatus.getCode());
     assertEquals(expectedStatus.getDescription(), actualStatus.getDescription());
     assertNull(actualStatus.getCause());
