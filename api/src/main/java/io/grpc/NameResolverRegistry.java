@@ -62,7 +62,7 @@ public final class NameResolverRegistry {
     return defaultScheme;
   }
 
-  public NameResolverProvider get(String scheme) {
+  public NameResolverProvider getProviderForScheme(String scheme) {
     if (scheme == null) {
       return null;
     }
@@ -173,7 +173,7 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      NameResolverProvider provider = get(targetUri.getScheme());
+      NameResolverProvider provider = getProviderForScheme(targetUri.getScheme());
       return provider == null ? null : provider.newNameResolver(targetUri, args);
     }
 

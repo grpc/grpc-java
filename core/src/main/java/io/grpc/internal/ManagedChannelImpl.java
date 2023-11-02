@@ -722,19 +722,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (targetUri != null) {
       // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
       // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
-      provider = nameResolverRegistry.get(targetUri.getScheme());
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
     }
 
     if (provider == null && !URI_PATTERN.matcher(target).matches()) {
       // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
-      // scheme from the factory.
+      // scheme from the registry.
       try {
         targetUri = new URI(nameResolverRegistry.getDefaultScheme(), "", "/" + target, null);
       } catch (URISyntaxException e) {
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      provider = nameResolverRegistry.get(targetUri.getScheme());
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
     }
 
     if (provider == null) {

@@ -161,12 +161,13 @@ public final class ManagedChannelRegistry {
     NameResolverProvider nameResolverProvider = null;
     try {
       URI uri = new URI(target);
-      nameResolverProvider = nameResolverRegistry.get(uri.getScheme());
+      nameResolverProvider = nameResolverRegistry.getProviderForScheme(uri.getScheme());
     } catch (URISyntaxException ignore) {
       // bad URI found, just ignore and continue
     }
     if (nameResolverProvider == null) {
-      nameResolverProvider = nameResolverRegistry.get(nameResolverRegistry.getDefaultScheme());
+      nameResolverProvider = nameResolverRegistry.getProviderForScheme(
+          nameResolverRegistry.getDefaultScheme());
     }
     Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
         = (nameResolverProvider != null)
