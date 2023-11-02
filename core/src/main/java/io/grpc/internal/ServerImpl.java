@@ -810,7 +810,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
      */
     private void internalClose(Throwable t, String task) {
       // TODO(ejona86): this is not thread-safe :)
-      String description = "Internal Application Error @ task " + task;
+      String description = "Application Error @ task " + task;
       stream.close(Status.UNKNOWN.withDescription(description).withCause(t), new Metadata());
     }
 
