@@ -33,7 +33,7 @@ class AltsHandshakerStub {
   private final HandshakerServiceStub serviceStub;
   private final ArrayBlockingQueue<Optional<HandshakerResp>> responseQueue =
       new ArrayBlockingQueue<>(1);
-  private final AtomicReference<String> exceptionMessage = new AtomicReference<>();
+  private final AtomicReference<ThrowableInfo> exceptionMessage = new AtomicReference<>();
 
   private static final long HANDSHAKE_RPC_DEADLINE_SECS = 20;
 
@@ -72,7 +72,7 @@ class AltsHandshakerStub {
     }
 
     if (exceptionMessage.get() != null) {
-      throw new IOException(exceptionMessage.get());
+      throw new IOException(exceptionMessage.get().info, exceptionMessage.get().throwable);
     } else {
       throw new IOException("No handshaker response received");
     }
@@ -89,7 +89,7 @@ class AltsHandshakerStub {
   /** Throw exception if there is an outstanding exception. */
   private void maybeThrowIoException() throws IOException {
     if (exceptionMessage.get() != null) {
-      throw new IOException(exceptionMessage.get());
+      throw new IOException(exceptionMessage.get().info, exceptionMessage.get().throwable);
     }
   }
 
@@ -108,7 +108,7 @@ class AltsHandshakerStub {
         AltsHandshakerStub.this.responseQueue.add(Optional.of(resp));
       } catch (IllegalStateException e) {
         AltsHandshakerStub.this.exceptionMessage.compareAndSet(
-            null, "Received an unexpected response.");
+            null, new ThrowableInfo(e, "Received an unexpected response."));
         AltsHandshakerStub.this.close();
       }
     }
@@ -117,7 +117,7 @@ class AltsHandshakerStub {
     @Override
     public void onError(Throwable t) {
       AltsHandshakerStub.this.exceptionMessage.compareAndSet(
-          null, "Received a terminating error: " + t.toString());
+          null, new ThrowableInfo(t, "Received a terminating error."));
       // Trigger the release of any blocked send.
       Optional<HandshakerResp> result = Optional.absent();
       AltsHandshakerStub.this.responseQueue.offer(result);
@@ -126,10 +126,22 @@ class AltsHandshakerStub {
     /** Receive the closing message from the server. */
     @Override
     public void onCompleted() {
-      AltsHandshakerStub.this.exceptionMessage.compareAndSet(null, "Response stream closed.");
+      AltsHandshakerStub.this.exceptionMessage.compareAndSet(
+          null, new ThrowableInfo(null, "Response stream closed."));
       // Trigger the release of any blocked send.
       Optional<HandshakerResp> result = Optional.absent();
       AltsHandshakerStub.this.responseQueue.offer(result);
+    }
+  }
+
+  private static class ThrowableInfo {
+
+    private final Throwable throwable;
+    private final String info;
+
+    private ThrowableInfo(Throwable throwable, String info) {
+      this.throwable = throwable;
+      this.info = info;
     }
   }
 }
