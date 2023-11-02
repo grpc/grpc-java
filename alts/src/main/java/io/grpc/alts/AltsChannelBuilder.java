@@ -18,7 +18,7 @@ package io.grpc.alts;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.GrpcUtil;
@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
  * commmunication between two cloud VMs using ALTS.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4151")
-public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChannelBuilder> {
+public final class AltsChannelBuilder extends ForwardingChannelBuilder2<AltsChannelBuilder> {
   private final NettyChannelBuilder delegate;
   private final AltsChannelCredentials.Builder credentialsBuilder =
       new AltsChannelCredentials.Builder();
