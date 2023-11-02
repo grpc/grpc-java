@@ -19,7 +19,6 @@ package io.grpc;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.ClassPath;
 import com.google.common.reflect.ClassPath.ClassInfo;
 import com.google.common.truth.Truth;
@@ -47,28 +46,17 @@ public class ChannelAndServerBuilderTest {
   public Class<?> builderClass;
 
   /**
-   * Returns the list of classes that have ServerBuilder or ManagedChannelBuilder in their class
-   * hierarchy and need to be checked for proper overrides of the static constructors.
+   * Javadoc.
    */
   @Parameters(name = "class={0}")
   public static Collection<Object[]> params() throws Exception {
     ClassLoader loader = ChannelAndServerBuilderTest.class.getClassLoader();
-    ImmutableSet<ClassInfo> classInfos =
+    Collection<ClassInfo> classInfos =
         ClassPath.from(loader).getTopLevelClassesRecursive("io.grpc");
-
     // Java 9 doesn't expose the URLClassLoader, which breaks searching through the classpath
     if (classInfos.isEmpty()) {
       return new ArrayList<>();
     }
-
-    // Exceptions from the check classes themselves, and ForwardingChannelBuilder.
-    // ForwardingChannelBuilder is deprecated and was stripped off of unnecessary methods,
-    // which it inherits from ForwardingChannelBuilder2.
-    ImmutableSet<Class<?>> ignoreClasses = ImmutableSet.of(
-        ServerBuilder.class,
-        ManagedChannelBuilder.class,
-        ForwardingChannelBuilder.class);
-
     List<Object[]> classes = new ArrayList<>();
     for (ClassInfo classInfo : classInfos) {
       String className = classInfo.getName();
@@ -76,11 +64,13 @@ public class ChannelAndServerBuilderTest {
         continue;
       }
       Class<?> clazz = Class.forName(className, false /*initialize*/, loader);
-      if (ignoreClasses.contains(clazz)) {
+      if (ServerBuilder.class.isAssignableFrom(clazz) && clazz != ServerBuilder.class) {
+        classes.add(new Object[]{clazz});
         continue;
       }
-      if (ServerBuilder.class.isAssignableFrom(clazz)
-          || ManagedChannelBuilder.class.isAssignableFrom(clazz)) {
+      // ForwardingChannelBuilder extends ForwardingChannelBuilder2, not need for extra checks.
+      if (ManagedChannelBuilder.class.isAssignableFrom(clazz)
+          && clazz != ManagedChannelBuilder.class && clazz != ForwardingChannelBuilder.class) {
         classes.add(new Object[]{clazz});
       }
     }
