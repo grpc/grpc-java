@@ -249,7 +249,12 @@ public class MoreInProcessTest {
         .onNext(StreamingInputCallRequest.getDefaultInstance());
 
     assertTrue(finishLatch.await(900, TimeUnit.MILLISECONDS));
-    assertEquals(Status.UNKNOWN, Status.fromThrowable(throwableRef.get()));
+    Status actualStatus = Status.fromThrowable(throwableRef.get());
+    Status expectedStatus = Status.UNKNOWN.withDescription(
+        "Internal Application Error @ task ServerCallListener(app).messagesAvailable");
+    assertEquals(expectedStatus.getCode(), actualStatus.getCode());
+    assertEquals(expectedStatus.getDescription(), actualStatus.getDescription());
+    assertNull(actualStatus.getCause());
     assertNull(responseRef.get());
   }
 }
