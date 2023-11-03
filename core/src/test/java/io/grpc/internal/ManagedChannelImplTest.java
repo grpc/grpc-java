@@ -72,6 +72,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.ClientTransportFilter;
 import io.grpc.CompositeChannelCredentials;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -107,6 +108,7 @@ import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
+import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
@@ -139,6 +141,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
@@ -4238,6 +4241,53 @@ public class ManagedChannelImplTest {
         resolvedOobChannel.shutdownNow();
       }
     }
+  }
+
+  @Test
+  public void transportFilters() throws Exception{
+
+    final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
+    final AtomicInteger shutdownCallbackCalled = new AtomicInteger(0);
+    final AtomicInteger terminationCallbackCalled = new AtomicInteger(0);
+    ClientTransportFilter transportFilter = new ClientTransportFilter() {
+      @Override
+      public void transportReady() {
+        readyCallbackCalled.incrementAndGet();
+      }
+      @Override
+      public void transportShutdown(Status s) {
+        shutdownCallbackCalled.incrementAndGet();
+      }
+      @Override
+      public void transportTerminated() {
+        terminationCallbackCalled.incrementAndGet();
+      }
+    };
+
+    channelBuilder.addTransportFilter(transportFilter);
+    assertEquals(0, readyCallbackCalled.get());
+
+    createChannel();
+    final Subchannel subchannel =
+      createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    verify(mockTransportFactory)
+      .newClientTransport(
+        any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
+    MockClientTransportInfo transportInfo = transports.poll();
+    ManagedClientTransport.Listener transportListener = transportInfo.listener;
+
+    transportListener.transportReady();
+    assertEquals(1, readyCallbackCalled.get());
+    assertEquals(0, shutdownCallbackCalled.get());
+    assertEquals(0, terminationCallbackCalled.get());
+
+    transportListener.transportShutdown(Status.OK);
+    assertEquals(1, shutdownCallbackCalled.get());
+    assertEquals(0, terminationCallbackCalled.get());
+
+    transportListener.transportTerminated();
+    assertEquals(1, terminationCallbackCalled.get());
   }
 
   private static final class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {

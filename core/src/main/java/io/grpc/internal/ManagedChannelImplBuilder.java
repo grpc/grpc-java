@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -27,6 +28,7 @@ import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
@@ -136,6 +138,8 @@ public final class ManagedChannelImplBuilder
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+
+  final List<ClientTransportFilter> transportFilters = new ArrayList<>();
 
   final String target;
   @Nullable
@@ -267,11 +271,10 @@ public final class ManagedChannelImplBuilder
       String target, @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
-    this.target = Preconditions.checkNotNull(target, "target");
+    this.target = checkNotNull(target, "target");
     this.channelCredentials = channelCreds;
     this.callCredentials = callCreds;
-    this.clientTransportFactoryBuilder = Preconditions
-        .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
+    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
     this.directServerAddress = null;
 
     if (channelBuilderDefaultPortProvider != null) {
@@ -323,8 +326,7 @@ public final class ManagedChannelImplBuilder
     this.target = makeTargetStringForDirectAddress(directServerAddress);
     this.channelCredentials = channelCreds;
     this.callCredentials = callCreds;
-    this.clientTransportFactoryBuilder = Preconditions
-        .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
+    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
     this.directServerAddress = directServerAddress;
     NameResolverRegistry reg = new NameResolverRegistry();
     reg.register(new DirectAddressNameResolverProvider(directServerAddress,
@@ -372,6 +374,12 @@ public final class ManagedChannelImplBuilder
   @Override
   public ManagedChannelImplBuilder intercept(ClientInterceptor... interceptors) {
     return intercept(Arrays.asList(interceptors));
+  }
+
+  @Override
+  public ManagedChannelImplBuilder addTransportFilter(ClientTransportFilter filter) {
+    transportFilters.add(checkNotNull(filter, "filter"));
+    return this;
   }
 
   @Deprecated

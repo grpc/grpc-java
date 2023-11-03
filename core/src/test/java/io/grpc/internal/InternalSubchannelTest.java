@@ -54,6 +54,7 @@ import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -1360,7 +1361,8 @@ public class InternalSubchannelTest {
         channelz, CallTracer.getDefaultFactory().create(),
         subchannelTracer,
         logId,
-        new ChannelLoggerImpl(subchannelTracer, fakeClock.getTimeProvider()));
+        new ChannelLoggerImpl(subchannelTracer, fakeClock.getTimeProvider()),
+        Collections.emptyList());
   }
 
   private void assertNoCallbackInvoke() {
