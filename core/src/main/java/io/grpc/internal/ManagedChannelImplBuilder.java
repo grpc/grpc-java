@@ -274,7 +274,8 @@ public final class ManagedChannelImplBuilder
     this.target = checkNotNull(target, "target");
     this.channelCredentials = channelCreds;
     this.callCredentials = callCreds;
-    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
+    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder,
+        "clientTransportFactoryBuilder");
     this.directServerAddress = null;
 
     if (channelBuilderDefaultPortProvider != null) {
@@ -326,7 +327,8 @@ public final class ManagedChannelImplBuilder
     this.target = makeTargetStringForDirectAddress(directServerAddress);
     this.channelCredentials = channelCreds;
     this.callCredentials = callCreds;
-    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
+    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder,
+        "clientTransportFactoryBuilder");
     this.directServerAddress = directServerAddress;
     NameResolverRegistry reg = new NameResolverRegistry();
     reg.register(new DirectAddressNameResolverProvider(directServerAddress,

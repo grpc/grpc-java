@@ -95,6 +95,12 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
+  public T addTransportFilter(ClientTransportFilter transportFilter) {
+    delegate().addTransportFilter(transportFilter);
+    return thisT();
+  }
+
+  @Override
   public T userAgent(String userAgent) {
     delegate().userAgent(userAgent);
     return thisT();

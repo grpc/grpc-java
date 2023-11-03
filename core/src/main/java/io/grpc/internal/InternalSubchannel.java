@@ -162,7 +162,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
       Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext, Callback callback,
       InternalChannelz channelz, CallTracer callsTracer, ChannelTracer channelTracer,
-      InternalLogId logId, ChannelLogger channelLogger, List<ClientTransportFilter> transportFilters) {
+      InternalLogId logId, ChannelLogger channelLogger,
+      List<ClientTransportFilter> transportFilters) {
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");

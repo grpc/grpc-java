@@ -108,7 +108,6 @@ import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
-import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
@@ -4244,7 +4243,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void transportFilters() throws Exception{
+  public void transportFilters() throws Exception {
 
     final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
     final AtomicInteger shutdownCallbackCalled = new AtomicInteger(0);
@@ -4254,10 +4253,12 @@ public class ManagedChannelImplTest {
       public void transportReady() {
         readyCallbackCalled.incrementAndGet();
       }
+
       @Override
       public void transportShutdown(Status s) {
         shutdownCallbackCalled.incrementAndGet();
       }
+
       @Override
       public void transportTerminated() {
         terminationCallbackCalled.incrementAndGet();
@@ -4269,10 +4270,10 @@ public class ManagedChannelImplTest {
 
     createChannel();
     final Subchannel subchannel =
-      createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     requestConnectionSafely(helper, subchannel);
     verify(mockTransportFactory)
-      .newClientTransport(
+        .newClientTransport(
         any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
     MockClientTransportInfo transportInfo = transports.poll();
     ManagedClientTransport.Listener transportListener = transportInfo.listener;

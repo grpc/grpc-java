@@ -585,13 +585,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final Rescheduler idleTimer;
 
   ManagedChannelImpl(
-    ManagedChannelImplBuilder builder,
-    ClientTransportFactory clientTransportFactory,
-    BackoffPolicy.Provider backoffPolicyProvider,
-    ObjectPool<? extends Executor> balancerRpcExecutorPool,
-    Supplier<Stopwatch> stopwatchSupplier,
-    List<ClientInterceptor> interceptors,
-    final TimeProvider timeProvider) {
+      ManagedChannelImplBuilder builder,
+      ClientTransportFactory clientTransportFactory,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      ObjectPool<? extends Executor> balancerRpcExecutorPool,
+      Supplier<Stopwatch> stopwatchSupplier,
+      List<ClientInterceptor> interceptors,
+      final TimeProvider timeProvider) {
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
