@@ -94,7 +94,7 @@ final class SecretGrpclbNameResolverProvider {
     }
 
     @Override
-    protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+    public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
       return Collections.singleton(InetSocketAddress.class);
     }
   }

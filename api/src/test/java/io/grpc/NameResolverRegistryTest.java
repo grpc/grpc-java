@@ -203,12 +203,14 @@ public class NameResolverRegistryTest {
   public void baseProviders() {
     Map<String, NameResolverProvider> providers =
             NameResolverRegistry.getDefaultRegistry().providers();
-    assertThat(providers).hasSize(1);
+    assertThat(providers).hasSize(2);
     // 2 name resolvers from grpclb and core, higher priority one is returned.
     assertThat(providers.get("dns").getClass().getName())
         .isEqualTo("io.grpc.grpclb.SecretGrpclbNameResolverProvider$Provider");
     assertThat(NameResolverRegistry.getDefaultRegistry().asFactory().getDefaultScheme())
         .isEqualTo("dns");
+    assertThat(providers.get("inprocess").getClass().getName())
+        .isEqualTo("io.grpc.inprocess.InProcessNameResolverProvider");
   }
 
   @Test

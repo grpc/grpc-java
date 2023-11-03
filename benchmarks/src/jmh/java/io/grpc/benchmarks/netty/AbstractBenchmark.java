@@ -207,7 +207,7 @@ public abstract class AbstractBenchmark {
       serverBuilder = NettyServerBuilder.forAddress(address, serverCreds);
       serverBuilder.channelType(LocalServerChannel.class);
       channelBuilder = NettyChannelBuilder.forAddress(address);
-      channelBuilder.channelType(LocalChannel.class);
+      channelBuilder.channelType(LocalChannel.class, LocalAddress.class);
     } else {
       ServerSocket sock = new ServerSocket();
       // Pick a port using an ephemeral socket.
@@ -216,7 +216,8 @@ public abstract class AbstractBenchmark {
       sock.close();
       serverBuilder = NettyServerBuilder.forAddress(address, serverCreds)
           .channelType(NioServerSocketChannel.class);
-      channelBuilder = NettyChannelBuilder.forAddress(address).channelType(NioSocketChannel.class);
+      channelBuilder = NettyChannelBuilder.forAddress(address).channelType(NioSocketChannel.class,
+          InetSocketAddress.class);
     }
 
     if (serverExecutor == ExecutorType.DIRECT) {

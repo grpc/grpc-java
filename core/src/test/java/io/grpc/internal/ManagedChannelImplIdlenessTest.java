@@ -66,6 +66,7 @@ import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -161,10 +162,14 @@ public class ManagedChannelImplIdlenessTest {
     when(mockNameResolverFactory
         .newNameResolver(any(URI.class), any(NameResolver.Args.class)))
         .thenReturn(mockNameResolver);
+    when(mockNameResolverFactory.getDefaultScheme())
+        .thenReturn("mockscheme");
     when(mockTransportFactory.getScheduledExecutorService())
         .thenReturn(timer.getScheduledExecutorService());
+    when(mockTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
 
-    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("fake://target",
+    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("mockscheme:///target",
         new UnsupportedClientTransportFactoryBuilder(), null);
 
     builder
