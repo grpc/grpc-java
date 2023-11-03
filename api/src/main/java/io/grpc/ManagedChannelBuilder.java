@@ -167,7 +167,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.60.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/TODO")
-  public T addTransportFilter(ClientTransportFilter filter){
+  public T addTransportFilter(ClientTransportFilter filter) {
     throw new UnsupportedOperationException();
   }
 
