@@ -162,20 +162,21 @@ public abstract class LoadBalancer {
    * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
    * @since 1.49.0
    */
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getAddresses().isEmpty()
         && !canHandleEmptyAddressListFromNameResolution()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
-              + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     } else {
       if (recursionCount++ == 0) {
         handleResolvedAddresses(resolvedAddresses);
       }
       recursionCount = 0;
 
-      return true;
+      return Status.OK;
     }
   }
 

@@ -1805,7 +1805,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 // GrpcUtil.getTransportFromPickResult().
                 onError(configOrError.getError());
                 if (resolutionResultListener != null) {
-                  resolutionResultListener.resolutionAttempted(false);
+                  resolutionResultListener.resolutionAttempted(configOrError.getError());
                 }
                 return;
               } else {
@@ -1851,7 +1851,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             Attributes attributes = attrBuilder.build();
 
-            boolean lastAddressesAccepted = helper.lb.tryAcceptResolvedAddresses(
+            Status addressAcceptanceStatus = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(attributes)
@@ -1859,7 +1859,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     .build());
             // If a listener is provided, let it know if the addresses were accepted.
             if (resolutionResultListener != null) {
-              resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
+              resolutionResultListener.resolutionAttempted(addressAcceptanceStatus);
             }
           }
         }

@@ -143,7 +143,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    *   Override to completely replace the default logic or to do additional activities.
    */
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
       return acceptResolvedAddressesInternal(resolvedAddresses);
@@ -183,14 +183,15 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         .build();
   }
 
-  private boolean acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
+  private Status acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
     Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
 
     if (newChildren.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. " + resolvedAddresses));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no usable address. " + resolvedAddresses);
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
 
     // Do adds and updates
@@ -223,7 +224,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     // Must update channel picker before return so that new RPCs will not be routed to deleted
     // clusters and resolver can remove them in service config.
     updateOverallBalancingState();
-    return true;
+    return Status.OK;
   }
 
   @Override

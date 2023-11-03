@@ -82,9 +82,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (this.resolvedAddresses != null) {
-      return true;
+      return Status.OK;
     }
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
@@ -94,7 +94,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     logger.log(XdsLogLevel.INFO, "Config: {0}", config);
     cdsLbState = new CdsLbState(config.name);
     cdsLbState.start();
-    return true;
+    return Status.OK;
   }
 
   @Override

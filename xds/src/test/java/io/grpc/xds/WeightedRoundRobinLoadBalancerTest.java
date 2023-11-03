@@ -467,7 +467,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void emptyConfig() {
     assertThat(wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(null)
-            .setAttributes(affinity).build())).isFalse();
+            .setAttributes(affinity).build()).isOk()).isFalse();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(fakeClock.getPendingTasks()).isEmpty();

@@ -562,8 +562,8 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     assertFalse(loadBalancer.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-        .setAddresses(Arrays.<EquivalentAddressGroup>asList()).setAttributes(affinity).build()));
+        ResolvedAddresses.newBuilder().setAddresses(Arrays.<EquivalentAddressGroup>asList())
+            .setAttributes(affinity).build()).isOk());
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getCurrentState());
   }
 
@@ -573,7 +573,7 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     List<EquivalentAddressGroup> eags = Arrays.asList((EquivalentAddressGroup) null);
     assertFalse(loadBalancer.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(eags).setAttributes(affinity).build()));
+        ResolvedAddresses.newBuilder().setAddresses(eags).setAttributes(affinity).build()).isOk());
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getCurrentState());
   }
 
