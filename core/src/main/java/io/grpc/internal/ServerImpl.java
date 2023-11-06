@@ -808,9 +808,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     /**
      * Like {@link ServerCall#close(Status, Metadata)}, but thread-safe for internal use.
      */
-    private void internalClose(Throwable t, String task) {
+    private void internalClose(Throwable t) {
       // TODO(ejona86): this is not thread-safe :)
-      String description = "Application Error @ task " + task;
+      String description = "Application error processing RPC";
       stream.close(Status.UNKNOWN.withDescription(description).withCause(t), new Metadata());
     }
 
@@ -827,13 +827,13 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
           @Override
           public void runInContext() {
-            String taskName = "ServerCallListener(app).messagesAvailable";
-            try (TaskCloseable ignore = PerfMark.traceTask(taskName)) {
+            try (TaskCloseable ignore =
+                     PerfMark.traceTask("ServerCallListener(app).messagesAvailable")) {
               PerfMark.attachTag(tag);
               PerfMark.linkIn(link);
               getListener().messagesAvailable(producer);
             } catch (Throwable t) {
-              internalClose(t, taskName);
+              internalClose(t);
               throw t;
             }
           }
@@ -855,13 +855,12 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
           @Override
           public void runInContext() {
-            String taskName = "ServerCallListener(app).halfClosed";
-            try (TaskCloseable ignore = PerfMark.traceTask(taskName)) {
+            try (TaskCloseable ignore = PerfMark.traceTask("ServerCallListener(app).halfClosed")) {
               PerfMark.attachTag(tag);
               PerfMark.linkIn(link);
               getListener().halfClosed();
             } catch (Throwable t) {
-              internalClose(t, taskName);
+              internalClose(t);
               throw t;
             }
           }
@@ -929,13 +928,12 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
           @Override
           public void runInContext() {
-            String taskName = "ServerCallListener(app).onReady";
-            try (TaskCloseable ignore = PerfMark.traceTask(taskName)) {
+            try (TaskCloseable ignore = PerfMark.traceTask("ServerCallListener(app).onReady")) {
               PerfMark.attachTag(tag);
               PerfMark.linkIn(link);
               getListener().onReady();
             } catch (Throwable t) {
-              internalClose(t, taskName);
+              internalClose(t);
               throw t;
             }
           }

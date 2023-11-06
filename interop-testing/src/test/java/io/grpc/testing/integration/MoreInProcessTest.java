@@ -250,8 +250,7 @@ public class MoreInProcessTest {
 
     assertTrue(finishLatch.await(900, TimeUnit.MILLISECONDS));
     Status actualStatus = Status.fromThrowable(throwableRef.get());
-    Status expectedStatus = Status.UNKNOWN.withDescription(
-        "Application Error @ task ServerCallListener(app).messagesAvailable");
+    Status expectedStatus = Status.UNKNOWN.withDescription("Application error processing RPC");
     assertEquals(expectedStatus.getCode(), actualStatus.getCode());
     assertEquals(expectedStatus.getDescription(), actualStatus.getDescription());
     assertNull(actualStatus.getCause());
