@@ -19,7 +19,6 @@ package io.grpc.util;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.HealthUtil.HEALTH_LISTENER_ARG_KEY;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -201,7 +200,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private Helper delegate;
 
     ChildHelper(Helper delegate) {
-      this.delegate = delegate;
+      this.delegate = new HealthProducerUtil.HealthProducerHelper(delegate, "Outlier-Detection");
     }
 
     @Override
@@ -213,26 +212,15 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       // Subchannels are wrapped so that we can monitor call results and to trigger failures when
       // we decide to eject the subchannel.
-      HealthUtil.SubchannelHealthListener hcListener = args.getOption(HEALTH_LISTENER_ARG_KEY);
-      HealthUtil.ChainedHealthListener outlierListener = null;
-      if (hcListener != null ) {
-        HealthUtil.HealthStatus initialHealthStatus = HealthUtil.HealthStatus.create(
-            HealthUtil.ServingStatus.SERVING, "Initial value is healthy");
-        HealthUtil.ChainedHealthListener chainedHealthListener =
-            new HealthUtil.ChainedHealthListener(hcListener, initialHealthStatus,
-                "Outlier Detection");
-        args = args.toBuilder()
-            .addOption(HEALTH_LISTENER_ARG_KEY, chainedHealthListener).build();
-        if (hcListener.getGeneration() > 0) {
-          outlierListener = chainedHealthListener;
-        }
-      }
+      HealthProducerUtil.HealthProducerSubchannel delegatedHealthSubchannel =
+          (HealthProducerUtil.HealthProducerSubchannel) super.createSubchannel(args);
       Subchannel originalSubchannel = delegate.createSubchannel(args);
       OutlierDetectionSubchannel subchannel = new OutlierDetectionSubchannel(originalSubchannel,
-          outlierListener);
+          delegatedHealthSubchannel.getHealthListener());
       // If the subchannel is associated with a single address that is also already in the map
       // the subchannel will be added to the map and be included in outlier detection.
       List<EquivalentAddressGroup> addressGroups = args.getAddresses();
+      boolean initialEjected = false;
       if (hasSingleAddress(addressGroups)
           && trackerMap.containsKey(addressGroups.get(0).getAddresses().get(0))) {
         AddressTracker tracker = trackerMap.get(addressGroups.get(0).getAddresses().get(0));
@@ -240,8 +228,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
         // If this address has already been ejected, we need to immediately eject this Subchannel.
         if (tracker.ejectionTimeNanos != null) {
-          subchannel.eject();
+          initialEjected = true;
         }
+      }
+      if (initialEjected) {
+        subchannel.eject();
+      } else {
+        subchannel.uneject();
       }
 
       return subchannel;
@@ -259,8 +252,15 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private AddressTracker addressTracker;
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
+    /**
+     * Only one of subchannelStatelistener or healthListener exists. Backward compatibility guaranteed.
+     * Before generic health check: subchannelStatelistener is nonnull and is used for state
+     * notification, considering health.
+     * After generic health check: healthListener is nonnull. Raw connectivity state is
+     * pass-through. Health status change is notified via healthListener.
+     * */
     private SubchannelStateListener subchannelStateListener;
-    @Nullable private HealthUtil.ChainedHealthListener healthListener;
+    @Nullable private HealthProducerUtil.HealthCheckProducerListener healthListener;
     private final ChannelLogger logger;
 
     OutlierDetectionSubchannel(Subchannel delegate) {
@@ -268,7 +268,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       this.logger = delegate.getChannelLogger();
     }
 
-    OutlierDetectionSubchannel(Subchannel delegate, @Nullable HealthUtil.ChainedHealthListener
+    OutlierDetectionSubchannel(Subchannel delegate, @Nullable HealthProducerUtil.HealthCheckProducerListener
         hcListener) {
       this.delegate = delegate;
       this.logger = delegate.getChannelLogger();
@@ -277,8 +277,12 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     @Override
     public void start(SubchannelStateListener listener) {
-      subchannelStateListener = listener;
-      super.start(new OutlierDetectionSubchannelStateListener(listener));
+      if (healthListener != null) {
+        super.start(listener);
+      } else {
+        subchannelStateListener = listener;
+        super.start(new OutlierDetectionSubchannelStateListener(listener));
+      }
     }
 
     @Override
@@ -350,29 +354,26 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     void eject() {
       ejected = true;
       if (healthListener != null) {
-        healthListener.thisHealthStatus(HealthUtil.HealthStatus.create(
-            HealthUtil.ServingStatus.NOT_SERVING, "Subchannel ejected"
-        ));
+        healthListener.onSubchannelState(
+            ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
       } else {
         subchannelStateListener.onSubchannelState(
             ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
       }
-      lastSubchannelState = null;
       logger.log(ChannelLogLevel.INFO, "Subchannel ejected: {0}", this);
     }
 
     void uneject() {
       ejected = false;
-      // stateListener needs to be notified first, this avoids subchannel from using stale
-      // connectivity state with the new health status
-      if (lastSubchannelState != null) {
-        subchannelStateListener.onSubchannelState(lastSubchannelState);
-        logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
-      }
       if (healthListener != null) {
-        healthListener.thisHealthStatus(HealthUtil.HealthStatus.create(
-            HealthUtil.ServingStatus.SERVING, "subchannel unejected"
-        ));
+          healthListener.onSubchannelState(
+              ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+          logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
+      } else {
+        if (lastSubchannelState != null) {
+          subchannelStateListener.onSubchannelState(lastSubchannelState);
+          logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
+        }
       }
     }
 

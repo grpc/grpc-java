@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
@@ -1449,11 +1450,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
       // No new subchannel should be created after load balancer has been shutdown.
       checkState(!terminating, "Channel is being terminated");
       AbstractSubchannel subchannelImp = new SubchannelImpl(args);
-      HealthUtil.SubchannelHealthListener rootHcListener =
-          args.getOption(HealthUtil.HEALTH_LISTENER_ARG_KEY);
+      SubchannelStateListener rootHcListener =
+          args.getOption(HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
       if (rootHcListener != null) {
-        rootHcListener.onHealthStatus(new HealthUtil.HealthStatus(
-            HealthUtil.ServingStatus.SERVING));
+        rootHcListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
       }
       return subchannelImp;
     }

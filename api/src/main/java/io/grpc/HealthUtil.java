@@ -80,73 +80,8 @@ public class HealthUtil {
     }
   }
 
-  public static final LoadBalancer.CreateSubchannelArgs.Key<SubchannelHealthListener>
-      HEALTH_LISTENER_ARG_KEY =
-      LoadBalancer.CreateSubchannelArgs.Key.create("health-check-listener");
+  public static final LoadBalancer.CreateSubchannelArgs.Key<LoadBalancer.SubchannelStateListener>
+      HEALTH_CONSUMER_LISTENER_ARG_KEY =
+      LoadBalancer.CreateSubchannelArgs.Key.create("health-check-consumer-listener");
 
-  public interface SubchannelHealthListener {
-
-    void onHealthStatus(HealthStatus healthStatus);
-
-    int getGeneration();
-  }
-
-  /**
-   * Used by a health producer system to construct the subchannel health notification chain and
-   * notify aggregated health status with cached health status.
-   * 1. At subchannel creation time, a health producer system should construct a
-   * ChainedHealthListener and provide to parent health producer's createSubchannelArgs. The parent
-   * health producer system then will call {@link #upperStreamHealthStatus} to notify health status
-   * change, and {@link #thisHealthStatus} is used for the current child health producer.
-   * 2. In the health producer's runtime, this health producer system should call
-   * {@link #thisHealthStatus} to notify health status change of its own health status change.
-   * */
-  public static final class ChainedHealthListener implements SubchannelHealthListener {
-
-    private HealthStatus upperStreamHealthStatus = HealthStatus.create(ServingStatus.UNKNOWN,
-        "upstream initial unknown Health Status");
-    private HealthStatus thisHealthStatus;
-    private final String healthProducerName;
-    private SubchannelHealthListener delegate;
-    private final int generation;
-
-    public ChainedHealthListener(SubchannelHealthListener delegate,
-                                 HealthStatus initialHealthStatus,
-                                 String thisHealthProducerName) {
-      this.delegate = checkNotNull(delegate, "delegate");
-      this.thisHealthStatus = checkNotNull(initialHealthStatus, "initialHealthStatus");
-      this.healthProducerName = checkNotNull(thisHealthProducerName, "thisHealthProducerName");
-      this.generation = delegate.getGeneration() + 1;
-    }
-
-    @Override
-    public void onHealthStatus(HealthUtil.HealthStatus healthStatus) {
-      upperStreamHealthStatus = healthStatus;
-      notifyHealth();
-    }
-
-    @Override
-    public int getGeneration() {
-      return generation;
-    }
-
-    public void thisHealthStatus(HealthUtil.HealthStatus healthStatus) {
-      thisHealthStatus = healthStatus;
-      notifyHealth();
-    }
-
-    private void notifyHealth() {
-      ServingStatus aggregatedStatus;
-      if (ServingStatus.SERVING == upperStreamHealthStatus.servingStatus
-          && ServingStatus.SERVING == thisHealthStatus.servingStatus) {
-        aggregatedStatus = ServingStatus.SERVING;
-      } else {
-        aggregatedStatus = ServingStatus.NOT_SERVING;
-      }
-      delegate.onHealthStatus(HealthStatus.create(aggregatedStatus, String.format(
-          "%sHealth producer [%s] information: %s",
-          upperStreamHealthStatus.description, healthProducerName,
-          thisHealthStatus.description.equals("") ? "None" : thisHealthStatus.description)));
-    }
-  }
 }

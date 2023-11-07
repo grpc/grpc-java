@@ -81,9 +81,6 @@ public class PickFirstLeafLoadBalancerTest {
   private PickFirstLeafLoadBalancer loadBalancer;
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private static final Attributes.Key<String> FOO = Attributes.Key.create("foo");
-  private static final HealthUtil.HealthStatus SERVING_STATUS =
-      HealthUtil.HealthStatus.create(HealthUtil.ServingStatus.SERVING);
-
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -275,8 +272,8 @@ public class PickFirstLeafLoadBalancerTest {
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1);
     verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertNull(pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
@@ -288,7 +285,7 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertEquals(mockSubchannel1, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
 
@@ -370,8 +367,8 @@ public class PickFirstLeafLoadBalancerTest {
     assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
     assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
     assertThat(argsList.get(3).getAddresses().size()).isEqualTo(1);
-    HealthUtil.SubchannelHealthListener healthListener = argsList.get(0).getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = argsList.get(0).getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     verify(mockSubchannel2).start(stateListenerCaptor.capture());
@@ -403,7 +400,7 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     assertEquals(mockSubchannel1, picker.pickSubchannel(mockArgs).getSubchannel());
@@ -600,8 +597,8 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
@@ -611,7 +608,7 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // Verify that picker returns correct subchannel
@@ -638,8 +635,8 @@ public class PickFirstLeafLoadBalancerTest {
     // We create new channels, remove old ones, and keep intersecting ones
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener3 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener3 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
@@ -661,7 +658,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Ready subchannel 3
     stateListener3.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener3.onHealthStatus(SERVING_STATUS);
+    healthListener3.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
 
@@ -706,8 +703,8 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener4 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener4 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener4 = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
 
@@ -732,7 +729,7 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
 
     // Succeed connection attempt to fourth address
-    healthListener4.onHealthStatus(SERVING_STATUS);
+    healthListener4.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     stateListener4.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
@@ -760,8 +757,8 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
@@ -773,7 +770,7 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     // Successful connection shuts down other subchannel
     inOrder.verify(mockSubchannel2).shutdown();
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -794,8 +791,8 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener3 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener3 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
@@ -820,7 +817,7 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
 
     // Ready subchannel 3
-    healthListener3.onHealthStatus(SERVING_STATUS);
+    healthListener3.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     stateListener3.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     // Successful connection shuts down other subchannel
     inOrder.verify(mockSubchannel4).shutdown();
@@ -845,8 +842,8 @@ public class PickFirstLeafLoadBalancerTest {
     stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener2 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     stateListener2 = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel3).shutdown();
@@ -878,7 +875,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Connection attempt to address 2 is successful
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // Successful connection shuts down other subchannel
@@ -949,8 +946,8 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener4 = stateListenerCaptor.getValue();
-    HealthUtil.SubchannelHealthListener healthListener4 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener4 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     verify(mockSubchannel1).shutdown();
     verify(mockSubchannel2).shutdown();
     inOrder.verify(mockSubchannel3).requestConnection();
@@ -968,7 +965,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Fourth subchannel connection attempt is successful
     stateListener4.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener4.onHealthStatus(SERVING_STATUS);
+    healthListener4.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockSubchannel3).shutdown();
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertEquals(READY, loadBalancer.getConnectivityState());
@@ -997,8 +994,8 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
@@ -1009,7 +1006,7 @@ public class PickFirstLeafLoadBalancerTest {
     // First connection attempt is successful
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // Successful connection attempt shuts down other subchannels
@@ -1089,8 +1086,8 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
@@ -1124,7 +1121,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // First connection attempt is successful
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // verify that picker returns correct subchannel
@@ -1149,8 +1146,8 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
@@ -1162,7 +1159,7 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel2).shutdown();
     // Verify that picker returns correct subchannel
@@ -1210,8 +1207,8 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener2 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel1).requestConnection();
@@ -1254,7 +1251,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Second subchannel connection attempt is now successful
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel3).shutdown();
 
@@ -1337,8 +1334,8 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
@@ -1348,7 +1345,7 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // Verify that picker returns correct subchannel
@@ -1400,8 +1397,8 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
@@ -1419,7 +1416,7 @@ public class PickFirstLeafLoadBalancerTest {
     // First connection attempt is successful
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // verify that picker returns correct subchannel
@@ -1443,8 +1440,8 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
@@ -1456,7 +1453,7 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel2).shutdown();
 
@@ -1499,8 +1496,8 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
@@ -1537,7 +1534,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // First connection attempt is successful
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel2).shutdown();
 
@@ -1563,8 +1560,8 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener2 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
@@ -1584,7 +1581,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Second connection attempt is successful
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // Verify that picker returns correct subchannel
@@ -1616,8 +1613,8 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
-    HealthUtil.SubchannelHealthListener healthListener2 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     inOrder.verify(mockSubchannel1).requestConnection();
@@ -1665,7 +1662,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Connection attempt to second address is now successful
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel1).shutdown();
 
@@ -1703,8 +1700,8 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-    HealthUtil.SubchannelHealthListener healthListener = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
@@ -1727,7 +1724,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Connection attempt to first address is now successful
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener.onHealthStatus(SERVING_STATUS);
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // verify that picker returns correct subchannel
@@ -1758,8 +1755,8 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
-    HealthUtil.SubchannelHealthListener healthListener2 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     inOrder.verify(mockSubchannel1).requestConnection();
@@ -1796,7 +1793,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Connection attempt to second address is now successful
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // Verify that picker returns correct subchannel
@@ -1831,8 +1828,8 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener2 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
@@ -1875,7 +1872,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Second subchannel is successful
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // verify that picker returns correct subchannel
@@ -1911,8 +1908,8 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener2 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel1).requestConnection();
@@ -1931,7 +1928,7 @@ public class PickFirstLeafLoadBalancerTest {
     // Successful second connection attempt
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockSubchannel1).shutdown();
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
 
     // Go to IDLE
@@ -1959,7 +1956,7 @@ public class PickFirstLeafLoadBalancerTest {
     // second subchannel connection attempt
     inOrder.verify(mockSubchannel2).requestConnection();
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel3).shutdown();
 
@@ -1991,8 +1988,8 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    HealthUtil.SubchannelHealthListener healthListener2 = createArgsCaptor.getValue().getOption(
-        HealthUtil.HEALTH_LISTENER_ARG_KEY);
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue().getOption(
+        HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConnectivityState());
     inOrder.verify(mockSubchannel1).requestConnection();
@@ -2010,7 +2007,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Successful second connection attempt
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    healthListener2.onHealthStatus(SERVING_STATUS);
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockSubchannel1).shutdown();
     assertEquals(READY, loadBalancer.getConnectivityState());
 
