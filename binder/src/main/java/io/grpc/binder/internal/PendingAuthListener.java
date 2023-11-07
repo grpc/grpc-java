@@ -6,7 +6,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
-import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
@@ -25,7 +24,8 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
 
   private final ConcurrentLinkedQueue<ListenerConsumer<ReqT>> pendingSteps =
       new ConcurrentLinkedQueue<>();
-  private final AtomicReference<Listener<ReqT>> delegateRef = new AtomicReference<>(null);
+  private final AtomicReference<ServerCall.Listener<ReqT>> delegateRef =
+      new AtomicReference<>(null);
 
   /**
    * @param authStatusFuture a ListenableFuture holding the result status of the authorization
@@ -51,12 +51,26 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
         new FutureCallback<Status>() {
           @Override
           public void onSuccess(Status authStatus) {
-            if (authStatus.isOk()) {
-              delegateRef.set(next.startCall(call, headers));
-              maybeRunPendingSteps();
-            } else {
+            if (!authStatus.isOk()) {
               call.close(authStatus, new Metadata());
+              executorPool.returnObject(executor);
+              return;
             }
+
+            ServerCall.Listener<ReqT> delegate;
+            try {
+              delegate = next.startCall(call, headers);
+            } catch (Exception e) {
+              call.close(
+                  Status
+                      .INTERNAL
+                      .withCause(e)
+                      .withDescription("Failed to start server call after authorization check"),
+                  new Metadata());
+              return;
+            }
+            delegateRef.set(delegate);
+            maybeRunPendingSteps();
             executorPool.returnObject(executor);
           }
 
@@ -66,8 +80,8 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
                 Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
                 new Metadata());
             executorPool.returnObject(executor);
-            }
-          }, executor);
+          }
+        }, executor);
     }
 
   /**
@@ -75,32 +89,36 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
    * complete. Otherwise, no-op and returns immediately.
    */
   private void maybeRunPendingSteps() {
-    @Nullable Listener<ReqT> delegate = delegateRef.get();
+    @Nullable ServerCall.Listener<ReqT> delegate = delegateRef.get();
     if (delegate == null) {
       return;
     }
 
+    // This section is synchronized so that no 2 threads may attempt to retrieve elements from the
+    // queue in order but end up executing the steps out of order.
+    synchronized (this) {
       ListenerConsumer<ReqT> nextStep;
       while ((nextStep = pendingSteps.poll()) != null) {
         nextStep.accept(delegate);
       }
     }
+  }
 
   @Override
   public void onCancel() {
-    pendingSteps.offer(Listener::onCancel);
+    pendingSteps.offer(ServerCall.Listener::onCancel);
     maybeRunPendingSteps();
   }
 
   @Override
   public void onComplete() {
-    pendingSteps.offer(Listener::onComplete);
+    pendingSteps.offer(ServerCall.Listener::onComplete);
     maybeRunPendingSteps();
   }
 
   @Override
   public void onHalfClose() {
-    pendingSteps.offer(Listener::onHalfClose);
+    pendingSteps.offer(ServerCall.Listener::onHalfClose);
     maybeRunPendingSteps();
   }
 
@@ -112,7 +130,7 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
 
   @Override
   public void onReady() {
-    pendingSteps.offer(Listener::onReady);
+    pendingSteps.offer(ServerCall.Listener::onReady);
     maybeRunPendingSteps();
   }
 
@@ -121,6 +139,6 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
    * Android SDK 21.
    */
   private interface ListenerConsumer<ReqT> {
-    void accept(Listener<ReqT> listener);
+    void accept(ServerCall.Listener<ReqT> listener);
   }
 }

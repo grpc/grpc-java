@@ -16,8 +16,8 @@
 
 package io.grpc.binder.internal;
 
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.Uninterruptibles;
 
 import io.grpc.Attributes;
 import io.grpc.Internal;
@@ -32,7 +32,6 @@ import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -58,7 +57,9 @@ public final class BinderTransportSecurity {
    * @param serverBuilder The ServerBuilder being used to create the server.
    */
   @Internal
-  public static void installAuthInterceptor(ServerBuilder<?> serverBuilder, ObjectPool<? extends Executor> executorPool) {
+  public static void installAuthInterceptor(
+      ServerBuilder<?> serverBuilder,
+      ObjectPool<? extends Executor> executorPool) {
     serverBuilder.intercept(new ServerAuthInterceptor(executorPool));
   }
 
@@ -93,21 +94,19 @@ public final class BinderTransportSecurity {
     }
 
     /**
-     * @param authStatusFuture a Future that is known to be complete, for which it's safe to call
-     *                         {@link ListenableFuture#get()} without blocking the current thread.
+     * @param authStatusFuture a Future that is known to be complete, i.e.
+     *                         {@link ListenableFuture#isDone()} returns true.
      */
-    private <ReqT, RespT> ServerCall.Listener<ReqT> shortCircuitAuthFuture(
+    private <ReqT, RespT> ServerCall.Listener<ReqT> newServerCallListenerForDoneAuthResult(
         ListenableFuture<Status> authStatusFuture,
         ServerCall<ReqT, RespT> call,
         Metadata headers,
         ServerCallHandler<ReqT, RespT> next) {
       Status authStatus;
       try {
-        authStatus = Uninterruptibles.getUninterruptibly(authStatusFuture);
+        authStatus = Futures.getDone(authStatusFuture);
       } catch (ExecutionException e) {
         authStatus = Status.INTERNAL.withCause(e);
-      } catch (CancellationException e) {
-        authStatus = Status.CANCELLED.withCause(e);
       }
 
       if (authStatus.isOk()) {
@@ -130,7 +129,7 @@ public final class BinderTransportSecurity {
       // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
       // and asynchronous code.
       if (authStatusFuture.isDone()) {
-        return shortCircuitAuthFuture(authStatusFuture, call, headers, next);
+        return newServerCallListenerForDoneAuthResult(authStatusFuture, call, headers, next);
       }
 
       return new PendingAuthListener<>(authStatusFuture, executorPool, call, headers, next);
