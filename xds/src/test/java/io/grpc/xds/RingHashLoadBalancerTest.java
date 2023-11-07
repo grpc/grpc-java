@@ -231,7 +231,7 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(helper).refreshNameResolution();
-    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     verifyConnection(0);
 
     verifyNoMoreInteractions(helper);
@@ -267,13 +267,13 @@ public class RingHashLoadBalancerTest {
     deliverNotFound(subChannelList, 1);
     inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper)
-        .updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
     // All 4 in TF switch to TF
     deliverNotFound(subChannelList, 2);
     inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper)
-        .updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     deliverNotFound(subChannelList, 3);
     inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper)
@@ -416,7 +416,7 @@ public class RingHashLoadBalancerTest {
         getSubChannel(servers.get(0)),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("unreachable")));
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
@@ -477,7 +477,7 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(2))),
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
-    verify(helper, times(2)).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verifyConnection(0);
     PickResult result = pickerCaptor.getValue().pickSubchannel(args); // activate last subchannel
     assertThat(result.getStatus().isOk()).isTrue();
@@ -487,7 +487,7 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(0))),
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied again")));
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verify(helper, times(2)).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
     assertThat(result.getStatus().getCode())
@@ -576,7 +576,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forTransientFailure(
         Status.UNAVAILABLE.withDescription("unreachable")));
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verifyConnection(0);
 
     // Picking subchannel triggers connection. RPC hash hits server0.
@@ -628,7 +628,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelState(subchannelList.get(0),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("unreachable")));
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verifyConnection(0);
 
     // Per GRFC A61 Picking subchannel should no longer request connections that were failing
@@ -661,7 +661,7 @@ public class RingHashLoadBalancerTest {
 
     deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(2))),
         ConnectivityStateInfo.forNonError(CONNECTING));
-    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verifyConnection(0);
 
     // Picking subchannel when idle triggers connection.
@@ -690,7 +690,7 @@ public class RingHashLoadBalancerTest {
     Subchannel firstSubchannel = subchannels.get(Collections.singletonList(servers.get(0)));
     deliverSubchannelUnreachable(firstSubchannel);
     deliverSubchannelUnreachable(subchannels.get(Collections.singletonList(servers.get(2))));
-    verify(helper, times(2)).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     verifyConnection(0);
 
     // Picking subchannel triggers connection.
@@ -720,7 +720,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelUnreachable(subchannels.get(Collections.singletonList(servers.get(2))));
     deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forNonError(CONNECTING));
-    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(helper, atLeastOnce()).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     verifyConnection(0);
 
     // Picking subchannel should not trigger connection per gRFC A61.
@@ -742,12 +742,14 @@ public class RingHashLoadBalancerTest {
     Subchannel firstSubchannel = subchannels.get(Collections.singletonList(servers.get(0)));
     deliverSubchannelUnreachable(firstSubchannel);
 
-    verify(helper).updateBalancingState(eq(IDLE), any());
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verifyConnection(0);
+
+    reset(helper);
     deliverSubchannelState(firstSubchannel, ConnectivityStateInfo.forNonError(IDLE));
     // Should not have called updateBalancingState on the helper again because PickFirst is
     // shielding the higher level from the state change.
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    verify(helper, never()).updateBalancingState(any(), any());
     verifyConnection(1);
 
     // Picking subchannel triggers connection on second address. RPC hash hits server0.

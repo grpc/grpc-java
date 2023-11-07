@@ -155,8 +155,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
    * <p>Aggregation rules (in order of dominance):
    * <ol>
    *   <li>If there is at least one subchannel in READY state, overall state is READY</li>
+   *   <li>If there are <em>2 or more</em> subchannels in TRANSIENT_FAILURE, overall state is
+   *   TRANSIENT_FAILURE (to allow timely failover to another policy)</li>
    *   <li>If there is at least one subchannel in CONNECTING state, overall state is
    *   CONNECTING</li>
+   *   <li> If there is one subchannel in TRANSIENT_FAILURE state and there is
+   *    more than one subchannel, report CONNECTING </li>
    *   <li>If there is at least one subchannel in IDLE state, overall state is IDLE</li>
    *   <li>Otherwise, overall state is TRANSIENT_FAILURE</li>
    * </ol>
@@ -173,6 +177,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     int numIdle = 0;
     int numReady = 0;
     int numConnecting = 0;
+    int numTF = 0;
 
     forloop:
     for (ChildLbState childLbState : getChildLbStates()) {
@@ -187,6 +192,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         case IDLE:
           numIdle++;
           break;
+        case TRANSIENT_FAILURE:
+          numTF++;
         default:
           // ignore it
       }
@@ -195,7 +202,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     ConnectivityState overallState;
     if (numReady > 0) {
       overallState = READY;
+    } else if (numTF >= 2) {
+      overallState = TRANSIENT_FAILURE;
     } else if (numConnecting > 0) {
+      overallState = CONNECTING;
+    } else if (numTF == 1 && getChildLbStates().size() > 1) {
       overallState = CONNECTING;
     } else if (numIdle > 0) {
       overallState = IDLE;
