@@ -26,7 +26,6 @@ import io.grpc.benchmarks.proto.Messages;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
-import io.grpc.stub.StreamObservers;
 import io.grpc.testing.TlsTesting;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
@@ -282,6 +281,7 @@ public class AsyncServer {
     }
 
     @Override
+    @SuppressWarnings("deprecation") // For StreamObservers, ideally we refactor this class out.
     public void streamingFromServer(
         final Messages.SimpleRequest request,
         final StreamObserver<Messages.SimpleResponse> observer) {
@@ -291,7 +291,7 @@ public class AsyncServer {
           (ServerCallStreamObserver<Messages.SimpleResponse>) observer;
       // If the client cancels, copyWithFlowControl takes care of calling
       // responseObserver.onCompleted() for us
-      StreamObservers.copyWithFlowControl(
+      io.grpc.stub.StreamObservers.copyWithFlowControl(
           new Iterator<Messages.SimpleResponse>() {
             @Override
             public boolean hasNext() {
@@ -312,6 +312,7 @@ public class AsyncServer {
     }
 
     @Override
+    @SuppressWarnings("deprecation") // For StreamObservers, ideally we refactor this class out.
     public StreamObserver<Messages.SimpleRequest> streamingBothWays(
         final StreamObserver<Messages.SimpleResponse> observer) {
       // receive data forever and send data forever until client cancels or we shut down.
@@ -319,7 +320,7 @@ public class AsyncServer {
           (ServerCallStreamObserver<Messages.SimpleResponse>) observer;
       // If the client cancels, copyWithFlowControl takes care of calling
       // responseObserver.onCompleted() for us
-      StreamObservers.copyWithFlowControl(
+      io.grpc.stub.StreamObservers.copyWithFlowControl(
           new Iterator<Messages.SimpleResponse>() {
             @Override
             public boolean hasNext() {
