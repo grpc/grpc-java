@@ -38,7 +38,7 @@ public class OpenTelemetryModuleTest {
   public void build() {
     OpenTelemetrySdk sdk =
         OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build();
-    OpenTelemetryModule openTelemetryModule = OpenTelemetryModule.builder()
+    OpenTelemetryModule openTelemetryModule = OpenTelemetryModule.newBuilder()
         .sdk(sdk)
         .build();
 
@@ -52,7 +52,7 @@ public class OpenTelemetryModuleTest {
 
   @Test
   public void builderDefaults() {
-    OpenTelemetryModule module = OpenTelemetryModule.builder().build();
+    OpenTelemetryModule module = OpenTelemetryModule.newBuilder().build();
 
     assertThat(module.getOpenTelemetryInstance()).isNotNull();
     assertThat(module.getOpenTelemetryInstance()).isSameInstanceAs(noopOpenTelemetry);

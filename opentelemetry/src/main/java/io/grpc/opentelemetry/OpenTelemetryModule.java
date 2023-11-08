@@ -30,7 +30,14 @@ import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.MeterProvider;
 
-
+/**
+ *  The entrypoint for OpenTelemetry metrics functionality in gRPC.
+ *
+ *  <p>OpenTelemetryModule uses {@link io.opentelemetry.api.OpenTelemetry} APIs for instrumentation.
+ *  When no SDK is explicitly added no telemetry data will be collected. See
+ *  {@link io.opentelemetry.sdk.OpenTelemetrySdk} for information on how to construct the SDK.
+ *
+ */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10591")
 public final class OpenTelemetryModule {
 
@@ -46,15 +53,13 @@ public final class OpenTelemetryModule {
   private final Meter meter;
   private final OpenTelemetryMetricsState state;
 
-  public static Builder builder() {
+  public static Builder newBuilder() {
     return new Builder();
   }
 
   private OpenTelemetryModule(Builder builder) {
     this.openTelemetryInstance = checkNotNull(builder.openTelemetrySdk, "openTelemetrySdk");
-    this.meterProvider =
-        openTelemetryInstance.getMeterProvider() != null ? openTelemetryInstance.getMeterProvider()
-            : MeterProvider.noop();
+    this.meterProvider = openTelemetryInstance.getMeterProvider();
     this.meter = openTelemetryInstance.getMeterProvider()
         .meterBuilder(OpenTelemetryConstants.INSTRUMENTATION_SCOPE)
         .setInstrumentationVersion(IMPLEMENTATION_VERSION)
@@ -109,28 +114,28 @@ public final class OpenTelemetryModule {
     OpenTelemetryMetricsState.Builder builder = OpenTelemetryMetricsState.builder();
 
     builder.clientCallDurationCounter(
-        meter.histogramBuilder(OpenTelemetryConstants.CLIENT_CALL_DURATION)
+        meter.histogramBuilder("grpc.client.call.duration")
             .setUnit("s")
             .setDescription(
                 "Time taken by gRPC to complete an RPC from application's perspective")
             .build());
 
     builder.clientAttemptCountCounter(
-        meter.counterBuilder(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+        meter.counterBuilder("grpc.client.attempt.started")
             .setUnit("{attempt}")
             .setDescription("Number of client call attempts started")
             .build());
 
     builder.clientAttemptDurationCounter(
         meter.histogramBuilder(
-                OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                "grpc.client.attempt.duration")
             .setUnit("s")
             .setDescription("Time taken to complete a client call attempt")
             .build());
 
     builder.clientTotalSentCompressedMessageSizeCounter(
         meter.histogramBuilder(
-                OpenTelemetryConstants.CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                "grpc.client.attempt.sent_total_compressed_message_size")
             .setUnit("By")
             .setDescription("Compressed message bytes sent per client call attempt")
             .ofLongs()
@@ -138,20 +143,20 @@ public final class OpenTelemetryModule {
 
     builder.clientTotalReceivedCompressedMessageSizeCounter(
         meter.histogramBuilder(
-                OpenTelemetryConstants.CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                "grpc.client.attempt.rcvd_total_compressed_message_size")
             .setUnit("By")
             .setDescription("Compressed message bytes received per call attempt")
             .ofLongs()
             .build());
 
     builder.serverCallCountCounter(
-        meter.counterBuilder(OpenTelemetryConstants.SERVER_CALL_COUNT)
+        meter.counterBuilder("grpc.server.call.started")
             .setUnit("{call}")
             .setDescription("Number of server calls started")
             .build());
 
     builder.serverCallDurationCounter(
-        meter.histogramBuilder(OpenTelemetryConstants.SERVER_CALL_DURATION)
+        meter.histogramBuilder("grpc.server.call.duration")
             .setUnit("s")
             .setDescription(
                 "Time taken to complete a call from server transport's perspective")
@@ -159,7 +164,7 @@ public final class OpenTelemetryModule {
 
     builder.serverTotalSentCompressedMessageSizeCounter(
         meter.histogramBuilder(
-                OpenTelemetryConstants.SERVER_CALL_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                "grpc.server.call.sent_total_compressed_message_size")
             .setUnit("By")
             .setDescription("Compressed message bytes sent per server call")
             .ofLongs()
@@ -167,7 +172,7 @@ public final class OpenTelemetryModule {
 
     builder.serverTotalReceivedCompressedMessageSizeCounter(
         meter.histogramBuilder(
-                OpenTelemetryConstants.SERVER_CALL_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                "grpc.server.call.rcvd_total_compressed_message_size")
             .setUnit("By")
             .setDescription("Compressed message bytes received per server call")
             .ofLongs()

@@ -17,6 +17,8 @@
 package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -36,8 +38,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
-import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
-import io.opentelemetry.api.common.AttributeKey;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
@@ -57,12 +57,15 @@ import javax.annotation.concurrent.GuardedBy;
  * of the overall RPC, such as RETRIES_PER_CALL, to OpenTelemetry.
  *
  * <p>On the server-side, there is only one ServerStream per each ServerCall, and ServerStream
- * starts earlier than the ServerCall.  Therefore, only one tracer is created per stream/call and
+ * starts earlier than the ServerCall. Therefore, only one tracer is created per stream/call, and
  * it's the tracer that reports the summary to OpenTelemetry.
  */
 final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
-  private static final double NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
+
+  // Using floating point because TimeUnit.NANOSECONDS.toSeconds would discard
+  // fractional seconds.
+  private static final double SECONDS_PER_NANO = 1e-9;
 
   private final OpenTelemetryMetricsState state;
   private final Supplier<Stopwatch> stopwatchSupplier;
@@ -193,12 +196,12 @@ final class OpenTelemetryMetricsModule {
 
     void recordFinishedAttempt() {
       // TODO(dnvindhya) : add target as an attribute
-      io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
-          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName,
-          AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), statusCode.toString());
+      io.opentelemetry.api.common.Attributes attribute =
+          io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
+              STATUS_KEY, statusCode.toString());
 
       module.state.clientAttemptDurationCounter()
-          .record(attemptNanos / NANOS_PER_SECOND, attribute);
+          .record(attemptNanos * SECONDS_PER_NANO, attribute);
       module.state.clientTotalSentCompressedMessageSizeCounter()
           .record(outboundWireSize, attribute);
       module.state.clientTotalReceivedCompressedMessageSizeCounter()
@@ -231,8 +234,8 @@ final class OpenTelemetryMetricsModule {
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
       // TODO(dnvindhya) : add target as an attribute
-      io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
-          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName);
+      io.opentelemetry.api.common.Attributes attribute =
+          io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName);
 
       // Record here in case mewClientStreamTracer() would never be called.
       module.state.clientAttemptCountCounter().add(1, attribute);
@@ -249,14 +252,18 @@ final class OpenTelemetryMetricsModule {
           attemptStopwatch.stop();
         }
       }
+      // Skip recording for the first time, since it is already recorded in
+      // CallAttemptsTracerFactory constructor. attemptsPerCall will be non-zero after the first
+      // attempt, as first attempt cannot be a transparent retry.
       if (attemptsPerCall.get() > 0) {
         // TODO(dnvindhya): Add target as an attribute
         io.opentelemetry.api.common.Attributes attribute =
-            io.opentelemetry.api.common.Attributes.of(
-                AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName);
+            io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName);
         module.state.clientAttemptCountCounter().add(1, attribute);
       }
-      attemptsPerCall.incrementAndGet();
+      if (!info.isTransparentRetry()) {
+        attemptsPerCall.incrementAndGet();
+      }
       return new ClientTracer(this, module, info, fullMethodName);
     }
 
@@ -310,13 +317,12 @@ final class OpenTelemetryMetricsModule {
       }
       callLatencyNanos = callStopWatch.elapsed(TimeUnit.NANOSECONDS);
       // TODO(dnvindhya): record target as an attribute
-      io.opentelemetry.api.common.Attributes attribute
-          = io.opentelemetry.api.common.Attributes.of(
-          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), fullMethodName,
-          AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), status.getCode().toString());
+      io.opentelemetry.api.common.Attributes attribute =
+          io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
+              STATUS_KEY, status.getCode().toString());
 
       module.state.clientCallDurationCounter()
-          .record(callLatencyNanos / NANOS_PER_SECOND, attribute);
+          .record(callLatencyNanos * SECONDS_PER_NANO, attribute);
     }
   }
 
@@ -369,13 +375,13 @@ final class OpenTelemetryMetricsModule {
     @Override
     public void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
       // Only record method name as an attribute if isSampledToLocalTracing is set to true,
-      // which is true for all generated methods. Otherwise, programatically
+      // which is true for all generated methods. Otherwise, programmatically
       // created methods result in high cardinality metrics.
-      isGeneratedMethod = callInfo.getMethodDescriptor().isSampledToLocalTracing();
+      boolean isSampledToLocalTracing = callInfo.getMethodDescriptor().isSampledToLocalTracing();
+      isGeneratedMethod = isSampledToLocalTracing;
       io.opentelemetry.api.common.Attributes attribute =
           io.opentelemetry.api.common.Attributes.of(
-              AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY),
-              recordMethodName(fullMethodName, isGeneratedMethod));
+              METHOD_KEY, recordMethodName(fullMethodName, isSampledToLocalTracing));
 
       module.state.serverCallCountCounter().add(1, attribute);
     }
@@ -420,14 +426,13 @@ final class OpenTelemetryMetricsModule {
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      io.opentelemetry.api.common.Attributes attributes
-          = io.opentelemetry.api.common.Attributes.of(
-          AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY),
-          recordMethodName(fullMethodName, isGeneratedMethod),
-          AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), status.getCode().toString());
+      io.opentelemetry.api.common.Attributes attributes =
+          io.opentelemetry.api.common.Attributes.of(
+          METHOD_KEY, recordMethodName(fullMethodName, isGeneratedMethod),
+          STATUS_KEY, status.getCode().toString());
 
       module.state.serverCallDurationCounter()
-          .record(elapsedTimeNanos / NANOS_PER_SECOND, attributes);
+          .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes);
       module.state.serverTotalSentCompressedMessageSizeCounter()
           .record(outboundWireSize, attributes);
       module.state.serverTotalReceivedCompressedMessageSizeCounter()

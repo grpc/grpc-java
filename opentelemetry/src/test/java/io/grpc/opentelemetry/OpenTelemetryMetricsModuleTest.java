@@ -17,6 +17,8 @@
 package io.grpc.opentelemetry;
 
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
 import static io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions.assertThat;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
@@ -44,7 +46,6 @@ import io.grpc.internal.FakeClock;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcServerRule;
-import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
@@ -76,6 +77,20 @@ public class OpenTelemetryMetricsModuleTest {
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder()
           .setCallOptions(CallOptions.DEFAULT.withOption(NAME_RESOLUTION_DELAYED, 10L)).build();
+  private static final String CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME = "grpc.client.attempt.started";
+  private static final String CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME
+      = "grpc.client.attempt.duration";
+  private static final String CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE
+      = "grpc.client.attempt.sent_total_compressed_message_size";
+  private static final String CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE
+      = "grpc.client.attempt.rcvd_total_compressed_message_size";
+  private static final String CLIENT_CALL_DURATION = "grpc.client.call.duration";
+  private static final String SERVER_CALL_COUNT = "grpc.server.call.started";
+  private static final String SERVER_CALL_DURATION = "grpc.server.call.duration";
+  private static final String SERVER_CALL_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE
+      = "grpc.server.call.sent_total_compressed_message_size";
+  private static final String SERVER_CALL_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE
+      = "grpc.server.call.rcvd_total_compressed_message_size";
 
   private static final class StringInputStream extends InputStream {
     final String string;
@@ -199,7 +214,7 @@ public class OpenTelemetryMetricsModuleTest {
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName());
+        METHOD_KEY, method.getFullMethodName());
 
     assertThat(openTelemetryTesting.getMetrics())
         .satisfiesExactly(
@@ -207,7 +222,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
                     .hasUnit("{attempt}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -240,8 +255,8 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributes
         = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName(),
-        AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), Status.Code.OK.toString());
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Status.Code.OK.toString());
 
     assertThat(openTelemetryTesting.getMetrics())
         .satisfiesExactlyInAnyOrder(
@@ -249,7 +264,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
                     .hasUnit("{attempt}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -263,7 +278,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -278,7 +293,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -293,7 +308,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -309,7 +324,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_CALL_DURATION)
+                    .hasName(CLIENT_CALL_DURATION)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -334,7 +349,7 @@ public class OpenTelemetryMetricsModuleTest {
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName());
+        METHOD_KEY, method.getFullMethodName());
 
     assertThat(openTelemetryTesting.getMetrics())
         .satisfiesExactly(
@@ -342,7 +357,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
                     .hasUnit("{attempt}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -364,8 +379,8 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributes
         = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName(),
-        AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), Code.UNAVAILABLE.toString());
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Code.UNAVAILABLE.toString());
 
     assertThat(openTelemetryTesting.getMetrics())
         .satisfiesExactlyInAnyOrder(
@@ -373,7 +388,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
                     .hasUnit("{attempt}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -387,7 +402,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -402,7 +417,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -417,7 +432,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -444,8 +459,8 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributes1
         = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName(),
-        AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), Code.NOT_FOUND.toString());
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Code.NOT_FOUND.toString());
 
     // Histograms are cumulative by default.
     assertThat(openTelemetryTesting.getMetrics())
@@ -454,7 +469,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
                     .hasUnit("{attempt}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -468,7 +483,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -488,7 +503,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -510,7 +525,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -541,7 +556,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
                     .hasUnit("{attempt}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -555,7 +570,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -575,7 +590,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -597,7 +612,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -630,8 +645,8 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributes2
         = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName(),
-        AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), Code.OK.toString());
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Code.OK.toString());
 
     assertThat(openTelemetryTesting.getMetrics())
         .satisfiesExactlyInAnyOrder(
@@ -639,7 +654,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
                     .hasUnit("{attempt}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -654,7 +669,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -678,7 +693,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_CALL_DURATION)
+                    .hasName(CLIENT_CALL_DURATION)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -693,7 +708,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -718,7 +733,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -756,12 +771,12 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes attemptStartedAttributes
         = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName());
+        METHOD_KEY, method.getFullMethodName());
 
     io.opentelemetry.api.common.Attributes clientAttributes
         = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName(),
-        AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY),
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY,
         Code.DEADLINE_EXCEEDED.toString());
 
     assertThat(openTelemetryTesting.getMetrics())
@@ -770,7 +785,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
                     .hasUnit("{attempt}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -785,7 +800,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -799,7 +814,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_CALL_DURATION)
+                    .hasName(CLIENT_CALL_DURATION)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -813,7 +828,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -828,7 +843,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -855,7 +870,7 @@ public class OpenTelemetryMetricsModuleTest {
         new CallInfo<>(method, Attributes.EMPTY, null));
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName());
+        METHOD_KEY, method.getFullMethodName());
 
     assertThat(openTelemetryTesting.getMetrics())
         .satisfiesExactly(
@@ -863,7 +878,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.SERVER_CALL_COUNT)
+                    .hasName(SERVER_CALL_COUNT)
                     .hasUnit("{call}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -889,8 +904,8 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes serverAttributes
         = io.opentelemetry.api.common.Attributes.of(
-        AttributeKey.stringKey(OpenTelemetryConstants.METHOD_KEY), method.getFullMethodName(),
-        AttributeKey.stringKey(OpenTelemetryConstants.STATUS_KEY), Code.CANCELLED.toString());
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Code.CANCELLED.toString());
 
     assertThat(openTelemetryTesting.getMetrics())
         .satisfiesExactlyInAnyOrder(
@@ -899,7 +914,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.SERVER_CALL_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        SERVER_CALL_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -913,7 +928,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.SERVER_CALL_COUNT)
+                    .hasName(SERVER_CALL_COUNT)
                     .hasUnit("{call}")
                     .hasLongSumSatisfying(
                         longSum ->
@@ -927,7 +942,7 @@ public class OpenTelemetryMetricsModuleTest {
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
-                    .hasName(OpenTelemetryConstants.SERVER_CALL_DURATION)
+                    .hasName(SERVER_CALL_DURATION)
                     .hasUnit("s")
                     .hasHistogramSatisfying(
                         histogram ->
@@ -942,7 +957,7 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
                         OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
                     .hasName(
-                        OpenTelemetryConstants.SERVER_CALL_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                        SERVER_CALL_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
                     .hasUnit("By")
                     .hasHistogramSatisfying(
                         histogram ->

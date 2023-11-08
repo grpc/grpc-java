@@ -14,9 +14,15 @@ dependencies {
     testImplementation testFixtures(project(':grpc-core')),
             project(':grpc-testing'),
             libraries.opentelemetry.sdk.testing,
-            ("org.assertj:assertj-core:3.24.2")
+            "org.assertj:assertj-core:3.24.2"
 
     annotationProcessor libraries.auto.value
+}
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.opentelemetry')
+    }
 }
 
 tasks.named("compileJava").configure {
