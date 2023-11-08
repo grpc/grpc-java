@@ -53,7 +53,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ForwardingClientCall;
 import io.grpc.Grpc;
-import io.grpc.HealthUtil;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
@@ -1451,7 +1450,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!terminating, "Channel is being terminated");
       AbstractSubchannel subchannelImp = new SubchannelImpl(args);
       SubchannelStateListener rootHcListener =
-          args.getOption(HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
+          args.getOption(LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY);
       if (rootHcListener != null) {
         rootHcListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
       }

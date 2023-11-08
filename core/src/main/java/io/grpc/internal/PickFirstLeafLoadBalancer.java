@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -32,7 +31,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
-import io.grpc.HealthUtil;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import java.net.SocketAddress;
@@ -261,16 +259,19 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   private void updateHealthState(SubchannelData subchannelData) {
     ConnectivityStateInfo healthInfo = subchannelData.healthState;
+    concludedState = healthInfo.getState();
     switch (healthInfo.getState()) {
       case READY:
-        concludedState = READY;
         helper.updateBalancingState(READY, new FixedResultPicker(
             PickResult.withSubchannel(subchannelData.subchannel)));
         break;
       case TRANSIENT_FAILURE:
-        concludedState = TRANSIENT_FAILURE;
         helper.updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(
             PickResult.withError(healthInfo.getStatus())));
+        break;
+      case CONNECTING:
+      case IDLE:
+        helper.updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
         break;
       default:
         log.log(Level.FINE, "Unsupported health status " + healthInfo);
@@ -351,6 +352,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             new EquivalentAddressGroup(addr)))
         .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
             .build());
+    if (subchannel.getAttributes() == null ||
+        subchannel.getAttributes().get(LoadBalancer.HEALTH_PRODUCER_LISTENER_KEY) == null) {
+      hcListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    }
     subchannels.put(addr, new SubchannelData(subchannel, IDLE, hcListener));
     subchannel.start(new SubchannelStateListener() {
       @Override

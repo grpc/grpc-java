@@ -33,7 +33,6 @@ import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.HealthUtil;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
@@ -268,8 +267,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       this.logger = delegate.getChannelLogger();
     }
 
-    OutlierDetectionSubchannel(Subchannel delegate, @Nullable HealthProducerUtil.HealthCheckProducerListener
-        hcListener) {
+    OutlierDetectionSubchannel(Subchannel delegate,
+      @Nullable HealthProducerUtil.HealthCheckProducerListener hcListener) {
       this.delegate = delegate;
       this.logger = delegate.getChannelLogger();
       this.healthListener = hcListener;

@@ -277,7 +277,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
         // may be available on the new connection.
         disabled = false;
         if (healthListener != null) {
-          healthListener.onSubchannelState(null);
+          healthListener.thisHealthState(null);
         }
       }
       if (Objects.equal(rawState.getState(), SHUTDOWN)) {

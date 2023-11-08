@@ -47,7 +47,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.HealthUtil;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -1260,7 +1259,7 @@ public class HealthCheckingLoadBalancerFactoryTestDeprecated {
       checkState(index >= 0, "addrs " + args.getAddresses() + " not found");
       FakeSubchannel subchannel = new FakeSubchannel(index, args, channels[index]);
       SubchannelStateListener healthListener =
-          args.getOption(HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY);
+          args.getOption(LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY);
       if (healthListener != null) {
         healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
       }
@@ -1321,7 +1320,7 @@ public class HealthCheckingLoadBalancerFactoryTestDeprecated {
         .setAddresses(eagLists[index])
         .setAttributes(attrs);
     if (hcListener != null) {
-      subchannelArgsBuilder.addOption(HealthUtil.HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener);
+      subchannelArgsBuilder.addOption(LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener);
     }
     final AtomicReference<Subchannel> returnedSubchannel = new AtomicReference<>();
     syncContext.execute(new Runnable() {
