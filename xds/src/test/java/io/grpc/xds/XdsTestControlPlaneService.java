@@ -29,10 +29,31 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+* A bidi-stream service that acts as a local xDS Control Plane.
+ * It accepts xDS config injection through a method call {@link #setXdsConfig}. Handling AdsStream
+ * response or updating xds config are run in syncContext.
+ *
+ * <p>The service maintains lookup tables:
+ * Subscriber table: map from each resource type, to a map from each client to subscribed resource
+ * names set.
+ * Resources table: store the resources in raw proto message.
+ *
+ * <p>xDS protocol requires version/nonce to avoid various race conditions. In this impl:
+ * Version stores the latest version number per each resource type. It is simply bumped up on each
+ * xds config set.
+ * Nonce stores the nonce number for each resource type and for each client. Incoming xDS requests
+ * share the same proto message type but may at different resources update phases:
+ * 1) Original: an initial xDS request.
+ * 2) NACK an xDS response.
+ * 3) ACK an xDS response.
+ * The service is capable of distinguish these cases when handling the request.
+ */
 final class XdsTestControlPlaneService extends
     AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase {
   private static final Logger logger = Logger.getLogger(XdsTestControlPlaneService.class.getName());
@@ -55,25 +76,24 @@ final class XdsTestControlPlaneService extends
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
   private final Map<String, HashMap<String, Message>> xdsResources = new HashMap<>();
-  private ImmutableMap<String, HashMap<StreamObserver<DiscoveryResponse>, Set<String>>> subscribers
+  private ImmutableMap<String, Map<StreamObserver<DiscoveryResponse>, Set<String>>> subscribers
       = ImmutableMap.of(
-          ADS_TYPE_URL_LDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
-          ADS_TYPE_URL_RDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
-          ADS_TYPE_URL_CDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
-          ADS_TYPE_URL_EDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>()
-          );
+      ADS_TYPE_URL_LDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
+      ADS_TYPE_URL_RDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
+      ADS_TYPE_URL_CDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
+      ADS_TYPE_URL_EDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, Set<String>>());
   private final ImmutableMap<String, AtomicInteger> xdsVersions = ImmutableMap.of(
       ADS_TYPE_URL_LDS, new AtomicInteger(1),
       ADS_TYPE_URL_RDS, new AtomicInteger(1),
       ADS_TYPE_URL_CDS, new AtomicInteger(1),
       ADS_TYPE_URL_EDS, new AtomicInteger(1)
   );
-  private final ImmutableMap<String, HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>>
+  private final ImmutableMap<String, Map<StreamObserver<DiscoveryResponse>, AtomicInteger>>
       xdsNonces = ImmutableMap.of(
-      ADS_TYPE_URL_LDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
-      ADS_TYPE_URL_RDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
-      ADS_TYPE_URL_CDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
-      ADS_TYPE_URL_EDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()
+      ADS_TYPE_URL_LDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
+      ADS_TYPE_URL_RDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
+      ADS_TYPE_URL_CDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
+      ADS_TYPE_URL_EDS, new ConcurrentHashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()
   );
 
 
@@ -102,8 +122,8 @@ final class XdsTestControlPlaneService extends
   @Override
   public StreamObserver<DiscoveryRequest> streamAggregatedResources(
       final StreamObserver<DiscoveryResponse> responseObserver) {
-    final StreamObserver<DiscoveryRequest> requestObserver =
-        new StreamObserver<DiscoveryRequest>() {
+
+    final class AdsStreamObserver implements StreamObserver<DiscoveryRequest> {
       @Override
       public void onNext(final DiscoveryRequest value) {
         syncContext.execute(new Runnable() {
@@ -156,8 +176,9 @@ final class XdsTestControlPlaneService extends
           xdsNonces.get(type).remove(responseObserver);
         }
       }
-    };
-    return requestObserver;
+    }
+
+    return new AdsStreamObserver();
   }
 
   //must run in syncContext

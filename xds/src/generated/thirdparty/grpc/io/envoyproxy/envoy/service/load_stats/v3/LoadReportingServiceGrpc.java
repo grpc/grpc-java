@@ -12,7 +12,7 @@ public final class LoadReportingServiceGrpc {
 
   private LoadReportingServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.service.load_stats.v3.LoadReportingService";
+  public static final java.lang.String SERVICE_NAME = "envoy.service.load_stats.v3.LoadReportingService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest,
@@ -92,7 +92,7 @@ public final class LoadReportingServiceGrpc {
 
   /**
    */
-  public static abstract class LoadReportingServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -125,27 +125,28 @@ public final class LoadReportingServiceGrpc {
      *    assignment destined for each zone Envoys are located in. Goto 2.
      * </pre>
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest> streamLoadStats(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest> streamLoadStats(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamLoadStatsMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamLoadStatsMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest,
-                io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse>(
-                  this, METHODID_STREAM_LOAD_STATS)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service LoadReportingService.
    */
-  public static final class LoadReportingServiceStub extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub> {
+  public static abstract class LoadReportingServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return LoadReportingServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service LoadReportingService.
+   */
+  public static final class LoadReportingServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub> {
     private LoadReportingServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -196,8 +197,10 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service LoadReportingService.
    */
-  public static final class LoadReportingServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
+  public static final class LoadReportingServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
     private LoadReportingServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -211,8 +214,10 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadReportingService.
    */
-  public static final class LoadReportingServiceFutureStub extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub> {
+  public static final class LoadReportingServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub> {
     private LoadReportingServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -232,10 +237,10 @@ public final class LoadReportingServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final LoadReportingServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(LoadReportingServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -263,6 +268,18 @@ public final class LoadReportingServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamLoadStatsMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest,
+              io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse>(
+                service, METHODID_STREAM_LOAD_STATS)))
+        .build();
+  }
+
   private static abstract class LoadReportingServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     LoadReportingServiceBaseDescriptorSupplier() {}
@@ -286,9 +303,9 @@ public final class LoadReportingServiceGrpc {
   private static final class LoadReportingServiceMethodDescriptorSupplier
       extends LoadReportingServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    LoadReportingServiceMethodDescriptorSupplier(String methodName) {
+    LoadReportingServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

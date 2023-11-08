@@ -48,6 +48,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -98,7 +99,7 @@ public class ServiceConfigErrorHandlingTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString().contains(
-              ManagedChannelImpl.DelayedNameResolverRefresh.class.getName());
+              RetryingNameResolver.DelayedNameResolverRefresh.class.getName());
         }
       };
 
@@ -158,6 +159,8 @@ public class ServiceConfigErrorHandlingTest {
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
 
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel =
         new ManagedChannelImpl(
             channelBuilder,
@@ -186,13 +189,13 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     assertEquals(numExpectedTasks, timer.numPendingTasks());
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
   }
 
   @Before
   public void setUp() throws Exception {
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenCallRealMethod();
+    mockLoadBalancer.setAddressAcceptanceStatus(Status.OK);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
     when(mockTransportFactory.getScheduledExecutorService())
@@ -268,7 +271,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("12");
@@ -280,19 +283,14 @@ public class ServiceConfigErrorHandlingTest {
     nameResolverFactory.servers.clear();
 
     // 2nd resolution
+    mockLoadBalancer.setAddressAcceptanceStatus(Status.UNAVAILABLE);
     nameResolverFactory.allResolved();
 
     // 2nd service config without addresses
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(mockLoadBalancer, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
-    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(statusCaptor.getValue().getDescription())
-        .contains("NameResolver returned no usable address.");
-    assertThat(channel.getState(true)).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
-    assertWithMessage("Empty address should schedule NameResolver retry")
-        .that(getNameResolverRefresh())
-        .isNotNull();
+    verify(mockLoadBalancer).acceptResolvedAddresses(any(ResolvedAddresses.class));
+
+    // A resolution retry has been scheduled
+    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
   }
 
   @Test
@@ -302,7 +300,6 @@ public class ServiceConfigErrorHandlingTest {
             .setServers(Collections.emptyList())
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"val\"}}]}");
@@ -312,7 +309,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
 
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEmpty();
@@ -338,7 +335,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("foo");
@@ -360,7 +357,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isNull();
@@ -386,7 +383,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("foo");
@@ -431,7 +428,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
 
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
@@ -462,7 +459,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
@@ -477,7 +474,7 @@ public class ServiceConfigErrorHandlingTest {
     nextLbPolicyConfigError.set(Status.UNKNOWN);
     nameResolverFactory.allResolved();
 
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses newResolvedAddress = resultCaptor.getValue();
     // should use previous service config because new service config is invalid.
     assertThat(newResolvedAddress.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
@@ -510,7 +507,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
     // should use previous service config because new resolution result is no config.
@@ -522,7 +519,7 @@ public class ServiceConfigErrorHandlingTest {
     nameResolverFactory.nextRawServiceConfig.set(null);
     nameResolverFactory.allResolved();
 
-    verify(mockLoadBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
+    verify(mockLoadBalancer, times(2)).acceptResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses newResolvedAddress = resultCaptor.getValue();
     assertThat(newResolvedAddress.getLoadBalancingPolicyConfig()).isEqualTo("mate");
     assertThat(newResolvedAddress.getAttributes().get(InternalConfigSelector.KEY))
@@ -587,8 +584,6 @@ public class ServiceConfigErrorHandlingTest {
 
       final ServiceConfigParser serviceConfigParser;
       Listener2 listener;
-      boolean shutdown;
-      int refreshCalled;
 
       FakeNameResolver(ServiceConfigParser serviceConfigParser) {
         this.serviceConfigParser = serviceConfigParser;
@@ -606,7 +601,6 @@ public class ServiceConfigErrorHandlingTest {
       }
 
       @Override public void refresh() {
-        refreshCalled++;
         resolved();
       }
 
@@ -623,7 +617,6 @@ public class ServiceConfigErrorHandlingTest {
       }
 
       @Override public void shutdown() {
-        shutdown = true;
       }
 
       @Override
@@ -653,16 +646,28 @@ public class ServiceConfigErrorHandlingTest {
   }
 
   private FakeClock.ScheduledTask getNameResolverRefresh() {
-    return Iterables.getOnlyElement(timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
+    return Iterables.getOnlyElement(
+       timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
   }
 
   private static class FakeLoadBalancer extends LoadBalancer {
+
+    private Status addressAcceptanceStatus = Status.OK;
 
     @Nullable
     private Helper helper;
 
     public void setHelper(Helper helper) {
       this.helper = helper;
+    }
+
+    @Override
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return addressAcceptanceStatus;
+    }
+
+    public void setAddressAcceptanceStatus(Status addressAcceptanceStatus) {
+      this.addressAcceptanceStatus = addressAcceptanceStatus;
     }
 
     @Override

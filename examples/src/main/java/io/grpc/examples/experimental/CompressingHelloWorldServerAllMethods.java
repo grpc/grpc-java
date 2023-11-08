@@ -20,9 +20,10 @@ import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
@@ -44,7 +45,7 @@ public class CompressingHelloWorldServerAllMethods {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         /* This method call adds the Interceptor to enable compressed server responses for all RPCs */
         .intercept(new ServerInterceptor() {
           @Override

@@ -15,7 +15,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
 
   private XdsUpdateClientConfigureServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.XdsUpdateClientConfigureService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.XdsUpdateClientConfigureService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.ClientConfigureRequest,
@@ -98,37 +98,41 @@ public final class XdsUpdateClientConfigureServiceGrpc {
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
    */
-  public static abstract class XdsUpdateClientConfigureServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
      * Update the tes client's configuration.
      * </pre>
      */
-    public void configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request,
+    default void configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.ClientConfigureResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getConfigureMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getConfigureMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Messages.ClientConfigureRequest,
-                io.grpc.testing.integration.Messages.ClientConfigureResponse>(
-                  this, METHODID_CONFIGURE)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
    */
-  public static final class XdsUpdateClientConfigureServiceStub extends io.grpc.stub.AbstractAsyncStub<XdsUpdateClientConfigureServiceStub> {
+  public static abstract class XdsUpdateClientConfigureServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return XdsUpdateClientConfigureServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service XdsUpdateClientConfigureService.
+   * <pre>
+   * A service to dynamically update the configuration of an xDS test client.
+   * </pre>
+   */
+  public static final class XdsUpdateClientConfigureServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<XdsUpdateClientConfigureServiceStub> {
     private XdsUpdateClientConfigureServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -153,11 +157,13 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
    */
-  public static final class XdsUpdateClientConfigureServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingStub> {
+  public static final class XdsUpdateClientConfigureServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<XdsUpdateClientConfigureServiceBlockingStub> {
     private XdsUpdateClientConfigureServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -181,11 +187,13 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>
    */
-  public static final class XdsUpdateClientConfigureServiceFutureStub extends io.grpc.stub.AbstractFutureStub<XdsUpdateClientConfigureServiceFutureStub> {
+  public static final class XdsUpdateClientConfigureServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<XdsUpdateClientConfigureServiceFutureStub> {
     private XdsUpdateClientConfigureServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -216,10 +224,10 @@ public final class XdsUpdateClientConfigureServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final XdsUpdateClientConfigureServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(XdsUpdateClientConfigureServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -248,6 +256,18 @@ public final class XdsUpdateClientConfigureServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getConfigureMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Messages.ClientConfigureRequest,
+              io.grpc.testing.integration.Messages.ClientConfigureResponse>(
+                service, METHODID_CONFIGURE)))
+        .build();
+  }
+
   private static abstract class XdsUpdateClientConfigureServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     XdsUpdateClientConfigureServiceBaseDescriptorSupplier() {}
@@ -271,9 +291,9 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   private static final class XdsUpdateClientConfigureServiceMethodDescriptorSupplier
       extends XdsUpdateClientConfigureServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    XdsUpdateClientConfigureServiceMethodDescriptorSupplier(String methodName) {
+    XdsUpdateClientConfigureServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

@@ -6,6 +6,7 @@ buildscript {
 
 plugins {
     id "java-library"
+    id "java-test-fixtures"
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
@@ -13,30 +14,28 @@ plugins {
     id "ru.vyarus.animalsniffer"
 }
 
-import static java.nio.charset.StandardCharsets.US_ASCII;
-
-import com.google.common.primitives.Bytes;
-
 description = 'gRPC: Core'
-
-evaluationDependsOn(project(':grpc-context').path)
-evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
     api project(':grpc-api')
+    // force dependent jars to depend on latest grpc-context
+    runtimeOnly project(":grpc-context"),
+            project(":grpc-util")  // need grpc-util to pull in round robin
     implementation libraries.gson,
             libraries.android.annotations,
             libraries.animalsniffer.annotations,
             libraries.errorprone.annotations,
             libraries.guava,
             libraries.perfmark.api
-    testImplementation project(':grpc-context').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
+    testFixturesApi libraries.junit
+    testFixturesImplementation libraries.guava,
+            libraries.mockito.core,
+            libraries.truth,
+            project(':grpc-testing')
+    testImplementation testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
             project(':grpc-grpclb')
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
 
     testRuntimeOnly project(':grpc-census')
 
@@ -53,6 +52,12 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/perfmark/**'
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.internal')
+    }
+}
+
 animalsniffer {
     // Don't check sourceSets.jmh
     sourceSets = [
@@ -61,59 +66,8 @@ animalsniffer {
     ]
 }
 
-import net.ltgt.gradle.errorprone.CheckSeverity
-
-def replaceBytes(byte[] haystack, byte[] needle, byte[] replacement) {
-    int i = Bytes.indexOf(haystack, needle);
-    assert i != -1;
-    byte[] result = new byte[haystack.length - needle.length + replacement.length];
-    System.arraycopy(haystack, 0, result, 0, i);
-    System.arraycopy(replacement, 0, result, i, replacement.length);
-    System.arraycopy(haystack, i + needle.length, result, i + replacement.length, haystack.length - i - needle.length);
-    return result;
-}
-
-def bigEndianShortBytes(int value) {
-    return [value >> 8, value & 0xFF] as byte[];
-}
-
-def replaceConstant(File file, String needle, String replacement) {
-    // CONSTANT_Utf8_info. https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.7
-    byte[] needleBytes = Bytes.concat(
-        [1] as byte[], bigEndianShortBytes(needle.length()), needle.getBytes(US_ASCII));
-    byte[] replacementBytes = Bytes.concat(
-        [1] as byte[], bigEndianShortBytes(replacement.length()), replacement.getBytes(US_ASCII));
-    file.setBytes(replaceBytes(file.getBytes(), needleBytes, replacementBytes));
-}
-
-plugins.withId("java") {
-    tasks.named("compileJava").configure {
-        doLast {
-            // Replace value of Signature Attribute.
-            // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.7.9
-	    //
-	    // Have new compilations compile against a public class, without breaking the internal
-	    // ABI for the moment. After giving users some time to recompile, this should be removed
-	    // and #7211 can continue. When this is removed, at the very least the generics need to
-	    // be changed to avoid <? extends io.grpc.internal.*>.
-            project.replaceConstant(
-                destinationDirectory.file(
-                    "io/grpc/internal/AbstractManagedChannelImplBuilder.class").get().getAsFile(),
-                "<T:Lio/grpc/internal/AbstractManagedChannelImplBuilder<TT;>;>Lio/grpc/ManagedChannelBuilder<TT;>;",
-                "<T:Lio/grpc/ManagedChannelBuilder<TT;>;>Lio/grpc/ManagedChannelBuilder<TT;>;");
-            project.replaceConstant(
-                destinationDirectory.file(
-                    "io/grpc/internal/AbstractServerImplBuilder.class").get().getAsFile(),
-                "<T:Lio/grpc/internal/AbstractServerImplBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;",
-                "<T:Lio/grpc/ServerBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;");
-        }
-    }
-
-    tasks.named("compileJmhJava").configure {
-        // This project targets Java 7 (no method references)
-        options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
-    }
-}
+components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
+components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }
 
 tasks.register("versionFile") {
     doLast {

@@ -19,6 +19,7 @@ package io.grpc.xds.orca;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -115,7 +116,6 @@ public class OrcaServiceImplTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void testReportingLifeCycle_serverShutdown() {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
@@ -128,11 +128,11 @@ public class OrcaServiceImplTest {
     OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
     assertThat(((OrcaServiceImpl)orcaServiceImpl).clientCount.get()).isEqualTo(1);
     verify(listener).onMessage(eq(expect));
-    reset(listener);
+    verify(listener, never()).onClose(any(), any());
     oobServer.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
     assertThat(((OrcaServiceImpl)orcaServiceImpl).clientCount.get()).isEqualTo(0);
-    ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(Status.class);
     verify(listener).onClose(callCloseCaptor.capture(), any());
     assertThat(callCloseCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
   }
@@ -143,19 +143,27 @@ public class OrcaServiceImplTest {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
     defaultTestService.putUtilizationMetric("buffer", 0.2);
+    defaultTestService.setApplicationUtilizationMetric(0.314159);
+    defaultTestService.setQpsMetric(1.9);
+    defaultTestService.setEpsMetric(0.2233);
     call.start(listener, new Metadata());
     call.sendMessage(OrcaLoadReportRequest.newBuilder()
         .setReportInterval(Duration.newBuilder().setSeconds(0).setNanos(500).build()).build());
     call.halfClose();
     call.request(1);
-    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
+    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2)
+        .setApplicationUtilization(0.314159).setRpsFractional(1.9).setEps(0.2233).build();
     verify(listener).onMessage(eq(expect));
     reset(listener);
     defaultTestService.removeUtilizationMetric("buffer0");
+    defaultTestService.clearApplicationUtilizationMetric();
+    defaultTestService.clearQpsMetric();
+    defaultTestService.clearEpsMetric();
     assertThat(fakeClock.forwardTime(500, TimeUnit.NANOSECONDS)).isEqualTo(0);
     verifyNoInteractions(listener);
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(1);
     call.request(1);
+    expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
     verify(listener).onMessage(eq(expect));
   }
 
@@ -211,12 +219,12 @@ public class OrcaServiceImplTest {
   public void testMultipleClients() {
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
-    defaultTestService.putUtilizationMetric("omg", 100);
+    defaultTestService.putUtilizationMetric("omg", 1.00);
     call.start(listener, new Metadata());
     call.sendMessage(OrcaLoadReportRequest.newBuilder().build());
     call.halfClose();
     call.request(1);
-    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("omg", 100).build();
+    OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("omg", 1.00).build();
     verify(listener).onMessage(eq(expect));
     defaultTestService.setMemoryUtilizationMetric(0.5);
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call2 = channel.newCall(
@@ -232,7 +240,7 @@ public class OrcaServiceImplTest {
     channel.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
     assertThat(((OrcaServiceImpl)orcaServiceImpl).clientCount.get()).isEqualTo(0);
-    ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(Status.class);
     verify(listener, times(2)).onClose(callCloseCaptor.capture(), any());
     assertThat(callCloseCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
   }
@@ -241,21 +249,30 @@ public class OrcaServiceImplTest {
   public void testApis() throws Exception {
     ImmutableMap<String, Double> firstUtilization = ImmutableMap.of("util", 0.1);
     OrcaLoadReport goldenReport = OrcaLoadReport.newBuilder()
-        .setCpuUtilization(random.nextDouble())
+        .setCpuUtilization(random.nextDouble() * 10)
+        .setApplicationUtilization(random.nextDouble() * 10)
         .setMemUtilization(random.nextDouble())
         .putAllUtilization(firstUtilization)
         .putUtilization("queue", 1.0)
+        .setRpsFractional(1239.01)
+        .setEps(1.618)
         .build();
     defaultTestService.setCpuUtilizationMetric(goldenReport.getCpuUtilization());
+    defaultTestService.setApplicationUtilizationMetric(goldenReport.getApplicationUtilization());
     defaultTestService.setMemoryUtilizationMetric(goldenReport.getMemUtilization());
     defaultTestService.setAllUtilizationMetrics(firstUtilization);
     defaultTestService.putUtilizationMetric("queue", 1.0);
+    defaultTestService.setQpsMetric(1239.01);
+    defaultTestService.setEpsMetric(1.618);
     Iterator<OrcaLoadReport> reports = OpenRcaServiceGrpc.newBlockingStub(channel)
         .streamCoreMetrics(OrcaLoadReportRequest.newBuilder().build());
     assertThat(reports.next()).isEqualTo(goldenReport);
 
     defaultTestService.clearCpuUtilizationMetric();
+    defaultTestService.clearApplicationUtilizationMetric();
     defaultTestService.clearMemoryUtilizationMetric();
+    defaultTestService.clearQpsMetric();
+    defaultTestService.clearEpsMetric();
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
     goldenReport = OrcaLoadReport.newBuilder()
         .putAllUtilization(firstUtilization)
@@ -265,6 +282,17 @@ public class OrcaServiceImplTest {
     assertThat(reports.next()).isEqualTo(goldenReport);
     defaultTestService.removeUtilizationMetric("util-not-exist");
     defaultTestService.removeUtilizationMetric("queue-not-exist");
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    assertThat(reports.next()).isEqualTo(goldenReport);
+
+    defaultTestService.setCpuUtilizationMetric(-0.001);
+    defaultTestService.setApplicationUtilizationMetric(-0.001);
+    defaultTestService.setMemoryUtilizationMetric(-0.001);
+    defaultTestService.setMemoryUtilizationMetric(1.001);
+    defaultTestService.setQpsMetric(-0.001);
+    defaultTestService.setEpsMetric(-0.001);
+    defaultTestService.putUtilizationMetric("util-out-of-range", -0.001);
+    defaultTestService.putUtilizationMetric("util-out-of-range", 1.001);
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
     assertThat(reports.next()).isEqualTo(goldenReport);
 

@@ -150,6 +150,8 @@ class ProxyDetectorImpl implements ProxyDetector {
       };
 
   /**
+   * Experimental environment variable name for enabling proxy support.
+   *
    * @deprecated Use the standard Java proxy configuration instead with flags such as:
    *     -Dhttps.proxyHost=HOST -Dhttps.proxyPort=PORT
    */

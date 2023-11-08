@@ -50,6 +50,7 @@ public class OptionalMethodTest {
   }
 
   private static class PrivateClass {
+    @SuppressWarnings("UnusedMethod")
     public String testMethod(String arg) {
       return arg;
     }

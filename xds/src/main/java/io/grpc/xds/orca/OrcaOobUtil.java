@@ -58,8 +58,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -68,7 +66,6 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9129")
 public final class OrcaOobUtil {
-  private static final Logger logger = Logger.getLogger(OrcaPerRequestUtil.class.getName());
 
   private OrcaOobUtil() {}
 
@@ -180,7 +177,8 @@ public final class OrcaOobUtil {
   /**
    *  Update {@link OrcaOobReportListener} to receive Out-of-Band metrics report for the
    *  particular subchannel connection, and set the configuration of receiving ORCA reports,
-   *  such as the interval of receiving reports.
+   *  such as the interval of receiving reports. Set listener to null to remove listener, and the
+   *  config will have no effect.
    *
    * <p>This method needs to be called from the SynchronizationContext returned by the wrapped
    * helper's {@link Helper#getSynchronizationContext()}.
@@ -194,13 +192,16 @@ public final class OrcaOobUtil {
    * @param subchannel the server connected by this subchannel to receive the metrics.
    *
    * @param listener the callback upon receiving backend metrics from the Out-Of-Band stream.
+   *                 Setting to null to removes the listener from the subchannel.
    *
-   * @param config the configuration to be set.
+   * @param config the configuration to be set. It has no effect when listener is null.
    *
    */
   public static void setListener(Subchannel subchannel, OrcaOobReportListener listener,
                                  OrcaReportingConfig config) {
-    SubchannelImpl orcaSubchannel = subchannel.getAttributes().get(ORCA_REPORTING_STATE_KEY);
+    Attributes attributes = subchannel.getAttributes();
+    SubchannelImpl orcaSubchannel =
+        (attributes == null) ? null : attributes.get(ORCA_REPORTING_STATE_KEY);
     if (orcaSubchannel == null) {
       throw new IllegalArgumentException("Subchannel does not have orca Out-Of-Band stream enabled."
           + " Try to use a subchannel created by OrcaOobUtil.OrcaHelper.");
@@ -239,7 +240,9 @@ public final class OrcaOobUtil {
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       syncContext.throwIfNotInThisSynchronizationContext();
       Subchannel subchannel = super.createSubchannel(args);
-      SubchannelImpl orcaSubchannel = subchannel.getAttributes().get(ORCA_REPORTING_STATE_KEY);
+      Attributes attributes = subchannel.getAttributes();
+      SubchannelImpl orcaSubchannel =
+          (attributes == null) ? null : attributes.get(ORCA_REPORTING_STATE_KEY);
       OrcaReportingState orcaState;
       if (orcaSubchannel == null) {
         // Only the first load balancing policy requesting ORCA reports instantiates an
@@ -305,18 +308,23 @@ public final class OrcaOobUtil {
             if (oldListener != null) {
               configs.remove(oldListener);
             }
+            if (listener != null) {
+              configs.put(listener, config);
+            }
             orcaSubchannel.reportListener = listener;
-            setReportingConfig(listener, config);
+            setReportingConfig(config);
           }
         });
       }
 
-      private void setReportingConfig(OrcaOobReportListener listener, OrcaReportingConfig config) {
+      private void setReportingConfig(OrcaReportingConfig config) {
         boolean reconfigured = false;
-        configs.put(listener, config);
         // Real reporting interval is the minimum of intervals requested by all participating
         // helpers.
-        if (overallConfig == null) {
+        if (configs.isEmpty()) {
+          overallConfig = null;
+          reconfigured = true;
+        } else if (overallConfig == null) {
           overallConfig = config.toBuilder().build();
           reconfigured = true;
         } else {
@@ -461,8 +469,8 @@ public final class OrcaOobUtil {
         void handleStreamClosed(Status status) {
           if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
             disabled = true;
-            logger.log(
-                Level.SEVERE,
+            subchannelLogger.log(
+                ChannelLogLevel.ERROR,
                 "Backend {0} OpenRcaService is disabled. Server returned: {1}",
                 new Object[] {subchannel.getAllAddresses(), status});
             subchannelLogger.log(ChannelLogLevel.ERROR, "OpenRcaService disabled: {0}", status);

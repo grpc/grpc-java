@@ -20,10 +20,8 @@ import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collection;
-import java.util.Collections;
 
 /**
  * Provider for {@link OkHttpChannelBuilder} instances.
@@ -64,6 +62,6 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
 
   @Override
   protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-    return Collections.singleton(InetSocketAddress.class);
+    return OkHttpChannelBuilder.getSupportedSocketAddressTypes();
   }
 }

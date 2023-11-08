@@ -3,12 +3,11 @@ load("//:java_grpc_library.bzl", "java_grpc_library")
 package(default_visibility = ["//visibility:public"])
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
-# with maven_install's override_targets. Purposefully does not export any
-# symbols, as it should only be used as a dep for pre-compiled binaries on
-# Maven Central.
+# with maven_install's override_targets. Should only be used as a dep for
+# pre-compiled binaries on Maven Central.
 java_library(
     name = "services_maven",
-    runtime_deps = [
+    exports = [
         ":admin",
         ":binarylog",
         ":channelz",
@@ -38,6 +37,7 @@ java_library(
         "src/main/java/io/grpc/services/CallMetricRecorder.java",
         "src/main/java/io/grpc/services/MetricRecorder.java",
         "src/main/java/io/grpc/services/MetricReport.java",
+        "src/main/java/io/grpc/services/MetricRecorderHelper.java",
     ],
     deps = [
         "//api",
@@ -154,7 +154,7 @@ java_library(
         ":_health_java_grpc",
         "//api",
         "//core:internal",
-        "//core:util",
+        "//util",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
         "@io_grpc_grpc_proto//:health_java_proto",

@@ -136,7 +136,7 @@ public class XxHash64Test {
         long eightByteExpected = f.hashBytes(bytes);
         assertEquals("byte hash", oneByteExpected, f.hashByte((byte) -1));
         assertEquals("short hash", twoByteExpected, f.hashShort((short) -1));
-        assertEquals("char hash", twoByteExpected, f.hashChar((char) -1));
+        assertEquals("char hash", twoByteExpected, f.hashChar(Character.MAX_VALUE));
         assertEquals("int hash", fourByteExpected, f.hashInt(-1));
         assertEquals("long hash", eightByteExpected, f.hashLong(-1L));
       }

@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,7 +40,9 @@ import io.grpc.InternalGlobalInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.NameResolverRegistry;
 import io.grpc.StaticTestingClassLoader;
+import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
@@ -196,25 +199,30 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void nameResolverFactory_default() {
-    assertNotNull(builder.nameResolverFactory);
+  public void nameResolverRegistry_default() {
+    assertNotNull(builder.nameResolverRegistry);
   }
 
   @Test
   @SuppressWarnings("deprecation")
   public void nameResolverFactory_normal() {
     NameResolver.Factory nameResolverFactory = mock(NameResolver.Factory.class);
+    doReturn("testscheme").when(nameResolverFactory).getDefaultScheme();
     assertEquals(builder, builder.nameResolverFactory(nameResolverFactory));
-    assertEquals(nameResolverFactory, builder.nameResolverFactory);
+    assertNotNull(builder.nameResolverRegistry);
+    assertEquals("testscheme", builder.nameResolverRegistry.asFactory().getDefaultScheme());
   }
 
   @Test
   @SuppressWarnings("deprecation")
   public void nameResolverFactory_null() {
-    NameResolver.Factory defaultValue = builder.nameResolverFactory;
-    builder.nameResolverFactory(mock(NameResolver.Factory.class));
-    assertEquals(builder, builder.nameResolverFactory(null));
-    assertEquals(defaultValue, builder.nameResolverFactory);
+    NameResolverRegistry defaultValue = builder.nameResolverRegistry;
+    NameResolver.Factory nameResolverFactory = mock(NameResolver.Factory.class);
+    doReturn("testscheme").when(nameResolverFactory).getDefaultScheme();
+    builder.nameResolverFactory(nameResolverFactory);
+    assertNotEquals(defaultValue, builder.nameResolverRegistry);
+    builder.nameResolverFactory(null);
+    assertEquals(defaultValue, builder.nameResolverRegistry);
   }
 
   @Test(expected = IllegalStateException.class)
@@ -327,6 +335,8 @@ public class ManagedChannelImplBuilderTest {
         .thenReturn(clock.getScheduledExecutorService());
     when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
         .thenReturn(mockClientTransportFactory);
+    when(mockClientTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
 
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
@@ -341,12 +351,49 @@ public class ManagedChannelImplBuilderTest {
         .thenReturn(clock.getScheduledExecutorService());
     when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
         .thenReturn(mockClientTransportFactory);
+    when(mockClientTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
 
     builder = new ManagedChannelImplBuilder(DUMMY_TARGET,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT))
         .overrideAuthority(overrideAuthority);
     ManagedChannel channel = grpcCleanupRule.register(builder.build());
     assertEquals(overrideAuthority, channel.authority());
+  }
+
+  @Test
+  public void transportDoesNotSupportAddressTypes() {
+    when(mockClientTransportFactory.getScheduledExecutorService())
+        .thenReturn(clock.getScheduledExecutorService());
+    when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
+        .thenReturn(mockClientTransportFactory);
+    when(mockClientTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InProcessSocketAddress.class));
+
+    builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
+        mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
+    try {
+      ManagedChannel unused = grpcCleanupRule.register(builder.build());
+      fail("Should fail");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().isEqualTo(
+          "Address types of NameResolver 'dns' for 'valid:1234' not supported by transport");
+    }
+  }
+
+  @Test
+  public void transportAddressTypeCompatibilityCheckSkipped() {
+    when(mockClientTransportFactory.getScheduledExecutorService())
+        .thenReturn(clock.getScheduledExecutorService());
+    when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
+        .thenReturn(mockClientTransportFactory);
+    when(mockClientTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(null);
+
+    builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
+        mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
+    // should not fail
+    ManagedChannel unused = grpcCleanupRule.register(builder.build());
   }
 
   @Test
@@ -368,7 +415,7 @@ public class ManagedChannelImplBuilderTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void overrideAuthority_invalid() {
-    builder.overrideAuthority("not_allowed");
+    builder.overrideAuthority("user@not_allowed");
   }
 
   @Test
@@ -414,10 +461,14 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void makeTargetStringForDirectAddress_scopedIpv6() throws Exception {
     InetSocketAddress address = new InetSocketAddress("0:0:0:0:0:0:0:0%0", 10005);
-    assertEquals("/0:0:0:0:0:0:0:0%0:10005", address.toString());
     String target = ManagedChannelImplBuilder.makeTargetStringForDirectAddress(address);
     URI uri = new URI(target);
-    assertEquals("directaddress:////0:0:0:0:0:0:0:0%250:10005", target);
+    assertThat(address.toString()).isIn(
+        Arrays.asList("/[0:0:0:0:0:0:0:0%0]:10005", "/0:0:0:0:0:0:0:0%0:10005"));
+    assertThat(target).isIn(
+        Arrays.asList(
+            "directaddress:////%5B0:0:0:0:0:0:0:0%250%5D:10005",
+            "directaddress:////0:0:0:0:0:0:0:0%250:10005"));
     assertEquals(target, uri.toString());
   }
 

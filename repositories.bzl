@@ -11,41 +11,40 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # )
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.9.0",
-    "com.google.auth:google-auth-library-credentials:0.22.0",
-    "com.google.auth:google-auth-library-oauth2-http:0.22.0",
-    "com.google.auto.value:auto-value-annotations:1.9",
-    "com.google.auto.value:auto-value:1.9",
+    "com.google.api.grpc:proto-google-common-protos:2.22.0",
+    "com.google.auth:google-auth-library-credentials:1.4.0",
+    "com.google.auth:google-auth-library-oauth2-http:1.4.0",
+    "com.google.auto.value:auto-value-annotations:1.10.2",
+    "com.google.auto.value:auto-value:1.10.2",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:2.9.0",
-    "com.google.errorprone:error_prone_annotations:2.9.0",
+    "com.google.code.gson:gson:2.10.1",
+    "com.google.errorprone:error_prone_annotations:2.20.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:31.0.1-android",
-    "com.google.j2objc:j2objc-annotations:1.3",
-    "com.google.re2j:re2j:1.6",
-    "com.google.truth:truth:1.0.1",
+    "com.google.guava:guava:32.0.1-android",
+    "com.google.re2j:re2j:1.7",
+    "com.google.truth:truth:1.1.5",
     "com.squareup.okhttp:okhttp:2.7.5",
-    "com.squareup.okio:okio:1.17.5",
-    "io.netty:netty-buffer:4.1.77.Final",
-    "io.netty:netty-codec-http2:4.1.77.Final",
-    "io.netty:netty-codec-http:4.1.77.Final",
-    "io.netty:netty-codec-socks:4.1.77.Final",
-    "io.netty:netty-codec:4.1.77.Final",
-    "io.netty:netty-common:4.1.77.Final",
-    "io.netty:netty-handler-proxy:4.1.77.Final",
-    "io.netty:netty-handler:4.1.77.Final",
-    "io.netty:netty-resolver:4.1.77.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.53.Final",
-    "io.netty:netty-tcnative-classes:2.0.53.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.77.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.72.Final",
-    "io.netty:netty-transport:4.1.77.Final",
-    "io.opencensus:opencensus-api:0.24.0",
-    "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
-    "io.perfmark:perfmark-api:0.25.0",
-    "junit:junit:4.12",
+    "com.squareup.okio:okio:2.10.0",
+    "io.netty:netty-buffer:4.1.100.Final",
+    "io.netty:netty-codec-http2:4.1.100.Final",
+    "io.netty:netty-codec-http:4.1.100.Final",
+    "io.netty:netty-codec-socks:4.1.100.Final",
+    "io.netty:netty-codec:4.1.100.Final",
+    "io.netty:netty-common:4.1.100.Final",
+    "io.netty:netty-handler-proxy:4.1.100.Final",
+    "io.netty:netty-handler:4.1.100.Final",
+    "io.netty:netty-resolver:4.1.100.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.61.Final",
+    "io.netty:netty-tcnative-classes:2.0.61.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.100.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.100.Final",
+    "io.netty:netty-transport:4.1.100.Final",
+    "io.opencensus:opencensus-api:0.31.0",
+    "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
+    "io.perfmark:perfmark-api:0.26.0",
+    "junit:junit:4.13.2",
     "org.apache.tomcat:annotations-api:6.0.53",
-    "org.codehaus.mojo:animal-sniffer-annotations:1.21",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.23",
 ]
 
 # For use with maven_install's override_targets.
@@ -55,21 +54,13 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 # )
 #
 # If you have your own overrides as well, you can use:
-#     override_targets = dict(
-#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
+#     override_targets = {
 #         "your.target:artifact": "@//third_party/artifact",
-#     )
-#
-# To combine OVERRIDE_TARGETS from multiple libraries:
-#     override_targets = dict(
-#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS.items() +
-#         OTHER_OVERRIDE_TARGETS.items(),
-#         "your.target:artifact": "@//third_party/artifact",
-#     )
+#     } | IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
 IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "com.google.protobuf:protobuf-java": "@com_google_protobuf//:protobuf_java",
     "com.google.protobuf:protobuf-java-util": "@com_google_protobuf//:protobuf_java_util",
-    "com.google.protobuf:protobuf-javalite": "@com_google_protobuf_javalite//:protobuf_java_lite",
+    "com.google.protobuf:protobuf-javalite": "@com_google_protobuf_javalite//:protobuf_javalite",
     "io.grpc:grpc-alts": "@io_grpc_grpc_java//alts",
     "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
     "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
@@ -78,6 +69,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-core": "@io_grpc_grpc_java//core:core_maven",
     "io.grpc:grpc-googleapis": "@io_grpc_grpc_java//googleapis",
     "io.grpc:grpc-grpclb": "@io_grpc_grpc_java//grpclb",
+    "io.grpc:grpc-inprocess": "@io_grpc_grpc_java//inprocess",
     "io.grpc:grpc-netty": "@io_grpc_grpc_java//netty",
     "io.grpc:grpc-netty-shaded": "@io_grpc_grpc_java//netty:shaded_maven",
     "io.grpc:grpc-okhttp": "@io_grpc_grpc_java//okhttp",
@@ -88,6 +80,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-stub": "@io_grpc_grpc_java//stub",
     "io.grpc:grpc-testing": "@io_grpc_grpc_java//testing",
     "io.grpc:grpc-xds": "@io_grpc_grpc_java//xds:xds_maven",
+    "io.grpc:grpc-util": "@io_grpc_grpc_java//util",
 }
 
 def grpc_java_repositories():
@@ -95,10 +88,10 @@ def grpc_java_repositories():
     if not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",
-            strip_prefix = "xds-d92e9ce0af512a73a3a126b32fa4920bee12e180",
-            sha256 = "27be88b1ff2844885d3b2d0d579546f3a8b3f26b4871eed89082c9709e49a4bd",
+            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
+            sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
             urls = [
-                "https://github.com/cncf/xds/archive/d92e9ce0af512a73a3a126b32fa4920bee12e180.tar.gz",
+                "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
             ],
         )
     if not native.existing_rule("com_github_grpc_grpc"):
@@ -137,10 +130,10 @@ def grpc_java_repositories():
     if not native.existing_rule("envoy_api"):
         http_archive(
             name = "envoy_api",
-            sha256 = "a0c58442cc2038ccccad9616dd1bab5ff1e65da2bbc0ae41020ef6010119eb0e",
-            strip_prefix = "data-plane-api-869b00336913138cad96a653458aab650c4e70ea",
+            sha256 = "b426904abf51ba21dd8947a05694bb3c861d6f5e436e4673e74d7d7bfb6d3188",
+            strip_prefix = "data-plane-api-268824e4eee3d7770a347a5dc5aaddc0b1b14e24",
             urls = [
-                "https://github.com/envoyproxy/data-plane-api/archive/869b00336913138cad96a653458aab650c4e70ea.tar.gz",
+                "https://github.com/envoyproxy/data-plane-api/archive/268824e4eee3d7770a347a5dc5aaddc0b1b14e24.tar.gz",
             ],
         )
 
@@ -150,18 +143,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "2d9084d3dd13b86ca2e811d2331f780eb86f6d7cb02b405426e3c80dcbfabf25",
-        strip_prefix = "protobuf-3.21.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.21.1.zip"],
+        sha256 = "5980276108f948e1ada091475549a8c75dc83c193129aab0e986ceaac3e97131",
+        strip_prefix = "protobuf-24.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protobuf-24.0.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "2d9084d3dd13b86ca2e811d2331f780eb86f6d7cb02b405426e3c80dcbfabf25",
-        strip_prefix = "protobuf-3.21.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.21.1.zip"],
+        sha256 = "5980276108f948e1ada091475549a8c75dc83c193129aab0e986ceaac3e97131",
+        strip_prefix = "protobuf-24.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protobuf-24.0.zip"],
     )
 
 def io_grpc_grpc_proto():

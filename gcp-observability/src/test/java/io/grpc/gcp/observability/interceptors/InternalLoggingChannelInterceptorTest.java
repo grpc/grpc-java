@@ -17,6 +17,7 @@
 package io.grpc.gcp.observability.interceptors;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.census.internal.ObservabilityCensusConstants.CLIENT_TRACE_SPAN_CONTEXT_KEY;
 import static io.grpc.gcp.observability.interceptors.LogHelperTest.BYTEARRAY_MARSHALLER;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,7 +27,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -53,6 +53,11 @@ import io.grpc.internal.NoopClientCall;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import io.opencensus.trace.SpanContext;
+import io.opencensus.trace.SpanId;
+import io.opencensus.trace.TraceId;
+import io.opencensus.trace.TraceOptions;
+import io.opencensus.trace.Tracestate;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -84,6 +89,14 @@ public class InternalLoggingChannelInterceptorTest {
   public final MockitoRule mockito = MockitoJUnit.rule();
 
   private static final Charset US_ASCII = StandardCharsets.US_ASCII;
+  private static final SpanContext DEFAULT_CLIENT_SPAN_CONTEXT = SpanContext.INVALID;
+  private static final SpanContext SPAN_CONTEXT = SpanContext.create(
+      TraceId.fromLowerBase16("4c6af40c499951eb7de2777ba1e4fefa"),
+      SpanId.fromLowerBase16("de52e84d13dd232d"),
+      TraceOptions.builder().setIsSampled(true).build(),
+      Tracestate.builder().build());
+  private static final CallOptions CALL_OPTIONS_WITH_SPAN_CONTEXT =
+      CallOptions.DEFAULT.withOption(CLIENT_TRACE_SPAN_CONTEXT_KEY, SPAN_CONTEXT);
 
   private InternalLoggingChannelInterceptor.Factory factory;
   private AtomicReference<ClientCall.Listener<byte[]>> interceptedListener;
@@ -108,8 +121,6 @@ public class InternalLoggingChannelInterceptorTest {
     cancelCalled = SettableFuture.create();
     peer = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 1234);
     filterParams = FilterParams.create(true, 0, 0);
-    when(mockFilterHelper.isEventToBeLogged(any(GrpcLogRecord.EventType.class)))
-        .thenReturn(true);
   }
 
   @Test
@@ -164,7 +175,7 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(filterParams);
 
     ClientCall<byte[], byte[]> interceptedLoggingCall =
@@ -185,7 +196,7 @@ public class InternalLoggingChannelInterceptorTest {
       clientInitial.put(keyA, dataA);
       clientInitial.put(keyB, dataB);
       interceptedLoggingCall.start(mockListener, clientInitial);
-      verify(mockLogHelper).logRequestHeader(
+      verify(mockLogHelper).logClientHeader(
           /*seq=*/ eq(1L),
           eq("service"),
           eq("method"),
@@ -193,9 +204,10 @@ public class InternalLoggingChannelInterceptorTest {
           ArgumentMatchers.isNull(),
           same(clientInitial),
           eq(filterParams.headerBytes()),
-          eq(EventLogger.LOGGER_CLIENT),
+          eq(EventLogger.CLIENT),
           anyString(),
-          ArgumentMatchers.isNull());
+          ArgumentMatchers.isNull(),
+          eq(DEFAULT_CLIENT_SPAN_CONTEXT));
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(clientInitial, actualClientInitial.get());
     }
@@ -207,15 +219,17 @@ public class InternalLoggingChannelInterceptorTest {
     {
       Metadata serverInitial = new Metadata();
       interceptedListener.get().onHeaders(serverInitial);
-      verify(mockLogHelper).logResponseHeader(
+      verify(mockLogHelper).logServerHeader(
           /*seq=*/ eq(2L),
           eq("service"),
           eq("method"),
+          eq("the-authority"),
           same(serverInitial),
           eq(filterParams.headerBytes()),
-          eq(EventLogger.LOGGER_CLIENT),
+          eq(EventLogger.CLIENT),
           anyString(),
-          same(peer));
+          same(peer),
+          any(SpanContext.class));
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onHeaders(same(serverInitial));
     }
@@ -231,11 +245,13 @@ public class InternalLoggingChannelInterceptorTest {
           /*seq=*/ eq(3L),
           eq("service"),
           eq("method"),
-          eq(EventType.GRPC_CALL_REQUEST_MESSAGE),
+          eq("the-authority"),
+          eq(EventType.CLIENT_MESSAGE),
           same(request),
           eq(filterParams.messageBytes()),
-          eq(EventLogger.LOGGER_CLIENT),
-          anyString());
+          eq(EventLogger.CLIENT),
+          anyString(),
+          any(SpanContext.class));
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(request, actualRequest.get());
     }
@@ -250,8 +266,10 @@ public class InternalLoggingChannelInterceptorTest {
           /*seq=*/ eq(4L),
           eq("service"),
           eq("method"),
-          eq(EventLogger.LOGGER_CLIENT),
-          anyString());
+          eq("the-authority"),
+          eq(EventLogger.CLIENT),
+          anyString(),
+          any(SpanContext.class));
       halfCloseCalled.get(1, TimeUnit.MILLISECONDS);
       verifyNoMoreInteractions(mockLogHelper);
     }
@@ -267,11 +285,13 @@ public class InternalLoggingChannelInterceptorTest {
           /*seq=*/ eq(5L),
           eq("service"),
           eq("method"),
-          eq(EventType.GRPC_CALL_RESPONSE_MESSAGE),
+          eq("the-authority"),
+          eq(EventType.SERVER_MESSAGE),
           same(response),
           eq(filterParams.messageBytes()),
-          eq(EventLogger.LOGGER_CLIENT),
-          anyString());
+          eq(EventLogger.CLIENT),
+          anyString(),
+          any(SpanContext.class));
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onMessage(same(response));
     }
@@ -288,12 +308,14 @@ public class InternalLoggingChannelInterceptorTest {
           /*seq=*/ eq(6L),
           eq("service"),
           eq("method"),
+          eq("the-authority"),
           same(status),
           same(trailers),
           eq(filterParams.headerBytes()),
-          eq(EventLogger.LOGGER_CLIENT),
+          eq(EventLogger.CLIENT),
           anyString(),
-          same(peer));
+          same(peer),
+          any(SpanContext.class));
       verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onClose(same(status), same(trailers));
     }
@@ -308,8 +330,10 @@ public class InternalLoggingChannelInterceptorTest {
           /*seq=*/ eq(7L),
           eq("service"),
           eq("method"),
-          eq(EventLogger.LOGGER_CLIENT),
-          anyString());
+          eq("the-authority"),
+          eq(EventLogger.CLIENT),
+          anyString(),
+          any(SpanContext.class));
       cancelCalled.get(1, TimeUnit.MILLISECONDS);
     }
   }
@@ -323,16 +347,17 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(filterParams);
     @SuppressWarnings("unchecked")
     ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
 
+    int durationSecs = 5;
     ClientCall<byte[], byte[]> interceptedLoggingCall =
         factory.create()
             .interceptCall(
                 method,
-                CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                CallOptions.DEFAULT.withDeadlineAfter(durationSecs, TimeUnit.SECONDS),
                 new Channel() {
                   @Override
                   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -349,7 +374,7 @@ public class InternalLoggingChannelInterceptorTest {
     interceptedLoggingCall.start(mockListener, new Metadata());
     ArgumentCaptor<Duration> callOptTimeoutCaptor = ArgumentCaptor.forClass(Duration.class);
     verify(mockLogHelper, times(1))
-        .logRequestHeader(
+        .logClientHeader(
             anyLong(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
             AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
@@ -360,10 +385,11 @@ public class InternalLoggingChannelInterceptorTest {
             any(GrpcLogRecord.EventLogger.class),
             anyString(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(),
-                ArgumentMatchers.any()));
+                ArgumentMatchers.any()),
+            any(SpanContext.class));
     Duration timeout = callOptTimeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(durationSecs) - Durations.toNanos(timeout)))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test
@@ -371,7 +397,7 @@ public class InternalLoggingChannelInterceptorTest {
     final SettableFuture<ClientCall<byte[], byte[]>> callFuture = SettableFuture.create();
     Context.current()
         .withDeadline(
-            Deadline.after(1, TimeUnit.SECONDS),
+            Deadline.after(2, TimeUnit.SECONDS),
             Executors.newSingleThreadScheduledExecutor())
         .run(() -> {
           MethodDescriptor<byte[], byte[]> method =
@@ -381,14 +407,14 @@ public class InternalLoggingChannelInterceptorTest {
                   .setRequestMarshaller(BYTEARRAY_MARSHALLER)
                   .setResponseMarshaller(BYTEARRAY_MARSHALLER)
                   .build();
-          when(mockFilterHelper.isMethodToBeLogged(method))
+          when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
               .thenReturn(filterParams);
 
           callFuture.set(
               factory.create()
                   .interceptCall(
                       method,
-                      CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                      CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS),
                       new Channel() {
                         @Override
                         public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -408,7 +434,7 @@ public class InternalLoggingChannelInterceptorTest {
     Objects.requireNonNull(callFuture.get()).start(mockListener, new Metadata());
     ArgumentCaptor<Duration> contextTimeoutCaptor = ArgumentCaptor.forClass(Duration.class);
     verify(mockLogHelper, times(1))
-        .logRequestHeader(
+        .logClientHeader(
             anyLong(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
             AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
@@ -419,10 +445,11 @@ public class InternalLoggingChannelInterceptorTest {
             any(GrpcLogRecord.EventLogger.class),
             anyString(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(),
-                ArgumentMatchers.any()));
+                ArgumentMatchers.any()),
+            any(SpanContext.class));
     Duration timeout = contextTimeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(2) - Durations.toNanos(timeout)))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test
@@ -443,7 +470,7 @@ public class InternalLoggingChannelInterceptorTest {
                   .setRequestMarshaller(BYTEARRAY_MARSHALLER)
                   .setResponseMarshaller(BYTEARRAY_MARSHALLER)
                   .build();
-          when(mockFilterHelper.isMethodToBeLogged(method))
+          when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
               .thenReturn(filterParams);
 
           callFuture.set(
@@ -470,7 +497,7 @@ public class InternalLoggingChannelInterceptorTest {
     Objects.requireNonNull(callFuture.get()).start(mockListener, new Metadata());
     ArgumentCaptor<Duration> timeoutCaptor = ArgumentCaptor.forClass(Duration.class);
     verify(mockLogHelper, times(1))
-        .logRequestHeader(
+        .logClientHeader(
             anyLong(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
             AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
@@ -481,12 +508,13 @@ public class InternalLoggingChannelInterceptorTest {
             any(GrpcLogRecord.EventLogger.class),
             anyString(),
             AdditionalMatchers.or(ArgumentMatchers.isNull(),
-                ArgumentMatchers.any()));
+                ArgumentMatchers.any()),
+            any(SpanContext.class));
     Duration timeout = timeoutCaptor.getValue();
     assertThat(LogHelper.min(contextDeadline, callOptionsDeadline))
         .isSameInstanceAs(contextDeadline);
-    assertThat(TimeUnit.SECONDS.toNanos(10) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(10) - Durations.toNanos(timeout)))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test
@@ -541,7 +569,7 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(FilterParams.create(false, 0, 0));
 
     ClientCall<byte[], byte[]> interceptedLoggingCall =
@@ -606,7 +634,7 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(FilterParams.create(true, 10, 10));
 
     ClientCall<byte[], byte[]> interceptedLoggingCall =
@@ -632,10 +660,7 @@ public class InternalLoggingChannelInterceptorTest {
   }
 
   @Test
-  public void eventFilter_enabled() {
-    when(mockFilterHelper.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_HEADER)).thenReturn(false);
-    when(mockFilterHelper.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_HEADER)).thenReturn(false);
-
+  public void clientSpanContextLogged_contextSetViaCallOption() {
     Channel channel = new Channel() {
       @Override
       public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -686,7 +711,91 @@ public class InternalLoggingChannelInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    when(mockFilterHelper.isMethodToBeLogged(method))
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
+        .thenReturn(FilterParams.create(true, 10, 10));
+
+    ClientCall<byte[], byte[]> interceptedLoggingCall =
+        factory.create()
+            .interceptCall(method,
+                CALL_OPTIONS_WITH_SPAN_CONTEXT,
+                channel);
+
+    {
+      interceptedLoggingCall.start(mockListener, new Metadata());
+      ArgumentCaptor<SpanContext> callOptSpanContextCaptor = ArgumentCaptor.forClass(
+          SpanContext.class);
+      verify(mockLogHelper, times(1))
+          .logClientHeader(
+              anyLong(),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              ArgumentMatchers.isNull(),
+              any(Metadata.class),
+              anyInt(),
+              any(GrpcLogRecord.EventLogger.class),
+              anyString(),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(),
+                  ArgumentMatchers.any()),
+              callOptSpanContextCaptor.capture());
+      SpanContext spanContext = callOptSpanContextCaptor.getValue();
+      assertThat(spanContext).isEqualTo(SPAN_CONTEXT);
+    }
+  }
+
+  @Test
+  public void clientSpanContextLogged_contextNotSetViaCallOption() {
+    Channel channel = new Channel() {
+      @Override
+      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+          MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
+        return new NoopClientCall<RequestT, ResponseT>() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public void start(Listener<ResponseT> responseListener, Metadata headers) {
+            interceptedListener.set((Listener<byte[]>) responseListener);
+            actualClientInitial.set(headers);
+          }
+
+          @Override
+          public void sendMessage(RequestT message) {
+            actualRequest.set(message);
+          }
+
+          @Override
+          public void cancel(String message, Throwable cause) {
+            cancelCalled.set(null);
+          }
+
+          @Override
+          public void halfClose() {
+            halfCloseCalled.set(null);
+          }
+
+          @Override
+          public Attributes getAttributes() {
+            return Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer).build();
+          }
+        };
+      }
+
+      @Override
+      public String authority() {
+        return "the-authority";
+      }
+    };
+
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
+
+    MethodDescriptor<byte[], byte[]> method =
+        MethodDescriptor.<byte[], byte[]>newBuilder()
+            .setType(MethodType.UNKNOWN)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+            .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+            .build();
+    when(mockFilterHelper.logRpcMethod(method.getFullMethodName(), true))
         .thenReturn(FilterParams.create(true, 10, 10));
 
     ClientCall<byte[], byte[]> interceptedLoggingCall =
@@ -697,38 +806,24 @@ public class InternalLoggingChannelInterceptorTest {
 
     {
       interceptedLoggingCall.start(mockListener, new Metadata());
-      verify(mockLogHelper, never()).logRequestHeader(
-          anyLong(),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          any(Duration.class),
-          any(Metadata.class),
-          anyInt(),
-          any(GrpcLogRecord.EventLogger.class),
-          anyString(),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(),
-              ArgumentMatchers.any()));
-      interceptedListener.get().onHeaders(new Metadata());
-      verify(mockLogHelper, never()).logResponseHeader(
-          anyLong(),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
-          any(Metadata.class),
-          anyInt(),
-          any(GrpcLogRecord.EventLogger.class),
-          anyString(),
-          ArgumentMatchers.any());
-      byte[] request = "this is a request".getBytes(US_ASCII);
-      interceptedLoggingCall.sendMessage(request);
-      interceptedLoggingCall.halfClose();
-      byte[] response = "this is a response".getBytes(US_ASCII);
-      interceptedListener.get().onMessage(response);
-      Status status = Status.INTERNAL.withDescription("trailer description");
-      Metadata trailers = new Metadata();
-      interceptedListener.get().onClose(status, trailers);
-      interceptedLoggingCall.cancel(null, null);
-      assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(5);
+      ArgumentCaptor<SpanContext> callOptSpanContextCaptor = ArgumentCaptor.forClass(
+          SpanContext.class);
+      verify(mockLogHelper, times(1))
+          .logClientHeader(
+              anyLong(),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+              ArgumentMatchers.isNull(),
+              any(Metadata.class),
+              anyInt(),
+              any(GrpcLogRecord.EventLogger.class),
+              anyString(),
+              AdditionalMatchers.or(ArgumentMatchers.isNull(),
+                  ArgumentMatchers.any()),
+              callOptSpanContextCaptor.capture());
+      SpanContext spanContext = callOptSpanContextCaptor.getValue();
+      assertThat(spanContext).isEqualTo(DEFAULT_CLIENT_SPAN_CONTEXT);
     }
   }
 }

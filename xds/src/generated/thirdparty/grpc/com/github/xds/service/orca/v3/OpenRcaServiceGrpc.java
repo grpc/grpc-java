@@ -22,7 +22,7 @@ public final class OpenRcaServiceGrpc {
 
   private OpenRcaServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "xds.service.orca.v3.OpenRcaService";
+  public static final java.lang.String SERVICE_NAME = "xds.service.orca.v3.OpenRcaService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<com.github.xds.service.orca.v3.OrcaLoadReportRequest,
@@ -112,29 +112,18 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static abstract class OpenRcaServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public void streamCoreMetrics(com.github.xds.service.orca.v3.OrcaLoadReportRequest request,
+    default void streamCoreMetrics(com.github.xds.service.orca.v3.OrcaLoadReportRequest request,
         io.grpc.stub.StreamObserver<com.github.xds.data.orca.v3.OrcaLoadReport> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStreamCoreMetricsMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamCoreMetricsMethod(),
-            io.grpc.stub.ServerCalls.asyncServerStreamingCall(
-              new MethodHandlers<
-                com.github.xds.service.orca.v3.OrcaLoadReportRequest,
-                com.github.xds.data.orca.v3.OrcaLoadReport>(
-                  this, METHODID_STREAM_CORE_METRICS)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service OpenRcaService.
    * <pre>
    * Out-of-band (OOB) load reporting service for the additional load reporting
    * agent that does not sit in the request path. Reports are periodically sampled
@@ -146,7 +135,29 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceStub extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
+  public static abstract class OpenRcaServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return OpenRcaServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service OpenRcaService.
+   * <pre>
+   * Out-of-band (OOB) load reporting service for the additional load reporting
+   * agent that does not sit in the request path. Reports are periodically sampled
+   * with sufficient frequency to provide temporal association with requests.
+   * OOB reporting compensates the limitation of in-band reporting in revealing
+   * costs for backends that do not provide a steady stream of telemetry such as
+   * long running stream operations and zero QPS services. This is a server
+   * streaming service, client needs to terminate current RPC and initiate
+   * a new call to change backend reporting frequency.
+   * </pre>
+   */
+  public static final class OpenRcaServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
     private OpenRcaServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -168,6 +179,7 @@ public final class OpenRcaServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service OpenRcaService.
    * <pre>
    * Out-of-band (OOB) load reporting service for the additional load reporting
    * agent that does not sit in the request path. Reports are periodically sampled
@@ -179,7 +191,8 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
+  public static final class OpenRcaServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
     private OpenRcaServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -201,6 +214,7 @@ public final class OpenRcaServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service OpenRcaService.
    * <pre>
    * Out-of-band (OOB) load reporting service for the additional load reporting
    * agent that does not sit in the request path. Reports are periodically sampled
@@ -212,7 +226,8 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceFutureStub extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
+  public static final class OpenRcaServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
     private OpenRcaServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -232,10 +247,10 @@ public final class OpenRcaServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final OpenRcaServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(OpenRcaServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -264,6 +279,18 @@ public final class OpenRcaServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamCoreMetricsMethod(),
+          io.grpc.stub.ServerCalls.asyncServerStreamingCall(
+            new MethodHandlers<
+              com.github.xds.service.orca.v3.OrcaLoadReportRequest,
+              com.github.xds.data.orca.v3.OrcaLoadReport>(
+                service, METHODID_STREAM_CORE_METRICS)))
+        .build();
+  }
+
   private static abstract class OpenRcaServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     OpenRcaServiceBaseDescriptorSupplier() {}
@@ -287,9 +314,9 @@ public final class OpenRcaServiceGrpc {
   private static final class OpenRcaServiceMethodDescriptorSupplier
       extends OpenRcaServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    OpenRcaServiceMethodDescriptorSupplier(String methodName) {
+    OpenRcaServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

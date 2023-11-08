@@ -21,7 +21,6 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
@@ -36,7 +35,8 @@ import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -58,7 +58,9 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
 
   // Includes all active and deactivated children. Mutable. New entries are only added from priority
-  // 0 up to the selected priority. An entry is only deleted 15 minutes after the its deactivation.
+  // 0 up to the selected priority. An entry is only deleted 15 minutes after its deactivation.
+  // Note that calling into a child can cause the child to call back into the LB policy and modify
+  // the map.  Therefore copy values before looping over them.
   private final Map<String, ChildLbState> children = new HashMap<>();
 
   // Following fields are only null initially.
@@ -70,6 +72,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
   @Nullable private String currentPriority;
   private ConnectivityState currentConnectivityState;
   private SubchannelPicker currentPicker;
+  // Set to true if currently in the process of handling resolved addresses.
+  private boolean handlingResolvedAddresses;
 
   PriorityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -81,7 +85,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
     PriorityLbConfig config = (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -89,54 +93,66 @@ final class PriorityLoadBalancer extends LoadBalancer {
     priorityNames = config.priorities;
     priorityConfigs = config.childConfigs;
     Set<String> prioritySet = new HashSet<>(config.priorities);
-    for (String priority : children.keySet()) {
+    ArrayList<String> childKeys = new ArrayList<>(children.keySet());
+    for (String priority : childKeys) {
       if (!prioritySet.contains(priority)) {
-        children.get(priority).deactivate();
+        ChildLbState childLbState = children.get(priority);
+        if (childLbState != null) {
+          childLbState.deactivate();
+        }
       }
     }
+    handlingResolvedAddresses = true;
     for (String priority : priorityNames) {
-      if (children.containsKey(priority)) {
-        children.get(priority).updateResolvedAddresses();
+      ChildLbState childLbState = children.get(priority);
+      if (childLbState != null) {
+        childLbState.updateResolvedAddresses();
       }
     }
-    // Not to report connecting in case a pending priority bumps up on top of the current READY
-    // priority.
-    tryNextPriority(false);
+    handlingResolvedAddresses = false;
+    tryNextPriority();
+    return Status.OK;
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
     boolean gotoTransientFailure = true;
-    for (ChildLbState child : children.values()) {
+    Collection<ChildLbState> childValues = new ArrayList<>(children.values());
+    for (ChildLbState child : childValues) {
       if (priorityNames.contains(child.priority)) {
         child.lb.handleNameResolutionError(error);
         gotoTransientFailure = false;
       }
     }
     if (gotoTransientFailure) {
-      updateOverallState(null, TRANSIENT_FAILURE, new ErrorPicker(error));
+      updateOverallState(
+          null, TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    for (ChildLbState child : children.values()) {
+    Collection<ChildLbState> childValues = new ArrayList<>(children.values());
+    for (ChildLbState child : childValues) {
       child.tearDown();
     }
     children.clear();
   }
 
-  private void tryNextPriority(boolean reportConnecting) {
+  private void tryNextPriority() {
     for (int i = 0; i < priorityNames.size(); i++) {
       String priority = priorityNames.get(i);
       if (!children.containsKey(priority)) {
         ChildLbState child =
             new ChildLbState(priority, priorityConfigs.get(priority).ignoreReresolution);
         children.put(priority, child);
+        updateOverallState(priority, CONNECTING, LoadBalancer.EMPTY_PICKER);
+        // Calling the child's updateResolvedAddresses() can result in tryNextPriority() being
+        // called recursively. We need to be sure to be done with processing here before it is
+        // called.
         child.updateResolvedAddresses();
-        updateOverallState(priority, CONNECTING, BUFFER_PICKER);
         return; // Give priority i time to connect.
       }
       ChildLbState child = children.get(priority);
@@ -153,9 +169,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         return;
       }
       if (child.failOverTimer != null && child.failOverTimer.isPending()) {
-        if (reportConnecting) {
-          updateOverallState(priority, CONNECTING, BUFFER_PICKER);
-        }
+        updateOverallState(priority, child.connectivityState, child.picker);
         return; // Give priority i time to connect.
       }
       if (priority.equals(currentPriority) && child.connectivityState != TRANSIENT_FAILURE) {
@@ -195,7 +209,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     @Nullable ScheduledHandle deletionTimer;
     @Nullable String policy;
     ConnectivityState connectivityState = CONNECTING;
-    SubchannelPicker picker = BUFFER_PICKER;
+    SubchannelPicker picker = LoadBalancer.EMPTY_PICKER;
 
     ChildLbState(final String priority, boolean ignoreReresolution) {
       this.priority = priority;
@@ -212,11 +226,11 @@ final class PriorityLoadBalancer extends LoadBalancer {
           // The child is deactivated.
           return;
         }
-        picker = new ErrorPicker(
-            Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority));
+        picker = new FixedResultPicker(PickResult.withError(
+            Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority)));
         logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
         currentPriority = null; // reset currentPriority to guarantee failover happen
-        tryNextPriority(true);
+        tryNextPriority();
       }
     }
 
@@ -301,32 +315,33 @@ final class PriorityLoadBalancer extends LoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!children.containsKey(priority)) {
-              return;
-            }
-            connectivityState = newState;
-            picker = newPicker;
-            if (deletionTimer != null && deletionTimer.isPending()) {
-              return;
-            }
-            if (newState.equals(CONNECTING) ) {
-              if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
-                failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
-                    executor);
-              }
-            } else if (newState.equals(READY) || newState.equals(IDLE)) {
-              seenReadyOrIdleSinceTransientFailure = true;
-              failOverTimer.cancel();
-            } else if (newState.equals(TRANSIENT_FAILURE)) {
-              seenReadyOrIdleSinceTransientFailure = false;
-              failOverTimer.cancel();
-            }
-            tryNextPriority(true);
+        if (!children.containsKey(priority)) {
+          return;
+        }
+        connectivityState = newState;
+        picker = newPicker;
+
+        if (deletionTimer != null && deletionTimer.isPending()) {
+          return;
+        }
+        if (newState.equals(CONNECTING)) {
+          if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
+            failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
+                executor);
           }
-        });
+        } else if (newState.equals(READY) || newState.equals(IDLE)) {
+          seenReadyOrIdleSinceTransientFailure = true;
+          failOverTimer.cancel();
+        } else if (newState.equals(TRANSIENT_FAILURE)) {
+          seenReadyOrIdleSinceTransientFailure = false;
+          failOverTimer.cancel();
+        }
+
+        // If we are currently handling newly resolved addresses, let's not try to reconfigure as
+        // the address handling process will take care of that to provide an atomic config update.
+        if (!handlingResolvedAddresses) {
+          tryNextPriority();
+        }
       }
 
       @Override

@@ -17,8 +17,9 @@
 package io.grpc.examples.jwtauth;
 
 import io.grpc.CallCredentials;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
@@ -42,12 +43,9 @@ public class AuthClient {
   AuthClient(CallCredentials callCredentials, String host, int port) {
     this(
         callCredentials,
-        ManagedChannelBuilder
-            .forAddress(host, port)
-            // Channels are secure by default (via SSL/TLS). For this example we disable TLS
-            // to avoid needing certificates, but it is recommended to use a secure channel
-            // while passing credentials.
-            .usePlaintext()
+        // For this example we use plaintext to avoid needing certificates, but it is
+        // recommended to use TlsChannelCredentials.
+        Grpc.newChannelBuilderForAddress(host, port, InsecureChannelCredentials.create())
             .build());
   }
 

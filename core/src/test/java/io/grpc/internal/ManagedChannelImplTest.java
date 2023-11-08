@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -55,7 +56,6 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -122,6 +122,7 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.ForwardingSubchannel;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -161,7 +162,7 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link ManagedChannelImpl}. */
 @RunWith(JUnit4.class)
 // TODO(creamsoup) remove backward compatible check when fully migrated
-@SuppressWarnings("deprecation")
+@SuppressWarnings({"deprecation"})
 public class ManagedChannelImplTest {
   private static final int DEFAULT_PORT = 447;
 
@@ -205,14 +206,6 @@ public class ManagedChannelImplTest {
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private final FakeClock balancerRpcExecutor = new FakeClock();
-  private static final FakeClock.TaskFilter NAME_RESOLVER_REFRESH_TASK_FILTER =
-      new FakeClock.TaskFilter() {
-        @Override
-        public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(
-              ManagedChannelImpl.DelayedNameResolverRefresh.class.getName());
-        }
-      };
 
   private final InternalChannelz channelz = new InternalChannelz();
 
@@ -288,15 +281,22 @@ public class ManagedChannelImplTest {
       ArgumentCaptor.forClass(ClientStreamListener.class);
 
   private void createChannel(ClientInterceptor... interceptors) {
+    createChannel(false, interceptors);
+  }
+
+  private void createChannel(boolean nameResolutionExpectedToFail,
+      ClientInterceptor... interceptors) {
     checkState(channel == null);
 
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
         timer.getTimeProvider());
 
     if (requestConnection) {
-      int numExpectedTasks = 0;
+      int numExpectedTasks = nameResolutionExpectedToFail ? 1 : 0;
 
       // Force-exit the initial idle-mode
       channel.syncContext.execute(new Runnable() {
@@ -309,13 +309,9 @@ public class ManagedChannelImplTest {
         numExpectedTasks += 1;
       }
 
-      if (getNameResolverRefresh() != null) {
-        numExpectedTasks += 1;
-      }
-
       assertEquals(numExpectedTasks, timer.numPendingTasks());
 
-      ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+      ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
       verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
       helper = helperCaptor.getValue();
     }
@@ -323,7 +319,8 @@ public class ManagedChannelImplTest {
 
   @Before
   public void setUp() throws Exception {
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenCallRealMethod();
+    when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(
+        Status.OK);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
     transports = TestUtils.captureTransports(mockTransportFactory);
@@ -402,7 +399,8 @@ public class ManagedChannelImplTest {
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     requestConnectionSafely(helper, subchannel);
-    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor =
+        ArgumentCaptor.forClass(ClientTransportOptions.class);
     verify(mockTransportFactory)
         .newClientTransport(
             any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
@@ -427,7 +425,8 @@ public class ManagedChannelImplTest {
     final Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     requestConnectionSafely(helper, subchannel);
-    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor =
+        ArgumentCaptor.forClass(ClientTransportOptions.class);
     verify(mockTransportFactory)
         .newClientTransport(
             any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
@@ -477,6 +476,8 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
@@ -494,7 +495,7 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, headers);
 
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
     // Make the transport available
@@ -520,7 +521,7 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
 
-    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     verify(mockTransport).newStream(
         same(method), same(headers), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
@@ -539,6 +540,8 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
@@ -576,7 +579,7 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, headers);
 
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
     // Make the transport available
@@ -599,7 +602,7 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
 
-    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     verify(mockTransport).newStream(
         same(method), same(headers), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
@@ -928,7 +931,7 @@ public class ManagedChannelImplTest {
 
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
 
     SubchannelStateListener stateListener1 = mock(SubchannelStateListener.class);
@@ -1061,147 +1064,6 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void nameResolutionFailed() {
-    Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
-            .setError(error)
-            .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    // Name resolution is started as soon as channel is created.
-    createChannel();
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
-    verify(mockLoadBalancer).handleNameResolutionError(same(error));
-    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
-
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
-    assertEquals(0, resolver.refreshCalled);
-
-    timer.forwardNanos(1);
-    assertEquals(1, resolver.refreshCalled);
-    verify(mockLoadBalancer, times(2)).handleNameResolutionError(same(error));
-
-    // Verify an additional name resolution failure does not schedule another timer
-    resolver.refresh();
-    verify(mockLoadBalancer, times(3)).handleNameResolutionError(same(error));
-    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
-
-    // Allow the next refresh attempt to succeed
-    resolver.error = null;
-
-    // For the second attempt, the backoff should occur at RECONNECT_BACKOFF_INTERVAL_NANOS * 2
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS * 2 - 1);
-    assertEquals(2, resolver.refreshCalled);
-    timer.forwardNanos(1);
-    assertEquals(3, resolver.refreshCalled);
-    assertEquals(0, timer.numPendingTasks());
-
-    // Verify that the successful resolution reset the backoff policy
-    resolver.listener.onError(error);
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
-    assertEquals(3, resolver.refreshCalled);
-    timer.forwardNanos(1);
-    assertEquals(4, resolver.refreshCalled);
-    assertEquals(0, timer.numPendingTasks());
-  }
-
-  @Test
-  public void nameResolutionFailed_delayedTransportShutdownCancelsBackoff() {
-    Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    // Name resolution is started as soon as channel is created.
-    createChannel();
-    verify(mockLoadBalancer).handleNameResolutionError(same(error));
-
-    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverRefresh();
-    assertNotNull(nameResolverBackoff);
-    assertFalse(nameResolverBackoff.isCancelled());
-
-    // Add a pending call to the delayed transport
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
-    Metadata headers = new Metadata();
-    call.start(mockCallListener, headers);
-
-    // The pending call on the delayed transport stops the name resolver backoff from cancelling
-    channel.shutdown();
-    assertFalse(nameResolverBackoff.isCancelled());
-
-    // Notify that a subchannel is ready, which drains the delayed transport
-    SubchannelPicker picker = mock(SubchannelPicker.class);
-    Status status = Status.UNAVAILABLE.withDescription("for test");
-    when(picker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withDrop(status));
-    updateBalancingStateSafely(helper, READY, picker);
-    executor.runDueTasks();
-    verify(mockCallListener).onClose(same(status), any(Metadata.class));
-
-    assertTrue(nameResolverBackoff.isCancelled());
-  }
-
-  @Test
-  public void nameResolverReturnsEmptySubLists_becomeErrorByDefault() throws Exception {
-    String errorDescription = "NameResolver returned no usable address";
-
-    // Pass a FakeNameResolverFactory with an empty list and LB config
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
-    Map<String, Object> rawServiceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": { \"setting1\": \"high\" } } ] }");
-    ManagedChannelServiceConfig parsedServiceConfig =
-        createManagedChannelServiceConfig(rawServiceConfig, null);
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
-
-    // LoadBalancer received the error
-    verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
-    Status status = statusCaptor.getValue();
-    assertSame(Status.Code.UNAVAILABLE, status.getCode());
-    assertThat(status.getDescription()).startsWith(errorDescription);
-
-    // A resolution retry has been scheduled
-    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
-  }
-
-  @Test
-  public void nameResolverReturnsEmptySubLists_optionallyAllowed() throws Exception {
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
-
-    // Pass a FakeNameResolverFactory with an empty list and LB config
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).build();
-    String rawLbConfig = "{ \"setting1\": \"high\" }";
-    Object parsedLbConfig = new Object();
-    Map<String, Object> rawServiceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": " + rawLbConfig + " } ] }");
-    ManagedChannelServiceConfig parsedServiceConfig =
-        createManagedChannelServiceConfig(
-            rawServiceConfig,
-            new PolicySelection(
-                mockLoadBalancerProvider,
-                parsedLbConfig));
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
-
-    // LoadBalancer received the empty list and the LB config
-    verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    ArgumentCaptor<ResolvedAddresses> resultCaptor =
-        ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
-    assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig()).isEqualTo(parsedLbConfig);
-
-    // A no resolution retry
-    assertEquals(0, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
-  }
-
-  @Test
   public void loadBalancerThrowsInHandleResolvedAddresses() {
     RuntimeException ex = new RuntimeException("simulated");
     // Delay the success of name resolution until allResolved() is called
@@ -1214,13 +1076,61 @@ public class ManagedChannelImplTest {
     createChannel();
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    doThrow(ex).when(mockLoadBalancer).handleResolvedAddresses(any(ResolvedAddresses.class));
+    doThrow(ex).when(mockLoadBalancer).acceptResolvedAddresses(any(ResolvedAddresses.class));
 
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();
 
     // Exception thrown from balancer is caught by ChannelExecutor, making channel enter panic mode.
     verifyPanicMode(ex);
+  }
+
+  @Test
+  public void delayedNameResolution() throws Exception {
+    ClientStream mockStream = mock(ClientStream.class);
+    final ClientStreamTracer tracer = new ClientStreamTracer() {};
+    ClientStreamTracer.Factory factory = new ClientStreamTracer.Factory() {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        return tracer;
+      }
+    };
+    FakeNameResolverFactory nsFactory = new FakeNameResolverFactory.Builder(expectedUri)
+        .setResolvedAtStart(false).build();
+    channelBuilder.nameResolverFactory(nsFactory);
+    createChannel();
+
+    CallOptions callOptions = CallOptions.DEFAULT.withStreamTracerFactory(factory);
+    ClientCall<String, Integer> call = channel.newCall(method, callOptions);
+    call.start(mockCallListener, new Metadata());
+
+    Thread.sleep(500);
+    nsFactory.allResolved();
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    MockClientTransportInfo transportInfo = transports.poll();
+    transportInfo.listener.transportReady();
+    ClientTransport mockTransport = transportInfo.transport;
+    when(mockTransport.newStream(
+        any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class),
+        ArgumentMatchers.<ClientStreamTracer[]>any()))
+        .thenReturn(mockStream);
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
+        PickResult.withSubchannel(subchannel));
+
+    updateBalancingStateSafely(helper, READY, mockPicker);
+    assertEquals(2, executor.runDueTasks());
+
+    verify(mockPicker).pickSubchannel(any(PickSubchannelArgs.class));
+    verify(mockTransport).newStream(
+        same(method), any(Metadata.class), callOptionsCaptor.capture(),
+        tracersCaptor.capture());
+    assertThat(Arrays.asList(tracersCaptor.getValue()).contains(tracer)).isTrue();
+    Long realDelay = callOptionsCaptor.getValue().getOption(NAME_RESOLUTION_DELAYED);
+    assertThat(realDelay).isNotNull();
+    assertThat(realDelay).isAtLeast(
+        TimeUnit.MILLISECONDS.toNanos(400));//sleep not precise
   }
 
   @Test
@@ -1276,7 +1186,7 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    inOrder.verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
@@ -1426,7 +1336,7 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    inOrder.verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
 
     Subchannel subchannel =
@@ -1815,7 +1725,7 @@ public class ManagedChannelImplTest {
     // Verify that resolving oob channel does not
     oob = helper.createResolvingOobChannelBuilder("oobauthority")
         .nameResolverFactory(
-            new FakeNameResolverFactory.Builder(URI.create("oobauthority")).build())
+            new FakeNameResolverFactory.Builder(URI.create("fake:///oobauthority")).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
         .disableRetry() // irrelevant to what we test, disable retry to make verification easy
@@ -2139,11 +2049,11 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void lbHelper_getNameResolverRegistry() {
+  public void lbHelper_getNonDefaultNameResolverRegistry() {
     createChannel();
 
     assertThat(helper.getNameResolverRegistry())
-        .isSameInstanceAs(NameResolverRegistry.getDefaultRegistry());
+        .isNotSameInstanceAs(NameResolverRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -2278,9 +2188,10 @@ public class ManagedChannelImplTest {
         .thenReturn(PickResult.withSubchannel(subchannel));
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
-    ArgumentCaptor<Executor> executorArgumentCaptor = ArgumentCaptor.forClass(null);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
+    ArgumentCaptor<Executor> executorArgumentCaptor = ArgumentCaptor.forClass(Executor.class);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(creds).applyRequestMetadata(infoCaptor.capture(),
         executorArgumentCaptor.capture(), applierCaptor.capture());
     assertSame(offloadExecutor,
@@ -2443,7 +2354,7 @@ public class ManagedChannelImplTest {
 
     // call getState() with requestConnection = true
     assertEquals(IDLE, channel.getState(true));
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
 
@@ -2707,7 +2618,7 @@ public class ManagedChannelImplTest {
       }
 
       @Override public String getDefaultScheme() {
-        return "fakescheme";
+        return "fake";
       }
     });
     createChannel();
@@ -2740,7 +2651,7 @@ public class ManagedChannelImplTest {
 
   private void verifyCallListenerClosed(
       ClientCall.Listener<Integer> listener, Status.Code code, Throwable cause) {
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener).onClose(captor.capture(), any(Metadata.class));
     Status rpcStatus = captor.getValue();
     assertEquals(code, rpcStatus.getCode());
@@ -3025,52 +2936,6 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void resetConnectBackoff() {
-    // Start with a name resolution failure to trigger backoff attempts
-    Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    // Name resolution is started as soon as channel is created.
-    createChannel();
-    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
-    verify(mockLoadBalancer).handleNameResolutionError(same(error));
-
-    FakeClock.ScheduledTask nameResolverBackoff = getNameResolverRefresh();
-    assertNotNull("There should be a name resolver backoff task", nameResolverBackoff);
-    assertEquals(0, resolver.refreshCalled);
-
-    // Verify resetConnectBackoff() calls refresh and cancels the scheduled backoff
-    channel.resetConnectBackoff();
-    assertEquals(1, resolver.refreshCalled);
-    assertTrue(nameResolverBackoff.isCancelled());
-
-    // Simulate a race between cancel and the task scheduler. Should be a no-op.
-    nameResolverBackoff.command.run();
-    assertEquals(1, resolver.refreshCalled);
-
-    // Verify that the reconnect policy was recreated and the backoff multiplier reset to 1
-    timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS);
-    assertEquals(2, resolver.refreshCalled);
-  }
-
-  @Test
-  public void resetConnectBackoff_noOpWithoutPendingResolverBackoff() {
-    FakeNameResolverFactory nameResolverFactory =
-        new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
-            .build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
-    FakeNameResolverFactory.FakeNameResolver nameResolver = nameResolverFactory.resolvers.get(0);
-    assertEquals(0, nameResolver.refreshCalled);
-
-    channel.resetConnectBackoff();
-
-    assertEquals(0, nameResolver.refreshCalled);
-  }
-
-  @Test
   public void resetConnectBackoff_noOpWhenChannelShutdown() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
@@ -3152,7 +3017,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).setError(error).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    createChannel();
+    createChannel(true);
 
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Failed to resolve name: " + error)
@@ -3351,7 +3216,7 @@ public class ManagedChannelImplTest {
   public void channelsAndSubchannels_instrumented_state() throws Exception {
     createChannel();
 
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
 
@@ -3655,10 +3520,11 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
-    verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(nameResolverFactory.servers)
-            .build());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
+    ResolvedAddresses resolvedAddresses = resolvedAddressCaptor.getValue();
+    assertThat(resolvedAddresses.getAddresses()).isEqualTo(nameResolverFactory.servers);
+    assertThat(resolvedAddresses.getAttributes()
+        .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)).isNotNull();
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel =
@@ -3761,10 +3627,11 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
-    verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(nameResolverFactory.servers)
-            .build());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
+    ResolvedAddresses resolvedAddresses = resolvedAddressCaptor.getValue();
+    assertThat(resolvedAddresses.getAddresses()).isEqualTo(nameResolverFactory.servers);
+    assertThat(resolvedAddresses.getAttributes()
+        .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)).isNotNull();
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel =
@@ -3885,6 +3752,8 @@ public class ManagedChannelImplTest {
           }
         },
         null);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     customBuilder.executorPool = executorPool;
     customBuilder.channelz = channelz;
     ManagedChannel mychannel = customBuilder.nameResolverFactory(factory).build();
@@ -3965,7 +3834,7 @@ public class ManagedChannelImplTest {
 
         @Override
         public String getDefaultScheme() {
-          return "fakescheme";
+          return "fake";
         }
       };
     channelBuilder.nameResolverFactory(factory).proxyDetector(neverProxy);
@@ -4088,7 +3957,7 @@ public class ManagedChannelImplTest {
 
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       assertThat(resultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -4126,7 +3995,7 @@ public class ManagedChannelImplTest {
 
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       assertThat(resultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -4156,7 +4025,7 @@ public class ManagedChannelImplTest {
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
@@ -4172,7 +4041,7 @@ public class ManagedChannelImplTest {
       nameResolverFactory.allResolved();
 
       resultCaptor = ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer, times(2)).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -4206,7 +4075,7 @@ public class ManagedChannelImplTest {
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -4234,7 +4103,7 @@ public class ManagedChannelImplTest {
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -4260,7 +4129,7 @@ public class ManagedChannelImplTest {
       createChannel();
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -4340,7 +4209,7 @@ public class ManagedChannelImplTest {
 
       ArgumentCaptor<ResolvedAddresses> resultCaptor =
           ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAttributes()
           .get(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG))
           .containsExactly("serviceName", "service1");
@@ -4520,10 +4389,6 @@ public class ManagedChannelImplTest {
   private static ChannelStats getStats(
       InternalInstrumented<ChannelStats> instrumented) throws Exception {
     return instrumented.getStats().get();
-  }
-
-  private FakeClock.ScheduledTask getNameResolverRefresh() {
-    return Iterables.getOnlyElement(timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
   }
 
   // Helper methods to call methods from SynchronizationContext

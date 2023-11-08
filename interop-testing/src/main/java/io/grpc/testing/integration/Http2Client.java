@@ -272,7 +272,7 @@ public final class Http2Client {
       threadpool = MoreExecutors.listeningDecorator(newFixedThreadPool(numThreads));
       List<ListenableFuture<?>> workerFutures = new ArrayList<>();
       for (int i = 0; i < numThreads; i++) {
-        workerFutures.add(threadpool.submit(new MaxStreamsWorker(i, simpleRequest)));
+        workerFutures.add(threadpool.submit(new MaxStreamsWorker(i)));
       }
       ListenableFuture<?> f = Futures.allAsList(workerFutures);
       f.get(timeoutSeconds, TimeUnit.SECONDS);
@@ -314,11 +314,9 @@ public final class Http2Client {
 
     private class MaxStreamsWorker implements Runnable {
       int threadNum;
-      SimpleRequest request;
 
-      MaxStreamsWorker(int threadNum, SimpleRequest request) {
+      MaxStreamsWorker(int threadNum) {
         this.threadNum = threadNum;
-        this.request = request;
       }
 
       @Override

@@ -58,10 +58,14 @@ model {
                 cppCompiler.executable = 'aarch64-linux-gnu-g++'
                 linker.executable = 'aarch64-linux-gnu-g++'
             }
-            target("s390_64")
+            target("s390_64") {
+                cppCompiler.executable = 's390x-linux-gnu-g++'
+                linker.executable = 's390x-linux-gnu-g++'
+            }
             target("loongarch_64")
         }
         clang(Clang) {
+            target("aarch_64") {}
         }
     }
 
@@ -133,8 +137,10 @@ model {
     }
 }
 
-configurations {
-    testLiteImplementation
+sourceSets {
+    testLite {
+        proto { setSrcDirs(['src/test/proto']) }
+    }
 }
 
 dependencies {
@@ -144,12 +150,6 @@ dependencies {
     testLiteImplementation project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             libraries.javax.annotation
-}
-
-sourceSets {
-    testLite {
-        proto { setSrcDirs(['src/test/proto']) }
-    }
 }
 
 tasks.named("compileTestJava").configure {
@@ -164,6 +164,10 @@ tasks.named("compileTestLiteJava").configure {
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
+tasks.named("checkstyleTestLite").configure {
+    enabled = false
+}
+
 protobuf {
     protoc {
         if (project.hasProperty('protoc')) {
@@ -176,31 +180,25 @@ protobuf {
         grpc { path = javaPluginPath }
     }
     generateProtoTasks {
-        all().each { task ->
-            task.configure {
-                dependsOn 'java_pluginExecutable'
-                inputs.file javaPluginPath
-            }
+        all().configureEach {
+            dependsOn 'java_pluginExecutable'
+            inputs.file javaPluginPath
         }
-        ofSourceSet('test').each { task ->
-            task.configure {
-                plugins { grpc {} }
-            }
+        ofSourceSet('test').configureEach {
+            plugins { grpc {} }
         }
-        ofSourceSet('testLite').each { task ->
-            task.configure {
-                builtins {
-                    java { option 'lite' }
-                }
-                plugins {
-                    grpc { option 'lite' }
-                }
+        ofSourceSet('testLite').configureEach {
+            builtins {
+                java { option 'lite' }
+            }
+            plugins {
+                grpc { option 'lite' }
             }
         }
     }
 }
 
-println "*** Building codegen requires Protobuf version ${libs.versions.protobuf.get()}"
+println "*** Building codegen requires Protobuf"
 println "*** Please refer to https://github.com/grpc/grpc-java/blob/master/COMPILING.md#how-to-build-code-generation-plugin"
 
 tasks.register("buildArtifacts", Copy) {
@@ -213,7 +211,9 @@ tasks.register("buildArtifacts", Copy) {
     into artifactStagingPath
 }
 
-archivesBaseName = "$protocPluginBaseName"
+base {
+    archivesName = "$protocPluginBaseName"
+}
 
 def checkArtifacts = tasks.register("checkArtifacts") {
     dependsOn buildArtifacts

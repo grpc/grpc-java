@@ -18,6 +18,7 @@ package io.grpc.gcp.observability.logging;
 
 import io.grpc.Internal;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
+import io.opencensus.trace.SpanContext;
 
 /**
  * Sink for GCP observability.
@@ -27,7 +28,7 @@ public interface Sink {
   /**
    * Writes the {@code message} to the destination.
    */
-  void write(GrpcLogRecord message);
+  void write(GrpcLogRecord message, SpanContext spanContext);
 
   /**
    * Closes the sink.

@@ -6,12 +6,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    compileSdkVersion 29
+    compileSdkVersion 34
 
     defaultConfig {
         applicationId "io.grpc.routeguideexample"
-        minSdkVersion 19
-        targetSdkVersion 29
+        minSdkVersion 21
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
     }
@@ -30,9 +30,9 @@ android {
 }
 
 protobuf {
-    protoc { artifact = 'com.google.protobuf:protoc:3.21.1' }
+    protoc { artifact = 'com.google.protobuf:protoc:3.24.0' }
     plugins {
-        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.50.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.60.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
     }
     generateProtoTasks {
@@ -49,11 +49,11 @@ protobuf {
 }
 
 dependencies {
-    implementation 'com.android.support:appcompat-v7:27.0.2'
+    implementation 'androidx.appcompat:appcompat:1.0.0'
 
     // You need to build grpc-java to obtain these libraries below.
-    implementation 'io.grpc:grpc-okhttp:1.50.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-protobuf-lite:1.50.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-stub:1.50.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-okhttp:1.60.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-protobuf-lite:1.60.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-stub:1.60.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'org.apache.tomcat:annotations-api:6.0.53'
 }

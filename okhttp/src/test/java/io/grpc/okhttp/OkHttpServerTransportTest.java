@@ -41,6 +41,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
@@ -55,12 +56,11 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketAddress;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
@@ -68,9 +68,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import okio.Buffer;
+import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.ByteString;
 import okio.Okio;
@@ -90,25 +91,31 @@ import org.mockito.ArgumentCaptor;
 public class OkHttpServerTransportTest {
   private static final int TIME_OUT_MS = 2000;
   private static final int INITIAL_WINDOW_SIZE = 65535;
-
+  private static final long MAX_CONNECTION_IDLE = TimeUnit.SECONDS.toNanos(1);
+  private static final byte FLAG_NONE = 0x0;
+  private static final byte FLAG_PADDED = 0x8;
+  private static final byte FLAG_END_STREAM = 0x1;
+  private static final byte TYPE_DATA = 0x0;
   private MockServerTransportListener mockTransportListener = new MockServerTransportListener();
   private ServerTransportListener transportListener
       = mock(ServerTransportListener.class, delegatesTo(mockTransportListener));
   private OkHttpServerTransport serverTransport;
-  private final PipeSocket socket = new PipeSocket();
-  private final FrameWriter clientFrameWriter
-      = new Http2().newWriter(Okio.buffer(Okio.sink(socket.inputStreamSource)), true);
+  private final ExecutorService threadPool = Executors.newCachedThreadPool();
+  private final SocketPair socketPair = SocketPair.create(threadPool);
+  private final BufferedSink clientWriterSink = Okio.buffer(
+      Okio.sink(socketPair.getClientOutputStream()));
+  private final FrameWriter clientFrameWriter = new Http2().newWriter(clientWriterSink, true);
   private final FrameReader clientFrameReader
-      = new Http2().newReader(Okio.buffer(Okio.source(socket.outputStreamSink)), true);
+      = new Http2().newReader(Okio.buffer(Okio.source(socketPair.getClientInputStream())), true);
   private final FrameReader.Handler clientFramesRead = mock(FrameReader.Handler.class);
   private final DataFrameHandler clientDataFrames = mock(DataFrameHandler.class);
-  private ExecutorService threadPool = Executors.newCachedThreadPool();
   private HandshakerSocketFactory handshakerSocketFactory
       = mock(HandshakerSocketFactory.class, delegatesTo(new PlaintextHandshakerSocketFactory()));
+  private final FakeClock fakeClock = new FakeClock();
   private OkHttpServerBuilder serverBuilder
       = new OkHttpServerBuilder(new InetSocketAddress(1234), handshakerSocketFactory)
       .executor(new FakeClock().getScheduledExecutorService()) // Executor unused
-      .scheduledExecutorService(new FakeClock().getScheduledExecutorService())
+      .scheduledExecutorService(fakeClock.getScheduledExecutorService())
       .transportExecutor(new Executor() {
         @Override public void execute(Runnable runnable) {
           if (runnable instanceof OkHttpServerTransport.FrameHandler) {
@@ -119,24 +126,33 @@ public class OkHttpServerTransportTest {
           }
         }
       })
-      .flowControlWindow(INITIAL_WINDOW_SIZE);
+      .flowControlWindow(INITIAL_WINDOW_SIZE)
+      .maxConnectionIdle(MAX_CONNECTION_IDLE, TimeUnit.NANOSECONDS)
+      .permitKeepAliveWithoutCalls(true)
+      .permitKeepAliveTime(0, TimeUnit.SECONDS);
 
   @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
   @Before
+  @SuppressWarnings("DirectInvocationOnMock")
   public void setUp() throws Exception {
     doAnswer(answerVoid((Boolean outDone, Integer streamId, BufferedSource in, Integer length) -> {
       in.require(length);
       Buffer buf = new Buffer();
       buf.write(in.getBuffer(), length);
       clientDataFrames.data(outDone, streamId, buf);
-    })).when(clientFramesRead).data(anyBoolean(), anyInt(), any(BufferedSource.class), anyInt());
+    })).when(clientFramesRead).data(anyBoolean(), anyInt(), any(BufferedSource.class), anyInt(),
+        anyInt());
   }
 
   @After
   public void tearDown() throws Exception {
     threadPool.shutdownNow();
-    socket.closeSourceAndSink();
+    try {
+      socketPair.client.close();
+    } finally {
+      socketPair.server.close();
+    }
   }
 
   @Test
@@ -144,6 +160,97 @@ public class OkHttpServerTransportTest {
     initTransport();
     handshake();
     shutdownAndTerminate(/*lastStreamId=*/ 0);
+  }
+
+  @Test
+  public void maxConnectionAge() throws Exception {
+    serverBuilder.maxConnectionAge(5, TimeUnit.SECONDS)
+        .maxConnectionAgeGrace(3, TimeUnit.SECONDS);
+    initTransport();
+    handshake();
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER));
+    clientFrameWriter.synStream(true, false, 1, -1, Arrays.asList(
+        new Header("some-client-sent-trailer", "trailer-value")));
+    pingPong();
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(6)); // > 1.1 * 5
+    verifyGracefulShutdown(1);
+    pingPong();
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(3));
+    assertThat(socketPair.server.isClosed()).isTrue();
+  }
+
+  @Test
+  public void maxConnectionAge_shutdown() throws Exception {
+    serverBuilder.maxConnectionAge(5, TimeUnit.SECONDS)
+        .maxConnectionAgeGrace(3, TimeUnit.SECONDS);
+    initTransport();
+    handshake();
+    shutdownAndTerminate(0);
+    assertThat(fakeClock.numPendingTasks()).isEqualTo(0);
+  }
+
+  @Test
+  public void maxConnectionIdleTimer() throws Exception {
+    initTransport();
+    handshake();
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER));
+    clientFrameWriter.synStream(true, false, 1, -1, Arrays.asList(
+        new Header("some-client-sent-trailer", "trailer-value")));
+    pingPong();
+
+    MockStreamListener streamListener = mockTransportListener.newStreams.pop();
+    assertThat(streamListener.messages.peek()).isNull();
+    assertThat(streamListener.halfClosedCalled).isTrue();
+
+    streamListener.stream.close(Status.OK, new Metadata());
+
+    List<Header> responseTrailers = Arrays.asList(
+        new Header(":status", "200"),
+        CONTENT_TYPE_HEADER,
+        new Header("grpc-status", "0"));
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead)
+        .headers(false, true, 1, -1, responseTrailers, HeadersMode.HTTP_20_HEADERS);
+
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    verifyGracefulShutdown(1);
+  }
+
+  @Test
+  public void maxConnectionIdleTimer_respondWithError() throws Exception {
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("host", "example.com:80"),
+        new Header("host", "example.com:80")));
+    clientFrameWriter.flush();
+
+    verifyHttpError(
+        1, 400, Status.Code.INTERNAL, "Multiple host headers disallowed. RFC7230 section 5.4");
+
+    pingPong();
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    fakeClock.forwardNanos(MAX_CONNECTION_IDLE);
+    verifyGracefulShutdown(1);
   }
 
   @Test
@@ -157,7 +264,7 @@ public class OkHttpServerTransportTest {
   @Test
   public void shutdownDuringHandshake() throws Exception {
     doAnswer(invocation -> {
-      socket.getInputStream().read();
+      ((Socket) invocation.getArguments()[0]).getInputStream().read();
       throw new IOException("handshake purposefully failed");
     }).when(handshakerSocketFactory).handshake(any(Socket.class), any(Attributes.class));
     serverBuilder.transportExecutor(threadPool);
@@ -171,7 +278,7 @@ public class OkHttpServerTransportTest {
   @Test
   public void shutdownNowDuringHandshake() throws Exception {
     doAnswer(invocation -> {
-      socket.getInputStream().read();
+      ((Socket) invocation.getArguments()[0]).getInputStream().read();
       throw new IOException("handshake purposefully failed");
     }).when(handshakerSocketFactory).handshake(any(Socket.class), any(Attributes.class));
     serverBuilder.transportExecutor(threadPool);
@@ -185,12 +292,12 @@ public class OkHttpServerTransportTest {
   @Test
   public void clientCloseDuringHandshake() throws Exception {
     doAnswer(invocation -> {
-      socket.getInputStream().read();
+      ((Socket) invocation.getArguments()[0]).getInputStream().read();
       throw new IOException("handshake purposefully failed");
     }).when(handshakerSocketFactory).handshake(any(Socket.class), any(Attributes.class));
     serverBuilder.transportExecutor(threadPool);
     initTransport();
-    socket.close();
+    socketPair.client.close();
 
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     verify(transportListener, never()).transportReady(any(Attributes.class));
@@ -199,7 +306,7 @@ public class OkHttpServerTransportTest {
   @Test
   public void closeDuringHttp2Preface() throws Exception {
     initTransport();
-    socket.close();
+    socketPair.client.close();
 
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     verify(transportListener, never()).transportReady(any(Attributes.class));
@@ -210,7 +317,7 @@ public class OkHttpServerTransportTest {
     initTransport();
     clientFrameWriter.connectionPreface();
     clientFrameWriter.flush();
-    socket.close();
+    socketPair.client.close();
 
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     verify(transportListener, never()).transportReady(any(Attributes.class));
@@ -232,7 +339,7 @@ public class OkHttpServerTransportTest {
     initTransport();
     handshake();
 
-    socket.closeSourceAndSink();
+    socketPair.client.close();
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }
 
@@ -264,7 +371,7 @@ public class OkHttpServerTransportTest {
     assertThat(streamListener.messages.pop()).isEqualTo("Hello server");
     assertThat(streamListener.halfClosedCalled).isTrue();
 
-    streamListener.stream.writeHeaders(metadata("User-Data", "best data"));
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"), false);
     streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
     streamListener.stream.close(Status.OK, metadata("End-Metadata", "bye"));
 
@@ -279,7 +386,8 @@ public class OkHttpServerTransportTest {
     Buffer responseMessageFrame = createMessageFrame("Howdy client");
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
-        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()));
+        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()),
+            eq((int) responseMessageFrame.size()));
     verify(clientDataFrames).data(false, 1, responseMessageFrame);
 
     List<Header> responseTrailers = Arrays.asList(
@@ -316,7 +424,8 @@ public class OkHttpServerTransportTest {
     clientFrameWriter.data(true, 1, requestMessageFrame, (int) requestMessageFrame.size());
     pingPong();
 
-    shutdownAndVerifyGraceful(1);
+    serverTransport.shutdown();
+    verifyGracefulShutdown(1);
     verify(transportListener, never()).transportTerminated();
 
     MockStreamListener streamListener = mockTransportListener.newStreams.pop();
@@ -325,7 +434,7 @@ public class OkHttpServerTransportTest {
     assertThat(streamListener.messages.pop()).isEqualTo("Hello server");
     assertThat(streamListener.halfClosedCalled).isTrue();
 
-    streamListener.stream.writeHeaders(new Metadata());
+    streamListener.stream.writeHeaders(new Metadata(), false);
     streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
     streamListener.stream.flush();
 
@@ -339,7 +448,8 @@ public class OkHttpServerTransportTest {
     Buffer responseMessageFrame = createMessageFrame("Howdy client");
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
-        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()));
+        .data(eq(false), eq(1), any(BufferedSource.class), eq((int) responseMessageFrame.size()),
+            eq((int) responseMessageFrame.size()));
     verify(clientDataFrames).data(false, 1, responseMessageFrame);
     pingPong();
     assertThat(serverTransport.getActiveStreams().length).isEqualTo(1);
@@ -874,7 +984,8 @@ public class OkHttpServerTransportTest {
     Buffer responseDataFrame = new Buffer().writeUtf8(errorDescription.substring(0, 1));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(false), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(false), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()),
+        eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(false, 1, responseDataFrame);
 
     clientFrameWriter.windowUpdate(1, 1000);
@@ -883,13 +994,79 @@ public class OkHttpServerTransportTest {
     responseDataFrame = new Buffer().writeUtf8(errorDescription.substring(1));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(true), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(true), eq(1), any(BufferedSource.class), eq((int) responseDataFrame.size()),
+        eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(true, 1, responseDataFrame);
 
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).rstStream(1, ErrorCode.NO_ERROR);
 
     shutdownAndTerminate(/*lastStreamId=*/ 1);
+  }
+
+  @Test
+  public void windowUpdate() throws Exception {
+    serverBuilder.flowControlWindow(100);
+    initTransport();
+    handshake();
+
+    List<Header> headers = Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything"));
+    clientFrameWriter.headers(1, new ArrayList<>(headers));
+    clientFrameWriter.headers(3, new ArrayList<>(headers));
+    String message = "Hello Server Pad Me!"; // length = 20, add buffer length = 5
+    writeDataDirectly(clientWriterSink, FLAG_NONE, 1, message, 0);
+    pingPong();
+
+    MockStreamListener streamListener = mockTransportListener.newStreams.pop();
+    MockStreamListener streamListener2 = mockTransportListener.newStreams.pop();
+    assertThat(streamListener.stream.getAuthority()).isEqualTo("example.com:80");
+    assertThat(streamListener.method).isEqualTo("com.example/SimpleService.doit");
+    assertThat(streamListener.headers.get(
+        Metadata.Key.of("Some-Metadata", Metadata.ASCII_STRING_MARSHALLER)))
+        .isEqualTo("this could be anything");
+    streamListener.stream.request(1);
+    pingPong();
+    assertThat(streamListener.messages.pop()).isEqualTo("Hello Server Pad Me!");
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"), false);
+    streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+    List<Header> responseHeaders = Arrays.asList(
+        new Header(":status", "200"),
+        CONTENT_TYPE_HEADER,
+        new Header("user-data", "best data"));
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead)
+        .headers(false, false, 1, -1, responseHeaders, HeadersMode.HTTP_20_HEADERS);
+
+    writeDataDirectly(clientWriterSink, FLAG_PADDED, 1, message, 10);
+    writeDataDirectly(clientWriterSink, FLAG_PADDED | FLAG_END_STREAM, 3, message, 40);
+    clientFrameWriter.flush();
+
+    int expectedConsumed = message.length() + 5;
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(0, expectedConsumed * 2 + 10);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(0, expectedConsumed  + 40);
+    streamListener.stream.request(2);
+    streamListener2.stream.request(1);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(1, expectedConsumed * 2 + 10);
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).windowUpdate(3, expectedConsumed + 40);
+
+    writeDataDirectly(clientWriterSink, FLAG_PADDED | FLAG_END_STREAM, 1, message, 100);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).rstStream(eq(1), eq(ErrorCode.FLOW_CONTROL_ERROR));
+    clientFrameWriter.rstStream(3, ErrorCode.CANCEL);
+    pingPong();
+    shutdownAndTerminate(/*lastStreamId=*/ 3);
   }
 
   @Test
@@ -988,14 +1165,109 @@ public class OkHttpServerTransportTest {
     assertThat(stats.data.messagesReceived).isEqualTo(0);
     assertThat(stats.data.remoteFlowControlWindow).isEqualTo(30000); // Lower bound
     assertThat(stats.data.localFlowControlWindow).isEqualTo(66535);
-    assertThat(stats.local).isEqualTo(new InetSocketAddress("127.0.0.1", 4000));
-    assertThat(stats.remote).isEqualTo(new InetSocketAddress("127.0.0.2", 5000));
+    assertThat(stats.local).isEqualTo(socketPair.server.getLocalSocketAddress());
+    assertThat(stats.remote).isEqualTo(socketPair.server.getRemoteSocketAddress());
+  }
+
+  @Test
+  public void keepAliveEnforcer_enforcesPings() throws Exception {
+    serverBuilder.permitKeepAliveTime(1, TimeUnit.HOURS)
+            .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES; i++) {
+      pingPong();
+    }
+    pingPongId++;
+    clientFrameWriter.ping(false, pingPongId, 0);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).goAway(0, ErrorCode.ENHANCE_YOUR_CALM,
+        ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII));
+  }
+
+  @Test
+  public void keepAliveEnforcer_sendingDataResetsCounters() throws Exception {
+    serverBuilder.permitKeepAliveTime(1, TimeUnit.HOURS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything")));
+    Buffer requestMessageFrame = createMessageFrame("Hello server");
+    clientFrameWriter.data(false, 1, requestMessageFrame, (int) requestMessageFrame.size());
+    pingPong();
+    MockStreamListener streamListener = mockTransportListener.newStreams.pop();
+
+    streamListener.stream.request(1);
+    pingPong();
+    assertThat(streamListener.messages.pop()).isEqualTo("Hello server");
+
+    streamListener.stream.writeHeaders(metadata("User-Data", "best data"), false);
+    streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+    streamListener.stream.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+
+    for (int i = 0; i < 10; i++) {
+      assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+      pingPong();
+      streamListener.stream.writeMessage(new ByteArrayInputStream("Howdy client".getBytes(UTF_8)));
+      streamListener.stream.flush();
+    }
+  }
+
+  @Test
+  public void keepAliveEnforcer_initialIdle() throws Exception {
+    serverBuilder.permitKeepAliveTime(0, TimeUnit.SECONDS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES; i++) {
+      pingPong();
+    }
+    pingPongId++;
+    clientFrameWriter.ping(false, pingPongId, 0);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).goAway(0, ErrorCode.ENHANCE_YOUR_CALM,
+        ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII));
+  }
+
+  @Test
+  public void keepAliveEnforcer_noticesActive() throws Exception {
+    serverBuilder.permitKeepAliveTime(0, TimeUnit.SECONDS)
+        .permitKeepAliveWithoutCalls(false);
+    initTransport();
+    handshake();
+
+    clientFrameWriter.headers(1, Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService.doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER,
+        new Header("some-metadata", "this could be anything")));
+    for (int i = 0; i < 10; i++) {
+      pingPong();
+    }
+    verify(clientFramesRead, never()).goAway(anyInt(), eq(ErrorCode.ENHANCE_YOUR_CALM),
+        eq(ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII)));
   }
 
   private void initTransport() throws Exception {
     serverTransport = new OkHttpServerTransport(
         new OkHttpServerTransport.Config(serverBuilder, Arrays.asList()),
-        socket);
+        socketPair.server);
     serverTransport.start(transportListener);
   }
 
@@ -1027,6 +1299,32 @@ public class OkHttpServerTransportTest {
     return buffer;
   }
 
+  private void writeDataDirectly(BufferedSink sink, int flag, int streamId, String message,
+                                 int paddingLength) throws IOException {
+    Buffer buffer = createMessageFrame(message);
+    int bufferLengthWithPadding = (int) buffer.size();
+    if ((flag & FLAG_PADDED) != 0) {
+      bufferLengthWithPadding += paddingLength;
+    }
+    writeLength(sink, bufferLengthWithPadding);
+    sink.writeByte(TYPE_DATA);
+    sink.writeByte(flag & 0xff);
+    sink.writeInt(streamId & 0x7fffffff);
+    if ((flag & FLAG_PADDED) != 0) {
+      sink.writeByte((short)(paddingLength - 1));
+      char[] value = new char[paddingLength - 1];
+      Arrays.fill(value, '!');
+      buffer.write(new String(value).getBytes(UTF_8));
+    }
+    sink.write(buffer, buffer.size());
+  }
+
+  private void writeLength(BufferedSink sink, int length) throws IOException {
+    sink.writeByte((length >>> 16 ) & 0xff);
+    sink.writeByte((length >>> 8 ) & 0xff);
+    sink.writeByte(length & 0xff);
+  }
+
   private Metadata metadata(String... keysAndValues) {
     Metadata metadata = new Metadata();
     assertThat(keysAndValues.length % 2).isEqualTo(0);
@@ -1038,8 +1336,8 @@ public class OkHttpServerTransportTest {
     return metadata;
   }
 
-  private void shutdownAndVerifyGraceful(int lastStreamId) throws IOException {
-    serverTransport.shutdown();
+  private void verifyGracefulShutdown(int lastStreamId)
+      throws IOException {
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).goAway(2147483647, ErrorCode.NO_ERROR, ByteString.EMPTY);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
@@ -1052,7 +1350,8 @@ public class OkHttpServerTransportTest {
 
   private void shutdownAndTerminate(int lastStreamId) throws IOException {
     assertThat(serverTransport.getActiveStreams().length).isEqualTo(0);
-    shutdownAndVerifyGraceful(lastStreamId);
+    serverTransport.shutdown();
+    verifyGracefulShutdown(lastStreamId);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isFalse();
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }
@@ -1082,7 +1381,8 @@ public class OkHttpServerTransportTest {
     Buffer responseDataFrame = new Buffer().writeUtf8(errorDescription);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead).data(
-        eq(true), eq(streamId), any(BufferedSource.class), eq((int) responseDataFrame.size()));
+        eq(true), eq(streamId), any(BufferedSource.class),
+        eq((int) responseDataFrame.size()), eq((int) responseDataFrame.size()));
     verify(clientDataFrames).data(true, streamId, responseDataFrame);
 
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
@@ -1112,7 +1412,6 @@ public class OkHttpServerTransportTest {
 
     Deque<String> messages = new ArrayDeque<>();
     boolean halfClosedCalled;
-    boolean onReadyCalled;
     Status status;
     CountDownLatch closed = new CountDownLatch(1);
 
@@ -1153,19 +1452,6 @@ public class OkHttpServerTransportTest {
 
     @Override
     public void onReady() {
-      onReadyCalled = true;
-    }
-
-    boolean isOnReadyCalled() {
-      boolean value = onReadyCalled;
-      onReadyCalled = false;
-      return value;
-    }
-
-    void waitUntilStreamClosed() throws InterruptedException, TimeoutException {
-      if (!closed.await(TIME_OUT_MS, TimeUnit.MILLISECONDS)) {
-        throw new TimeoutException("Failed waiting stream to be closed.");
-      }
     }
 
     static String getContent(InputStream message) throws IOException {
@@ -1177,59 +1463,43 @@ public class OkHttpServerTransportTest {
     }
   }
 
-  private static class PipeSocket extends Socket {
-    private final PipedOutputStream outputStream = new PipedOutputStream();
-    private final PipedInputStream outputStreamSink = new PipedInputStream();
-    private final PipedOutputStream inputStreamSource = new PipedOutputStream();
-    private final PipedInputStream inputStream = new PipedInputStream();
+  private static class SocketPair {
+    public final Socket client;
+    public final Socket server;
 
-    public PipeSocket() {
+    public SocketPair(Socket client, Socket server) {
+      this.client = client;
+      this.server = server;
+    }
+
+    public InputStream getClientInputStream() {
       try {
-        outputStreamSink.connect(outputStream);
-        inputStream.connect(inputStreamSource);
+        return client.getInputStream();
       } catch (IOException ex) {
-        throw new AssertionError(ex);
+        throw new RuntimeException(ex);
       }
     }
 
-    @Override
-    public synchronized void close() throws IOException {
+    public OutputStream getClientOutputStream() {
       try {
-        outputStream.close();
-      } finally {
-        inputStream.close();
-        // PipedInputStream can only be woken by PipedOutputStream, so PipedOutputStream.close() is
-        // a better imitation of Socket.close().
-        inputStreamSource.close();
+        return client.getOutputStream();
+      } catch (IOException ex) {
+        throw new RuntimeException(ex);
       }
     }
 
-    public void closeSourceAndSink() throws IOException {
+    public static SocketPair create(ExecutorService threadPool) {
       try {
-        outputStreamSink.close();
-      } finally {
-        inputStreamSource.close();
+        try (ServerSocket serverSocket = new ServerSocket(0)) {
+          Future<Socket> serverFuture = threadPool.submit(() -> serverSocket.accept());
+          Socket client = new Socket();
+          client.connect(serverSocket.getLocalSocketAddress());
+          Socket server = serverFuture.get();
+          return new SocketPair(client, server);
+        }
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
       }
-    }
-
-    @Override
-    public SocketAddress getLocalSocketAddress() {
-      return new InetSocketAddress("127.0.0.1", 4000);
-    }
-
-    @Override
-    public SocketAddress getRemoteSocketAddress() {
-      return new InetSocketAddress("127.0.0.2", 5000);
-    }
-
-    @Override
-    public OutputStream getOutputStream() {
-      return outputStream;
-    }
-
-    @Override
-    public InputStream getInputStream() {
-      return inputStream;
     }
   }
 

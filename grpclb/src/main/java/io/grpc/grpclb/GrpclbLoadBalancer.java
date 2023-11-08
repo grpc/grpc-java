@@ -76,16 +76,17 @@ class GrpclbLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     Attributes attributes = resolvedAddresses.getAttributes();
     List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpclbConstants.ATTR_LB_ADDRS);
     if (newLbAddresses == null) {
       newLbAddresses = Collections.emptyList();
     }
     if (newLbAddresses.isEmpty() && resolvedAddresses.getAddresses().isEmpty()) {
-      handleNameResolutionError(
-          Status.UNAVAILABLE.withDescription("No backend or balancer addresses found"));
-      return;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+          "No backend or balancer addresses found");
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
     List<EquivalentAddressGroup> overrideAuthorityLbAddresses =
         new ArrayList<>(newLbAddresses.size());
@@ -114,6 +115,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
     }
     grpclbState.handleAddresses(Collections.unmodifiableList(overrideAuthorityLbAddresses),
         newBackendServers);
+
+    return Status.OK;
   }
 
   @Override

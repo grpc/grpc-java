@@ -11,16 +11,16 @@ description = "gRPC: Authorization"
 
 dependencies {
     implementation project(':grpc-protobuf'),
-            project(':grpc-core')
+            project(':grpc-core'),
+            libraries.guava.jre // JRE required by transitive protobuf-java-util
 
     annotationProcessor libraries.auto.value
     compileOnly libraries.javax.annotation
 
     testImplementation project(':grpc-testing'),
-            project(':grpc-testing-proto')
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+            project(':grpc-testing-proto'),
+            testFixtures(project(':grpc-core'))
+    testImplementation libraries.guava.testlib
 
     def xdsDependency = implementation project(':grpc-xds')
     shadow configurations.implementation.getDependencies().minus([xdsDependency])
@@ -30,17 +30,11 @@ dependencies {
 }
 
 tasks.named("jar").configure {
-    classifier = 'original'
-}
-
-// TODO(ashithasantosh): Remove javadoc exclusion on adding authorization
-// interceptor implementations.
-tasks.named("javadoc").configure {
-    exclude "io/grpc/authz/*"
+    archiveClassifier = 'original'
 }
 
 tasks.named("shadowJar").configure {
-    classifier = null
+    archiveClassifier = null
     dependencies {
         exclude(dependency {true})
     }
@@ -50,6 +44,12 @@ tasks.named("shadowJar").configure {
     relocate 'envoy.annotations', 'io.grpc.xds.shaded.envoy.annotations'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
+}
+
+tasks.named("compileJava").configure {
+    it.options.compilerArgs += [
+        "-Xlint:-processing",
+    ]
 }
 
 publishing {

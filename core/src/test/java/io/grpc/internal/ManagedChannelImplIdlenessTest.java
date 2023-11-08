@@ -66,6 +66,7 @@ import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -154,15 +155,21 @@ public class ManagedChannelImplIdlenessTest {
   @Before
   @SuppressWarnings("deprecation") // For NameResolver.Listener
   public void setUp() {
+    when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(
+        Status.OK);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     when(mockNameResolver.getServiceAuthority()).thenReturn(AUTHORITY);
     when(mockNameResolverFactory
         .newNameResolver(any(URI.class), any(NameResolver.Args.class)))
         .thenReturn(mockNameResolver);
+    when(mockNameResolverFactory.getDefaultScheme())
+        .thenReturn("mockscheme");
     when(mockTransportFactory.getScheduledExecutorService())
         .thenReturn(timer.getScheduledExecutorService());
+    when(mockTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
 
-    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("fake://target",
+    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("mockscheme:///target",
         new UnsupportedClientTransportFactoryBuilder(), null);
 
     builder
@@ -220,7 +227,7 @@ public class ManagedChannelImplIdlenessTest {
 
     ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(mockLoadBalancer).handleResolvedAddresses(resolvedAddressCaptor.capture());
+    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     assertThat(resolvedAddressCaptor.getValue().getAddresses())
         .containsExactlyElementsIn(servers);
   }
@@ -324,7 +331,7 @@ public class ManagedChannelImplIdlenessTest {
     call.start(mockCallListener, new Metadata());
 
     // Verify that we have exited the idle mode
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     deliverResolutionResult();
     Helper helper = helperCaptor.getValue();
@@ -372,7 +379,7 @@ public class ManagedChannelImplIdlenessTest {
     call.start(mockCallListener, new Metadata());
 
     // Verify that we have exited the idle mode
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     deliverResolutionResult();
     Helper helper = helperCaptor.getValue();
@@ -411,7 +418,7 @@ public class ManagedChannelImplIdlenessTest {
   public void updateSubchannelAddresses_newAddressConnects() {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata()); // Create LB
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     deliverResolutionResult();
     Helper helper = helperCaptor.getValue();
@@ -435,7 +442,7 @@ public class ManagedChannelImplIdlenessTest {
   public void updateSubchannelAddresses_existingAddressDoesNotConnect() {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata()); // Create LB
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     deliverResolutionResult();
     Helper helper = helperCaptor.getValue();
@@ -460,7 +467,7 @@ public class ManagedChannelImplIdlenessTest {
     call.start(mockCallListener, new Metadata());
 
     // Verify that we have exited the idle mode
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     Helper helper = helperCaptor.getValue();
     deliverResolutionResult();
@@ -509,7 +516,7 @@ public class ManagedChannelImplIdlenessTest {
   public void updateOobChannelAddresses_newAddressConnects() {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata()); // Create LB
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     deliverResolutionResult();
     Helper helper = helperCaptor.getValue();
@@ -533,7 +540,7 @@ public class ManagedChannelImplIdlenessTest {
   public void updateOobChannelAddresses_existingAddressDoesNotConnect() {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata()); // Create LB
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     Helper helper = helperCaptor.getValue();
     deliverResolutionResult();

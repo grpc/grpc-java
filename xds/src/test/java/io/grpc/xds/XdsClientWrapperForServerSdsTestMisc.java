@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector.NO_FILTER_CHAIN;
-import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
+import static io.grpc.xds.internal.security.SecurityProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
@@ -44,13 +44,13 @@ import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
-import io.grpc.xds.XdsClient.LdsUpdate;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SslContextProvider;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.SslContextProvider;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -71,13 +71,14 @@ import java.net.SocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Migration test XdsServerWrapper from previous XdsClientWrapperForServerSds. */
 @RunWith(JUnit4.class)
@@ -85,6 +86,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
 
   private static final int PORT = 7000;
   private static final int START_WAIT_AFTER_LISTENER_MILLIS = 100;
+
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private EmbeddedChannel channel;
   private ChannelPipeline pipeline;
@@ -107,7 +110,6 @@ public class XdsClientWrapperForServerSdsTestMisc {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     tlsContext1 =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     tlsContext2 =

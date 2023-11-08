@@ -1,10 +1,16 @@
 # Security Policy
 
-For information on gRPC Security Policy and reporting potentional security issues, please see [gRPC CVE Process](https://github.com/grpc/proposal/blob/master/P4-grpc-cve-process.md).
+For information on gRPC Security Policy and reporting potentional security
+issues, please see [gRPC CVE Process][].
+
+[gRPC CVE Process]: https://github.com/grpc/proposal/blob/master/P4-grpc-cve-process.md
 
 # Authentication
 
-gRPC supports a number of different mechanisms for asserting identity between an client and server. This document provides code samples demonstrating how to provide SSL/TLS encryption support and identity assertions in Java, as well as passing OAuth2 tokens to services that support it.
+gRPC supports a number of different mechanisms for asserting identity between an
+client and server. This document provides code samples demonstrating how to
+provide SSL/TLS encryption support and identity assertions in Java, as well as
+passing OAuth2 tokens to services that support it.
 
 # Transport Security (TLS)
 
@@ -19,25 +25,28 @@ BoringSSL](#tls-with-netty-tcnative-on-boringssl).
 ## TLS on Android
 
 On Android we recommend the use of the [Play Services Dynamic Security
-Provider](https://www.appfoundry.be/blog/2014/11/18/Google-Play-Services-Dynamic-Security-Provider/)
-to ensure your application has an up-to-date OpenSSL library with the necessary
-cipher-suites and a reliable ALPN implementation. This requires [updating the
-security provider at
-runtime](https://developer.android.com/training/articles/security-gms-provider.html).
+Provider][] to ensure your application has an up-to-date OpenSSL library with
+the necessary cipher-suites and a reliable ALPN implementation. This requires
+[updating the security provider at runtime][config-psdsp].
 
 Although ALPN mostly works on newer Android releases (especially since 5.0),
 there are bugs and discovered security vulnerabilities that are only fixed by
 upgrading the security provider. Thus, we recommend using the Play Service
 Dynamic Security Provider for all Android versions.
 
-*Note: The Dynamic Security Provider must be installed **before** creating a gRPC OkHttp channel. gRPC's OkHttpProtocolNegotiator statically initializes the security protocol(s) available to gRPC, which means that changes to the security provider after the first channel is created will not be picked up by gRPC.*
+*Note: The Dynamic Security Provider must be installed **before** creating a
+gRPC OkHttp channel. gRPC statically initializes the security protocol(s)
+available, which means that changes to the security provider after the first
+channel is created will not be noticed by gRPC.*
+
+[Play Services Dynamic Security Provider]: https://www.appfoundry.be/blog/2014/11/18/Google-Play-Services-Dynamic-Security-Provider/
+[config-psdsp]: https://developer.android.com/training/articles/security-gms-provider.html
 
 ### Bundling Conscrypt
 
 If depending on Play Services is not an option for your app, then you may bundle
 [Conscrypt](https://conscrypt.org) with your application. Binaries are available
-on [Maven
-Central](https://search.maven.org/#search%7Cga%7C1%7Cg%3Aorg.conscrypt%20a%3Aconscrypt-android).
+on [Maven Central][conscrypt-maven].
 
 Like the Play Services Dynamic Security Provider, you must still "install"
 Conscrypt before use.
@@ -50,10 +59,12 @@ import java.security.Security;
 Security.insertProviderAt(Conscrypt.newProvider(), 1);
 ```
 
+[conscrypt-maven]: https://search.maven.org/#search%7Cga%7C1%7Cg%3Aorg.conscrypt%20a%3Aconscrypt-android
+
 ## TLS on non-Android
 
-JDK versions prior to Java 9 do not support ALPN and are either missing AES GCM
-support or have 2% the performance of OpenSSL.
+OpenJDK versions prior to Java 8u252 do not support ALPN. Java 8 has 10% the
+performance of OpenSSL.
 
 We recommend most users use grpc-netty-shaded, which includes netty-tcnative on
 BoringSSL. It includes pre-built libraries for 64 bit Windows, OS X, and 64 bit
@@ -159,7 +170,7 @@ the dependency.
       <extension>
         <groupId>kr.motd.maven</groupId>
         <artifactId>os-maven-plugin</artifactId>
-        <version>1.6.2</version>
+        <version>1.7.1</version>
       </extension>
     </extensions>
     <plugins>
@@ -243,37 +254,6 @@ import java.security.Security;
 Security.insertProviderAt(Conscrypt.newProvider(), 1);
 ```
 
-### TLS with Jetty ALPN
-
-**Please do not use Jetty ALPN**
-
-gRPC historically supported Jetty ALPN for ALPN on Java 8. While functional, it
-suffers from poor performance and breakages when the JRE is upgraded.
-When mis-matched to the JRE version, it can also produce unpredictable errors
-that are hard to diagnose. When using it, it became common practice that any
-time we saw a TLS failure that made no sense we would blame a Jetty ALPN/JRE
-version mismatch and we were overwhelmingly correct. The Jetty ALPN agent makes
-it much easier to use, but we still strongly discourage Jetty ALPN's use.
-
-When using Jetty ALPN with Java 8, realize that performance will be 2-10% that
-of the other options due to a slow AES GCM implementation in Java.
-
-#### Configuring Jetty ALPN in Web Containers
-
-Some web containers, such as [Jetty](https://www.eclipse.org/jetty/documentation/current/jetty-classloading.html) restrict access to server classes for web applications. A gRPC client running within such a container must be properly configured to allow access to the ALPN classes. In Jetty, this is done by including a `WEB-INF/jetty-env.xml` file containing the following:
-
-```xml
-<?xml version="1.0"  encoding="ISO-8859-1"?>
-<!DOCTYPE Configure PUBLIC "-//Mort Bay Consulting//DTD Configure//EN" "http://www.eclipse.org/jetty/configure.dtd">
-<Configure class="org.eclipse.jetty.webapp.WebAppContext">
-    <!-- Must be done in jetty-env.xml, since jetty-web.xml is loaded too late.   -->
-    <!-- Removing ALPN from the blacklisted server classes (using "-" to remove). -->
-    <!-- Must prepend to the blacklist since order matters.                       -->
-    <Call name="prependServerClass">
-        <Arg>-org.eclipse.jetty.alpn.</Arg>
-    </Call>
-</Configure>
-```
 ## Enabling TLS on a server
 
 To use TLS on the server, a certificate chain and private key need to be
@@ -281,35 +261,36 @@ specified in PEM format. The standard TLS port is 443, but we use 8443 below to
 avoid needing extra permissions from the OS.
 
 ```java
-Server server = ServerBuilder.forPort(8443)
-    // Enable TLS
-    .useTransportSecurity(certChainFile, privateKeyFile)
+ServerCredentials creds = TlsServerCredentials.create(certChainFile, privateKeyFile);
+Server server = Grpc.newServerBuilderForPort(8443, creds)
     .addService(serviceImplementation)
-    .build();
-server.start();
+    .build()
+    .start();
 ```
 
 If the issuing certificate authority is not known to the client then a properly
-configured SslContext or SSLSocketFactory should be provided to the
-NettyChannelBuilder or OkHttpChannelBuilder, respectively.
+configured trust manager should be provided to TlsChannelCredentials and used to
+construct the channel.
 
 ## Mutual TLS
 
 [Mutual authentication][] (or "client-side authentication") configuration is similar to the server by providing truststores, a client certificate and private key to the client channel.  The server must also be configured to request a certificate from clients, as well as truststores for which client certificates it should allow.
 
 ```java
-Server server = NettyServerBuilder.forPort(8443)
-    .sslContext(GrpcSslContexts.forServer(certChainFile, privateKeyFile)
-        .trustManager(clientCAsFile)
-        .clientAuth(ClientAuth.REQUIRE)
-        .build());
+ServerCredentials creds = TlsServerCredentials.newBuilder()
+    .keyManager(certChainFile, privateKeyFile)
+    .trustManager(clientCAsFile)
+    .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
+    .build();
 ```
 
-Negotiated client certificates are available in the SSLSession, which is found in the `TRANSPORT_ATTR_SSL_SESSION` attribute of <a href="https://github.com/grpc/grpc-java/blob/master/core/src/main/java/io/grpc/Grpc.java">Grpc</a>.  A server interceptor can provide details in the current Context.
+Negotiated client certificates are available in the SSLSession, which is found
+in the `Grpc.TRANSPORT_ATTR_SSL_SESSION` attribute of the call. A server
+interceptor can provide details in the current Context.
 
 ```java
-// The application uses this in its handlers
-public final static Context.Key<SSLSession> SSL_SESSION_CONTEXT = Context.key("SSLSession");
+// The application uses this in its handlers.
+public static final Context.Key<MySecurityInfo> SECURITY_INFO = Context.key("my.security.Info");
 
 @Override
 public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
@@ -318,8 +299,12 @@ public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, Re
     if (sslSession == null) {
         return next.startCall(call, headers);
     }
+    // This interceptor can provide a centralized policy to process the client's
+    // certificate. Avoid exposing low-level details (like SSLSession) and
+    // instead provide a higher-level concept like "authenticated user."
+    MySecurityInfo info = process(sslSession);
     return Contexts.interceptCall(
-        Context.current().withValue(SSL_SESSION_CONTEXT, sslSession), call, headers, next);
+        Context.current().withValue(SECURITY_INFO, info), call, headers, next);
 }
 ```
 
@@ -358,10 +343,6 @@ If on Fedora 30 or later and you see "libcrypt.so.1: cannot open shared object
 file: No such file or directory". Run `dnf -y install libxcrypt-compat` to
 install the necessary dependency.
 
-If you are running inside of an embedded Tomcat runtime (e.g., Spring Boot),
-then some versions of `netty-tcnative-boringssl-static` will have conflicts and
-won't work. You must use gRPC 1.4.0 or later.
-
 Most dependency versioning problems can be solved by using
 `io.grpc:grpc-netty-shaded` instead of `io.grpc:grpc-netty`, although this also
 limits your usage of the Netty-specific APIs. `io.grpc:grpc-netty-shaded`
@@ -387,7 +368,7 @@ If you are running in a runtime environment that also uses Netty (e.g., Hadoop, 
 Below are known to work version combinations:
 
 grpc-netty version | netty-handler version | netty-tcnative-boringssl-static version
------------------- | --------------------- | ---------------------------------------
+------------------ |-----------------------| ---------------------------------------
 1.0.0-1.0.1        | 4.1.3.Final           | 1.1.33.Fork19
 1.0.2-1.0.3        | 4.1.6.Final           | 1.1.33.Fork23
 1.1.x-1.3.x        | 4.1.8.Final           | 1.1.33.Fork26
@@ -411,24 +392,23 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.35.x-1.41.x      | 4.1.52.Final          | 2.0.34.Final
 1.42.x-1.43.x      | 4.1.63.Final          | 2.0.38.Final
 1.44.x-1.47.x      | 4.1.72.Final          | 2.0.46.Final
-1.48.x-            | 4.1.77.Final          | 2.0.53.Final
+1.48.x-1.49.x      | 4.1.77.Final          | 2.0.53.Final
+1.50.x-1.53.x      | 4.1.79.Final          | 2.0.54.Final
+1.54.x-1.55.x      | 4.1.87.Final          | 2.0.56.Final
+1.56.x             | 4.1.87.Final          | 2.0.61.Final
+1.57.x-1.58.x      | 4.1.93.Final          | 2.0.61.Final
+1.59.x             | 4.1.97.Final          | 2.0.61.Final
+1.60.x-            | 4.1.100.Final         | 2.0.61.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 
 ### OkHttp
-If you are using gRPC on Android devices, you are most likely using `grpc-okhttp` transport.
+If you are using gRPC on Android devices, you are most likely using
+`grpc-okhttp` transport.
 
-Find the dependency tree (e.g., `mvn dependency:tree`), and look for versions of:
- - `io.grpc:grpc-okhttp`
- - `com.squareup.okhttp:okhttp`
-
-If you don't have `grpc-okhttp`, you should add it as a dependency.
-
-If you have both `io.grpc:grpc-netty` and `io.grpc:grpc-okhttp`, you may also have issues. Remove `grpc-netty` if you are on Android.
-
-If you have `okhttp` version below 2.5.0, then it may not work with gRPC.
-
-It is OK to have both `okhttp` 2.x and 3.x since they have different group name and under different packages.
+Find the dependency tree (e.g., `mvn dependency:tree`), and look for
+`io.grpc:grpc-okhttp`. If you don't have `grpc-okhttp`, you should add it as a
+dependency.
 
 # gRPC over plaintext
 
@@ -439,17 +419,12 @@ An option is provided to use gRPC over plaintext without TLS. While this is conv
 The following code snippet shows how you can call the Google Cloud PubSub API using gRPC with a service account. The credentials are loaded from a key stored in a well-known location or by detecting that the application is running in an environment that can provide one automatically, e.g. Google Compute Engine. While this example is specific to Google and it's services, similar patterns can be followed for other service providers.
 
 ```java
-// Create a channel to the test service.
-ManagedChannel channel = ManagedChannelBuilder.forTarget("dns:///pubsub.googleapis.com")
+// Use the default credentials from the environment
+ChannelCredentials creds = GoogleDefaultChannelCredentials.create();
+// Create a channel to the service
+ManagedChannel channel = Grpc.newChannelBuilder("dns:///pubsub.googleapis.com", creds)
     .build();
-// Get the default credentials from the environment
-GoogleCredentials creds = GoogleCredentials.getApplicationDefault();
-// Down-scope the credential to just the scopes required by the service
-creds = creds.createScoped(Arrays.asList("https://www.googleapis.com/auth/pubsub"));
-// Create an instance of {@link io.grpc.CallCredentials}
-CallCredentials callCreds = MoreCallCredentials.from(creds);
-// Create a stub with credential
-PublisherGrpc.PublisherBlockingStub publisherStub =
-    PublisherGrpc.newBlockingStub(channel).withCallCredentials(callCreds);
+// Create a stub and send an RPC
+PublisherGrpc.PublisherBlockingStub publisherStub = PublisherGrpc.newBlockingStub(channel);
 publisherStub.publish(someMessage);
 ```

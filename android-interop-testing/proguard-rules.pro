@@ -21,3 +21,7 @@
 
 # Ignores: can't find referenced method from grpc-testing's compileOnly dependency on Truth
 -dontwarn io.grpc.testing.DeadlineSubject
+
+-keepclassmembers class io.grpc.testing.integration.Messages$* {
+    *;
+}

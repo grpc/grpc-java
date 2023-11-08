@@ -15,7 +15,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
   private ClusterDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.api.v2.ClusterDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.api.v2.ClusterDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -160,62 +160,52 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static abstract class ClusterDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamClusters(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamClusters(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamClustersMethod(), responseObserver);
     }
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaClustersMethod(), responseObserver);
     }
 
     /**
      */
-    public void fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
+    default void fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchClustersMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamClustersMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_STREAM_CLUSTERS)))
-          .addMethod(
-            getDeltaClustersMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_CLUSTERS)))
-          .addMethod(
-            getFetchClustersMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_FETCH_CLUSTERS)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service ClusterDiscoveryService.
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
+  public static abstract class ClusterDiscoveryServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return ClusterDiscoveryServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service ClusterDiscoveryService.
+   * <pre>
+   * Return list of all clusters this proxy will load balance to.
+   * </pre>
+   */
+  public static final class ClusterDiscoveryServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
     private ClusterDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -253,11 +243,13 @@ public final class ClusterDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service ClusterDiscoveryService.
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
+  public static final class ClusterDiscoveryServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
     private ClusterDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -278,11 +270,13 @@ public final class ClusterDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ClusterDiscoveryService.
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
+  public static final class ClusterDiscoveryServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
     private ClusterDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -312,10 +306,10 @@ public final class ClusterDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ClusterDiscoveryServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ClusterDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -350,6 +344,32 @@ public final class ClusterDiscoveryServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamClustersMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_STREAM_CLUSTERS)))
+        .addMethod(
+          getDeltaClustersMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_CLUSTERS)))
+        .addMethod(
+          getFetchClustersMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_FETCH_CLUSTERS)))
+        .build();
+  }
+
   private static abstract class ClusterDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     ClusterDiscoveryServiceBaseDescriptorSupplier() {}
@@ -373,9 +393,9 @@ public final class ClusterDiscoveryServiceGrpc {
   private static final class ClusterDiscoveryServiceMethodDescriptorSupplier
       extends ClusterDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ClusterDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    ClusterDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

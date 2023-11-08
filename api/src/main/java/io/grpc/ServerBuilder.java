@@ -139,7 +139,6 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @return this
    * @since 1.5.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3117")
   public T intercept(ServerInterceptor interceptor) {
     throw new UnsupportedOperationException();
   }
@@ -231,14 +230,13 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
 
   /**
    * Sets the permitted time for new connections to complete negotiation handshakes before being
-   * killed.
+   * killed. The default value is 2 minutes.
    *
    * @return this
    * @throws IllegalArgumentException if timeout is negative
    * @throws UnsupportedOperationException if unsupported
    * @since 1.8.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3706")
   public T handshakeTimeout(long timeout, TimeUnit unit) {
     throw new UnsupportedOperationException();
   }
@@ -250,6 +248,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * @throws IllegalArgumentException if time is not positive
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
    * @since 1.47.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
@@ -266,6 +266,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * @throws IllegalArgumentException if timeout is not positive
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
    * @since 1.47.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
@@ -282,6 +284,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * @throws IllegalArgumentException if idle is not positive
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
    * @since 1.47.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
@@ -297,6 +301,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * @throws IllegalArgumentException if age is not positive
    * @throws UnsupportedOperationException if unsupported
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
    * @since 1.47.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
@@ -313,6 +319,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @throws IllegalArgumentException if grace is negative
    * @throws UnsupportedOperationException if unsupported
    * @see #maxConnectionAge(long, TimeUnit)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A9-server-side-conn-mgt.md">gRFC A9
+   *     Server-side Connection Management</a>
    * @since 1.47.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
@@ -334,6 +342,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @throws IllegalArgumentException if time is negative
    * @throws UnsupportedOperationException if unsupported
    * @see #permitKeepAliveWithoutCalls(boolean)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.47.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")
@@ -347,6 +357,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * @throws UnsupportedOperationException if unsupported
    * @see #permitKeepAliveTime(long, TimeUnit)
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
+   *     Client-side Keepalive</a>
    * @since 1.47.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9009")

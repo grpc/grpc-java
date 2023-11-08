@@ -27,6 +27,12 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
 @ThreadSafe
 public abstract class ClientStreamTracer extends StreamTracer {
+  /**
+   * Indicates how long the call was delayed, in nanoseconds, due to waiting for name resolution
+   * result. If the call option is not set, the call did not experience name resolution delay.
+   */
+  public static final CallOptions.Key<Long> NAME_RESOLUTION_DELAYED =
+      CallOptions.Key.create("io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED");
 
   /**
    * The stream is being created on a ready transport.
@@ -37,6 +43,18 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * @since 1.40.0
    */
   public void streamCreated(@Grpc.TransportAttr Attributes transportAttrs, Metadata headers) {
+  }
+
+  /**
+   * Name resolution is completed and the connection starts getting established. This method is only
+   * invoked on the streams that encounter such delay.
+   *
+   * </p>gRPC buffers the client call if the remote address and configurations, e.g. timeouts and
+   * retry policy, are not ready. Asynchronously gRPC internally does the name resolution to get
+   * this information. The streams that are processed immediately on ready transports by the time
+   * the RPC comes do not go through the pending process, thus this callback will not be invoked.
+   */
+  public void createPendingStream() {
   }
 
   /**

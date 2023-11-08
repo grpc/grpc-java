@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -41,6 +42,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
@@ -142,12 +144,13 @@ public class CallCredentialsApplyingTest {
 
     transport.newStream(method, origHeaders, callOptions, tracers);
 
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
     verify(mockCreds).applyRequestMetadata(infoCaptor.capture(), same(mockExecutor),
         any(CallCredentials.MetadataApplier.class));
     RequestInfo info = infoCaptor.getValue();
     assertSame(transportAttrs, info.getTransportAttrs());
     assertSame(method, info.getMethodDescriptor());
+    assertSame(callOptions, info.getCallOptions());
     assertSame(AUTHORITY, info.getAuthority());
     assertSame(SecurityLevel.NONE, info.getSecurityLevel());
   }
@@ -166,7 +169,7 @@ public class CallCredentialsApplyingTest {
         callOptions.withAuthority("calloptions-authority").withExecutor(anotherExecutor),
         tracers);
 
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
     verify(mockCreds).applyRequestMetadata(infoCaptor.capture(),
         same(mockExecutor), any(CallCredentials.MetadataApplier.class));
     RequestInfo info = infoCaptor.getValue();
@@ -186,7 +189,7 @@ public class CallCredentialsApplyingTest {
 
     transport.newStream(method, origHeaders, callOptions, tracers);
 
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
     verify(mockCreds).applyRequestMetadata(
             infoCaptor.capture(), same(mockExecutor),
             any(io.grpc.CallCredentials.MetadataApplier.class));
@@ -210,7 +213,7 @@ public class CallCredentialsApplyingTest {
             callOptions.withAuthority("calloptions-authority").withExecutor(anotherExecutor),
             tracers);
 
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(RequestInfo.class);
     verify(mockCreds).applyRequestMetadata(
             infoCaptor.capture(), same(mockExecutor),
             any(io.grpc.CallCredentials.MetadataApplier.class));
@@ -264,7 +267,7 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void fail_inline() {
-    final Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
+    final Status error = Status.UNAVAILABLE.withDescription("channel not secure for creds");
     when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
     doAnswer(new Answer<Void>() {
         @Override
@@ -290,6 +293,38 @@ public class CallCredentialsApplyingTest {
     verify(mockTransport).shutdownNow(Status.UNAVAILABLE);
   }
 
+  // If the creds return an error that is inappropriate to directly propagate from the control plane
+  // to the call, it should be converted to an INTERNAL error.
+  @Test
+  public void fail_inline_inappropriate_error() {
+    final Status error = Status.NOT_FOUND.withDescription("channel not secure for creds");
+    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        CallCredentials.MetadataApplier applier =
+            (CallCredentials.MetadataApplier) invocation.getArguments()[2];
+        applier.fail(error);
+        return null;
+      }
+    }).when(mockCreds).applyRequestMetadata(any(RequestInfo.class),
+        same(mockExecutor), any(CallCredentials.MetadataApplier.class));
+
+    FailingClientStream stream = (FailingClientStream) transport.newStream(
+        method, origHeaders, callOptions, tracers);
+
+    verify(mockTransport, never()).newStream(
+        any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class),
+        ArgumentMatchers.<ClientStreamTracer[]>any());
+    assertThat(stream.getError().getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(stream.getError().getDescription()).contains("Inappropriate");
+    assertThat(stream.getError().getCause()).isNull();
+    transport.shutdownNow(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions, tracers)
+        instanceof FailingClientStream);
+    verify(mockTransport).shutdownNow(Status.UNAVAILABLE);
+  }
+
   @Test
   public void applyMetadata_delayed() {
     when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
@@ -298,7 +333,8 @@ public class CallCredentialsApplyingTest {
     DelayedStream stream = (DelayedStream) transport.newStream(
         method, origHeaders, callOptions, tracers);
 
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     verify(mockTransport, never()).newStream(
@@ -324,7 +360,8 @@ public class CallCredentialsApplyingTest {
   @Test
   public void delayedShutdown_shutdownShutdownNowThenApply() {
     transport.newStream(method, origHeaders, callOptions, tracers);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     transport.shutdown(Status.UNAVAILABLE);
@@ -345,7 +382,8 @@ public class CallCredentialsApplyingTest {
   @Test
   public void delayedShutdown_shutdownThenApplyThenShutdownNow() {
     transport.newStream(method, origHeaders, callOptions, tracers);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     transport.shutdown(Status.UNAVAILABLE);
@@ -373,7 +411,8 @@ public class CallCredentialsApplyingTest {
     transport.newStream(method, origHeaders, callOptions, tracers);
     transport.newStream(method, origHeaders, callOptions, tracers);
     transport.newStream(method, origHeaders, callOptions, tracers);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds, times(3)).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     applierCaptor.getAllValues().get(1).apply(headers);
@@ -401,11 +440,12 @@ public class CallCredentialsApplyingTest {
     DelayedStream stream = (DelayedStream) transport.newStream(
         method, origHeaders, callOptions, tracers);
 
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor =
+        ArgumentCaptor.forClass(CallCredentials.MetadataApplier.class);
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
 
-    Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
+    Status error = Status.UNAVAILABLE.withDescription("channel not secure for creds");
     applierCaptor.getValue().fail(error);
 
     verify(mockTransport, never()).newStream(

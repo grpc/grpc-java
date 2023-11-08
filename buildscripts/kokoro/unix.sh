@@ -11,6 +11,8 @@
 #  ARCH=aarch_64 ./buildscripts/kokoro/unix.sh
 # For ppc64le arch:
 #  ARCH=ppcle_64 ./buildscripts/kokoro/unix.sh
+# For s390x arch:
+#  ARCH=s390_64 ./buildscripts/kokoro/unix.sh
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
 set -exu -o pipefail
@@ -29,6 +31,14 @@ fi
 # ARCH is x86_64 unless otherwise specified.
 ARCH="${ARCH:-x86_64}"
 
+cat <<EOF >> gradle.properties
+# defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
+# https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
+# Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
+# space is exhausted", and to increase build speed
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m
+EOF
+
 ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
@@ -37,8 +47,12 @@ GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
-GRADLE_FLAGS+=" -PskipAndroid=true"
 GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
+if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
+  GRADLE_FLAGS+=" -PskipAndroid=true"
+else
+  GRADLE_FLAGS+=" -Pandroid.useAndroidX=true"
+fi
 export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 
 # Make protobuf discoverable by :grpc-compiler
@@ -64,34 +78,23 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   # --batch-mode reduces log spam
   mvn verify --batch-mode
   popd
-  pushd examples/example-alts
-  ../gradlew build $GRADLE_FLAGS
-  popd
-  pushd examples/example-hostname
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-tls
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-jwt-auth
-  ../gradlew build $GRADLE_FLAGS
-  mvn verify --batch-mode
-  popd
-  pushd examples/example-xds
-  ../gradlew build $GRADLE_FLAGS
-  popd
+  for f in examples/example-*
+  do
+     pushd "$f"
+     ../gradlew build $GRADLE_FLAGS
+     if [ -f "pom.xml" ]; then
+       # --batch-mode reduces log spam
+       mvn verify --batch-mode
+     fi
+     popd
+  done
   # TODO(zpencer): also build the GAE examples
-  pushd examples/example-orca
-  ../gradlew build $GRADLE_FLAGS
-  popd
 fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
-  if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" ]]; then
+  if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" || "$ARCH" = "s390_64" ]]; then
     GRADLE_FLAGS+=" -x grpc-compiler:generateTestProto -x grpc-compiler:generateTestLiteProto"
     GRADLE_FLAGS+=" -x grpc-compiler:testGolden -x grpc-compiler:testLiteGolden"
     GRADLE_FLAGS+=" -x grpc-compiler:testDeprecatedGolden -x grpc-compiler:testDeprecatedLiteGolden"

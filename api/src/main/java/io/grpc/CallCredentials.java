@@ -56,18 +56,20 @@ public abstract class CallCredentials {
       RequestInfo requestInfo, Executor appExecutor, CallCredentials.MetadataApplier applier);
 
   /**
-   * Should be a noop but never called; tries to make it clearer to implementors that they may break
-   * in the future.
+   * With this class now being stable this method moves from an abstract one to a normal one with
+   * a no-op implementation. This method is marked deprecated to allow extenders time to remove the
+   * method before it is removed here.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  public abstract void thisUsesUnstableApi();
+  @Deprecated
+  public void thisUsesUnstableApi() {
+  }
 
   /**
    * The outlet of the produced headers. Not thread-safe.
    *
    * <p>Exactly one of its methods must be called to make the RPC proceed.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   public abstract static class MetadataApplier {
     /**
      * Called when headers are successfully generated. They will be merged into the original
@@ -84,12 +86,18 @@ public abstract class CallCredentials {
   /**
    * The request-related information passed to {@code CallCredentials.applyRequestMetadata()}.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   public abstract static class RequestInfo {
     /**
      * The method descriptor of this RPC.
      */
     public abstract MethodDescriptor<?, ?> getMethodDescriptor();
+
+    /**
+     * The call options used to call this RPC.
+     */
+    public CallOptions getCallOptions() {
+      throw new UnsupportedOperationException("Not implemented");
+    }
 
     /**
      * The security level on the transport.

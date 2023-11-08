@@ -1,0 +1,143 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+}
+
+description = "gRPC: Jakarta Servlet"
+
+// Set up classpaths and source directories for different servlet tests
+sourceSets {
+    undertowTest {
+        java {
+            include '**/Undertow*.java'
+        }
+    }
+    tomcatTest {
+        java {
+            include '**/Tomcat*.java'
+        }
+    }
+    // Only run these tests if java 11+ is being used
+    if (JavaVersion.current().isJava11Compatible()) {
+        jettyTest {
+            java {
+                include '**/Jetty*.java'
+            }
+        }
+    }
+}
+
+configurations {
+    itImplementation.extendsFrom(implementation)
+    jettyTestImplementation.extendsFrom(itImplementation)
+    tomcatTestImplementation.extendsFrom(itImplementation)
+    undertowTestImplementation.extendsFrom(itImplementation)
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+// Mechanically transform sources from grpc-servlet to use the corrected packages
+def migrate(String name, String inputDir, SourceSet sourceSet) {
+    def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
+    sourceSet.java.srcDir tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
+        into(outputDir)
+        from("$inputDir/io/grpc/servlet") {
+            into('io/grpc/servlet/jakarta')
+            filter { String line ->
+                line.replace('javax.servlet', 'jakarta.servlet')
+                    .replace('io.grpc.servlet', 'io.grpc.servlet.jakarta')
+            }
+        }
+    }
+}
+
+migrate('main', '../src/main/java', sourceSets.main)
+
+// Build the set of sourceSets and classpaths to modify, since Jetty 11 requires Java 11
+// and must be skipped
+migrate('undertowTest', '../src/undertowTest/java', sourceSets.undertowTest)
+migrate('tomcatTest', '../src/tomcatTest/java', sourceSets.tomcatTest)
+if (JavaVersion.current().isJava11Compatible()) {
+    migrate('jettyTest', '../src/jettyTest/java', sourceSets.jettyTest)
+}
+
+// Disable checkstyle for this project, since it consists only of generated code
+tasks.withType(Checkstyle).configureEach {
+    enabled = false
+}
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.servlet.jakarta')
+    }
+}
+
+dependencies {
+    api project(':grpc-api')
+    compileOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0',
+            libraries.javax.annotation
+
+    implementation project(':grpc-util'),
+            libraries.guava
+
+    itImplementation project(':grpc-servlet-jakarta'),
+            project(':grpc-netty'),
+            testFixtures(project(':grpc-core')),
+            libraries.junit
+    itImplementation(project(':grpc-interop-testing')) {
+        // Avoid grpc-netty-shaded dependency
+        exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-xds'
+    }
+
+    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:10.0.14'
+
+    jettyTestImplementation "org.eclipse.jetty:jetty-servlet:11.0.7",
+            "org.eclipse.jetty.http2:http2-server:11.0.7"
+
+    undertowTestImplementation 'io.undertow:undertow-servlet-jakartaee9:2.2.13.Final'
+}
+
+// Set up individual classpaths for each test, to avoid any mismatch,
+// and ensure they are only used when supported by the current jvm
+def undertowTest = tasks.register('undertowTest', Test) {
+    classpath = sourceSets.undertowTest.runtimeClasspath
+    testClassesDirs = sourceSets.undertowTest.output.classesDirs
+}
+def tomcat10Test = tasks.register('tomcat10Test', Test) {
+    classpath = sourceSets.tomcatTest.runtimeClasspath
+    testClassesDirs = sourceSets.tomcatTest.output.classesDirs
+
+    // Provide a temporary directory for tomcat to be deleted after test finishes
+    def tomcatTempDir = "$buildDir/tomcat_catalina_base"
+    systemProperty 'catalina.base', tomcatTempDir
+    doLast {
+        file(tomcatTempDir).deleteDir()
+    }
+
+    // tomcat-embed-core 10 presently performs illegal reflective access on
+    // java.io.ObjectStreamClass$Caches.localDescs and sun.rmi.transport.Target.ccl,
+    // see https://lists.apache.org/thread/s0xr7tk2kfkkxfjps9n7dhh4cypfdhyy
+    if (JavaVersion.current().isJava9Compatible()) {
+        jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
+    }
+}
+
+tasks.named("check").configure {
+    dependsOn undertowTest, tomcat10Test
+}
+
+// Only run these tests if java 11+ is being used
+if (JavaVersion.current().isJava11Compatible()) {
+    def jetty11Test = tasks.register('jetty11Test', Test) {
+        classpath = sourceSets.jettyTest.runtimeClasspath
+        testClassesDirs = sourceSets.jettyTest.output.classesDirs
+    }
+
+    tasks.named("check").configure {
+        dependsOn jetty11Test
+    }
+}

@@ -18,11 +18,8 @@ package io.grpc.netty;
 
 import io.grpc.Attributes;
 import io.grpc.Internal;
-import io.grpc.ServerStreamTracer;
 import io.grpc.internal.SharedResourcePool;
-import io.grpc.internal.TransportTracer;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import java.util.List;
 
 /**
  * Internal {@link NettyServerBuilder} accessor.  This is intended for usage internal to
@@ -30,16 +27,6 @@ import java.util.List;
  */
 @Internal
 public final class InternalNettyServerBuilder {
-  public static NettyServer buildTransportServers(NettyServerBuilder builder,
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-    return builder.buildTransportServers(streamTracerFactories);
-  }
-
-  public static void setTransportTracerFactory(NettyServerBuilder builder,
-      TransportTracer.Factory transportTracerFactory) {
-    builder.setTransportTracerFactory(transportTracerFactory);
-  }
-
   public static void setStatsEnabled(NettyServerBuilder builder, boolean value) {
     builder.setStatsEnabled(value);
   }

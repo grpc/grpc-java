@@ -35,6 +35,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BindServiceFlags;
+import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.BinderServerBuilder;
 import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
@@ -146,7 +147,9 @@ public final class BinderClientTransportTest {
     public BinderTransport.BinderClientTransport build() {
       return new BinderTransport.BinderClientTransport(
           appContext,
+          BinderChannelCredentials.forDefault(),
           serverAddress,
+          null,
           BindServiceFlags.DEFAULTS,
           ContextCompat.getMainExecutor(appContext),
           executorServicePool,

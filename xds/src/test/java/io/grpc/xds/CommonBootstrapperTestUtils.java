@@ -20,7 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;

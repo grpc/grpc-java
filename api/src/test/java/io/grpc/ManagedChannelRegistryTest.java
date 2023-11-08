@@ -125,7 +125,7 @@ public class ManagedChannelRegistryTest {
         return NewChannelBuilderResult.error("dodging");
       }
     });
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
@@ -173,13 +173,13 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return Collections.singleton(SocketAddress1.class);
       }
     });
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 6, "sc2") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         fail("Should not be called");
         throw new AssertionError();
       }
@@ -199,7 +199,7 @@ public class ManagedChannelRegistryTest {
         throw new AssertionError();
       }
     });
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
@@ -234,7 +234,7 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return ImmutableSet.of(SocketAddress1.class, SocketAddress2.class);
       }
     });
@@ -282,7 +282,7 @@ public class ManagedChannelRegistryTest {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
 
     ManagedChannelRegistry registry = new ManagedChannelRegistry();
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
@@ -314,13 +314,13 @@ public class ManagedChannelRegistryTest {
 
     nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
       @Override
-      protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
         return Collections.singleton(SocketAddress1.class);
       }
     });
 
     ManagedChannelRegistry registry = new ManagedChannelRegistry();
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }
@@ -351,7 +351,7 @@ public class ManagedChannelRegistryTest {
 
     ManagedChannelRegistry registry = new ManagedChannelRegistry();
 
-    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
       @Override public ManagedChannelBuilder<?> delegate() {
         throw new UnsupportedOperationException();
       }

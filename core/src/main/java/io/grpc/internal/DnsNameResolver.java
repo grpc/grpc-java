@@ -411,6 +411,7 @@ public class DnsNameResolver extends NameResolver {
   }
 
   /**
+   * Parse TXT service config records as JSON.
    *
    * @throws IOException if one of the txt records contains improperly formatted JSON.
    */

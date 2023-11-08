@@ -13,19 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Update VERSION then in this directory run ./import.sh
+# Update VERSION then execute this script
 
 set -e
-BRANCH=main
 # import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=2f99e0c9f83b6c91b42d215a148ed49ce0f174fd
-GIT_REPO="https://github.com/envoyproxy/envoy.git"
-GIT_BASE_DIR=envoy
-SOURCE_PROTO_BASE_DIR=envoy/api
+VERSION=0478eba2a495027bf6ac8e787c42e2f5b9eb553b
+DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
+DOWNLOAD_BASE_DIR="envoy-${VERSION}"
+SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
 TARGET_PROTO_BASE_DIR=src/main/proto
 # Sorted alphabetically.
 FILES=(
 envoy/admin/v3/config_dump.proto
+envoy/admin/v3/config_dump_shared.proto
 envoy/annotations/deprecation.proto
 envoy/annotations/resource.proto
 envoy/api/v2/auth/cert.proto
@@ -120,6 +120,7 @@ envoy/config/trace/v3/dynamic_ot.proto
 envoy/config/trace/v3/http_tracer.proto
 envoy/config/trace/v3/lightstep.proto
 envoy/config/trace/v3/opencensus.proto
+envoy/config/trace/v3/opentelemetry.proto
 envoy/config/trace/v3/service.proto
 envoy/config/trace/v3/trace.proto
 envoy/config/trace/v3/zipkin.proto
@@ -129,7 +130,10 @@ envoy/extensions/filters/http/fault/v3/fault.proto
 envoy/extensions/filters/http/rbac/v3/rbac.proto
 envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
+envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3/client_side_weighted_round_robin.proto
+envoy/extensions/load_balancing_policies/common/v3/common.proto
 envoy/extensions/load_balancing_policies/least_request/v3/least_request.proto
+envoy/extensions/load_balancing_policies/pick_first/v3/pick_first.proto
 envoy/extensions/load_balancing_policies/ring_hash/v3/ring_hash.proto
 envoy/extensions/load_balancing_policies/round_robin/v3/round_robin.proto
 envoy/extensions/load_balancing_policies/wrr_locality/v3/wrr_locality.proto
@@ -151,6 +155,7 @@ envoy/type/matcher/number.proto
 envoy/type/matcher/path.proto
 envoy/type/matcher/regex.proto
 envoy/type/matcher/string.proto
+envoy/type/matcher/v3/filter_state.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
 envoy/type/matcher/v3/number.proto
@@ -175,19 +180,13 @@ envoy/type/v3/semantic_version.proto
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/envoy
 
-# clone the envoy github repo in a tmp directory
+# put the repo in a tmp directory
 tmpdir="$(mktemp -d)"
 trap "rm -rf ${tmpdir}" EXIT
+curl -Ls "${DOWNLOAD_URL}" | tar xz -C "${tmpdir}"
 
-pushd "${tmpdir}"
-git clone -b $BRANCH $GIT_REPO
-trap "rm -rf $GIT_BASE_DIR" EXIT
-cd "$GIT_BASE_DIR"
-git checkout $VERSION
-popd
-
-cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
-cp -p "${tmpdir}/${GIT_BASE_DIR}/NOTICE" NOTICE
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/LICENSE" LICENSE
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/NOTICE" NOTICE
 
 rm -rf "${TARGET_PROTO_BASE_DIR}"
 mkdir -p "${TARGET_PROTO_BASE_DIR}"

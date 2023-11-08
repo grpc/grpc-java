@@ -425,6 +425,80 @@ public class ServerInterceptorsTest {
         order);
   }
 
+  /**
+   * Tests the ServerInterceptors#useMarshalledMessages()} with two marshallers. Makes sure that
+   * on incoming request the request marshaller's stream method is called and on response the
+   * response marshaller's parse method is called
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  public void distinctMarshallerForRequestAndResponse() {
+    final List<String> requestFlowOrder = new ArrayList<>();
+
+    final Marshaller<String> requestMarshaller = new Marshaller<String>() {
+      @Override
+      public InputStream stream(String value) {
+        requestFlowOrder.add("RequestStream");
+        return null;
+      }
+
+      @Override
+      public String parse(InputStream stream) {
+        requestFlowOrder.add("RequestParse");
+        return null;
+      }
+    };
+    final Marshaller<String> responseMarshaller = new Marshaller<String>() {
+      @Override
+      public InputStream stream(String value) {
+        requestFlowOrder.add("ResponseStream");
+        return null;
+      }
+
+      @Override
+      public String parse(InputStream stream) {
+        requestFlowOrder.add("ResponseParse");
+        return null;
+      }
+    };
+    final Marshaller<Holder> dummyMarshaller = new Marshaller<Holder>() {
+      @Override
+      public InputStream stream(Holder value) {
+        return value.get();
+      }
+
+      @Override
+      public Holder parse(InputStream stream) {
+        return new Holder(stream);
+      }
+    };
+    ServerCallHandler<Holder, Holder> handler = (call, headers) -> new Listener<Holder>() {
+      @Override
+      public void onMessage(Holder message) {
+        requestFlowOrder.add("handler");
+        call.sendMessage(message);
+      }
+    };
+
+    MethodDescriptor<Holder, Holder> wrappedMethod = MethodDescriptor.<Holder, Holder>newBuilder()
+        .setType(MethodType.UNKNOWN)
+        .setFullMethodName("basic/wrapped")
+        .setRequestMarshaller(dummyMarshaller)
+        .setResponseMarshaller(dummyMarshaller)
+        .build();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder(
+            new ServiceDescriptor("basic", wrappedMethod))
+        .addMethod(wrappedMethod, handler).build();
+    ServerServiceDefinition intercepted = ServerInterceptors.useMarshalledMessages(serviceDef,
+        requestMarshaller, responseMarshaller);
+    ServerMethodDefinition<String, String> serverMethod =
+        (ServerMethodDefinition<String, String>) intercepted.getMethod("basic/wrapped");
+    ServerCall<String, String> serverCall = new NoopServerCall<>();
+    serverMethod.getServerCallHandler().startCall(serverCall, headers).onMessage("TestMessage");
+
+    assertEquals(Arrays.asList("RequestStream",  "handler", "ResponseParse"), requestFlowOrder);
+  }
+
   @SuppressWarnings("unchecked")
   private static ServerMethodDefinition<String, Integer> getSoleMethod(
       ServerServiceDefinition serviceDef) {

@@ -17,7 +17,6 @@
 package io.grpc.binder;
 
 import android.os.Parcelable;
-import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.binder.internal.MetadataHelper;
 
@@ -26,7 +25,6 @@ import io.grpc.binder.internal.MetadataHelper;
  *
  * <p>This class models the same pattern as the {@code ProtoLiteUtils} class.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class ParcelableUtils {
 
   private ParcelableUtils() {}

@@ -20,6 +20,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
@@ -64,10 +66,8 @@ public class RetryingHelloWorldClient {
    */
   public RetryingHelloWorldClient(String host, int port, boolean enableRetries) {
 
-    ManagedChannelBuilder<?> channelBuilder = ManagedChannelBuilder.forAddress(host, port)
-        // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
-        // needing certificates.
-        .usePlaintext();
+    ManagedChannelBuilder<?> channelBuilder
+        = Grpc.newChannelBuilderForAddress(host, port, InsecureChannelCredentials.create());
     if (enableRetries) {
       Map<String, ?> serviceConfig = getRetryingServiceConfig();
       logger.info("Client started with retrying configuration: " + serviceConfig);

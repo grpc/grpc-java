@@ -47,7 +47,6 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
@@ -61,17 +60,12 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
-import io.grpc.xds.VirtualHost.Route.RouteMatch;
-import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsClient.LdsResourceWatcher;
-import io.grpc.xds.XdsClient.LdsUpdate;
-import io.grpc.xds.XdsClient.RdsResourceWatcher;
-import io.grpc.xds.XdsClient.RdsUpdate;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-import io.grpc.xds.internal.Matchers.FractionMatcher;
-import io.grpc.xds.internal.Matchers.HeaderMatcher;
+import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -111,6 +105,9 @@ final class XdsNameResolver extends NameResolver {
   @Nullable
   private final String targetAuthority;
   private final String serviceAuthority;
+  // Encoded version of the service authority as per 
+  // https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
+  private final String encodedServiceAuthority;
   private final String overrideAuthority;
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
@@ -153,7 +150,12 @@ final class XdsNameResolver extends NameResolver {
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
-    serviceAuthority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
+
+    // The name might have multiple slashes so encode it before verifying.
+    serviceAuthority = checkNotNull(name, "name");
+    this.encodedServiceAuthority = 
+      GrpcUtil.checkAuthority(GrpcUtil.AuthorityEscaper.encodeAuthority(serviceAuthority));
+
     this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
@@ -171,7 +173,7 @@ final class XdsNameResolver extends NameResolver {
 
   @Override
   public String getServiceAuthority() {
-    return serviceAuthority;
+    return encodedServiceAuthority;
   }
 
   @Override
@@ -203,8 +205,8 @@ final class XdsNameResolver extends NameResolver {
       replacement = XdsClient.percentEncodePath(replacement);
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
-    if (!XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrl())
-        && !XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrlV2())) {
+    if (!XdsClient.isResourceNameValid(ldsResourceName, XdsListenerResource.getInstance().typeUrl())
+        ) {
       listener.onError(Status.INVALID_ARGUMENT.withDescription(
           "invalid listener resource URI for service authority: " + serviceAuthority));
       return;
@@ -306,47 +308,6 @@ final class XdsNameResolver extends NameResolver {
     receivedConfig = true;
   }
 
-  @VisibleForTesting
-  @Nullable
-  static VirtualHost findVirtualHostForHostName(List<VirtualHost> virtualHosts, String hostName) {
-    // Domain search order:
-    //  1. Exact domain names: ``www.foo.com``.
-    //  2. Suffix domain wildcards: ``*.foo.com`` or ``*-bar.foo.com``.
-    //  3. Prefix domain wildcards: ``foo.*`` or ``foo-*``.
-    //  4. Special wildcard ``*`` matching any domain.
-    //
-    //  The longest wildcards match first.
-    //  Assuming only a single virtual host in the entire route configuration can match
-    //  on ``*`` and a domain must be unique across all virtual hosts.
-    int matchingLen = -1; // longest length of wildcard pattern that matches host name
-    boolean exactMatchFound = false;  // true if a virtual host with exactly matched domain found
-    VirtualHost targetVirtualHost = null;  // target VirtualHost with longest matched domain
-    for (VirtualHost vHost : virtualHosts) {
-      for (String domain : vHost.domains()) {
-        boolean selected = false;
-        if (matchHostName(hostName, domain)) { // matching
-          if (!domain.contains("*")) { // exact matching
-            exactMatchFound = true;
-            targetVirtualHost = vHost;
-            break;
-          } else if (domain.length() > matchingLen) { // longer matching pattern
-            selected = true;
-          } else if (domain.length() == matchingLen && domain.startsWith("*")) { // suffix matching
-            selected = true;
-          }
-        }
-        if (selected) {
-          matchingLen = domain.length();
-          targetVirtualHost = vHost;
-        }
-      }
-      if (exactMatchFound) {
-        break;
-      }
-    }
-    return targetVirtualHost;
-  }
-
   /**
    * Returns {@code true} iff {@code hostName} matches the domain name {@code pattern} with
    * case-insensitive.
@@ -420,7 +381,8 @@ final class XdsNameResolver extends NameResolver {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
         for (Route route : routingCfg.routes) {
-          if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
+          if (RoutingUtils.matchRoute(
+                  route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
               headers, random)) {
             selectedRoute = route;
             selectedOverrideConfigs.putAll(route.filterConfigOverrides());
@@ -439,12 +401,12 @@ final class XdsNameResolver extends NameResolver {
         if (action.cluster() != null) {
           cluster = prefixedClusterName(action.cluster());
         } else if (action.weightedClusters() != null) {
-          int totalWeight = 0;
+          long totalWeight = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             totalWeight += weightedCluster.weight();
           }
-          int select = random.nextInt(totalWeight);
-          int accumulator = 0;
+          long select = random.nextLong(totalWeight);
+          long accumulator = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
@@ -621,34 +583,6 @@ final class XdsNameResolver extends NameResolver {
     };
   }
 
-  @VisibleForTesting
-  static boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
-      Metadata headers, ThreadSafeRandom random) {
-    if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
-      return false;
-    }
-    for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
-      if (!headerMatcher.matches(getHeaderValue(headers, headerMatcher.name()))) {
-        return false;
-      }
-    }
-    FractionMatcher fraction = routeMatch.fractionMatcher();
-    return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
-  }
-
-  private static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
-    if (pathMatcher.path() != null) {
-      return pathMatcher.caseSensitive()
-          ? pathMatcher.path().equals(fullMethodName)
-          : pathMatcher.path().equalsIgnoreCase(fullMethodName);
-    } else if (pathMatcher.prefix() != null) {
-      return pathMatcher.caseSensitive()
-          ? fullMethodName.startsWith(pathMatcher.prefix())
-          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
-    }
-    return pathMatcher.regEx().matches(fullMethodName);
-  }
-
   @Nullable
   private static String getHeaderValue(Metadata headers, String headerName) {
     if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
@@ -688,7 +622,7 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
-  private class ResolveState implements LdsResourceWatcher {
+  private class ResolveState implements ResourceWatcher<LdsUpdate> {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
     private final String ldsResourceName;
@@ -723,7 +657,8 @@ final class XdsNameResolver extends NameResolver {
                 rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
                 httpConnectionManager.httpFilterConfigs());
             logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
-            xdsClient.watchRdsResource(rdsName, routeDiscoveryState);
+            xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
+                rdsName, routeDiscoveryState);
           }
         }
       });
@@ -762,21 +697,21 @@ final class XdsNameResolver extends NameResolver {
 
     private void start() {
       logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", ldsResourceName);
-      xdsClient.watchLdsResource(ldsResourceName, this);
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName, this);
     }
 
     private void stop() {
       logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", ldsResourceName);
       stopped = true;
       cleanUpRouteDiscoveryState();
-      xdsClient.cancelLdsResourceWatch(ldsResourceName, this);
+      xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), ldsResourceName, this);
     }
 
     // called in syncContext
     private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
       String authority = overrideAuthority != null ? overrideAuthority : ldsResourceName;
-      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, authority);
+      VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(virtualHosts, authority);
       if (virtualHost == null) {
         String error = "Failed to find virtual host matching hostname: " + authority;
         logger.log(XdsLogLevel.WARNING, error);
@@ -905,7 +840,8 @@ final class XdsNameResolver extends NameResolver {
       if (routeDiscoveryState != null) {
         String rdsName = routeDiscoveryState.resourceName;
         logger.log(XdsLogLevel.INFO, "Stop watching RDS resource {0}", rdsName);
-        xdsClient.cancelRdsResourceWatch(rdsName, routeDiscoveryState);
+        xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(), rdsName,
+            routeDiscoveryState);
         routeDiscoveryState = null;
       }
     }
@@ -914,7 +850,7 @@ final class XdsNameResolver extends NameResolver {
      * Discovery state for RouteConfiguration resource. One instance for each Listener resource
      * update.
      */
-    private class RouteDiscoveryState implements RdsResourceWatcher {
+    private class RouteDiscoveryState implements ResourceWatcher<RdsUpdate> {
       private final String resourceName;
       private final long httpMaxStreamDurationNano;
       @Nullable
@@ -936,7 +872,8 @@ final class XdsNameResolver extends NameResolver {
               return;
             }
             logger.log(XdsLogLevel.INFO, "Received RDS resource update: {0}", update);
-            updateRoutes(update.virtualHosts, httpMaxStreamDurationNano, filterConfigs);
+            updateRoutes(update.virtualHosts, httpMaxStreamDurationNano,
+                filterConfigs);
           }
         });
       }

@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -92,15 +93,13 @@ public final class ServerRegistry {
     if (instance == null) {
       List<ServerProvider> providerList = ServiceProviders.loadAll(
           ServerProvider.class,
-          Collections.<Class<?>>emptyList(),
+          getHardCodedClasses(),
           ServerProvider.class.getClassLoader(),
           new ServerPriorityAccessor());
       instance = new ServerRegistry();
       for (ServerProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
+        instance.addProvider(provider);
       }
       instance.refreshProviders();
     }
@@ -121,11 +120,26 @@ public final class ServerRegistry {
     return providers.isEmpty() ? null : providers.get(0);
   }
 
+  @VisibleForTesting
+  static List<Class<?>> getHardCodedClasses() {
+    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
+    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
+    // https://sourceforge.net/p/proguard/bugs/418/
+    List<Class<?>> list = new ArrayList<>();
+    try {
+      list.add(Class.forName("io.grpc.okhttp.OkHttpServerProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find OkHttpServerProvider", e);
+    }
+    return Collections.unmodifiableList(list);
+  }
+
   ServerBuilder<?> newServerBuilderForPort(int port, ServerCredentials creds) {
     List<ServerProvider> providers = providers();
     if (providers.isEmpty()) {
       throw new ProviderNotFoundException("No functional server found. "
-          + "Try adding a dependency on the grpc-netty or grpc-netty-shaded artifact");
+          + "Try adding a dependency on the grpc-netty, grpc-netty-shaded, or grpc-okhttp "
+          + "artifact");
     }
     StringBuilder error = new StringBuilder();
     for (ServerProvider provider : providers()) {

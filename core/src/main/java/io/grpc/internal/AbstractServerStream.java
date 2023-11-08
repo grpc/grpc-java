@@ -41,7 +41,7 @@ public abstract class AbstractServerStream extends AbstractStream
      *
      * @param headers the headers to be sent to client.
      */
-    void writeHeaders(Metadata headers);
+    void writeHeaders(Metadata headers, boolean flush);
 
     /**
      * Sends an outbound frame to the remote end point.
@@ -96,11 +96,11 @@ public abstract class AbstractServerStream extends AbstractStream
   }
 
   @Override
-  public final void writeHeaders(Metadata headers) {
+  public final void writeHeaders(Metadata headers, boolean flush) {
     Preconditions.checkNotNull(headers, "headers");
 
     headersSent = true;
-    abstractServerStreamSink().writeHeaders(headers);
+    abstractServerStreamSink().writeHeaders(headers, flush);
   }
 
   @Override

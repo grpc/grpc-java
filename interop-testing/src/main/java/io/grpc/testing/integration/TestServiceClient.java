@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ChannelCredentials;
+import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
@@ -26,6 +27,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
 import io.grpc.ServerBuilder;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.alts.AltsChannelCredentials;
@@ -33,12 +35,13 @@ import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.stub.MetadataUtils;
+import io.grpc.testing.TlsTesting;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
@@ -58,8 +61,6 @@ public class TestServiceClient {
    * The main application allowing this client to be launched from the command line.
    */
   public static void main(String[] args) throws Exception {
-    // Let Netty or OkHttp use Conscrypt if it is available.
-    TestUtils.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
     customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
@@ -71,13 +72,13 @@ public class TestServiceClient {
     } finally {
       client.tearDown();
     }
-    System.exit(0);
   }
 
   private String serverHost = "localhost";
   private String serverHostOverride;
   private int serverPort = 8080;
   private String testCase = "empty_unary";
+  private int numTimes = 1;
   private boolean useTls = true;
   private boolean useAlts = false;
   private boolean useH2cUpgrade = false;
@@ -96,6 +97,9 @@ public class TestServiceClient {
   private int soakMinTimeMsBetweenRpcs = 0;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
+  private int soakRequestSize = 271828;
+  private int soakResponseSize = 314159;
+  private String additionalMetadata = "";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
@@ -129,6 +133,8 @@ public class TestServiceClient {
         serverPort = Integer.parseInt(value);
       } else if ("test_case".equals(key)) {
         testCase = value;
+      } else if ("num_times".equals(key)) {
+        numTimes = Integer.parseInt(value);
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_upgrade".equals(key)) {
@@ -171,6 +177,12 @@ public class TestServiceClient {
         soakMinTimeMsBetweenRpcs = Integer.parseInt(value);
       } else if ("soak_overall_timeout_seconds".equals(key)) {
         soakOverallTimeoutSeconds = Integer.parseInt(value);
+      } else if ("soak_request_size".equals(key)) {
+        soakRequestSize = Integer.parseInt(value);
+      } else if ("soak_response_size".equals(key)) {
+        soakResponseSize = Integer.parseInt(value);
+      } else if ("additional_metadata".equals(key)) {
+        additionalMetadata = value;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -192,6 +204,8 @@ public class TestServiceClient {
           + "\n  --test_case=TESTCASE        Test case to run. Default " + c.testCase
           + "\n    Valid options:"
           + validTestCasesHelpText()
+          + "\n  --num_times=INT             Number of times to run the test case. Default: "
+          + c.numTimes
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
           + "\n  --use_alts=true|false       Whether to use ALTS. Enable ALTS will disable TLS."
           + "\n                              Default " + c.useAlts
@@ -239,6 +253,16 @@ public class TestServiceClient {
           + "\n                              should stop and fail, if the desired number of "
           + "\n                              iterations have not yet completed. Default "
             + c.soakOverallTimeoutSeconds
+          + "\n --soak_request_size "
+          + "\n                              The request size in a soak RPC. Default "
+            + c.soakRequestSize
+          + "\n --soak_response_size "
+          + "\n                              The response size in a soak RPC. Default "
+            + c.soakResponseSize
+          + "\n --additional_metadata "
+          + "\n                              Additional metadata to send in each request, as a "
+          + "\n                              semicolon-separated list of key:value pairs. Default "
+            + c.additionalMetadata
       );
       System.exit(1);
     }
@@ -266,7 +290,9 @@ public class TestServiceClient {
   private void run() {
     System.out.println("Running test " + testCase);
     try {
-      runTest(TestCases.fromString(testCase));
+      for (int i = 0; i < numTimes; i++) {
+        runTest(TestCases.fromString(testCase));
+      }
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -461,23 +487,29 @@ public class TestServiceClient {
 
       case RPC_SOAK: {
         tester.performSoakTest(
+            serverHost,
             false /* resetChannelPerIteration */,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds);
+            soakOverallTimeoutSeconds,
+            soakRequestSize,
+            soakResponseSize);
         break;
       }
 
       case CHANNEL_SOAK: {
         tester.performSoakTest(
+            serverHost,
             true /* resetChannelPerIteration */,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds);
+            soakOverallTimeoutSeconds,
+            soakRequestSize,
+            soakResponseSize);
         break;
 
       }
@@ -495,6 +527,32 @@ public class TestServiceClient {
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);
     }
+  }
+
+  /* Parses input string as a semi-colon-separated list of colon-separated key/value pairs.
+   * Allow any character but semicolons in values.
+   * If the string is emtpy, return null.
+   * Otherwise, return a client interceptor which inserts the provided metadata.
+   */
+  @Nullable
+  private ClientInterceptor maybeCreateAdditionalMetadataInterceptor(
+      String additionalMd)
+      throws IllegalArgumentException {
+    if (additionalMd.length() == 0) {
+      return null;
+    }
+    Metadata metadata = new Metadata();
+    String[] pairs = additionalMd.split(";", -1);
+    for (String pair : pairs) {
+      String[] parts = pair.split(":", 2);
+      if (parts.length != 2) {
+        throw new IllegalArgumentException(
+            "error parsing --additional_metadata string, expected k:v pairs separated by ;");
+      }
+      Metadata.Key<String> key = Metadata.Key.of(parts[0], Metadata.ASCII_STRING_MARSHALLER);
+      metadata.put(key, parts[1]);
+    }
+    return MetadataUtils.newAttachHeadersInterceptor(metadata);
   }
 
   private class Tester extends AbstractInteropTest {
@@ -529,7 +587,7 @@ public class TestServiceClient {
         } else {
           try {
             channelCredentials = TlsChannelCredentials.newBuilder()
-                .trustManager(TestUtils.loadCert("ca.pem"))
+                .trustManager(TlsTesting.loadCert("ca.pem"))
                 .build();
           } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -547,6 +605,8 @@ public class TestServiceClient {
           channelCredentials = InsecureChannelCredentials.create();
         }
       }
+      ClientInterceptor addMdInterceptor = maybeCreateAdditionalMetadataInterceptor(
+          additionalMetadata);
       if (useGeneric) {
         ManagedChannelBuilder<?> channelBuilder;
         if (serverPort == 0) {
@@ -561,6 +621,9 @@ public class TestServiceClient {
         if (serviceConfig != null) {
           channelBuilder.disableServiceConfigLookUp();
           channelBuilder.defaultServiceConfig(serviceConfig);
+        }
+        if (addMdInterceptor != null) {
+          channelBuilder.intercept(addMdInterceptor);
         }
         return channelBuilder;
       }
@@ -584,6 +647,9 @@ public class TestServiceClient {
           nettyBuilder.disableServiceConfigLookUp();
           nettyBuilder.defaultServiceConfig(serviceConfig);
         }
+        if (addMdInterceptor != null) {
+          nettyBuilder.intercept(addMdInterceptor);
+        }
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
 
@@ -606,6 +672,9 @@ public class TestServiceClient {
       if (serviceConfig != null) {
         okBuilder.disableServiceConfigLookUp();
         okBuilder.defaultServiceConfig(serviceConfig);
+      }
+      if (addMdInterceptor != null) {
+        okBuilder.intercept(addMdInterceptor);
       }
       return okBuilder.intercept(createCensusStatsClientInterceptor());
     }

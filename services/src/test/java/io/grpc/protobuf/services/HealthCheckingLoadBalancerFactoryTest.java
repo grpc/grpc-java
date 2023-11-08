@@ -84,6 +84,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -91,14 +92,17 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.hamcrest.MockitoHamcrest;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /** Tests for {@link HealthCheckingLoadBalancerFactory}. */
 @RunWith(JUnit4.class)
 public class HealthCheckingLoadBalancerFactoryTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
       Attributes.Key.create("subchannel-attr-for-test");
 
@@ -157,8 +161,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   @Before
   @SuppressWarnings("unchecked")
   public void setup() throws Exception {
-    MockitoAnnotations.initMocks(this);
-
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       HealthImpl healthImpl = new HealthImpl();
       healthImpls[i] = healthImpl;

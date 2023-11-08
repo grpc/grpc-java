@@ -66,6 +66,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -73,13 +74,16 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link ClientCalls}.
  */
 @RunWith(JUnit4.class)
 public class ClientCallsTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final MethodDescriptor<Integer, Integer> UNARY_METHOD =
       MethodDescriptor.<Integer, Integer>newBuilder()
           .setType(MethodDescriptor.MethodType.UNARY)
@@ -104,7 +108,6 @@ public class ClientCallsTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     originalRejectRunnableOnExecutor = ClientCalls.rejectRunnableOnExecutor;
   }
 
@@ -501,6 +504,50 @@ public class ClientCallsTest {
     });
     listener.get().onMessage("message");
     assertThat(requests).isEmpty();
+  }
+
+  @Test
+  public void checkForNullInAsyncUnaryCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncUnaryCall(call, Integer.valueOf(1), null);
+      fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertEquals("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInBidiCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncBidiStreamingCall(call, null);
+      fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertEquals("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInClientStreamCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncClientStreamingCall(call, null);
+      fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertEquals("responseObserver", e.getMessage());
+    }
+  }
+
+  @Test
+  public void checkForNullInServerStreamCall()  {
+    NoopClientCall<Integer, String> call = new NoopClientCall<>();
+    try {
+      ClientCalls.asyncServerStreamingCall(call, Integer.valueOf(1), null);
+      fail("Should have gotten an exception for the null responseObserver");
+    } catch (NullPointerException e) {
+      assertEquals("responseObserver", e.getMessage());
+    }
   }
 
   @Test

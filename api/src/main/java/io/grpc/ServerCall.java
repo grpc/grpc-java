@@ -189,16 +189,15 @@ public abstract class ServerCall<ReqT, RespT> {
    * encoding has been negotiated, this is a no-op. By default per-message compression is enabled,
    * but may not have any effect if compression is not enabled on the call.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public void setMessageCompression(boolean enabled) {
     // noop
   }
 
   /**
-   * Sets the compression algorithm for this call.  If the server does not support the compression
-   * algorithm, the call will fail.  This method may only be called before {@link #sendHeaders}.
-   * The compressor to use will be looked up in the {@link CompressorRegistry}.  Default gRPC
-   * servers support the "gzip" compressor.
+   * Sets the compression algorithm for this call.  This compression is utilized for sending.  If
+   * the server does not support the compression algorithm, the call will fail.  This method may
+   * only be called before {@link #sendHeaders}.  The compressor to use will be looked up in the
+   * {@link CompressorRegistry}.  Default gRPC servers support the "gzip" compressor.
    *
    * <p>It is safe to call this even if the client does not support the compression format chosen.
    * The implementation will handle negotiation with the client and may fall back to no compression.
@@ -206,7 +205,6 @@ public abstract class ServerCall<ReqT, RespT> {
    * @param compressor the name of the compressor to use.
    * @throws IllegalArgumentException if the compressor name can not be found.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public void setCompression(String compressor) {
     // noop
   }
@@ -244,7 +242,6 @@ public abstract class ServerCall<ReqT, RespT> {
    *
    * @return the authority string. {@code null} if not available.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2924")
   @Nullable
   public String getAuthority() {
     return null;

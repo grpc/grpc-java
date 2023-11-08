@@ -7,17 +7,22 @@ plugins {
 
 description = 'gRPC: Census'
 
-evaluationDependsOn(project(':grpc-api').path)
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.census')
+    }
+}
 
 dependencies {
     api project(':grpc-api')
+    // force dependent jars to depend on latest grpc-context
+    runtimeOnly project(":grpc-context")
     implementation libraries.guava,
             libraries.opencensus.api,
             libraries.opencensus.contrib.grpc.metrics
 
-    testImplementation project(':grpc-api').sourceSets.test.output,
-            project(':grpc-context').sourceSets.test.output,
-            project(':grpc-core').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-core')),
             project(':grpc-testing'),
             libraries.opencensus.impl
 

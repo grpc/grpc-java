@@ -44,7 +44,7 @@ public final class InternalCensusTracingAccessor {
   }
 
   /**
-   * Returns a {@link ServerStreamTracer.Factory} with default stats implementation.
+   * Returns a {@link ServerStreamTracer.Factory} with default tracing implementation.
    */
   public static ServerStreamTracer.Factory getServerStreamTracerFactory() {
     CensusTracingModule censusTracing =

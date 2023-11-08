@@ -1,13 +1,12 @@
 load("//:java_grpc_library.bzl", "java_grpc_library")
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
-# with maven_install's override_targets. Purposefully does not export any
-# symbols, as it should only be used as a dep for pre-compiled binaries on
-# Maven Central.
+# with maven_install's override_targets. Should only be used as a dep for
+# pre-compiled binaries on Maven Central.
 java_library(
     name = "xds_maven",
     visibility = ["//visibility:public"],
-    runtime_deps = [
+    exports = [
         ":orca",
         ":xds",
     ],
@@ -33,14 +32,17 @@ java_library(
         ":envoy_service_load_stats_v3_java_grpc",
         ":envoy_service_status_v3_java_grpc",
         ":xds_protos_java",
+        ":orca",
         "//:auto_value_annotations",
         "//alts",
         "//api",
         "//context",
         "//core:internal",
-        "//core:util",
+        "//util",
         "//netty",
         "//stub",
+        "//services:metrics",
+        "//services:metrics_internal",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_code_gson_gson//jar",
         "@com_google_errorprone_error_prone_annotations//jar",
@@ -84,7 +86,9 @@ java_proto_library(
         "@envoy_api//envoy/extensions/filters/http/rbac/v3:pkg",
         "@envoy_api//envoy/extensions/filters/http/router/v3:pkg",
         "@envoy_api//envoy/extensions/filters/network/http_connection_manager/v3:pkg",
+        "@envoy_api//envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/least_request/v3:pkg",
+        "@envoy_api//envoy/extensions/load_balancing_policies/pick_first/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/ring_hash/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/round_robin/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/wrr_locality/v3:pkg",
@@ -141,7 +145,7 @@ java_library(
         "//api",
         "//context",
         "//core:internal",
-        "//core:util",
+        "//util",
         "//protobuf",
         "//services:metrics",
         "//services:metrics_internal",

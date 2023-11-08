@@ -20,6 +20,8 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
+import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.util.Map;
 
 /**
@@ -29,7 +31,7 @@ import java.util.Map;
  * down the address list and sticks to the first that works.
  */
 public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
-  private static final String NO_CONFIG = "no service config";
+  private static final String SHUFFLE_ADDRESS_LIST_KEY = "shuffleAddressList";
 
   @Override
   public boolean isAvailable() {
@@ -54,6 +56,14 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
-    return ConfigOrError.fromConfig(NO_CONFIG);
+    try {
+      return ConfigOrError.fromConfig(
+          new PickFirstLoadBalancerConfig(JsonUtil.getBoolean(rawLoadBalancingPolicyConfig,
+              SHUFFLE_ADDRESS_LIST_KEY)));
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.UNAVAILABLE.withCause(e).withDescription(
+              "Failed parsing configuration for " + getPolicyName()));
+    }
   }
 }

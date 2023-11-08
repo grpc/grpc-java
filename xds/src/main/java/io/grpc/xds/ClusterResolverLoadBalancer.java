@@ -52,10 +52,9 @@ import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
-import io.grpc.xds.XdsClient.EdsResourceWatcher;
-import io.grpc.xds.XdsClient.EdsUpdate;
+import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -113,7 +112,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL);
@@ -127,6 +126,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       this.config = config;
       delegate.handleResolvedAddresses(resolvedAddresses);
     }
+    return Status.OK;
   }
 
   @Override
@@ -170,7 +170,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       this.resolvedAddresses = resolvedAddresses;
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -189,6 +189,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         clusterStates.put(instance.cluster, state);
         state.start();
       }
+      return Status.OK;
     }
 
     @Override
@@ -196,7 +197,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       if (childLb != null) {
         childLb.handleNameResolutionError(error);
       } else {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
       }
     }
 
@@ -214,7 +216,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> addresses = new ArrayList<>();
       Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
       List<String> priorities = new ArrayList<>();  // totally ordered priority list
-      Map<Locality, Integer> localityWeights = new HashMap<>();
 
       Status endpointNotFound = Status.OK;
       for (String cluster : clusters) {
@@ -227,7 +228,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           addresses.addAll(state.result.addresses);
           priorityChildConfigs.putAll(state.result.priorityChildConfigs);
           priorities.addAll(state.result.priorities);
-          localityWeights.putAll(state.result.localityWeights);
         } else {
           endpointNotFound = state.status;
         }
@@ -241,7 +241,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               Status.UNAVAILABLE.withCause(endpointNotFound.getCause())
                   .withDescription(endpointNotFound.getDescription());
         }
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(endpointNotFound));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(endpointNotFound)));
         if (childLb != null) {
           childLb.shutdown();
           childLb = null;
@@ -258,9 +259,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           resolvedAddresses.toBuilder()
               .setLoadBalancingPolicyConfig(childConfig)
               .setAddresses(Collections.unmodifiableList(addresses))
-              .setAttributes(resolvedAddresses.getAttributes().toBuilder()
-                  .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS,
-                      Collections.unmodifiableMap(localityWeights)).build())
               .build());
     }
 
@@ -279,7 +277,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (childLb != null) {
           childLb.handleNameResolutionError(error);
         } else {
-          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          helper.updateBalancingState(
+              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
         }
       }
     }
@@ -350,7 +349,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       }
     }
 
-    private final class EdsClusterState extends ClusterState implements EdsResourceWatcher {
+    private final class EdsClusterState extends ClusterState implements ResourceWatcher<EdsUpdate> {
       @Nullable
       private final String edsServiceName;
       private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
@@ -367,7 +366,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       void start() {
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Start watching EDS resource {0}", resourceName);
-        xdsClient.watchEdsResource(resourceName, this);
+        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), resourceName, this);
       }
 
       @Override
@@ -375,7 +374,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         super.shutdown();
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Stop watching EDS resource {0}", resourceName);
-        xdsClient.cancelEdsResourceWatch(resourceName, this);
+        xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), resourceName, this);
       }
 
       @Override
@@ -394,7 +393,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             }
             Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
                 update.localityLbEndpointsMap;
-            Map<Locality, Integer> localityWeights = new HashMap<>();
             List<DropOverload> dropOverloads = update.dropPolicies;
             List<EquivalentAddressGroup> addresses = new ArrayList<>();
             Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
@@ -413,6 +411,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   Attributes attr =
                       endpoint.eag().getAttributes().toBuilder()
                           .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
+                          .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT,
+                              localityLbInfo.localityWeight())
                           .set(InternalXdsAttributes.ATTR_SERVER_WEIGHT, weight)
                           .build();
                   EquivalentAddressGroup eag = new EquivalentAddressGroup(
@@ -427,7 +427,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                     "Discard locality {0} with 0 healthy endpoints", locality);
                 continue;
               }
-              localityWeights.put(locality, localityLbInfo.localityWeight());
               if (!prioritizedLocalityWeights.containsKey(priorityName)) {
                 prioritizedLocalityWeights.put(priorityName, new HashMap<Locality, Integer>());
               }
@@ -448,7 +447,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityChildConfigs,
-                sortedPriorityNames, localityWeights);
+                sortedPriorityNames);
             handleEndpointResourceUpdate();
           }
         }
@@ -688,23 +687,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private final Map<String, PriorityChildConfig> priorityChildConfigs;
     // List of priority names ordered in descending priorities.
     private final List<String> priorities;
-    // Most recent view on how localities in the cluster should be wighted. Only set for EDS
-    // clusters that support the concept.
-    private final Map<Locality, Integer> localityWeights;
 
     ClusterResolutionResult(List<EquivalentAddressGroup> addresses, String priority,
         PriorityChildConfig config) {
       this(addresses, Collections.singletonMap(priority, config),
-          Collections.singletonList(priority), Collections.emptyMap());
+          Collections.singletonList(priority));
     }
 
     ClusterResolutionResult(List<EquivalentAddressGroup> addresses,
-        Map<String, PriorityChildConfig> configs, List<String> priorities,
-        Map<Locality, Integer> localityWeights) {
+        Map<String, PriorityChildConfig> configs, List<String> priorities) {
       this.addresses = addresses;
       this.priorityChildConfigs = configs;
       this.priorities = priorities;
-      this.localityWeights = localityWeights;
     }
   }
 

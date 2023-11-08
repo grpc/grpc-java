@@ -26,6 +26,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
+import io.grpc.xds.RingHashOptions;
 import java.util.Map;
 
 /**
@@ -39,11 +40,7 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
   static final long DEFAULT_MIN_RING_SIZE = 1024L;
   // Same as ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE
   @VisibleForTesting
-  static final long DEFAULT_MAX_RING_SIZE = 8 * 1024 * 1024L;
-  // Maximum number of ring entries allowed. Setting this too large can result in slow
-  // ring construction and OOM error.
-  // Same as ClientXdsClient.MAX_RING_HASH_LB_POLICY_RING_SIZE
-  static final long MAX_RING_SIZE = 8 * 1024 * 1024L;
+  static final long DEFAULT_MAX_RING_SIZE = 4 * 1024L;
 
   private static final boolean enableRingHash =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"))
@@ -71,16 +68,33 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
+    try {
+      return parseLoadBalancingPolicyConfigInternal(rawLoadBalancingPolicyConfig);
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.UNAVAILABLE.withCause(e).withDescription(
+              "Failed parsing configuration for " + getPolicyName()));
+    }
+  }
+
+  private ConfigOrError parseLoadBalancingPolicyConfigInternal(
+      Map<String, ?> rawLoadBalancingPolicyConfig) {
     Long minRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "minRingSize");
     Long maxRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "maxRingSize");
+    long maxRingSizeCap = RingHashOptions.getRingSizeCap();
     if (minRingSize == null) {
       minRingSize = DEFAULT_MIN_RING_SIZE;
     }
     if (maxRingSize == null) {
       maxRingSize = DEFAULT_MAX_RING_SIZE;
     }
-    if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize
-        || maxRingSize > MAX_RING_SIZE) {
+    if (minRingSize > maxRingSizeCap) {
+      minRingSize = maxRingSizeCap;
+    }
+    if (maxRingSize > maxRingSizeCap) {
+      maxRingSize = maxRingSizeCap;
+    }
+    if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize) {
       return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
           "Invalid 'mingRingSize'/'maxRingSize'"));
     }

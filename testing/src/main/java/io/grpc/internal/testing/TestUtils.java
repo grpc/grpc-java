@@ -18,6 +18,7 @@ package io.grpc.internal.testing;
 
 import com.google.common.base.Throwables;
 import io.grpc.internal.ConscryptLoader;
+import io.grpc.testing.TlsTesting;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -30,14 +31,12 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.security.KeyStore;
-import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -96,37 +95,13 @@ public class TestUtils {
   }
 
   /**
-   * Returns the ciphers preferred to use during tests. They may be chosen because they are widely
-   * available or because they are fast. There is no requirement that they provide confidentiality
-   * or integrity.
-   */
-  public static List<String> preferredTestCiphers() {
-    String[] ciphers;
-    try {
-      ciphers = SSLContext.getDefault().getDefaultSSLParameters().getCipherSuites();
-    } catch (NoSuchAlgorithmException ex) {
-      throw new RuntimeException(ex);
-    }
-    List<String> ciphersMinusGcm = new ArrayList<>();
-    for (String cipher : ciphers) {
-      // The GCM implementation in Java is _very_ slow (~1 MB/s)
-      if (cipher.contains("_GCM_")) {
-        continue;
-      }
-      ciphersMinusGcm.add(cipher);
-    }
-    return Collections.unmodifiableList(ciphersMinusGcm);
-  }
-
-  /**
    * Saves a file from the classpath resources in src/main/resources/certs as a file on the
    * filesystem.
    *
    * @param name  name of a file in src/main/resources/certs.
    */
   public static File loadCert(String name) throws IOException {
-    InputStream
-        in = new BufferedInputStream(TestUtils.class.getResourceAsStream("/certs/" + name));
+    InputStream in = new BufferedInputStream(TlsTesting.loadCert(name));
     File tmpFile = File.createTempFile(name, "");
     tmpFile.deleteOnExit();
 
@@ -154,7 +129,7 @@ public class TestUtils {
       throws CertificateException, IOException {
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
-    InputStream in = TestUtils.class.getResourceAsStream("/certs/" + fileName);
+    InputStream in = TlsTesting.loadCert(fileName);
     try {
       return (X509Certificate) cf.generateCertificate(in);
     } finally {

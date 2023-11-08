@@ -36,6 +36,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
@@ -57,6 +58,7 @@ public class LbPolicyConfigurationTest {
 
   private final Helper helper = mock(Helper.class);
   private final LoadBalancerProvider lbProvider = mock(LoadBalancerProvider.class);
+  private final LoadBalancer lb = mock(LoadBalancer.class);
   private final SubchannelStateManager subchannelStateManager = new SubchannelStateManagerImpl();
   private final SubchannelPicker picker = mock(SubchannelPicker.class);
   private final ChildLbStatusListener childLbStatusListener = mock(ChildLbStatusListener.class);
@@ -91,9 +93,10 @@ public class LbPolicyConfigurationTest {
               }
             }))
         .when(helper).getSynchronizationContext();
-    doReturn(mock(LoadBalancer.class)).when(lbProvider).newLoadBalancer(any(Helper.class));
+    doReturn(lb).when(lbProvider).newLoadBalancer(any(Helper.class));
     doReturn(ConfigOrError.fromConfig(new Object()))
         .when(lbProvider).parseLoadBalancingPolicyConfig(ArgumentMatchers.<Map<String, ?>>any());
+    doReturn(Status.OK).when(lb).acceptResolvedAddresses(any(ResolvedAddresses.class));
   }
 
   @Test
@@ -118,6 +121,13 @@ public class LbPolicyConfigurationTest {
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("already released");
     }
+  }
+
+  @Test
+  public void childPolicyWrapper_addressesRejected() {
+    when(lb.acceptResolvedAddresses(any(ResolvedAddresses.class))).thenReturn(Status.UNAVAILABLE);
+    factory.createOrGet("target");
+    verify(helper).refreshNameResolution();
   }
 
   @Test

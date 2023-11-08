@@ -41,6 +41,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.TlsTesting;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -313,7 +314,7 @@ public class OkHttpChannelBuilderTest {
   public void sslSocketFactoryFrom_tls_mtls_passwordUnsupported() throws Exception {
     ChannelCredentials creds = TlsChannelCredentials.newBuilder()
         .keyManager(
-            TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"), "password")
+            TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"), "password")
         .build();
     OkHttpChannelBuilder.SslSocketFactoryResult result =
         OkHttpChannelBuilder.sslSocketFactoryFrom(creds);

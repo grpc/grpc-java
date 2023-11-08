@@ -17,7 +17,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
 
   private ClientStatusDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.service.status.v3.ClientStatusDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.service.status.v3.ClientStatusDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.service.status.v3.ClientStatusRequest,
@@ -133,50 +133,49 @@ public final class ClientStatusDiscoveryServiceGrpc {
    * also be used to get the current xDS states directly from the client.
    * </pre>
    */
-  public static abstract class ClientStatusDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.status.v3.ClientStatusRequest> streamClientStatus(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.status.v3.ClientStatusRequest> streamClientStatus(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.status.v3.ClientStatusResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamClientStatusMethod(), responseObserver);
     }
 
     /**
      */
-    public void fetchClientStatus(io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request,
+    default void fetchClientStatus(io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.status.v3.ClientStatusResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchClientStatusMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamClientStatusMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.service.status.v3.ClientStatusRequest,
-                io.envoyproxy.envoy.service.status.v3.ClientStatusResponse>(
-                  this, METHODID_STREAM_CLIENT_STATUS)))
-          .addMethod(
-            getFetchClientStatusMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.service.status.v3.ClientStatusRequest,
-                io.envoyproxy.envoy.service.status.v3.ClientStatusResponse>(
-                  this, METHODID_FETCH_CLIENT_STATUS)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can
    * also be used to get the current xDS states directly from the client.
    * </pre>
    */
-  public static final class ClientStatusDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ClientStatusDiscoveryServiceStub> {
+  public static abstract class ClientStatusDiscoveryServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return ClientStatusDiscoveryServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service ClientStatusDiscoveryService.
+   * <pre>
+   * CSDS is Client Status Discovery Service. It can be used to get the status of
+   * an xDS-compliant client from the management server's point of view. It can
+   * also be used to get the current xDS states directly from the client.
+   * </pre>
+   */
+  public static final class ClientStatusDiscoveryServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<ClientStatusDiscoveryServiceStub> {
     private ClientStatusDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -206,13 +205,15 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can
    * also be used to get the current xDS states directly from the client.
    * </pre>
    */
-  public static final class ClientStatusDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ClientStatusDiscoveryServiceBlockingStub> {
+  public static final class ClientStatusDiscoveryServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<ClientStatusDiscoveryServiceBlockingStub> {
     private ClientStatusDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -233,13 +234,15 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can
    * also be used to get the current xDS states directly from the client.
    * </pre>
    */
-  public static final class ClientStatusDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ClientStatusDiscoveryServiceFutureStub> {
+  public static final class ClientStatusDiscoveryServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<ClientStatusDiscoveryServiceFutureStub> {
     private ClientStatusDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -268,10 +271,10 @@ public final class ClientStatusDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ClientStatusDiscoveryServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ClientStatusDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -303,6 +306,25 @@ public final class ClientStatusDiscoveryServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamClientStatusMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.service.status.v3.ClientStatusRequest,
+              io.envoyproxy.envoy.service.status.v3.ClientStatusResponse>(
+                service, METHODID_STREAM_CLIENT_STATUS)))
+        .addMethod(
+          getFetchClientStatusMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.service.status.v3.ClientStatusRequest,
+              io.envoyproxy.envoy.service.status.v3.ClientStatusResponse>(
+                service, METHODID_FETCH_CLIENT_STATUS)))
+        .build();
+  }
+
   private static abstract class ClientStatusDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     ClientStatusDiscoveryServiceBaseDescriptorSupplier() {}
@@ -326,9 +348,9 @@ public final class ClientStatusDiscoveryServiceGrpc {
   private static final class ClientStatusDiscoveryServiceMethodDescriptorSupplier
       extends ClientStatusDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ClientStatusDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    ClientStatusDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

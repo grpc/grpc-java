@@ -8,19 +8,31 @@ plugins {
 
 description = "gRPC: OkHttp"
 
-evaluationDependsOn(project(':grpc-core').path)
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.okhttp')
+    }
+}
 
 dependencies {
     api project(':grpc-core')
-    implementation libraries.okio,
+    implementation project(':grpc-util'),
+            libraries.okio,
             libraries.guava,
             libraries.perfmark.api
     // Make okhttp dependencies compile only
     compileOnly libraries.okhttp
+
+    // Needed because com.google.guava:guava:32.0.1-android requires
+    // com.google.errorprone:error_prone_annotations version 2.18.0, while we are running newer.
+    // TODO(any release manager): remove when guava is updated
+    runtimeOnly libraries.errorprone.annotations
+
     // Tests depend on base class defined by core module.
-    testImplementation project(':grpc-core').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
+            project(':grpc-testing-proto'),
             libraries.netty.codec.http2,
             libraries.okhttp
     signature libraries.signature.java
@@ -39,6 +51,7 @@ tasks.named("checkstyleMain").configure {
 tasks.named("javadoc").configure {
     options.links 'http://square.github.io/okhttp/2.x/okhttp/'
     exclude 'io/grpc/okhttp/Internal*'
+    exclude 'io/grpc/okhttp/*Provider.java'
     exclude 'io/grpc/okhttp/internal/**'
 }
 

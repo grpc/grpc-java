@@ -16,6 +16,8 @@
 
 package io.grpc.examples.hostname;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
@@ -49,7 +51,7 @@ public final class HostnameServer {
       hostname = args[1];
     }
     HealthStatusManager health = new HealthStatusManager();
-    final Server server = ServerBuilder.forPort(port)
+    final Server server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new HostnameGreeter(hostname))
         .addService(ProtoReflectionService.newInstance())
         .addService(health.getHealthService())

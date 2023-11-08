@@ -579,8 +579,6 @@ public class BootstrapperImplTest {
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
-    // xds v2: xds v3 disabled
-    assertThat(serverInfo.useProtocolV3()).isFalse();
   }
 
   @Test
@@ -603,8 +601,6 @@ public class BootstrapperImplTest {
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
-    // xds_v3 enabled
-    assertThat(serverInfo.useProtocolV3()).isTrue();
   }
 
   @Test
@@ -627,7 +623,6 @@ public class BootstrapperImplTest {
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
     // Only ignore_resource_deletion feature enabled: confirm it's on, and xds_v3 is off.
-    assertThat(serverInfo.useProtocolV3()).isFalse();
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
 
@@ -650,8 +645,7 @@ public class BootstrapperImplTest {
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
-    // xds_v3 and ignore_resource_deletion features enabled: confirm both are on.
-    assertThat(serverInfo.useProtocolV3()).isTrue();
+    // ignore_resource_deletion features enabled: confirm both are on.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
 

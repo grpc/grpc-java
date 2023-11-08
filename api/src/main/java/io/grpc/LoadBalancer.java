@@ -115,30 +115,20 @@ public abstract class LoadBalancer {
   @NameResolver.ResolutionResultAttr
   public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
       Attributes.Key.create("internal:health-checking-config");
-  private int recursionCount;
 
-  /**
-   * Handles newly resolved server groups and metadata attributes from name resolution system.
-   * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
-   * but may be flattened into a single list if needed.
-   *
-   * <p>Implementations should not modify the given {@code servers}.
-   *
-   * @param servers the resolved server addresses, never empty.
-   * @param attributes extra information from naming system.
-   * @deprecated override {@link #handleResolvedAddresses(ResolvedAddresses) instead}
-   * @since 1.2.0
-   */
-  @Deprecated
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers,
-      @NameResolver.ResolutionResultAttr Attributes attributes) {
-    if (recursionCount++ == 0) {
-      handleResolvedAddresses(
-          ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+  public static final SubchannelPicker EMPTY_PICKER = new SubchannelPicker() {
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return PickResult.withNoResult();
     }
-    recursionCount = 0;
-  }
+
+    @Override
+    public String toString() {
+      return "EMPTY_PICKER";
+    }
+  };
+
+  private int recursionCount;
 
   /**
    * Handles newly resolved server groups and metadata attributes from name resolution system.
@@ -150,13 +140,44 @@ public abstract class LoadBalancer {
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
    */
-  @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
-      handleResolvedAddressGroups(
-          resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
+      // Note that the information about the addresses actually being accepted will be lost
+      // if you rely on this method for backward compatibility.
+      acceptResolvedAddresses(resolvedAddresses);
     }
     recursionCount = 0;
+  }
+
+  /**
+   * Accepts newly resolved addresses from the name resolution system. The {@link
+   * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
+   * single list if needed.
+   *
+   * <p>Implementations can choose to reject the given addresses by returning {@code false}.
+   *
+   * <p>Implementations should not modify the given {@code addresses}.
+   *
+   * @param resolvedAddresses the resolved server addresses, attributes, and config.
+   * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
+   * @since 1.49.0
+   */
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    if (resolvedAddresses.getAddresses().isEmpty()
+        && !canHandleEmptyAddressListFromNameResolution()) {
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
+    } else {
+      if (recursionCount++ == 0) {
+        handleResolvedAddresses(resolvedAddresses);
+      }
+      recursionCount = 0;
+
+      return Status.OK;
+    }
   }
 
   /**
@@ -765,7 +786,7 @@ public abstract class LoadBalancer {
       Builder() {
       }
 
-      private <T> Builder copyCustomOptions(Object[][] options) {
+      private Builder copyCustomOptions(Object[][] options) {
         customOptions = new Object[options.length][2];
         System.arraycopy(options, 0, customOptions, 0, options.length);
         return this;
@@ -1390,5 +1411,51 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract LoadBalancer newLoadBalancer(Helper helper);
+  }
+
+  /**
+   * A picker that always returns an erring pick.
+   *
+   * @deprecated Use {@code new FixedResultPicker(PickResult.withError(error))} instead.
+   */
+  @Deprecated
+  public static final class ErrorPicker extends SubchannelPicker {
+
+    private final Status error;
+
+    public ErrorPicker(Status error) {
+      this.error = checkNotNull(error, "error");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return PickResult.withError(error);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("error", error)
+          .toString();
+    }
+  }
+
+  /** A picker that always returns the same result. */
+  public static final class FixedResultPicker extends SubchannelPicker {
+    private final PickResult result;
+
+    public FixedResultPicker(PickResult result) {
+      this.result = Preconditions.checkNotNull(result, "result");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return result;
+    }
+
+    @Override
+    public String toString() {
+      return "FixedResultPicker(" + result + ")";
+    }
   }
 }

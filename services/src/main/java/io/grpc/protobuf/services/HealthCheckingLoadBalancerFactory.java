@@ -163,13 +163,9 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
   private static final class HealthCheckingLoadBalancer extends ForwardingLoadBalancer {
     final LoadBalancer delegate;
     final HelperImpl helper;
-    final SynchronizationContext syncContext;
-    final ScheduledExecutorService timerService;
 
     HealthCheckingLoadBalancer(HelperImpl helper, LoadBalancer delegate) {
       this.helper = checkNotNull(helper, "helper");
-      this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
-      this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timerService");
       this.delegate = checkNotNull(delegate, "delegate");
     }
 

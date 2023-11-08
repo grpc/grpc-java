@@ -20,7 +20,7 @@ public final class AggregatedDiscoveryServiceGrpc {
 
   private AggregatedDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.service.discovery.v2.AggregatedDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.service.discovery.v2.AggregatedDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -139,46 +139,28 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
-  public static abstract class AggregatedDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
      * This is a gRPC-only API.
      * </pre>
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamAggregatedResources(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamAggregatedResources(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamAggregatedResourcesMethod(), responseObserver);
     }
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaAggregatedResources(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaAggregatedResources(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaAggregatedResourcesMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamAggregatedResourcesMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_STREAM_AGGREGATED_RESOURCES)))
-          .addMethod(
-            getDeltaAggregatedResourcesMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_AGGREGATED_RESOURCES)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service AggregatedDiscoveryService.
    * <pre>
    * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
    * ADS and how it is intended to be used by a management server. ADS requests
@@ -188,7 +170,27 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
-  public static final class AggregatedDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub> {
+  public static abstract class AggregatedDiscoveryServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return AggregatedDiscoveryServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service AggregatedDiscoveryService.
+   * <pre>
+   * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
+   * ADS and how it is intended to be used by a management server. ADS requests
+   * have the same structure as their singleton xDS counterparts, but can
+   * multiplex many resource types on a single stream. The type_url in the
+   * DiscoveryRequest/DiscoveryResponse provides sufficient information to recover
+   * the multiplexed singleton APIs at the Envoy instance and management server.
+   * </pre>
+   */
+  public static final class AggregatedDiscoveryServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub> {
     private AggregatedDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -221,6 +223,7 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service AggregatedDiscoveryService.
    * <pre>
    * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
    * ADS and how it is intended to be used by a management server. ADS requests
@@ -230,7 +233,8 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
-  public static final class AggregatedDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
+  public static final class AggregatedDiscoveryServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
     private AggregatedDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -244,6 +248,7 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service AggregatedDiscoveryService.
    * <pre>
    * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
    * ADS and how it is intended to be used by a management server. ADS requests
@@ -253,7 +258,8 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
-  public static final class AggregatedDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub> {
+  public static final class AggregatedDiscoveryServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub> {
     private AggregatedDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -274,10 +280,10 @@ public final class AggregatedDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final AggregatedDiscoveryServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(AggregatedDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -308,6 +314,25 @@ public final class AggregatedDiscoveryServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamAggregatedResourcesMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_STREAM_AGGREGATED_RESOURCES)))
+        .addMethod(
+          getDeltaAggregatedResourcesMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_AGGREGATED_RESOURCES)))
+        .build();
+  }
+
   private static abstract class AggregatedDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     AggregatedDiscoveryServiceBaseDescriptorSupplier() {}
@@ -331,9 +356,9 @@ public final class AggregatedDiscoveryServiceGrpc {
   private static final class AggregatedDiscoveryServiceMethodDescriptorSupplier
       extends AggregatedDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    AggregatedDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    AggregatedDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

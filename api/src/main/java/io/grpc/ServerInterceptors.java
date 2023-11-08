@@ -184,6 +184,31 @@ public final class ServerInterceptors {
   public static <T> ServerServiceDefinition useMarshalledMessages(
       final ServerServiceDefinition serviceDef,
       final MethodDescriptor.Marshaller<T> marshaller) {
+    return useMarshalledMessages(serviceDef, marshaller, marshaller);
+  }
+
+  /**
+   * Create a new {@code ServerServiceDefinition} with {@link MethodDescriptor} for deserializing
+   * requests and separate {@link MethodDescriptor} for serializing responses. The {@code
+   * ServerCallHandler} created will automatically convert back to the original types for request
+   * and response before calling the existing {@code ServerCallHandler}.  Calling this method
+   * combined with the intercept methods will allow the developer to choose whether to intercept
+   * messages of ReqT/RespT, or the modeled types of their application. This can also be chained
+   * to allow for interceptors to handle messages as multiple different ReqT/RespT types within
+   * the chain if the added cost of serialization is not a concern.
+   *
+   * @param serviceDef         the sevice definition to add request and response marshallers to.
+   * @param requestMarshaller  request marshaller
+   * @param responseMarshaller response marshaller
+   * @param <ReqT>             the request payload type
+   * @param <RespT>            the response payload type.
+   * @return a wrapped version of {@code serviceDef} with the ReqT and RespT conversion applied.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9870")
+  public static <ReqT, RespT> ServerServiceDefinition useMarshalledMessages(
+      final ServerServiceDefinition serviceDef,
+      final MethodDescriptor.Marshaller<ReqT> requestMarshaller,
+      final MethodDescriptor.Marshaller<RespT> responseMarshaller) {
     List<ServerMethodDefinition<?, ?>> wrappedMethods =
         new ArrayList<>();
     List<MethodDescriptor<?, ?>> wrappedDescriptors =
@@ -191,8 +216,8 @@ public final class ServerInterceptors {
     // Wrap the descriptors
     for (final ServerMethodDefinition<?, ?> definition : serviceDef.getMethods()) {
       final MethodDescriptor<?, ?> originalMethodDescriptor = definition.getMethodDescriptor();
-      final MethodDescriptor<T, T> wrappedMethodDescriptor =
-          originalMethodDescriptor.toBuilder(marshaller, marshaller).build();
+      final MethodDescriptor<ReqT, RespT> wrappedMethodDescriptor =
+          originalMethodDescriptor.toBuilder(requestMarshaller, responseMarshaller).build();
       wrappedDescriptors.add(wrappedMethodDescriptor);
       wrappedMethods.add(wrapMethod(definition, wrappedMethodDescriptor));
     }
@@ -266,23 +291,23 @@ public final class ServerInterceptors {
           final Metadata headers) {
         final ServerCall<OReqT, ORespT> unwrappedCall =
             new PartialForwardingServerCall<OReqT, ORespT>() {
-          @Override
-          protected ServerCall<WReqT, WRespT> delegate() {
-            return call;
-          }
+              @Override
+              protected ServerCall<WReqT, WRespT> delegate() {
+                return call;
+              }
 
-          @Override
-          public void sendMessage(ORespT message) {
-            final InputStream is = originalMethod.streamResponse(message);
-            final WRespT wrappedMessage = wrappedMethod.parseResponse(is);
-            delegate().sendMessage(wrappedMessage);
-          }
+              @Override
+              public void sendMessage(ORespT message) {
+                final InputStream is = originalMethod.streamResponse(message);
+                final WRespT wrappedMessage = wrappedMethod.parseResponse(is);
+                delegate().sendMessage(wrappedMessage);
+              }
 
-          @Override
-          public MethodDescriptor<OReqT, ORespT> getMethodDescriptor() {
-            return originalMethod;
-          }
-        };
+              @Override
+              public MethodDescriptor<OReqT, ORespT> getMethodDescriptor() {
+                return originalMethod;
+              }
+            };
 
         final ServerCall.Listener<OReqT> originalListener = originalHandler
             .startCall(unwrappedCall, headers);

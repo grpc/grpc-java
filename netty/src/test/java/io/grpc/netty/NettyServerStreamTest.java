@@ -93,8 +93,8 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
               return null;
             }
           })
-      .when(serverListener)
-      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+        .when(serverListener)
+        .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   @Test
@@ -104,7 +104,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
             .status(Utils.STATUS_OK)
             .set(Utils.CONTENT_TYPE_HEADER, Utils.CONTENT_TYPE_GRPC));
 
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
 
     ArgumentCaptor<SendResponseHeadersCommand> sendHeadersCap =
         ArgumentCaptor.forClass(SendResponseHeadersCommand.class);
@@ -130,7 +130,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     ListMultimap<CharSequence, CharSequence> expectedHeaders =
         ImmutableListMultimap.copyOf(Utils.convertServerHeaders(headers));
 
-    stream().writeHeaders(headers);
+    stream().writeHeaders(headers, true);
 
     ArgumentCaptor<SendResponseHeadersCommand> sendHeadersCap =
         ArgumentCaptor.forClass(SendResponseHeadersCommand.class);
@@ -281,6 +281,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
   }
 
   @Override
+  @SuppressWarnings("DirectInvocationOnMock")
   protected NettyServerStream createStream() {
     when(handler.getWriteQueue()).thenReturn(writeQueue);
     StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
@@ -299,7 +300,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
 
   @Override
   protected void sendHeadersIfServer() {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
   }
 
   @Override

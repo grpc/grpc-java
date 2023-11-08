@@ -36,7 +36,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -87,7 +87,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -123,8 +122,6 @@ public class RlsLoadBalancerTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     fakeSearchMethod =
         MethodDescriptor.newBuilder()
             .setFullMethodName("com.google/Search")
@@ -445,7 +442,7 @@ public class RlsLoadBalancerTest {
     ConfigOrError parsedConfigOrError =
         provider.parseLoadBalancingPolicyConfig(getServiceConfig());
     assertThat(parsedConfigOrError.getConfig()).isNotNull();
-    rlsLb.handleResolvedAddresses(ResolvedAddresses.newBuilder()
+    rlsLb.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mock(SocketAddress.class))))
         .setLoadBalancingPolicyConfig(parsedConfigOrError.getConfig())
         .build());
@@ -522,7 +519,7 @@ public class RlsLoadBalancerTest {
       final InProcessChannelBuilder builder =
           InProcessChannelBuilder.forName(target).directExecutor();
 
-      class CleaningChannelBuilder extends ForwardingChannelBuilder<CleaningChannelBuilder> {
+      class CleaningChannelBuilder extends ForwardingChannelBuilder2<CleaningChannelBuilder> {
 
         @Override
         protected ManagedChannelBuilder<?> delegate() {

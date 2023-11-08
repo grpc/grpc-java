@@ -24,7 +24,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
 
   private VirtualHostDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.api.v2.VirtualHostDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.api.v2.VirtualHostDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
@@ -116,29 +116,18 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  public static abstract class VirtualHostDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaVirtualHosts(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaVirtualHosts(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaVirtualHostsMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getDeltaVirtualHostsMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_VIRTUAL_HOSTS)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service VirtualHostDiscoveryService.
    * <pre>
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
@@ -152,7 +141,31 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  public static final class VirtualHostDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<VirtualHostDiscoveryServiceStub> {
+  public static abstract class VirtualHostDiscoveryServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return VirtualHostDiscoveryServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service VirtualHostDiscoveryService.
+   * <pre>
+   * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
+   * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
+   * during the processing of an HTTP request if a route for the request cannot be resolved. The
+   * :ref:`resource_names_subscribe &lt;envoy_api_field_DeltaDiscoveryRequest.resource_names_subscribe&gt;`
+   * field contains a list of virtual host names or aliases to track. The contents of an alias would
+   * be the contents of a *host* or *authority* header used to make an http request. An xDS server
+   * will match an alias to a virtual host based on the content of :ref:`domains'
+   * &lt;envoy_api_field_route.VirtualHost.domains&gt;` field. The *resource_names_unsubscribe* field
+   * contains a list of virtual host names that have been :ref:`unsubscribed
+   * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
+   * </pre>
+   */
+  public static final class VirtualHostDiscoveryServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<VirtualHostDiscoveryServiceStub> {
     private VirtualHostDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -174,6 +187,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service VirtualHostDiscoveryService.
    * <pre>
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
@@ -187,7 +201,8 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  public static final class VirtualHostDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
+  public static final class VirtualHostDiscoveryServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
     private VirtualHostDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -201,6 +216,7 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service VirtualHostDiscoveryService.
    * <pre>
    * Virtual Host Discovery Service (VHDS) is used to dynamically update the list of virtual hosts for
    * a given RouteConfiguration. If VHDS is configured a virtual host list update will be triggered
@@ -214,7 +230,8 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * &lt;xds_protocol_unsubscribe&gt;` from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  public static final class VirtualHostDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<VirtualHostDiscoveryServiceFutureStub> {
+  public static final class VirtualHostDiscoveryServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<VirtualHostDiscoveryServiceFutureStub> {
     private VirtualHostDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -234,10 +251,10 @@ public final class VirtualHostDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final VirtualHostDiscoveryServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(VirtualHostDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -265,6 +282,18 @@ public final class VirtualHostDiscoveryServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getDeltaVirtualHostsMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_VIRTUAL_HOSTS)))
+        .build();
+  }
+
   private static abstract class VirtualHostDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     VirtualHostDiscoveryServiceBaseDescriptorSupplier() {}
@@ -288,9 +317,9 @@ public final class VirtualHostDiscoveryServiceGrpc {
   private static final class VirtualHostDiscoveryServiceMethodDescriptorSupplier
       extends VirtualHostDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    VirtualHostDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    VirtualHostDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

@@ -20,6 +20,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -46,7 +47,6 @@ import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
-import io.grpc.internal.testing.SingleMessageProducer;
 import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -59,12 +59,15 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class ServerCallImplTest {
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   @Mock private ServerStream stream;
   @Mock private ServerCall.Listener<Long> callListener;
 
@@ -92,7 +95,6 @@ public class ServerCallImplTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     context = Context.ROOT.withCancellation();
     call = new ServerCallImpl<>(stream, UNARY_METHOD, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
@@ -151,7 +153,7 @@ public class ServerCallImplTest {
 
     call.sendHeaders(headers);
 
-    verify(stream).writeHeaders(headers);
+    verify(stream).writeHeaders(headers, false);
   }
 
   @Test
@@ -160,7 +162,7 @@ public class ServerCallImplTest {
     headers.put(CONTENT_LENGTH_KEY, "123");
     call.sendHeaders(headers);
 
-    verify(stream).writeHeaders(headers);
+    verify(stream).writeHeaders(headers, false);
     assertNull(headers.get(CONTENT_LENGTH_KEY));
   }
 
@@ -217,7 +219,7 @@ public class ServerCallImplTest {
 
     call.sendMessage(1234L);
 
-    verify(stream).close(isA(Status.class), isA(Metadata.class));
+    verify(stream).cancel(isA(Status.class));
   }
 
   @Test
@@ -424,7 +426,7 @@ public class ServerCallImplTest {
 
     verify(callListener).onCancel();
     assertTrue(context.isCancelled());
-    assertNull(context.cancellationCause());
+    assertNotNull(context.cancellationCause());
   }
 
   @Test

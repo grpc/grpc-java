@@ -22,6 +22,7 @@ import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
+import io.grpc.InternalMayRequireSpecificExecutor;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -44,13 +45,16 @@ import javax.annotation.Nullable;
 /**
  * Wraps {@link Credentials} as a {@link io.grpc.CallCredentials}.
  */
-final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
+final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
+    implements InternalMayRequireSpecificExecutor {
   private static final Logger log
       = Logger.getLogger(GoogleAuthLibraryCallCredentials.class.getName());
   private static final JwtHelper jwtHelper
       = createJwtHelperOrNull(GoogleAuthLibraryCallCredentials.class.getClassLoader());
-  private static final Class<? extends Credentials> googleCredentialsClass
+  private static final Class<? extends Credentials> GOOGLE_CREDENTIALS_CLASS
       = loadGoogleCredentialsClass();
+  private static final Class<?> APP_ENGINE_CREDENTIALS_CLASS
+      = loadAppEngineCredentials();
 
   private final boolean requirePrivacy;
   @VisibleForTesting
@@ -58,6 +62,8 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
 
   private Metadata lastHeaders;
   private Map<String, List<String>> lastMetadata;
+
+  private final boolean requiresSpecificExecutor;
 
   public GoogleAuthLibraryCallCredentials(Credentials creds) {
     this(creds, jwtHelper);
@@ -67,22 +73,26 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
   GoogleAuthLibraryCallCredentials(Credentials creds, JwtHelper jwtHelper) {
     checkNotNull(creds, "creds");
     boolean requirePrivacy = false;
-    if (googleCredentialsClass != null) {
+    if (GOOGLE_CREDENTIALS_CLASS != null) {
       // All GoogleCredentials instances are bearer tokens and should only be used on private
       // channels. This catches all return values from GoogleCredentials.getApplicationDefault().
       // This should be checked before upgrading the Service Account to JWT, as JWT is also a bearer
       // token.
-      requirePrivacy = googleCredentialsClass.isInstance(creds);
+      requirePrivacy = GOOGLE_CREDENTIALS_CLASS.isInstance(creds);
     }
     if (jwtHelper != null) {
       creds = jwtHelper.tryServiceAccountToJwt(creds);
     }
     this.requirePrivacy = requirePrivacy;
     this.creds = creds;
-  }
 
-  @Override
-  public void thisUsesUnstableApi() {}
+    // Cache the value so we only need to try to load the class once
+    if (APP_ENGINE_CREDENTIALS_CLASS == null) {
+      requiresSpecificExecutor = false;
+    } else {
+      requiresSpecificExecutor = APP_ENGINE_CREDENTIALS_CLASS.isInstance(creds);
+    }
+  }
 
   @Override
   public void applyRequestMetadata(
@@ -242,6 +252,16 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
     return rawGoogleCredentialsClass.asSubclass(Credentials.class);
   }
 
+  @Nullable
+  private static Class<?> loadAppEngineCredentials() {
+    try {
+      return Class.forName("com.google.auth.appengine.AppEngineCredentials");
+    } catch (ClassNotFoundException ex) {
+      log.log(Level.FINE, "AppEngineCredentials not available in classloader", ex);
+      return null;
+    }
+  }
+
   private static class MethodPair {
     private final Method getter;
     private final Method builderSetter;
@@ -353,4 +373,15 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
       return creds;
     }
   }
+
+  /**
+   * This method is to support the hack for AppEngineCredentials which need to run on a
+   * specific thread.
+   * @return Whether a specific executor is needed or if any executor can be used
+   */
+  @Override
+  public boolean isSpecificExecutorRequired() {
+    return requiresSpecificExecutor;
+  }
+
 }

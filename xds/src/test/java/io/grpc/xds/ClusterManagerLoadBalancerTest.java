@@ -54,7 +54,6 @@ import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -64,17 +63,20 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Tests for {@link ClusterManagerLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class ClusterManagerLoadBalancerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -96,7 +98,6 @@ public class ClusterManagerLoadBalancerTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     lbConfigInventory.put("childA", new Object());
@@ -124,10 +125,14 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(pickSubchannel(picker, "childA")).isEqualTo(PickResult.withNoResult());
     assertThat(pickSubchannel(picker, "childB")).isEqualTo(PickResult.withNoResult());
     assertThat(childBalancers).hasSize(2);
-    FakeLoadBalancer childBalancer1 = childBalancers.get(0);
-    FakeLoadBalancer childBalancer2 = childBalancers.get(1);
-    assertThat(childBalancer1.name).isEqualTo("policy_a");
-    assertThat(childBalancer2.name).isEqualTo("policy_b");
+    assertThat(childBalancers.stream()
+        .filter(b -> b.name.equals("policy_a"))
+        .count()).isEqualTo(1);
+    assertThat(childBalancers.stream()
+        .filter(b -> b.name.equals("policy_b"))
+        .count()).isEqualTo(1);
+    FakeLoadBalancer childBalancer1 = getChildBalancerByName("policy_a");
+    FakeLoadBalancer childBalancer2 = getChildBalancerByName("policy_b");
     assertThat(childBalancer1.config).isEqualTo(lbConfigInventory.get("childA"));
     assertThat(childBalancer2.config).isEqualTo(lbConfigInventory.get("childB"));
 
@@ -149,8 +154,7 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(childBalancer2.shutdown).isFalse();
 
     assertThat(childBalancers).hasSize(3);
-    FakeLoadBalancer childBalancer3 = childBalancers.get(2);
-    assertThat(childBalancer3.name).isEqualTo("policy_c");
+    FakeLoadBalancer childBalancer3 = getChildBalancerByName("policy_c");
     assertThat(childBalancer3.config).isEqualTo(lbConfigInventory.get("childC"));
 
     // delayed policy_b deletion
@@ -164,8 +168,8 @@ public class ClusterManagerLoadBalancerTest {
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
 
     assertThat(childBalancers).hasSize(2);
-    FakeLoadBalancer childBalancer1 = childBalancers.get(0);
-    FakeLoadBalancer childBalancer2 = childBalancers.get(1);
+    FakeLoadBalancer childBalancer1 = getChildBalancerByName("policy_a");
+    FakeLoadBalancer childBalancer2 = getChildBalancerByName("policy_b");
     Subchannel subchannel1 = mock(Subchannel.class);
     Subchannel subchannel2 = mock(Subchannel.class);
     childBalancer1.deliverSubchannelState(subchannel1, ConnectivityState.READY);
@@ -182,11 +186,20 @@ public class ClusterManagerLoadBalancerTest {
         .isEqualTo(subchannel2);
   }
 
+  private FakeLoadBalancer getChildBalancerByName(String name) {
+    for (FakeLoadBalancer childLb : childBalancers) {
+      if (childLb.name.equals(name)) {
+        return childLb;
+      }
+    }
+    return null;
+  }
+
   @Test
   public void ignoreBalancingStateUpdateForDeactivatedChildLbs() {
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
     deliverResolvedAddresses(ImmutableMap.of("childB", "policy_b"));
-    FakeLoadBalancer childBalancer1 = childBalancers.get(0);  // policy_a (deactivated)
+    FakeLoadBalancer childBalancer1 = getChildBalancerByName("policy_a");  // policy_a (deactivated)
     Subchannel subchannel = mock(Subchannel.class);
     childBalancer1.deliverSubchannelState(subchannel, ConnectivityState.READY);
     verify(helper, never()).updateBalancingState(
@@ -229,8 +242,8 @@ public class ClusterManagerLoadBalancerTest {
   public void handleNameResolutionError_afterChildLbsInstantiated_propagateToChildLbs() {
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
     assertThat(childBalancers).hasSize(2);
-    FakeLoadBalancer childBalancer1 = childBalancers.get(0);
-    FakeLoadBalancer childBalancer2 = childBalancers.get(1);
+    FakeLoadBalancer childBalancer1 = getChildBalancerByName("policy_a");
+    FakeLoadBalancer childBalancer2 = getChildBalancerByName("policy_b");
     clusterManagerLoadBalancer.handleNameResolutionError(
         Status.UNAVAILABLE.withDescription("resolver error"));
     assertThat(childBalancer1.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
@@ -243,8 +256,8 @@ public class ClusterManagerLoadBalancerTest {
   public void handleNameResolutionError_notPropagateToDeactivatedChildLbs() {
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
     deliverResolvedAddresses(ImmutableMap.of("childB", "policy_b"));
-    FakeLoadBalancer childBalancer1 = childBalancers.get(0);  // policy_a (deactivated)
-    FakeLoadBalancer childBalancer2 = childBalancers.get(1);  // policy_b
+    FakeLoadBalancer childBalancer1 = getChildBalancerByName("policy_a");  // policy_a (deactivated)
+    FakeLoadBalancer childBalancer2 = getChildBalancerByName("policy_b");  // policy_b
     clusterManagerLoadBalancer.handleNameResolutionError(
         Status.UNKNOWN.withDescription("unknown error"));
     assertThat(childBalancer1.upstreamError).isNull();
@@ -267,7 +280,7 @@ public class ClusterManagerLoadBalancerTest {
   }
 
   private void deliverResolvedAddresses(final Map<String, String> childPolicies, boolean failing) {
-    clusterManagerLoadBalancer.handleResolvedAddresses(
+    clusterManagerLoadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setLoadBalancingPolicyConfig(buildConfig(childPolicies, failing))
@@ -348,12 +361,14 @@ public class ClusterManagerLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
 
       if (failing) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.INTERNAL));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.INTERNAL)));
       }
+      return Status.OK;
     }
 
     @Override

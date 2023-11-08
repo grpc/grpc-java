@@ -19,7 +19,7 @@ public final class RouteDiscoveryServiceGrpc {
 
   private RouteDiscoveryServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "envoy.api.v2.RouteDiscoveryService";
+  public static final java.lang.String SERVICE_NAME = "envoy.api.v2.RouteDiscoveryService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -168,57 +168,32 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static abstract class RouteDiscoveryServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamRoutes(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> streamRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getStreamRoutesMethod(), responseObserver);
     }
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaRoutes(
+    default io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaRoutes(
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDeltaRoutesMethod(), responseObserver);
     }
 
     /**
      */
-    public void fetchRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
+    default void fetchRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request,
         io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getFetchRoutesMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStreamRoutesMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_STREAM_ROUTES)))
-          .addMethod(
-            getDeltaRoutesMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
-                  this, METHODID_DELTA_ROUTES)))
-          .addMethod(
-            getFetchRoutesMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.DiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
-                  this, METHODID_FETCH_ROUTES)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service RouteDiscoveryService.
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and
@@ -227,7 +202,26 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<RouteDiscoveryServiceStub> {
+  public static abstract class RouteDiscoveryServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return RouteDiscoveryServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service RouteDiscoveryService.
+   * <pre>
+   * The resource_names field in DiscoveryRequest specifies a route configuration.
+   * This allows an Envoy configuration with multiple HTTP listeners (and
+   * associated HTTP connection manager filters) to use different route
+   * configurations. Each listener will bind its HTTP connection manager filter to
+   * a route table via this identifier.
+   * </pre>
+   */
+  public static final class RouteDiscoveryServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<RouteDiscoveryServiceStub> {
     private RouteDiscoveryServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -265,6 +259,7 @@ public final class RouteDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service RouteDiscoveryService.
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and
@@ -273,7 +268,8 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<RouteDiscoveryServiceBlockingStub> {
+  public static final class RouteDiscoveryServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<RouteDiscoveryServiceBlockingStub> {
     private RouteDiscoveryServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -294,6 +290,7 @@ public final class RouteDiscoveryServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service RouteDiscoveryService.
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and
@@ -302,7 +299,8 @@ public final class RouteDiscoveryServiceGrpc {
    * a route table via this identifier.
    * </pre>
    */
-  public static final class RouteDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<RouteDiscoveryServiceFutureStub> {
+  public static final class RouteDiscoveryServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<RouteDiscoveryServiceFutureStub> {
     private RouteDiscoveryServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -332,10 +330,10 @@ public final class RouteDiscoveryServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final RouteDiscoveryServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(RouteDiscoveryServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -370,6 +368,32 @@ public final class RouteDiscoveryServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStreamRoutesMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_STREAM_ROUTES)))
+        .addMethod(
+          getDeltaRoutesMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                service, METHODID_DELTA_ROUTES)))
+        .addMethod(
+          getFetchRoutesMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.envoyproxy.envoy.api.v2.DiscoveryRequest,
+              io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
+                service, METHODID_FETCH_ROUTES)))
+        .build();
+  }
+
   private static abstract class RouteDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     RouteDiscoveryServiceBaseDescriptorSupplier() {}
@@ -393,9 +417,9 @@ public final class RouteDiscoveryServiceGrpc {
   private static final class RouteDiscoveryServiceMethodDescriptorSupplier
       extends RouteDiscoveryServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    RouteDiscoveryServiceMethodDescriptorSupplier(String methodName) {
+    RouteDiscoveryServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

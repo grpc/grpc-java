@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
@@ -45,6 +46,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.protobuf.ProtoUtils;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
@@ -57,9 +59,9 @@ import io.grpc.xds.Stats.UpstreamLocalityStats;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.SslContextProvider;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.SslContextProvider;
+import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -73,22 +75,31 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link ClusterImplLoadBalancer}.
  */
 @RunWith(JUnit4.class)
 public class ClusterImplLoadBalancerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
+  private static final double TOLERANCE = 1.0e-10;
   private static final String AUTHORITY = "api.google.com";
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("api.google.com", InsecureChannelCredentials.create(), true);
+      ServerInfo.create("api.google.com", InsecureChannelCredentials.create());
+  private static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
+      Metadata.Key.of(
+          "endpoint-load-metrics-bin",
+          ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -135,7 +146,6 @@ public class ClusterImplLoadBalancerTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom);
   }
 
@@ -163,6 +173,41 @@ public class ClusterImplLoadBalancerTest {
     assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
     assertThat(childBalancer.attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
+  }
+
+  /**
+   * If the control plane switches from using the legacy lb_policy field in the xDS Cluster proto
+   * to the newer load_balancing_policy then the child policy can switch from weighted_target to
+   * xds_wrr_locality (this could happen the opposite way as well). This test assures that this
+   * results in the child LB changing if this were to happen. If this is not done correctly the new
+   * configuration would be given to the old LB implementation which would cause a channel panic.
+   */
+  @Test
+  public void handleResolvedAddresses_childPolicyChanges() {
+    FakeLoadBalancerProvider weightedTargetProvider =
+        new FakeLoadBalancerProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);
+    Object weightedTargetConfig = new Object();
+    ClusterImplConfig configWithWeightedTarget = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
+        LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWeightedTarget);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);
+    assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
+
+    FakeLoadBalancerProvider wrrLocalityProvider =
+        new FakeLoadBalancerProvider(XdsLbPolicies.WRR_LOCALITY_POLICY_NAME);
+    Object wrrLocalityConfig = new Object();
+    ClusterImplConfig configWithWrrLocality = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
+        LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(wrrLocalityProvider, wrrLocalityConfig), null);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWrrLocality);
+    childBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.WRR_LOCALITY_POLICY_NAME);
+    assertThat(childBalancer.config).isSameInstanceAs(wrrLocalityConfig);
   }
 
   @Test
@@ -217,7 +262,21 @@ public class ClusterImplLoadBalancerTest {
         ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // second RPC call
     ClientStreamTracer streamTracer3 = result.getStreamTracerFactory().newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // third RPC call
+    // When the trailer contains an ORCA report, the listener callback will be invoked.
+    Metadata trailersWithOrcaLoadReport1 = new Metadata();
+    trailersWithOrcaLoadReport1.put(ORCA_ENDPOINT_LOAD_METRICS_KEY,
+        OrcaLoadReport.newBuilder().setApplicationUtilization(1.414).setMemUtilization(0.034)
+            .setRpsFractional(1.414).putNamedMetrics("named1", 3.14159)
+            .putNamedMetrics("named2", -1.618).build());
+    streamTracer1.inboundTrailers(trailersWithOrcaLoadReport1);
     streamTracer1.streamClosed(Status.OK);
+    Metadata trailersWithOrcaLoadReport2 = new Metadata();
+    trailersWithOrcaLoadReport2.put(ORCA_ENDPOINT_LOAD_METRICS_KEY,
+        OrcaLoadReport.newBuilder().setApplicationUtilization(0.99).setMemUtilization(0.123)
+            .setRpsFractional(0.905).putNamedMetrics("named1", 2.718)
+            .putNamedMetrics("named2", 1.414)
+            .putNamedMetrics("named3", 0.009).build());
+    streamTracer2.inboundTrailers(trailersWithOrcaLoadReport2);
     streamTracer2.streamClosed(Status.UNAVAILABLE);
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
@@ -228,6 +287,24 @@ public class ClusterImplLoadBalancerTest {
     assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(1L);
     assertThat(localityStats.totalErrorRequests()).isEqualTo(1L);
     assertThat(localityStats.totalRequestsInProgress()).isEqualTo(1L);
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named1")).isTrue();
+    assertThat(
+        localityStats.loadMetricStatsMap().get("named1").numRequestsFinishedWithMetric()).isEqualTo(
+        2L);
+    assertThat(localityStats.loadMetricStatsMap().get("named1").totalMetricValue()).isWithin(
+        TOLERANCE).of(3.14159 + 2.718);
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named2")).isTrue();
+    assertThat(
+        localityStats.loadMetricStatsMap().get("named2").numRequestsFinishedWithMetric()).isEqualTo(
+        2L);
+    assertThat(localityStats.loadMetricStatsMap().get("named2").totalMetricValue()).isWithin(
+        TOLERANCE).of(-1.618 + 1.414);
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named3")).isTrue();
+    assertThat(
+        localityStats.loadMetricStatsMap().get("named3").numRequestsFinishedWithMetric()).isEqualTo(
+        1L);
+    assertThat(localityStats.loadMetricStatsMap().get("named3").totalMetricValue()).isWithin(
+        TOLERANCE).of(0.009);
 
     streamTracer3.streamClosed(Status.OK);
     subchannel.shutdown();  // stats recorder released
@@ -240,6 +317,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(1L);
     assertThat(localityStats.totalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.totalRequestsInProgress()).isEqualTo(0L);
+    assertThat(localityStats.loadMetricStatsMap().isEmpty()).isTrue();
 
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     assertThat(clusterStats.upstreamLocalityStatsList()).isEmpty();  // no longer reported
@@ -282,7 +360,7 @@ public class ClusterImplLoadBalancerTest {
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, null,
         Collections.singletonList(DropOverload.create("lb", 1_000_000)),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.singletonList(endpoint))
             .setAttributes(
@@ -470,6 +548,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(leafBalancer.name).isEqualTo("round_robin");
+
     // Simulates leaf load balancer creating subchannels.
     CreateSubchannelArgs args =
         CreateSubchannelArgs.newBuilder()
@@ -480,22 +559,17 @@ public class ClusterImplLoadBalancerTest {
       assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_CLUSTER_NAME))
           .isEqualTo(CLUSTER);
     }
-  }
 
-  @Test
-  public void endpointAddressesAttachedWithTlsConfig_disableSecurity() {
-    boolean originalEnableSecurity = ClusterImplLoadBalancer.enableSecurity;
-    ClusterImplLoadBalancer.enableSecurity = false;
-    subtest_endpointAddressesAttachedWithTlsConfig(false);
-    ClusterImplLoadBalancer.enableSecurity = originalEnableSecurity;
+    // An address update should also retain the cluster attribute.
+    subchannel.updateAddresses(leafBalancer.addresses);
+    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_CLUSTER_NAME))
+          .isEqualTo(CLUSTER);
+    }
   }
 
   @Test
   public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
-    subtest_endpointAddressesAttachedWithTlsConfig(true);
-  }
-
-  private void subtest_endpointAddressesAttachedWithTlsConfig(boolean enableSecurity) {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
@@ -520,11 +594,7 @@ public class ClusterImplLoadBalancerTest {
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
-      } else {
-        assertThat(supplier).isNull();
-      }
+      assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
     }
 
     // Removes UpstreamTlsContext from the config.
@@ -551,27 +621,21 @@ public class ClusterImplLoadBalancerTest {
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.isShutdown()).isFalse();
-        assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
-      } else {
-        assertThat(supplier).isNull();
-      }
+      assertThat(supplier.isShutdown()).isFalse();
+      assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
     }
     loadBalancer.shutdown();
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
               eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
-      if (enableSecurity) {
-        assertThat(supplier.isShutdown()).isTrue();
-      }
+      assertThat(supplier.isShutdown()).isTrue();
     }
     loadBalancer = null;
   }
 
   private void deliverAddressesAndConfig(List<EquivalentAddressGroup> addresses,
       ClusterImplConfig config) {
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(addresses)
             .setAttributes(
@@ -677,10 +741,11 @@ public class ClusterImplLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
       attributes = resolvedAddresses.getAttributes();
+      return Status.OK;
     }
 
     @Override
@@ -759,6 +824,10 @@ public class ClusterImplLoadBalancerTest {
     @Override
     public Attributes getAttributes() {
       return attrs;
+    }
+
+    @Override
+    public void updateAddresses(List<EquivalentAddressGroup> addrs) {
     }
   }
 

@@ -33,12 +33,13 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
+import io.envoyproxy.envoy.config.core.v3.Node;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
+import io.envoyproxy.envoy.config.endpoint.v3.EndpointLoadMetricStats;
+import io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
+import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
@@ -66,12 +67,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link LoadReportClient}.
  */
-// TODO(chengyuanzhang): missing LRS V3 test.
 @RunWith(JUnit4.class)
 public class LoadReportClientTest {
   // bootstrap node identifier
@@ -105,6 +106,8 @@ public class LoadReportClientTest {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -139,7 +142,6 @@ public class LoadReportClientTest {
   @SuppressWarnings("unchecked")
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     mockLoadReportingService = mock(LoadReportingServiceGrpc.LoadReportingServiceImplBase.class,
         delegatesTo(
             new LoadReportingServiceGrpc.LoadReportingServiceImplBase() {
@@ -172,7 +174,7 @@ public class LoadReportClientTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
     addFakeStatsData();
-    lrsClient = new LoadReportClient(loadStatsManager, channel, Context.ROOT, false, NODE,
+    lrsClient = new LoadReportClient(loadStatsManager, channel, Context.ROOT, NODE,
         syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
         fakeClock.getStopwatchSupplier());
     syncContext.execute(new Runnable() {
@@ -197,11 +199,15 @@ public class LoadReportClientTest {
     for (int i = 0; i < 31; i++) {
       localityStats1.recordCallStarted();
     }
+    localityStats1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 3.14159));
+    localityStats1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.618));
+    localityStats1.recordBackendLoadMetricStats(ImmutableMap.of("named1", -2.718));
     ClusterLocalityStats localityStats2 =
         loadStatsManager.getClusterLocalityStats(CLUSTER2, EDS_SERVICE_NAME2, LOCALITY2);
     for (int i = 0; i < 45; i++) {
       localityStats2.recordCallStarted();
     }
+    localityStats2.recordBackendLoadMetricStats(ImmutableMap.of("named2", 1.414));
     localityStats2.recordCallFinished(Status.OK);
   }
 
@@ -244,6 +250,12 @@ public class LoadReportClientTest {
     assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(31L);
+    assertThat(localityStats.getLoadMetricStatsCount()).isEqualTo(1);
+    EndpointLoadMetricStats loadMetricStats = Iterables.getOnlyElement(
+        localityStats.getLoadMetricStatsList());
+    assertThat(loadMetricStats.getMetricName()).isEqualTo("named1");
+    assertThat(loadMetricStats.getNumRequestsFinishedWithMetric()).isEqualTo(3L);
+    assertThat(loadMetricStats.getTotalMetricValue()).isEqualTo(3.14159 + 1.618 - 2.718);
 
     fakeClock.forwardTime(10L, TimeUnit.SECONDS);
     verify(requestObserver, times(3)).onNext(requestCaptor.capture());
@@ -262,6 +274,7 @@ public class LoadReportClientTest {
     assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(31L);
+    assertThat(localityStats.getLoadMetricStatsList()).isEmpty();
 
     // Management server updates the interval of sending load reports, while still asking for
     // loads to cluster1 only.
@@ -286,6 +299,7 @@ public class LoadReportClientTest {
     assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(31L);
+    assertThat(localityStats.getLoadMetricStatsList()).isEmpty();
 
     // Management server asks to report loads for all clusters.
     responseObserver.onNext(LoadStatsResponse.newBuilder().setSendAllClusters(true)
@@ -308,6 +322,7 @@ public class LoadReportClientTest {
     assertThat(localityStats1.getTotalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats1.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats1.getTotalRequestsInProgress()).isEqualTo(31L);
+    assertThat(localityStats1.getLoadMetricStatsList()).isEmpty();
     ClusterStats clusterStats2 = findClusterStats(request.getClusterStatsList(), CLUSTER2);
     assertThat(Durations.toSeconds(clusterStats2.getLoadReportInterval()))
         .isEqualTo(10L + 10L + 20L + 20L);
@@ -325,6 +340,12 @@ public class LoadReportClientTest {
     assertThat(localityStats2.getTotalSuccessfulRequests()).isEqualTo(1L);
     assertThat(localityStats2.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats2.getTotalRequestsInProgress()).isEqualTo(45L - 1L);
+    assertThat(localityStats2.getLoadMetricStatsCount()).isEqualTo(1);
+    EndpointLoadMetricStats loadMetricStats2 = Iterables.getOnlyElement(
+        localityStats2.getLoadMetricStatsList());
+    assertThat(loadMetricStats2.getMetricName()).isEqualTo("named2");
+    assertThat(loadMetricStats2.getNumRequestsFinishedWithMetric()).isEqualTo(1L);
+    assertThat(loadMetricStats2.getTotalMetricValue()).isEqualTo(1.414);
 
     // Load reports for cluster1 is no longer wanted.
     responseObserver.onNext(LoadStatsResponse.newBuilder().addClusters(CLUSTER2)
@@ -347,6 +368,7 @@ public class LoadReportClientTest {
     assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(44L);
+    assertThat(localityStats.getLoadMetricStatsList()).isEmpty();
 
     fakeClock.forwardTime(10L, TimeUnit.SECONDS);
     verify(requestObserver, times(7)).onNext(requestCaptor.capture());
@@ -365,6 +387,7 @@ public class LoadReportClientTest {
     assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(44L);
+    assertThat(localityStats.getLoadMetricStatsList()).isEmpty();
 
     // Management server asks loads for a cluster that client has no load data.
     responseObserver.onNext(LoadStatsResponse.newBuilder().addClusters("unknown.googleapis.com")
@@ -494,6 +517,12 @@ public class LoadReportClientTest {
     assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(31L);
+    assertThat(localityStats.getLoadMetricStatsCount()).isEqualTo(1);
+    EndpointLoadMetricStats loadMetricStats = Iterables.getOnlyElement(
+        localityStats.getLoadMetricStatsList());
+    assertThat(loadMetricStats.getMetricName()).isEqualTo("named1");
+    assertThat(loadMetricStats.getNumRequestsFinishedWithMetric()).isEqualTo(3L);
+    assertThat(loadMetricStats.getTotalMetricValue()).isEqualTo(3.14159 + 1.618 - 2.718);
 
     // Wrapping up
     verify(backoffPolicyProvider, times(2)).get();

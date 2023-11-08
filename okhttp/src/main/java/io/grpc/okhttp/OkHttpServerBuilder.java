@@ -16,8 +16,10 @@
 
 package io.grpc.okhttp;
 
-import com.google.common.annotations.VisibleForTesting;
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChoiceServerCredentials;
 import io.grpc.ExperimentalApi;
@@ -37,7 +39,10 @@ import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.internal.Platform;
+import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
 import java.util.EnumSet;
@@ -51,6 +56,8 @@ import java.util.logging.Logger;
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 
 /**
@@ -62,6 +69,13 @@ import javax.net.ssl.TrustManager;
 public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpServerBuilder> {
   private static final Logger log = Logger.getLogger(OkHttpServerBuilder.class.getName());
   private static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
+
+  static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
+  private static final long MIN_MAX_CONNECTION_IDLE_NANO = TimeUnit.SECONDS.toNanos(1L);
+  static final long MAX_CONNECTION_AGE_NANOS_DISABLED = Long.MAX_VALUE;
+  static final long MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE = Long.MAX_VALUE;
+  private static final long MIN_MAX_CONNECTION_AGE_NANO = TimeUnit.SECONDS.toNanos(1L);
+
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
   private static final ObjectPool<Executor> DEFAULT_TRANSPORT_EXECUTOR_POOL =
       OkHttpChannelBuilder.DEFAULT_TRANSPORT_EXECUTOR_POOL;
@@ -74,7 +88,7 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   @DoNotCall("Always throws. Use forPort(int, ServerCredentials) instead")
   @Deprecated
   public static OkHttpServerBuilder forPort(int port) {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException("Use forPort(int, ServerCredentials) instead");
   }
 
   /**
@@ -110,8 +124,12 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   int maxInboundMetadataSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+  long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
+  boolean permitKeepAliveWithoutCalls;
+  long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
+  long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 
-  @VisibleForTesting
   OkHttpServerBuilder(
       SocketAddress address, HandshakerSocketFactory handshakerSocketFactory) {
     this.listenAddress = Preconditions.checkNotNull(address, "address");
@@ -179,6 +197,66 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   }
 
   /**
+   * Sets a custom max connection idle time, connection being idle for longer than which will be
+   * gracefully terminated. Idleness duration is defined since the most recent time the number of
+   * outstanding RPCs became zero or the connection establishment. An unreasonably small value might
+   * be increased. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
+   * max connection idle.
+   */
+  @Override
+  public OkHttpServerBuilder maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
+    checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive: %s",
+        maxConnectionIdle);
+    maxConnectionIdleInNanos = timeUnit.toNanos(maxConnectionIdle);
+    if (maxConnectionIdleInNanos >= AS_LARGE_AS_INFINITE) {
+      maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
+    }
+    if (maxConnectionIdleInNanos < MIN_MAX_CONNECTION_IDLE_NANO) {
+      maxConnectionIdleInNanos = MIN_MAX_CONNECTION_IDLE_NANO;
+    }
+    return this;
+  }
+
+  /**
+   * Sets a custom max connection age, connection lasting longer than which will be gracefully
+   * terminated. An unreasonably small value might be increased.  A random jitter of +/-10% will be
+   * added to it. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value will disable
+   * max connection age.
+   */
+  @Override
+  public OkHttpServerBuilder maxConnectionAge(long maxConnectionAge, TimeUnit timeUnit) {
+    checkArgument(maxConnectionAge > 0L, "max connection age must be positive: %s",
+        maxConnectionAge);
+    maxConnectionAgeInNanos = timeUnit.toNanos(maxConnectionAge);
+    if (maxConnectionAgeInNanos >= AS_LARGE_AS_INFINITE) {
+      maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
+    }
+    if (maxConnectionAgeInNanos < MIN_MAX_CONNECTION_AGE_NANO) {
+      maxConnectionAgeInNanos = MIN_MAX_CONNECTION_AGE_NANO;
+    }
+    return this;
+  }
+
+  /**
+   * Sets a custom grace time for the graceful connection termination. Once the max connection age
+   * is reached, RPCs have the grace time to complete. RPCs that do not complete in time will be
+   * cancelled, allowing the connection to terminate. {@code Long.MAX_VALUE} nano seconds or an
+   * unreasonably large value are considered infinite.
+   *
+   * @see #maxConnectionAge(long, TimeUnit)
+   */
+  @Override
+  public OkHttpServerBuilder maxConnectionAgeGrace(long maxConnectionAgeGrace, TimeUnit timeUnit) {
+    checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative: %s",
+        maxConnectionAgeGrace);
+    maxConnectionAgeGraceInNanos = timeUnit.toNanos(maxConnectionAgeGrace);
+    if (maxConnectionAgeGraceInNanos >= AS_LARGE_AS_INFINITE) {
+      maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
+    }
+    return this;
+  }
+
+  /**
    * Sets a time waiting for read activity after sending a keepalive ping. If the time expires
    * without any read activity on the connection, the connection is considered dead. An unreasonably
    * small value might be increased. Defaults to 20 seconds.
@@ -192,6 +270,41 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     Preconditions.checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
     keepAliveTimeoutNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutNanos = KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutNanos);
+    return this;
+  }
+
+  /**
+   * Specify the most aggressive keep-alive time clients are permitted to configure. The server will
+   * try to detect clients exceeding this rate and when detected will forcefully close the
+   * connection. The default is 5 minutes.
+   *
+   * <p>Even though a default is defined that allows some keep-alives, clients must not use
+   * keep-alive without approval from the service owner. Otherwise, they may experience failures in
+   * the future if the service becomes more restrictive. When unthrottled, keep-alives can cause a
+   * significant amount of traffic and CPU usage, so clients and servers should be conservative in
+   * what they use and accept.
+   *
+   * @see #permitKeepAliveWithoutCalls(boolean)
+   */
+  @CanIgnoreReturnValue
+  @Override
+  public OkHttpServerBuilder permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative: %s",
+        keepAliveTime);
+    permitKeepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
+    return this;
+  }
+
+  /**
+   * Sets whether to allow clients to send keep-alive HTTP/2 PINGs even if there are no outstanding
+   * RPCs on the connection. Defaults to {@code false}.
+   *
+   * @see #permitKeepAliveTime(long, TimeUnit)
+   */
+  @CanIgnoreReturnValue
+  @Override
+  public OkHttpServerBuilder permitKeepAliveWithoutCalls(boolean permit) {
+    permitKeepAliveWithoutCalls = permit;
     return this;
   }
 
@@ -312,9 +425,26 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
       } catch (GeneralSecurityException gse) {
         throw new RuntimeException("TLS Provider failure", gse);
       }
+      SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+      switch (tlsCreds.getClientAuth()) {
+        case OPTIONAL:
+          sslSocketFactory = new ClientCertRequestingSocketFactory(sslSocketFactory, false);
+          break;
+
+        case REQUIRE:
+          sslSocketFactory = new ClientCertRequestingSocketFactory(sslSocketFactory, true);
+          break;
+
+        case NONE:
+          // NOOP; this is the SSLContext default
+          break;
+
+        default:
+          return HandshakerSocketFactoryResult.error(
+              "Unknown TlsServerCredentials.ClientAuth value: " + tlsCreds.getClientAuth());
+      }
       return HandshakerSocketFactoryResult.factory(new TlsServerHandshakerSocketFactory(
-          new SslSocketFactoryServerCredentials.ServerCredentials(
-              sslContext.getSocketFactory())));
+          new SslSocketFactoryServerCredentials.ServerCredentials(sslSocketFactory)));
 
     } else if (creds instanceof InsecureServerCredentials) {
       return HandshakerSocketFactoryResult.factory(new PlaintextHandshakerSocketFactory());
@@ -361,6 +491,61 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     public static HandshakerSocketFactoryResult factory(HandshakerSocketFactory factory) {
       return new HandshakerSocketFactoryResult(
           Preconditions.checkNotNull(factory, "factory"), null);
+    }
+  }
+
+  static final class ClientCertRequestingSocketFactory extends SSLSocketFactory {
+    private final SSLSocketFactory socketFactory;
+    private final boolean required;
+
+    public ClientCertRequestingSocketFactory(SSLSocketFactory socketFactory, boolean required) {
+      this.socketFactory = Preconditions.checkNotNull(socketFactory, "socketFactory");
+      this.required = required;
+    }
+
+    private Socket apply(Socket s) throws IOException {
+      if (!(s instanceof SSLSocket)) {
+        throw new IOException(
+            "SocketFactory " + socketFactory + " did not produce an SSLSocket: " + s.getClass());
+      }
+      SSLSocket sslSocket = (SSLSocket) s;
+      if (required) {
+        sslSocket.setNeedClientAuth(true);
+      } else {
+        sslSocket.setWantClientAuth(true);
+      }
+      return sslSocket;
+    }
+
+    @Override public Socket createSocket(Socket s, String host, int port, boolean autoClose)
+        throws IOException {
+      return apply(socketFactory.createSocket(s, host, port, autoClose));
+    }
+
+    @Override public Socket createSocket(String host, int port) throws IOException {
+      return apply(socketFactory.createSocket(host, port));
+    }
+
+    @Override public Socket createSocket(
+        String host, int port, InetAddress localHost, int localPort) throws IOException {
+      return apply(socketFactory.createSocket(host, port, localHost, localPort));
+    }
+
+    @Override public Socket createSocket(InetAddress host, int port) throws IOException {
+      return apply(socketFactory.createSocket(host, port));
+    }
+
+    @Override public Socket createSocket(
+        InetAddress host, int port, InetAddress localAddress, int localPort) throws IOException {
+      return apply(socketFactory.createSocket(host, port, localAddress, localPort));
+    }
+
+    @Override public String[] getDefaultCipherSuites() {
+      return socketFactory.getDefaultCipherSuites();
+    }
+
+    @Override public String[] getSupportedCipherSuites() {
+      return socketFactory.getSupportedCipherSuites();
     }
   }
 }

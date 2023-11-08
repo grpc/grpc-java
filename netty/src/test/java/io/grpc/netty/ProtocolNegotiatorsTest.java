@@ -67,6 +67,7 @@ import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
+import io.grpc.testing.TlsTesting;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
@@ -109,9 +110,9 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.File;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.KeyStore;
@@ -189,10 +190,9 @@ public class ProtocolNegotiatorsTest {
 
   @Before
   public void setUp() throws Exception {
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File key = TestUtils.loadCert("server1.key");
-    sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream key = TlsTesting.loadCert("server1.key");
+    sslContext = GrpcSslContexts.forServer(serverCert, key).build();
     engine = SSLContext.getDefault().createSSLEngine();
     engine.setUseClientMode(true);
   }
@@ -789,8 +789,8 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File key = TestUtils.loadCert("server1.key");
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream key = TlsTesting.loadCert("server1.key");
     List<String> alpnList = Arrays.asList("managed_mtls", "h2");
     ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
         ApplicationProtocolConfig.Protocol.ALPN,
@@ -799,7 +799,6 @@ public class ProtocolNegotiatorsTest {
         alpnList);
 
     sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
 
     ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
@@ -826,8 +825,8 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File key = TestUtils.loadCert("server1.key");
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream key = TlsTesting.loadCert("server1.key");
     List<String> alpnList = Arrays.asList("managed_mtls", "h2");
     ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
         ApplicationProtocolConfig.Protocol.ALPN,
@@ -836,7 +835,6 @@ public class ProtocolNegotiatorsTest {
         alpnList);
 
     sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
     ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
@@ -898,8 +896,8 @@ public class ProtocolNegotiatorsTest {
     };
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
-    File clientCert = TestUtils.loadCert("client.pem");
-    File key = TestUtils.loadCert("client.key");
+    InputStream clientCert = TlsTesting.loadCert("client.pem");
+    InputStream key = TlsTesting.loadCert("client.key");
     List<String> alpnList = Arrays.asList("managed_mtls", "h2");
     ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
         ApplicationProtocolConfig.Protocol.ALPN,
@@ -909,7 +907,6 @@ public class ProtocolNegotiatorsTest {
 
     sslContext = GrpcSslContexts.forClient()
         .keyManager(clientCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,

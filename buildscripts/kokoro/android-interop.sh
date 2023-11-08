@@ -16,10 +16,15 @@ export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
-echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
+(yes || true) | "${ANDROID_HOME}/tools/bin/sdkmanager" --licenses
 
 # Proto deps
 buildscripts/make_dependencies.sh
+
+# Build Android with Java 11, this adds it to the PATH
+sudo update-java-alternatives --set java-1.11.0-openjdk-amd64
+# Unset any existing JAVA_HOME env var to stop Gradle from using it
+unset JAVA_HOME
 
 GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 

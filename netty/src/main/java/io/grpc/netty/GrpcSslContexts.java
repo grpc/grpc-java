@@ -154,8 +154,7 @@ public class GrpcSslContexts {
   @CanIgnoreReturnValue
   public static SslContextBuilder configure(SslContextBuilder builder, SslProvider provider) {
     switch (provider) {
-      case JDK:
-      {
+      case JDK: {
         Provider jdkProvider = findJdkProvider();
         if (jdkProvider == null) {
           throw new IllegalArgumentException(
@@ -163,8 +162,7 @@ public class GrpcSslContexts {
         }
         return configure(builder, jdkProvider);
       }
-      case OPENSSL:
-      {
+      case OPENSSL: {
         ApplicationProtocolConfig apc;
         if (OpenSsl.isAlpnSupported()) {
           apc = NPN_AND_ALPN;

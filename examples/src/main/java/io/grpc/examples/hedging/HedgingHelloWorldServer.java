@@ -16,9 +16,10 @@
 
 package io.grpc.examples.hedging;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
@@ -43,7 +44,7 @@ public class HedgingHelloWorldServer {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .intercept(new LatencyInjectionInterceptor())
         .build()

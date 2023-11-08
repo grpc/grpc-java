@@ -270,38 +270,6 @@ final class EnvoyProtoData {
       builder.addAllClientFeatures(clientFeatures);
       return builder.build();
     }
-
-    @SuppressWarnings("deprecation") // Deprecated v2 API setBuildVersion().
-    public io.envoyproxy.envoy.api.v2.core.Node toEnvoyProtoNodeV2() {
-      io.envoyproxy.envoy.api.v2.core.Node.Builder builder =
-          io.envoyproxy.envoy.api.v2.core.Node.newBuilder();
-      builder.setId(id);
-      builder.setCluster(cluster);
-      if (metadata != null) {
-        Struct.Builder structBuilder = Struct.newBuilder();
-        for (Map.Entry<String, ?> entry : metadata.entrySet()) {
-          structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
-        }
-        builder.setMetadata(structBuilder);
-      }
-      if (locality != null) {
-        builder.setLocality(
-            io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
-                .setRegion(locality.region())
-                .setZone(locality.zone())
-                .setSubZone(locality.subZone()));
-      }
-      for (Address address : listeningAddresses) {
-        builder.addListeningAddresses(address.toEnvoyProtoAddressV2());
-      }
-      builder.setBuildVersion(buildVersion);
-      builder.setUserAgentName(userAgentName);
-      if (userAgentVersion != null) {
-        builder.setUserAgentVersion(userAgentVersion);
-      }
-      builder.addAllClientFeatures(clientFeatures);
-      return builder.build();
-    }
   }
 
   /**

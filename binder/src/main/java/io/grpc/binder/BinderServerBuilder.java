@@ -21,34 +21,24 @@ import static com.google.common.base.Preconditions.checkState;
 
 import android.app.Service;
 import android.os.IBinder;
-import com.google.common.base.Supplier;
 import com.google.errorprone.annotations.DoNotCall;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.ServerStreamTracer;
 import io.grpc.binder.internal.BinderServer;
 import io.grpc.binder.internal.BinderTransportSecurity;
-import io.grpc.ForwardingServerBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.InternalServer;
 import io.grpc.internal.ServerImplBuilder;
-import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import java.io.File;
-import java.io.IOException;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.Nullable;
 
 /**
  * Builder for a server that services requests from an Android Service.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class BinderServerBuilder
     extends ForwardingServerBuilder<BinderServerBuilder> {
 
@@ -81,6 +71,7 @@ public final class BinderServerBuilder
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
   private ServerSecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
+  private boolean isBuilt;
 
   private BinderServerBuilder(
       AndroidComponentAddress listenAddress,
@@ -93,22 +84,15 @@ public final class BinderServerBuilder
           listenAddress,
           schedulerPool,
           streamTracerFactories,
-          securityPolicy,
+          BinderInternal.createPolicyChecker(securityPolicy),
           inboundParcelablePolicy);
-      binderReceiver.set(server.getHostBinder());
+      BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;
     });
-
-    // Disable compression by default, since there's little benefit when all communication is
-    // on-device, and it means sending supported-encoding headers with every call.
-    decompressorRegistry(DecompressorRegistry.emptyInstance());
-    compressorRegistry(CompressorRegistry.newEmptyInstance());
 
     // Disable stats and tracing by default.
     serverImplBuilder.setStatsEnabled(false);
     serverImplBuilder.setTracingEnabled(false);
-
-    BinderTransportSecurity.installAuthInterceptor(this);
   }
 
   @Override
@@ -117,12 +101,14 @@ public final class BinderServerBuilder
   }
 
   /** Enable stats collection using census. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder enableStats() {
     serverImplBuilder.setStatsEnabled(true);
     return this;
   }
 
   /** Enable tracing using census. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder enableTracing() {
     serverImplBuilder.setTracingEnabled(true);
     return this;
@@ -157,12 +143,16 @@ public final class BinderServerBuilder
   }
 
   /** Sets the policy for inbound parcelable objects. */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
     this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
     return this;
   }
 
+  /**
+   * Always fails. TLS is not supported in BinderServer.
+   */
   @Override
   public BinderServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in BinderServer");
@@ -177,6 +167,11 @@ public final class BinderServerBuilder
    */
   @Override // For javadoc refinement only.
   public Server build() {
+    // Since we install a final interceptor here, we need to ensure we're only built once.
+    checkState(!isBuilt, "BinderServerBuilder can only be used to build one server instance.");
+    isBuilt = true;
+    // We install the security interceptor last, so it's closest to the transport.
+    BinderTransportSecurity.installAuthInterceptor(this);
     return super.build();
   }
 }

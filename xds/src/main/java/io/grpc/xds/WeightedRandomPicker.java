@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.primitives.UnsignedInteger;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -34,21 +35,22 @@ final class WeightedRandomPicker extends SubchannelPicker {
   final List<WeightedChildPicker> weightedChildPickers;
 
   private final ThreadSafeRandom random;
-  private final int totalWeight;
+  private final long totalWeight;
 
   static final class WeightedChildPicker {
-    private final int weight;
+    private final long weight;
     private final SubchannelPicker childPicker;
 
-    WeightedChildPicker(int weight, SubchannelPicker childPicker) {
+    WeightedChildPicker(long weight, SubchannelPicker childPicker) {
       checkArgument(weight >= 0, "weight is negative");
+      checkArgument(weight <= UnsignedInteger.MAX_VALUE.longValue(), "weight is too large");
       checkNotNull(childPicker, "childPicker is null");
 
       this.weight = weight;
       this.childPicker = childPicker;
     }
 
-    int getWeight() {
+    long getWeight() {
       return weight;
     }
 
@@ -93,12 +95,16 @@ final class WeightedRandomPicker extends SubchannelPicker {
 
     this.weightedChildPickers = Collections.unmodifiableList(weightedChildPickers);
 
-    int totalWeight = 0;
+    long totalWeight = 0;
     for (WeightedChildPicker weightedChildPicker : weightedChildPickers) {
-      int weight = weightedChildPicker.getWeight();
+      long weight = weightedChildPicker.getWeight();
+      checkArgument(weight >= 0, "weight is negative");
+      checkNotNull(weightedChildPicker.getPicker(), "childPicker is null");
       totalWeight += weight;
     }
     this.totalWeight = totalWeight;
+    checkArgument(totalWeight <= UnsignedInteger.MAX_VALUE.longValue(),
+        "total weight greater than unsigned int can hold");
 
     this.random = random;
   }
@@ -111,15 +117,15 @@ final class WeightedRandomPicker extends SubchannelPicker {
       childPicker =
           weightedChildPickers.get(random.nextInt(weightedChildPickers.size())).getPicker();
     } else {
-      int rand = random.nextInt(totalWeight);
+      long rand = random.nextLong(totalWeight);
 
       // Find the first idx such that rand < accumulatedWeights[idx]
       // Not using Arrays.binarySearch for better readability.
-      int accumulatedWeight = 0;
-      for (int idx = 0; idx < weightedChildPickers.size(); idx++) {
-        accumulatedWeight += weightedChildPickers.get(idx).getWeight();
+      long accumulatedWeight = 0;
+      for (WeightedChildPicker weightedChildPicker : weightedChildPickers) {
+        accumulatedWeight += weightedChildPicker.getWeight();
         if (rand < accumulatedWeight) {
-          childPicker = weightedChildPickers.get(idx).getPicker();
+          childPicker = weightedChildPicker.getPicker();
           break;
         }
       }
