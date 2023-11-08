@@ -105,7 +105,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }
 

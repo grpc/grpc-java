@@ -32,7 +32,6 @@ import io.grpc.netty.ProtocolNegotiators.PlaintextProtocolNegotiatorClientFactor
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
@@ -81,14 +80,9 @@ public class NettyChannelBuilderTest {
     overrideAuthorityIsReadableHelper(builder, "override:5678");
   }
 
-  private static SocketAddress getTestSocketAddress() {
-    return new InetSocketAddress("1.1.1.1", 80);
-  }
-
   @Test
   public void overrideAuthorityIsReadableForSocketAddress() throws Exception {
-    NettyChannelBuilder builder = NettyChannelBuilder.forAddress(
-        getTestSocketAddress());
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress(new SocketAddress(){});
     overrideAuthorityIsReadableHelper(builder, "override:5678");
   }
 
@@ -105,7 +99,7 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void failOverrideInvalidAuthority() {
-    NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress());
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid authority:");
@@ -115,7 +109,7 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void disableCheckAuthorityAllowsInvalidAuthority() {
-    NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress())
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){})
         .disableCheckAuthority();
 
     Object unused = builder.overrideAuthority("[invalidauthority")
@@ -125,7 +119,7 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void enableCheckAuthorityFailOverrideInvalidAuthority() {
-    NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress())
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){})
         .disableCheckAuthority()
         .enableCheckAuthority();
 
@@ -145,14 +139,14 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void sslContextCanBeNull() {
-    NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress());
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
     builder.sslContext(null);
   }
 
   @Test
   public void failIfSslContextIsNotClient() {
     SslContext sslContext = mock(SslContext.class);
-    NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress());
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Server SSL context can not be used for client channel");
@@ -174,7 +168,7 @@ public class NettyChannelBuilderTest {
   @Test
   public void failNegotiationTypeWithChannelCredentials_socketAddress() {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress(
-        getTestSocketAddress(), InsecureChannelCredentials.create());
+        new SocketAddress(){}, InsecureChannelCredentials.create());
 
     thrown.expect(IllegalStateException.class);
     thrown.expectMessage("Cannot change security when using ChannelCredentials");
@@ -271,7 +265,7 @@ public class NettyChannelBuilderTest {
   @Test
   public void assertEventLoopAndChannelType_onlyTypeProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-    builder.channelType(LocalChannel.class, LocalAddress.class);
+    builder.channelType(LocalChannel.class);
     thrown.expect(IllegalStateException.class);
     thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
@@ -304,7 +298,7 @@ public class NettyChannelBuilderTest {
   public void assertEventLoopAndChannelType_bothProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
     builder.eventLoopGroup(mock(EventLoopGroup.class));
-    builder.channelType(LocalChannel.class, LocalAddress.class);
+    builder.channelType(LocalChannel.class);
 
     builder.assertEventLoopAndChannelType();
   }

@@ -16,7 +16,6 @@
 
 package io.grpc.netty;
 
-import com.google.common.base.Preconditions;
 import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelProvider;
@@ -52,12 +51,11 @@ public final class UdsNettyChannelProvider extends ManagedChannelProvider {
 
   @Override
   public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
-    Preconditions.checkState(isAvailable());
     NewChannelBuilderResult result = new NettyChannelProvider().newChannelBuilder(target, creds);
     if (result.getChannelBuilder() != null) {
       ((NettyChannelBuilder) result.getChannelBuilder())
           .eventLoopGroupPool(SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP))
-          .channelType(Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE, DomainSocketAddress.class);
+          .channelType(Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE);
     }
     return result;
   }

@@ -60,8 +60,6 @@ import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -724,10 +722,6 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     return trustManagerFactory.getTrustManagers();
   }
 
-  static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-    return Collections.singleton(InetSocketAddress.class);
-  }
-
   static final class SslSocketFactoryResult {
     /** {@code null} implies plaintext if {@code error == null}. */
     public final SSLSocketFactory factory;
@@ -903,11 +897,6 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
 
       executorPool.returnObject(executor);
       scheduledExecutorServicePool.returnObject(scheduledExecutorService);
-    }
-
-    @Override
-    public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-      return OkHttpChannelBuilder.getSupportedSocketAddressTypes();
     }
   }
 }

@@ -110,7 +110,7 @@ public class TransportBenchmark {
             .channelType(LocalServerChannel.class);
         channelBuilder = NettyChannelBuilder.forAddress(address)
             .eventLoopGroup(group)
-            .channelType(LocalChannel.class, LocalAddress.class)
+            .channelType(LocalChannel.class)
             .negotiationType(NegotiationType.PLAINTEXT);
         groupToShutdown = group;
         break;
@@ -134,7 +134,7 @@ public class TransportBenchmark {
               .asSubclass(Channel.class);
         channelBuilder = NettyChannelBuilder.forAddress(address)
             .eventLoopGroup(group)
-            .channelType(channelClass, InetSocketAddress.class)
+            .channelType(channelClass)
             .negotiationType(NegotiationType.PLAINTEXT);
         groupToShutdown = group;
         break;

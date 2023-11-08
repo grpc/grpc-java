@@ -34,7 +34,6 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.internal.MetadataApplierImpl.MetadataApplierListener;
 import java.net.SocketAddress;
-import java.util.Collection;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -73,11 +72,6 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   @Override
   public void close() {
     delegate.close();
-  }
-
-  @Override
-  public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-    return delegate.getSupportedSocketAddressTypes();
   }
 
   private class CallCredentialsApplyingTransport extends ForwardingConnectionClientTransport {

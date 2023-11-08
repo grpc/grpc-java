@@ -35,7 +35,6 @@ import io.grpc.InternalGlobalInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
-import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import java.lang.reflect.InvocationTargetException;
@@ -45,7 +44,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -135,7 +133,10 @@ public final class ManagedChannelImplBuilder
   ObjectPool<? extends Executor> offloadExecutorPool = DEFAULT_EXECUTOR_POOL;
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
-  NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+  final NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+
+  // Access via getter, which may perform authority override as needed
+  NameResolver.Factory nameResolverFactory = nameResolverRegistry.asFactory();
 
   final String target;
   @Nullable
@@ -283,7 +284,7 @@ public final class ManagedChannelImplBuilder
 
   /**
    * Returns a target string for the SocketAddress. It is only used as a placeholder, because
-   * DirectAddressNameResolverProvider will not actually try to use it. However, it must be a valid
+   * DirectAddressNameResolverFactory will not actually try to use it. However, it must be a valid
    * URI.
    */
   @VisibleForTesting
@@ -326,10 +327,7 @@ public final class ManagedChannelImplBuilder
     this.clientTransportFactoryBuilder = Preconditions
         .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
     this.directServerAddress = directServerAddress;
-    NameResolverRegistry reg = new NameResolverRegistry();
-    reg.register(new DirectAddressNameResolverProvider(directServerAddress,
-        authority));
-    this.nameResolverRegistry = reg;
+    this.nameResolverFactory = new DirectAddressNameResolverFactory(directServerAddress, authority);
 
     if (channelBuilderDefaultPortProvider != null) {
       this.channelBuilderDefaultPortProvider = channelBuilderDefaultPortProvider;
@@ -381,17 +379,10 @@ public final class ManagedChannelImplBuilder
         "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
         directServerAddress);
     if (resolverFactory != null) {
-      NameResolverRegistry reg = new NameResolverRegistry();
-      reg.register(new NameResolverFactoryToProviderFacade(resolverFactory));
-      this.nameResolverRegistry = reg;
+      this.nameResolverFactory = resolverFactory;
     } else {
-      this.nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+      this.nameResolverFactory = nameResolverRegistry.asFactory();
     }
-    return this;
-  }
-
-  ManagedChannelImplBuilder nameResolverRegistry(NameResolverRegistry resolverRegistry) {
-    this.nameResolverRegistry = resolverRegistry;
     return this;
   }
 
@@ -737,16 +728,13 @@ public final class ManagedChannelImplBuilder
     return channelBuilderDefaultPortProvider.getDefaultPort();
   }
 
-  private static class DirectAddressNameResolverProvider extends NameResolverProvider {
+  private static class DirectAddressNameResolverFactory extends NameResolver.Factory {
     final SocketAddress address;
     final String authority;
-    final Collection<Class<? extends SocketAddress>> producedSocketAddressTypes;
 
-    DirectAddressNameResolverProvider(SocketAddress address, String authority) {
+    DirectAddressNameResolverFactory(SocketAddress address, String authority) {
       this.address = address;
       this.authority = authority;
-      this.producedSocketAddressTypes
-          = Collections.singleton(address.getClass());
     }
 
     @Override
@@ -774,21 +762,6 @@ public final class ManagedChannelImplBuilder
     @Override
     public String getDefaultScheme() {
       return DIRECT_ADDRESS_SCHEME;
-    }
-
-    @Override
-    protected boolean isAvailable() {
-      return true;
-    }
-
-    @Override
-    protected int priority() {
-      return 5;
-    }
-
-    @Override
-    public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
-      return producedSocketAddressTypes;
     }
   }
 

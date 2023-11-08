@@ -191,7 +191,7 @@ public class RetryTest {
     rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
     channel = cleanupRule.register(
         NettyChannelBuilder.forAddress(localAddress)
-            .channelType(LocalChannel.class, LocalAddress.class)
+            .channelType(LocalChannel.class)
             .eventLoopGroup(group)
             .usePlaintext()
             .enableRetry()

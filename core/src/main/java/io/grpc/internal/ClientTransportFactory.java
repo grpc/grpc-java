@@ -25,7 +25,6 @@ import io.grpc.ChannelLogger;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import java.io.Closeable;
 import java.net.SocketAddress;
-import java.util.Collection;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -73,11 +72,6 @@ public interface ClientTransportFactory extends Closeable {
    */
   @Override
   void close();
-
-  /**
-   * Returns the {@link SocketAddress} types this transport supports.
-   */
-  Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes();
 
   /**
    * Options passed to {@link #newClientTransport}. Although it is safe to save this object if

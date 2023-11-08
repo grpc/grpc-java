@@ -48,7 +48,6 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -159,8 +158,6 @@ public class ServiceConfigErrorHandlingTest {
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
 
-    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
-        InetSocketAddress.class));
     channel =
         new ManagedChannelImpl(
             channelBuilder,

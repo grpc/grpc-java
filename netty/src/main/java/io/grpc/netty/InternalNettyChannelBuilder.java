@@ -23,7 +23,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import java.net.InetSocketAddress;
 
 /**
  * Internal {@link NettyChannelBuilder} accessor.  This is intended for usage internal to the gRPC
@@ -101,7 +100,7 @@ public final class InternalNettyChannelBuilder {
    * io.netty.channel.EventLoopGroup}.
    */
   public static void useNioTransport(NettyChannelBuilder builder) {
-    builder.channelType(NioSocketChannel.class, InetSocketAddress.class);
+    builder.channelType(NioSocketChannel.class);
     builder
         .eventLoopGroupPool(SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP));
   }

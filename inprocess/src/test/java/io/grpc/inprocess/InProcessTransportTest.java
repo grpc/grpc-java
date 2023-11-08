@@ -174,7 +174,7 @@ public class InProcessTransportTest extends AbstractTransportTest {
       fail("Call should fail.");
     } catch (ExecutionException ex) {
       StatusRuntimeException s = (StatusRuntimeException)ex.getCause();
-      assertEquals(Code.UNIMPLEMENTED, s.getStatus().getCode());
+      assertEquals(s.getStatus().getCode(), Code.UNIMPLEMENTED);
     }
   }
 }

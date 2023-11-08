@@ -130,21 +130,21 @@ public final class Utils {
       case NETTY_NIO:
         builder
             .eventLoopGroup(new NioEventLoopGroup(0, tf))
-            .channelType(NioSocketChannel.class, InetSocketAddress.class);
+            .channelType(NioSocketChannel.class);
         break;
 
       case NETTY_EPOLL:
         // These classes only work on Linux.
         builder
             .eventLoopGroup(new EpollEventLoopGroup(0, tf))
-            .channelType(EpollSocketChannel.class, InetSocketAddress.class);
+            .channelType(EpollSocketChannel.class);
         break;
 
       case NETTY_UNIX_DOMAIN_SOCKET:
         // These classes only work on Linux.
         builder
             .eventLoopGroup(new EpollEventLoopGroup(0, tf))
-            .channelType(EpollDomainSocketChannel.class, DomainSocketAddress.class);
+            .channelType(EpollDomainSocketChannel.class);
         break;
 
       default:

@@ -39,8 +39,6 @@ import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import java.net.SocketAddress;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -402,11 +400,6 @@ public final class BinderChannelBuilder
       closed = true;
       executorService = scheduledExecutorPool.returnObject(executorService);
       offloadExecutor = offloadExecutorPool.returnObject(offloadExecutor);
-    }
-
-    @Override
-    public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-      return Collections.singleton(AndroidComponentAddress.class);
     }
   }
 }

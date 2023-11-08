@@ -59,8 +59,6 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -117,8 +115,6 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
    * request body in the query params.
    */
   private final boolean useGetForSafeMethods = false;
-
-  private Class<? extends SocketAddress> transportSocketType = InetSocketAddress.class;
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
@@ -264,23 +260,8 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
    */
   @CanIgnoreReturnValue
   public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
-    return channelType(channelType, null);
-  }
-
-  /**
-   * Similar to {@link #channelType(Class)} above but allows the
-   * caller to specify the socket-type associated with the channelType.
-   *
-   * @param channelType the type of {@link Channel} to use.
-   * @param transportSocketType the associated {@link SocketAddress} type. If {@code null}, then
-   *     no compatibility check is performed between channel transport and name-resolver addresses.
-   */
-  @CanIgnoreReturnValue
-  public NettyChannelBuilder channelType(Class<? extends Channel> channelType,
-      @Nullable Class<? extends SocketAddress> transportSocketType) {
     checkNotNull(channelType, "channelType");
-    return channelFactory(new ReflectiveChannelFactory<>(channelType),
-        transportSocketType);
+    return channelFactory(new ReflectiveChannelFactory<>(channelType));
   }
 
   /**
@@ -298,22 +279,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
    */
   @CanIgnoreReturnValue
   public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory) {
-    return channelFactory(channelFactory, null);
-  }
-
-  /**
-   * Similar to {@link #channelFactory(ChannelFactory)} above but allows the
-   * caller to specify the socket-type associated with the channelFactory.
-   *
-   * @param channelFactory the {@link ChannelFactory} to use.
-   * @param transportSocketType the associated {@link SocketAddress} type. If {@code null}, then
-   *     no compatibility check is performed between channel transport and name-resolver addresses.
-   */
-  @CanIgnoreReturnValue
-  public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory,
-      @Nullable Class<? extends SocketAddress> transportSocketType) {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
-    this.transportSocketType = transportSocketType;
     return this;
   }
 
@@ -575,7 +541,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
         negotiator, channelFactory, channelOptions,
         eventLoopGroupPool, autoFlowControl, flowControlWindow, maxInboundMessageSize,
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory, localSocketPicker, useGetForSafeMethods, transportSocketType);
+        transportTracerFactory, localSocketPicker, useGetForSafeMethods);
   }
 
   @VisibleForTesting
@@ -660,10 +626,6 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
     return this;
   }
 
-  static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-    return Collections.singleton(InetSocketAddress.class);
-  }
-
   private final class DefaultProtocolNegotiator implements ProtocolNegotiator.ClientFactory {
     private NegotiationType negotiationType = NegotiationType.TLS;
     private SslContext sslContext;
@@ -718,7 +680,6 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
     private final boolean useGetForSafeMethods;
 
     private boolean closed;
-    private final Class<? extends SocketAddress> transportSocketType;
 
     NettyTransportFactory(
         ProtocolNegotiator protocolNegotiator,
@@ -727,7 +688,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
         boolean autoFlowControl, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
-        boolean useGetForSafeMethods, Class<? extends SocketAddress> transportSocketType) {
+        boolean useGetForSafeMethods) {
       this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -745,7 +706,6 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
       this.localSocketPicker =
           localSocketPicker != null ? localSocketPicker : new LocalSocketPicker();
       this.useGetForSafeMethods = useGetForSafeMethods;
-      this.transportSocketType = transportSocketType;
     }
 
     @Override
@@ -799,7 +759,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
           result.negotiator.newNegotiator(), channelFactory, channelOptions, groupPool,
           autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeNanos,
           keepAliveTimeoutNanos, keepAliveWithoutCalls, transportTracerFactory,  localSocketPicker,
-          useGetForSafeMethods, transportSocketType);
+          useGetForSafeMethods);
       return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 
@@ -812,12 +772,6 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
 
       protocolNegotiator.close();
       groupPool.returnObject(group);
-    }
-
-    @Override
-    public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-      return transportSocketType == null ? null
-          : Collections.singleton(transportSocketType);
     }
   }
 }

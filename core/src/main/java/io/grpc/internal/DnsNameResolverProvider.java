@@ -84,7 +84,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }
 }
