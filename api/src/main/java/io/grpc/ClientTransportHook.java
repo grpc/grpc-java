@@ -23,7 +23,7 @@ package io.grpc;
  *
  * @since 1.60.0
  */
-@ExperimentalApi("https://gitub.com/grpc/grpc-java/issues/TODO")
+@ExperimentalApi("https://gitub.com/grpc/grpc-java/issues/10652")
 public interface ClientTransportHook {
   /**
    * Called when a transport is ready to accept traffic (when a connection has been established).
