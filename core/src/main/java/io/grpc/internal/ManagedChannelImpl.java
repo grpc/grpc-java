@@ -664,7 +664,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       channel = builder.binlog.wrapChannel(channel);
     }
     this.interceptorChannel = ClientInterceptors.intercept(channel, interceptors);
-    this.transportFilters = builder.transportFilters;
+    this.transportFilters = new ArrayList<>(builder.transportFilters);
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;

@@ -4250,17 +4250,17 @@ public class ManagedChannelImplTest {
     final AtomicInteger terminationCallbackCalled = new AtomicInteger(0);
     ClientTransportFilter transportFilter = new ClientTransportFilter() {
       @Override
-      public void transportReady() {
+      public void transportReady(Attributes transportAttrs) {
         readyCallbackCalled.incrementAndGet();
       }
 
       @Override
-      public void transportShutdown(Status s) {
+      public void transportShutdown(Status s, Attributes transportAttrs) {
         shutdownCallbackCalled.incrementAndGet();
       }
 
       @Override
-      public void transportTerminated() {
+      public void transportTerminated(Attributes transportAttrs) {
         terminationCallbackCalled.incrementAndGet();
       }
     };

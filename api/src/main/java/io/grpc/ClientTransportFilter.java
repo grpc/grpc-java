@@ -22,14 +22,12 @@ package io.grpc;
  * for transport observability. Multiple filters may be registered to the client.
  */
 @ExperimentalApi("https://gitub.com/grpc/grpc-java/issues/TODO")
-public abstract class ClientTransportFilter {
+public interface ClientTransportFilter {
   /**
    * Called when a transport is ready to accept traffic (when a connection has been established).
    * The default implementation is a no-op.
    */
-  public void transportReady() {
-
-  }
+  void transportReady(Attributes transportAttrs);
 
   /**
    * Called when a transport is shutting down. Shutdown could have been caused by an error or normal
@@ -39,17 +37,12 @@ public abstract class ClientTransportFilter {
    *
    * @param s the reason for the shutdown.
    */
-  public void transportShutdown(Status s) {
-
-  }
+  void transportShutdown(Status s, Attributes transportAttrs);
 
   /**
    * Called when a transport completed shutting down. All resources have been released.
    * All streams have either been closed or transferred off this transport.
    * Default implementation is a no-op
    */
-  public void transportTerminated() {
-
-  }
-
+  void transportTerminated(Attributes transportAttrs);
 }

@@ -548,7 +548,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     public void transportReady() {
       channelLogger.log(ChannelLogLevel.INFO, "READY");
       for (ClientTransportFilter filter : transportFilters) {
-        filter.transportReady();
+        filter.transportReady(transport.getAttributes());
       }
       syncContext.execute(new Runnable() {
         @Override
@@ -579,7 +579,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
       for (ClientTransportFilter filter : transportFilters) {
-        filter.transportShutdown(s);
+        filter.transportShutdown(s, transport.getAttributes());
       }
       syncContext.execute(new Runnable() {
         @Override
@@ -619,7 +619,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       channelz.removeClientSocket(transport);
       handleTransportInUseState(transport, false);
       for (ClientTransportFilter filter : transportFilters) {
-        filter.transportTerminated();
+        filter.transportTerminated(transport.getAttributes());
       }
       syncContext.execute(new Runnable() {
         @Override
