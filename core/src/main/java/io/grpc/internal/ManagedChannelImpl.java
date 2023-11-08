@@ -42,7 +42,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ClientTransportFilter;
+import io.grpc.ClientTransportHook;
 import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -211,7 +211,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   private final Channel interceptorChannel;
 
-  private final List<ClientTransportFilter> transportFilters;
+  private final List<ClientTransportHook> transportHooks;
   @Nullable private final String userAgent;
 
   // Only null after channel is terminated. Must be assigned from the syncContext.
@@ -664,7 +664,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       channel = builder.binlog.wrapChannel(channel);
     }
     this.interceptorChannel = ClientInterceptors.intercept(channel, interceptors);
-    this.transportFilters = new ArrayList<>(builder.transportFilters);
+    this.transportHooks = new ArrayList<>(builder.transportHooks);
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
@@ -1571,7 +1571,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannelTracer,
           subchannelLogId,
           subchannelLogger,
-          transportFilters);
+          transportHooks);
       oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel created")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -1996,7 +1996,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannelTracer,
           subchannelLogId,
           subchannelLogger,
-          transportFilters);
+          transportHooks);
 
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel started")

@@ -35,7 +35,7 @@ import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ClientTransportFilter;
+import io.grpc.ClientTransportHook;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -78,7 +78,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final ChannelTracer channelTracer;
   private final ChannelLogger channelLogger;
 
-  private final List<ClientTransportFilter> transportFilters;
+  private final List<ClientTransportHook> transportHooks;
 
   /**
    * All field must be mutated in the syncContext.
@@ -163,7 +163,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext, Callback callback,
       InternalChannelz channelz, CallTracer callsTracer, ChannelTracer channelTracer,
       InternalLogId logId, ChannelLogger channelLogger,
-      List<ClientTransportFilter> transportFilters) {
+      List<ClientTransportHook> transportHooks) {
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
@@ -184,7 +184,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.channelTracer = Preconditions.checkNotNull(channelTracer, "channelTracer");
     this.logId = Preconditions.checkNotNull(logId, "logId");
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
-    this.transportFilters = transportFilters;
+    this.transportHooks = transportHooks;
   }
 
   ChannelLogger getChannelLogger() {
@@ -547,8 +547,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     @Override
     public void transportReady() {
       channelLogger.log(ChannelLogLevel.INFO, "READY");
-      for (ClientTransportFilter filter : transportFilters) {
-        filter.transportReady(transport.getAttributes());
+      for (ClientTransportHook hook : transportHooks) {
+        hook.transportReady(transport.getAttributes());
       }
       syncContext.execute(new Runnable() {
         @Override
@@ -578,8 +578,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       channelLogger.log(
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
-      for (ClientTransportFilter filter : transportFilters) {
-        filter.transportShutdown(s, transport.getAttributes());
+      for (ClientTransportHook hook : transportHooks) {
+        hook.transportShutdown(s, transport.getAttributes());
       }
       syncContext.execute(new Runnable() {
         @Override
@@ -618,8 +618,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       channelLogger.log(ChannelLogLevel.INFO, "{0} Terminated", transport.getLogId());
       channelz.removeClientSocket(transport);
       handleTransportInUseState(transport, false);
-      for (ClientTransportFilter filter : transportFilters) {
-        filter.transportTerminated(transport.getAttributes());
+      for (ClientTransportHook hook : transportHooks) {
+        hook.transportTerminated(transport.getAttributes());
       }
       syncContext.execute(new Runnable() {
         @Override

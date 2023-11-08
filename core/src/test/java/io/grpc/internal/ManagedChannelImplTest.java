@@ -72,7 +72,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.ClientTransportFilter;
+import io.grpc.ClientTransportHook;
 import io.grpc.CompositeChannelCredentials;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -4248,7 +4248,7 @@ public class ManagedChannelImplTest {
     final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
     final AtomicInteger shutdownCallbackCalled = new AtomicInteger(0);
     final AtomicInteger terminationCallbackCalled = new AtomicInteger(0);
-    ClientTransportFilter transportFilter = new ClientTransportFilter() {
+    ClientTransportHook transportHook = new ClientTransportHook() {
       @Override
       public void transportReady(Attributes transportAttrs) {
         readyCallbackCalled.incrementAndGet();
@@ -4265,7 +4265,7 @@ public class ManagedChannelImplTest {
       }
     };
 
-    channelBuilder.addTransportFilter(transportFilter);
+    channelBuilder.addTransportHook(transportHook);
     assertEquals(0, readyCallbackCalled.get());
 
     createChannel();

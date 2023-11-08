@@ -22,7 +22,7 @@ package io.grpc;
  * for transport observability. Multiple filters may be registered to the client.
  */
 @ExperimentalApi("https://gitub.com/grpc/grpc-java/issues/TODO")
-public interface ClientTransportFilter {
+public interface ClientTransportHook {
   /**
    * Called when a transport is ready to accept traffic (when a connection has been established).
    * The default implementation is a no-op.

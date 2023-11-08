@@ -160,14 +160,14 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T intercept(ClientInterceptor... interceptors);
 
   /**
-   * Adds a {@link ClientTransportFilter}. The order of filters being added is the order they will
+   * Adds a {@link ClientTransportHook}. The order of filters being added is the order they will
    * be executed
    *
    * @return this
    * @since 1.60.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/TODO")
-  public T addTransportFilter(ClientTransportFilter filter) {
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10647")
+  public T addTransportHook(ClientTransportHook hook) {
     throw new UnsupportedOperationException();
   }
 
