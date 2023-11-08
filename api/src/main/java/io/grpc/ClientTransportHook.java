@@ -20,6 +20,8 @@ package io.grpc;
  * Listens on the client transport life-cycle events. These filters do not have the capability
  * to modify the channels or transport life-cycle event behavior, but they can be useful hooks
  * for transport observability. Multiple filters may be registered to the client.
+ *
+ * @since 1.60.0
  */
 @ExperimentalApi("https://gitub.com/grpc/grpc-java/issues/TODO")
 public interface ClientTransportHook {
