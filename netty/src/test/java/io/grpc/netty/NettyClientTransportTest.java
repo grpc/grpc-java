@@ -579,7 +579,7 @@ public class NettyClientTransportTest {
     new Rpc(transport, headers).halfClose().waitForResponse();
 
     if (!foundExpectedHeaderBytes.get()) {
-      fail("expected to find ");
+      fail("expected to find UTF-8 encoded 'a's in the header");
     }
   }
 
