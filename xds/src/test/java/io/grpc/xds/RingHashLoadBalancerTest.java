@@ -720,7 +720,8 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelUnreachable(subchannels.get(Collections.singletonList(servers.get(2))));
     deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forNonError(CONNECTING));
-    verify(helper, atLeastOnce()).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verify(helper, atLeastOnce())
+        .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     verifyConnection(0);
 
     // Picking subchannel should not trigger connection per gRFC A61.

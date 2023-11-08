@@ -194,6 +194,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           break;
         case TRANSIENT_FAILURE:
           numTF++;
+          break;
         default:
           // ignore it
       }
