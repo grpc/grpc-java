@@ -4243,7 +4243,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void transportFilters() throws Exception {
+  public void transportFilters() {
 
     final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
     final AtomicInteger shutdownCallbackCalled = new AtomicInteger(0);
