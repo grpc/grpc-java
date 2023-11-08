@@ -40,7 +40,6 @@ import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
@@ -71,6 +70,7 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.grpc.testing.TlsTesting;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelDuplexHandler;
@@ -78,6 +78,7 @@ import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.local.LocalChannel;
@@ -88,24 +89,23 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.traffic.ChannelTrafficShapingHandler;
-import io.netty.handler.traffic.TrafficCounter;
 import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
@@ -123,8 +123,6 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
-  public static final String LONG_STRING_OF_A = Strings.repeat("a", 1024);
-  public static final String LONG_STRING_OF_Z = Strings.repeat("z", 1024);
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final SslContext SSL_CONTEXT = createSslContext();
@@ -547,55 +545,42 @@ public class NettyClientTransportTest {
 
   @Test
   public void huffmanCodingShouldNotBePerformed() throws Exception {
+    String longStringOfA = Strings.repeat("a", 128);
+
+    negotiator = ProtocolNegotiators.serverPlaintext();
     startServer();
 
-    Callable<NettyClientTransport> nonHuffmanTransport =  () -> newTransport(newNegotiator(),
-        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, true,
+    NettyClientTransport transport = newTransport(ProtocolNegotiators.plaintext(),
+        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, false,
         TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
         new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
 
-    Metadata aHeaders = new Metadata();
-    aHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-        LONG_STRING_OF_A);
-
-    Metadata zHeaders = new Metadata();
-    zHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-        LONG_STRING_OF_Z);
-
-    Metadata warmupHeaders = new Metadata();
-    warmupHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER), "unused");
-
-    //warm up hpack
-    getRpcSize(nonHuffmanTransport, warmupHeaders);
-
-    // When huffman coded via the HPACK speck, 'a' is 5 bits while 'z' is 7 bits.
-    // A 1024 character string of 'a' should be 256 bytes shorter than the same length of 'z'.
-    long aHeaderRpcSize = getRpcSize(nonHuffmanTransport, aHeaders);
-    long zHeaderRpcSize = getRpcSize(nonHuffmanTransport, zHeaders);
-
-    assertThat(aHeaderRpcSize).isEqualTo(zHeaderRpcSize);
-  }
-
-  @CanIgnoreReturnValue
-  private long getRpcSize(Callable<NettyClientTransport> transportSupplier, Metadata headers)
-      throws Exception {
-
-    NettyClientTransport transport = transportSupplier.call();
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        longStringOfA);
 
     callMeMaybe(transport.start(clientTransportListener));
 
-    ChannelTrafficShapingHandler channelTrafficShapingHandler =
-        new ChannelTrafficShapingHandler(0);
+    AtomicBoolean foundExpectedHeaderBytes = new AtomicBoolean(false);
 
-    transport.channel().pipeline().addFirst(channelTrafficShapingHandler);
+    transport.channel().pipeline().addFirst(new ChannelDuplexHandler() {
+      @Override
+      public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+          throws Exception {
+        if (msg instanceof ByteBuf) {
+          if (((ByteBuf) msg).toString(StandardCharsets.UTF_8).contains(longStringOfA)) {
+            foundExpectedHeaderBytes.set(true);
+          }
+        }
+        super.write(ctx, msg, promise);
+      }
+    });
 
     new Rpc(transport, headers).halfClose().waitForResponse();
 
-    TrafficCounter trafficCounter = channelTrafficShapingHandler.trafficCounter();
-    if (trafficCounter == null) {
-      fail("Could not measure size of RPC");
+    if (!foundExpectedHeaderBytes.get()) {
+      fail("expected to find ");
     }
-    return trafficCounter.getRealWrittenBytes().get();
   }
 
   @Test
