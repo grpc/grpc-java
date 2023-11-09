@@ -146,15 +146,15 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    *   Override to completely replace the default logic or to do additional activities.
    */
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
 
       // process resolvedAddresses to update children
       AcceptResolvedAddressRetVal acceptRetVal =
           acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.valid) {
-        return false;
+      if (!acceptRetVal.status.isOk()) {
+        return acceptRetVal.status;
       }
 
       // Update the picker and our connectivity state
@@ -162,7 +162,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
       // shutdown removed children
       shutdownRemoved(acceptRetVal.removedChildren);
-      return true;
+      return acceptRetVal.status;
     } finally {
       resolvingAddresses = false;
     }
@@ -213,9 +213,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
 
     if (newChildren.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. " + resolvedAddresses));
-      return new AcceptResolvedAddressRetVal(false, null);
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+          "NameResolver returned no usable address. " + resolvedAddresses);
+      handleNameResolutionError(unavailableStatus);
+      return new AcceptResolvedAddressRetVal(unavailableStatus, null);
     }
 
     // Do adds and updates
@@ -251,7 +252,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       }
     }
 
-    return new AcceptResolvedAddressRetVal(true, removedChildren);
+    return new AcceptResolvedAddressRetVal(Status.OK, removedChildren);
   }
 
   protected void shutdownRemoved(List<ChildLbState> removedChildren) {
@@ -594,11 +595,11 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   }
 
   protected static class AcceptResolvedAddressRetVal {
-    public final boolean valid;
+    public final Status status;
     public final List<ChildLbState> removedChildren;
 
-    public AcceptResolvedAddressRetVal(boolean valid, List<ChildLbState> removedChildren) {
-      this.valid = valid;
+    public AcceptResolvedAddressRetVal(Status status, List<ChildLbState> removedChildren) {
+      this.status = status;
       this.removedChildren = removedChildren;
     }
   }

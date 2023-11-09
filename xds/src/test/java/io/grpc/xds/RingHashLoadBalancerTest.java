@@ -128,10 +128,10 @@ public class RingHashLoadBalancerTest {
   public void subchannelLazyConnectUntilPicked() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
     assertThat(subchannels.size()).isEqualTo(0);
 
@@ -159,10 +159,10 @@ public class RingHashLoadBalancerTest {
   public void subchannelNotAutoReconnectAfterReenteringIdle() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
     RingHashChildLbState childLbState =
@@ -337,10 +337,10 @@ public class RingHashLoadBalancerTest {
     }
     Subchannel subchannel0_old = subchannels.get(Collections.singletonList(servers.get(0)));
     Subchannel subchannel1_old = subchannels.get(Collections.singletonList(servers.get(1)));
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(updatedServers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(subchannel0_old).updateAddresses(Collections.singletonList(updatedServers.get(0)));
     verify(subchannel1_old).updateAddresses(Collections.singletonList(updatedServers.get(1)));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -372,10 +372,10 @@ public class RingHashLoadBalancerTest {
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
 
     servers = createWeightedServerAddrs(1, 1, 1, 1, 1);  // server2, server3, server4 added
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(5);
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(args).getSubchannel())
@@ -392,11 +392,11 @@ public class RingHashLoadBalancerTest {
     // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
-    boolean addressesAccepted =
+    Status addressesAcceptanceStatus =
         loadBalancer.acceptResolvedAddresses(
             ResolvedAddresses.newBuilder()
                 .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Create subchannel for the first address
     ((RingHashChildLbState)loadBalancer.getChildLbStateEag(servers.get(0))).activate();
@@ -772,32 +772,32 @@ public class RingHashLoadBalancerTest {
 
     // Try value between max signed and max unsigned int
     servers = createWeightedServerAddrs(Integer.MAX_VALUE + 100L, 100); // (MAX+100):100
-    boolean addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Try a negative value
     servers = createWeightedServerAddrs(10, -20, 100); // 10:-20:100
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isFalse();
+    assertThat(addressesAcceptanceStatus.isOk()).isFalse();
 
     // Try an individual value larger than max unsigned int
     long maxUnsigned = UnsignedInteger.MAX_VALUE.longValue();
     servers = createWeightedServerAddrs(maxUnsigned + 10, 10, 100); // uMAX+10:10:100
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isFalse();
+    assertThat(addressesAcceptanceStatus.isOk()).isFalse();
 
     // Try a sum of values larger than max unsigned int
     servers = createWeightedServerAddrs(Integer.MAX_VALUE, Integer.MAX_VALUE, 100); // MAX:MAX:100
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(addressesAccepted).isFalse();
+    assertThat(addressesAcceptanceStatus.isOk()).isFalse();
   }
 
   @Test
@@ -912,17 +912,17 @@ public class RingHashLoadBalancerTest {
       }
     }
 
-    boolean addressesAccepted =
+    Status addressesAcceptanceStatus =
         loadBalancer.acceptResolvedAddresses(
             ResolvedAddresses.newBuilder()
                 .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
 
     if (doVerifies) {
-      assertThat(addressesAccepted).isTrue();
+      assertThat(addressesAcceptanceStatus.isOk()).isTrue();
       verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
     }
 
-    if (!addressesAccepted) {
+    if (!addressesAcceptanceStatus.isOk()) {
       return new ArrayList<>();
     }
 

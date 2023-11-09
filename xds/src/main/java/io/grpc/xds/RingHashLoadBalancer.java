@@ -79,11 +79,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     List<EquivalentAddressGroup> addrList = resolvedAddresses.getAddresses();
-    if (!validateAddrList(addrList)) {
-      return false;
+    Status addressValidityStatus = validateAddrList(addrList);
+    if (!addressValidityStatus.isOk()) {
+      return addressValidityStatus;
     }
 
     AcceptResolvedAddressRetVal acceptRetVal;
@@ -91,11 +92,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       resolvingAddresses = true;
       // Update the child list by creating-adding, updating addresses, and removing
       acceptRetVal = super.acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.valid) {
-        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+      if (!acceptRetVal.status.isOk()) {
+        addressValidityStatus = Status.UNAVAILABLE.withDescription(
             "Ring hash lb error: EDS resolution was successful, but was not accepted by base class"
-            ));
-        return false;
+                + " (" + acceptRetVal.status + ")");
+        handleNameResolutionError(addressValidityStatus);
+        return addressValidityStatus;
       }
 
       // Now do the ringhash specific logic with weights and building the ring
@@ -146,7 +148,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       this.resolvingAddresses = false;
     }
 
-    return true;
+    return Status.OK;
   }
 
   /**
@@ -170,10 +172,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     checkState(!getChildLbStates().isEmpty(), "no subchannel has been created");
     if (this.currentConnectivityState == SHUTDOWN) {
       // Ignore changes that happen after shutdown is called
+      logger.log(XdsLogLevel.DEBUG, "UpdateOverallBalancingState called after shutdown");
       return;
     }
 
-    // Calculate the current overall state considering sticky TF
+    // Calculate the current overall state to report
     int numIdle = 0;
     int numReady = 0;
     int numConnecting = 0;
@@ -237,18 +240,20 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         getChildAddresses(key, resolvedAddresses, null));
   }
 
-  private boolean validateAddrList(List<EquivalentAddressGroup> addrList) {
+  private Status validateAddrList(List<EquivalentAddressGroup> addrList) {
     if (addrList.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
-          + "resolution was successful, but returned server addresses are empty."));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+              + "resolution was successful, but returned server addresses are empty.");
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
 
     String dupAddrString = validateNoDuplicateAddresses(addrList);
     if (dupAddrString != null) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
-          + "resolution was successful, but there were duplicate addresses: " + dupAddrString));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+              + "resolution was successful, but there were duplicate addresses: " + dupAddrString);
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
 
     long totalWeight = 0;
@@ -260,29 +265,32 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       }
 
       if (weight < 0) {
-        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
             String.format("Ring hash lb error: EDS resolution was successful, but returned a "
-                + "negative weight for %s.", stripAttrs(eag))));
-        return false;
+                        + "negative weight for %s.", stripAttrs(eag)));
+        handleNameResolutionError(unavailableStatus);
+        return unavailableStatus;
       }
       if (weight > UnsignedInteger.MAX_VALUE.longValue()) {
-        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
             String.format("Ring hash lb error: EDS resolution was successful, but returned a weight"
-                + " too large to fit in an unsigned int for %s.", stripAttrs(eag))));
-        return false;
+                + " too large to fit in an unsigned int for %s.", stripAttrs(eag)));
+        handleNameResolutionError(unavailableStatus);
+        return unavailableStatus;
       }
       totalWeight += weight;
     }
 
     if (totalWeight > UnsignedInteger.MAX_VALUE.longValue()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
           String.format(
               "Ring hash lb error: EDS resolution was successful, but returned a sum of weights too"
-              + " large to fit in an unsigned int (%d).", totalWeight)));
-      return false;
+                  + " large to fit in an unsigned int (%d).", totalWeight));
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
 
-    return true;
+    return Status.OK;
   }
 
   @Nullable
@@ -377,7 +385,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         long midVal = ring.get(mid).hash;
         long midValL = mid == 0 ? 0 : ring.get(mid - 1).hash;
         if (requestHash <= midVal && requestHash > midValL) {
-          return mid;
+          break;
         }
         if (midVal < requestHash) {
           low = mid + 1;
@@ -441,13 +449,17 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     throw new UnsupportedOperationException("Not used by RingHash");
   }
 
+  /**
+   * An unmodifiable view of a subchannel with state not subject to its real connectivity
+   * state changes.
+   */
   private static final class SubchannelView {
     private final RingHashChildLbState childLbState;
     private final ConnectivityState connectivityState;
 
-    private SubchannelView(RingHashChildLbState subchannel, ConnectivityState connectivityState) {
-      this.childLbState = subchannel;
-      this.connectivityState = connectivityState;
+    private SubchannelView(RingHashChildLbState childLbState, ConnectivityState state) {
+      this.childLbState = childLbState;
+      this.connectivityState = state;
     }
   }
 

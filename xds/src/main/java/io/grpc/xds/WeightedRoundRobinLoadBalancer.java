@@ -97,29 +97,30 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
+      SubchannelPicker initialPicker, ResolvedAddresses unused) {
     ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
         initialPicker);
     return childLbState;
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getLoadBalancingPolicyConfig() == null) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
               "NameResolver returned no WeightedRoundRobinLoadBalancerConfig. addrs="
                       + resolvedAddresses.getAddresses()
-                      + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+    AcceptResolvedAddressRetVal acceptRetVal;
     try {
       resolvingAddresses = true;
-      AcceptResolvedAddressRetVal acceptRetVal =
-          acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.valid) {
-        return false;
+      acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
+      if (!acceptRetVal.status.isOk()) {
+        return acceptRetVal.status;
       }
 
       if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
@@ -138,7 +139,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       resolvingAddresses = false;
     }
 
-    return true;
+    return acceptRetVal.status;
   }
 
   @Override

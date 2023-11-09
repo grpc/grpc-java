@@ -98,21 +98,21 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
    * to be done by the timer.
    */
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
 
       // process resolvedAddresses to update children
       AcceptResolvedAddressRetVal acceptRetVal =
           acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.valid) {
-        return false;
+      if (!acceptRetVal.status.isOk()) {
+        return acceptRetVal.status;
       }
 
       // Update the picker
       updateOverallBalancingState();
 
-      return true;
+      return acceptRetVal.status;
     } finally {
       resolvingAddresses = false;
     }
