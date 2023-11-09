@@ -45,6 +45,7 @@ public final class GoogleDefaultChannelBuilder
   }
 
   @Override
+  @SuppressWarnings("deprecation") // Not extending ForwardingChannelBuilder2 to preserve ABI.
   protected NettyChannelBuilder delegate() {
     return delegate;
   }

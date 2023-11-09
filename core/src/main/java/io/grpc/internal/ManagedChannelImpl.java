@@ -50,7 +50,7 @@ import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.ForwardingClientCall;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
@@ -74,6 +74,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
@@ -89,6 +90,7 @@ import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelect
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
 import io.grpc.internal.RetryingNameResolver.ResolutionResultListener;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -161,7 +163,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @Nullable
   private final String authorityOverride;
   private final NameResolverRegistry nameResolverRegistry;
-  private final NameResolver.Factory nameResolverFactory;
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
   private final ClientTransportFactory originalTransportFactory;
@@ -377,7 +378,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       nameResolverStarted = false;
       if (channelIsActive) {
         nameResolver = getNameResolver(
-            target, authorityOverride, nameResolverFactory, nameResolverArgs);
+            target, authorityOverride, nameResolverRegistry, nameResolverArgs,
+            transportFactory.getSupportedSocketAddressTypes());
       } else {
         nameResolver = null;
       }
@@ -631,9 +633,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
             .build();
-    this.nameResolverFactory = builder.nameResolverFactory;
     this.nameResolver = getNameResolver(
-        target, authorityOverride, nameResolverFactory, nameResolverArgs);
+        target, authorityOverride, nameResolverRegistry, nameResolverArgs,
+        transportFactory.getSupportedSocketAddressTypes());
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
     this.delayedTransport = new DelayedClientTransport(this.executor, this.syncContext);
@@ -705,54 +707,70 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private static NameResolver getNameResolver(
-      String target, NameResolver.Factory nameResolverFactory, NameResolver.Args nameResolverArgs) {
+      String target, NameResolverRegistry nameResolverRegistry, NameResolver.Args nameResolverArgs,
+      Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
+    NameResolverProvider provider = null;
     URI targetUri = null;
     StringBuilder uriSyntaxErrors = new StringBuilder();
     try {
       targetUri = new URI(target);
-      // For "localhost:8080" this would likely cause newNameResolver to return null, because
-      // "localhost" is parsed as the scheme. Will fall into the next branch and try
-      // "dns:///localhost:8080".
     } catch (URISyntaxException e) {
       // Can happen with ip addresses like "[::1]:1234" or 127.0.0.1:1234.
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverArgs);
-      if (resolver != null) {
-        return resolver;
-      }
-      // "foo.googleapis.com:8080" cause resolver to be null, because "foo.googleapis.com" is an
-      // unmapped scheme. Just fall through and will try "dns:///foo.googleapis.com:8080"
+      // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
+      // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
     }
 
-    // If we reached here, the targetUri couldn't be used.
-    if (!URI_PATTERN.matcher(target).matches()) {
+    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
       // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
-      // scheme from the factory.
+      // scheme from the registry.
       try {
-        targetUri = new URI(nameResolverFactory.getDefaultScheme(), "", "/" + target, null);
+        targetUri = new URI(nameResolverRegistry.getDefaultScheme(), "", "/" + target, null);
       } catch (URISyntaxException e) {
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverArgs);
-      if (resolver != null) {
-        return resolver;
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+    }
+
+    if (provider == null) {
+      throw new IllegalArgumentException(String.format(
+          "Could not find a NameResolverProvider for %s%s",
+          target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+    }
+
+    if (channelTransportSocketAddressTypes != null) {
+      Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
+          = provider.getProducedSocketAddressTypes();
+      if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+        throw new IllegalArgumentException(String.format(
+            "Address types of NameResolver '%s' for '%s' not supported by transport",
+            targetUri.getScheme(), target));
       }
     }
+
+    NameResolver resolver = provider.newNameResolver(targetUri, nameResolverArgs);
+    if (resolver != null) {
+      return resolver;
+    }
+
     throw new IllegalArgumentException(String.format(
-        "cannot find a NameResolver for %s%s",
+        "cannot create a NameResolver for %s%s",
         target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
   }
 
   @VisibleForTesting
   static NameResolver getNameResolver(
       String target, @Nullable final String overrideAuthority,
-      NameResolver.Factory nameResolverFactory, NameResolver.Args nameResolverArgs) {
-    NameResolver resolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
+      NameResolverRegistry nameResolverRegistry, NameResolver.Args nameResolverArgs,
+      Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
+    NameResolver resolver = getNameResolver(target, nameResolverRegistry, nameResolverArgs,
+        channelTransportSocketAddressTypes);
 
     // We wrap the name resolver in a RetryingNameResolver to give it the ability to retry failures.
     // TODO: After a transition period, all NameResolver implementations that need retry should use
@@ -1594,7 +1612,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkNotNull(channelCreds, "channelCreds");
 
       final class ResolvingOobChannelBuilder
-          extends ForwardingChannelBuilder<ResolvingOobChannelBuilder> {
+          extends ForwardingChannelBuilder2<ResolvingOobChannelBuilder> {
         final ManagedChannelBuilder<?> delegate;
 
         ResolvingOobChannelBuilder() {
@@ -1626,7 +1644,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
               channelCreds,
               callCredentials,
               transportFactoryBuilder,
-              new FixedPortProvider(nameResolverArgs.getDefaultPort()));
+              new FixedPortProvider(nameResolverArgs.getDefaultPort()))
+              .nameResolverRegistry(nameResolverRegistry);
         }
 
         @Override
@@ -1638,8 +1657,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!terminated, "Channel is terminated");
 
       @SuppressWarnings("deprecation")
-      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder()
-          .nameResolverFactory(nameResolverFactory);
+      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder();
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.
@@ -1806,7 +1824,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 // GrpcUtil.getTransportFromPickResult().
                 onError(configOrError.getError());
                 if (resolutionResultListener != null) {
-                  resolutionResultListener.resolutionAttempted(false);
+                  resolutionResultListener.resolutionAttempted(configOrError.getError());
                 }
                 return;
               } else {
@@ -1852,7 +1870,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             Attributes attributes = attrBuilder.build();
 
-            boolean lastAddressesAccepted = helper.lb.tryAcceptResolvedAddresses(
+            Status addressAcceptanceStatus = helper.lb.tryAcceptResolvedAddresses(
                 ResolvedAddresses.newBuilder()
                     .setAddresses(servers)
                     .setAttributes(attributes)
@@ -1860,7 +1878,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     .build());
             // If a listener is provided, let it know if the addresses were accepted.
             if (resolutionResultListener != null) {
-              resolutionResultListener.resolutionAttempted(lastAddressesAccepted);
+              resolutionResultListener.resolutionAttempted(addressAcceptanceStatus);
             }
           }
         }

@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.ConnectivityState.CONNECTING;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
@@ -59,6 +60,7 @@ import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancer
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
 import java.net.SocketAddress;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -78,7 +80,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -176,7 +180,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             .forNonError(ConnectivityState.READY));
     Subchannel connectingSubchannel = it.next();
     getSubchannelStateListener(connectingSubchannel).onSubchannelState(ConnectivityStateInfo
-            .forNonError(ConnectivityState.CONNECTING));
+            .forNonError(CONNECTING));
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
@@ -467,7 +471,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void emptyConfig() {
     assertThat(wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(null)
-            .setAttributes(affinity).build())).isFalse();
+            .setAttributes(affinity).build()).isOk()).isFalse();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(fakeClock.getPendingTasks()).isEmpty();
@@ -477,7 +481,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             .setAttributes(affinity).build()));
     verify(helper, times(6)).createSubchannel(
             any(CreateSubchannelArgs.class));
-    verify(helper).updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().getClass().getName())
         .isEqualTo("io.grpc.util.RoundRobinLoadBalancer$EmptyPicker");
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
@@ -554,7 +558,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         .forNonError(ConnectivityState.READY));
     Subchannel connectingSubchannel = it.next();
     getSubchannelStateListener(connectingSubchannel).onSubchannelState(ConnectivityStateInfo
-        .forNonError(ConnectivityState.CONNECTING));
+        .forNonError(CONNECTING));
     verify(helper, times(2)).updateBalancingState(
         eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
@@ -1062,6 +1066,24 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(sss.pick()).isEqualTo(2);
     assertThat(sequence.get()).isEqualTo(9);
   }
+
+  @Test
+  public void removingAddressShutsdownSubchannel() {
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+    final Subchannel subchannel2 = subchannels.get(Collections.singletonList(servers.get(2)));
+
+    InOrder inOrder = Mockito.inOrder(helper, subchannel2);
+    // send LB only the first 2 addresses
+    List<EquivalentAddressGroup> svs2 = Arrays.asList(servers.get(0), servers.get(1));
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(svs2).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any());
+    inOrder.verify(subchannel2).shutdown();
+  }
+
 
   private static final class VerifyingScheduler {
     private final StaticStrideScheduler delegate;

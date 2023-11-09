@@ -59,7 +59,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
       return acceptResolvedAddressesInternal(resolvedAddresses);
@@ -68,7 +68,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     }
   }
 
-  public boolean acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbConfig, "missing weighted_target lb config");
@@ -107,7 +107,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     childBalancers.keySet().retainAll(targets.keySet());
     childHelpers.keySet().retainAll(targets.keySet());
     updateOverallBalancingState();
-    return true;
+    return Status.OK;
   }
 
   @Override

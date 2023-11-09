@@ -42,6 +42,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -282,6 +284,11 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
       if (usingSharedScheduler) {
         SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
       }
+    }
+
+    @Override
+    public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      return Collections.singleton(InetSocketAddress.class);
     }
   }
 

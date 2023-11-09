@@ -90,7 +90,7 @@ public class RetryingNameResolverTest {
         .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
     assertThat(resolutionResultListener).isNotNull();
 
-    resolutionResultListener.resolutionAttempted(true);
+    resolutionResultListener.resolutionAttempted(Status.OK);
     verify(mockRetryScheduler).reset();
   }
 
@@ -108,7 +108,7 @@ public class RetryingNameResolverTest {
         .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
     assertThat(resolutionResultListener).isNotNull();
 
-    resolutionResultListener.resolutionAttempted(false);
+    resolutionResultListener.resolutionAttempted(Status.UNAVAILABLE);
     verify(mockRetryScheduler).schedule(isA(Runnable.class));
   }
 

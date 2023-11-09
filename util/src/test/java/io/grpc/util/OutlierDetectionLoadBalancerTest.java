@@ -1287,7 +1287,7 @@ public class OutlierDetectionLoadBalancerTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       subchannelList = new ArrayList<>();
       for (EquivalentAddressGroup eag: resolvedAddresses.getAddresses()) {
         Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
@@ -1304,7 +1304,7 @@ public class OutlierDetectionLoadBalancerTest {
         subchannel.start(mock(SubchannelStateListener.class));
         deliverSubchannelState(READY);
       }
-      return true;
+      return Status.OK;
     }
 
     @Override

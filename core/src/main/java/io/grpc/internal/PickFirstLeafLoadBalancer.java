@@ -66,20 +66,23 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     if (servers.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
-          + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
     for (EquivalentAddressGroup eag : servers) {
       if (eag == null) {
-        handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
             "NameResolver returned address list with null endpoint. addrs="
-            + resolvedAddresses.getAddresses() + ", attrs=" + resolvedAddresses.getAttributes()));
-        return false;
+                + resolvedAddresses.getAddresses() + ", attrs="
+                + resolvedAddresses.getAttributes());
+        handleNameResolutionError(unavailableStatus);
+        return unavailableStatus;
       }
     }
     // We can optionally be configured to shuffle the address list. This can help better distribute
@@ -106,7 +109,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
       addressIndex.updateGroups(newImmutableAddressGroups);
       if (addressIndex.seekTo(previousAddress)) {
-        return true;
+        return Status.OK;
       }
       addressIndex.reset();
     } else {
@@ -149,7 +152,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       requestConnection();
     }
 
-    return true;
+    return Status.OK;
   }
 
   @Override
