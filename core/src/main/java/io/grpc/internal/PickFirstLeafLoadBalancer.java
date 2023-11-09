@@ -214,6 +214,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       case READY:
         shutdownRemaining(subchannel);
         addressIndex.seekTo(getAddress(subchannel));
+        rawConnectivityState = READY;
         if (subchannelData.healthState != null) {
           updateHealthState(subchannelData);
         }
@@ -284,6 +285,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return;
     }
     rawConnectivityState = state;
+    concludedState = state;
     helper.updateBalancingState(state, picker);
   }
 
@@ -352,11 +354,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             new EquivalentAddressGroup(addr)))
         .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
             .build());
-    if (subchannel.getAttributes() == null ||
-        subchannel.getAttributes().get(LoadBalancer.HEALTH_PRODUCER_LISTENER_KEY) == null) {
-      hcListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    SubchannelData subchannelData = new SubchannelData(subchannel, IDLE, hcListener);
+    subchannels.put(addr, subchannelData);
+    Attributes attrs = subchannel.getAttributes();
+    if (attrs == null || attrs.get(LoadBalancer.HEALTH_PRODUCER_LISTENER_KEY) == null) {
+      subchannelData.healthState = ConnectivityStateInfo.forNonError(READY);
     }
-    subchannels.put(addr, new SubchannelData(subchannel, IDLE, hcListener));
     subchannel.start(new SubchannelStateListener() {
       @Override
       public void onSubchannelState(ConnectivityStateInfo stateInfo) {
@@ -372,7 +375,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   ConnectivityState getConnectivityState() {
-    return this.rawConnectivityState;
+    return this.concludedState;
   }
 
   /**
