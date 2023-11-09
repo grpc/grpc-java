@@ -97,7 +97,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker) {
+      SubchannelPicker initialPicker, ResolvedAddresses unused) {
     ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
         initialPicker);
     return childLbState;
@@ -115,13 +115,31 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    Status addressAcceptanceStatus = super.acceptResolvedAddresses(resolvedAddresses);
-    if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
-      weightUpdateTimer.cancel();
+    AcceptResolvedAddressRetVal acceptRetVal;
+    try {
+      resolvingAddresses = true;
+      acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
+      if (!acceptRetVal.status.isOk()) {
+        return acceptRetVal.status;
+      }
+
+      if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
+        weightUpdateTimer.cancel();
+      }
+      updateWeightTask.run();
+
+      createAndApplyOrcaListeners();
+
+      // Must update channel picker before return so that new RPCs will not be routed to deleted
+      // clusters and resolver can remove them in service config.
+      updateOverallBalancingState();
+
+      shutdownRemoved(acceptRetVal.removedChildren);
+    } finally {
+      resolvingAddresses = false;
     }
-    updateWeightTask.run();
-    afterAcceptAddresses();
-    return addressAcceptanceStatus;
+
+    return acceptRetVal.status;
   }
 
   @Override
@@ -228,7 +246,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
   }
 
-  private void afterAcceptAddresses() {
+  private void createAndApplyOrcaListeners() {
     for (ChildLbState child : getChildLbStates()) {
       WeightedChildLbState wChild = (WeightedChildLbState) child;
       for (WrrSubchannel weightedSubchannel : wChild.subchannels) {

@@ -106,7 +106,7 @@ public class LeastRequestLoadBalancerTest {
   @Captor
   private ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
   private final TestHelper testHelperInstance = new TestHelper();
-  private Helper helper = mock(Helper.class, delegatesTo(testHelperInstance));
+  private final Helper helper = mock(Helper.class, delegatesTo(testHelperInstance));
 
   @Mock
   private ThreadSafeRandom mockRandom;
@@ -522,7 +522,6 @@ public class LeastRequestLoadBalancerTest {
     loadBalancer.handleNameResolutionError(error);
     loadBalancer.setResolvingAddresses(false);
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-
     LoadBalancer.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
     assertNull(pickResult.getSubchannel());
     assertEquals(error, pickResult.getStatus());
