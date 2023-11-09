@@ -213,13 +213,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       // we decide to eject the subchannel.
       HealthProducerUtil.HealthProducerSubchannel delegatedHealthSubchannel =
           (HealthProducerUtil.HealthProducerSubchannel) super.createSubchannel(args);
-      Subchannel originalSubchannel = delegate.createSubchannel(args);
-      OutlierDetectionSubchannel subchannel = new OutlierDetectionSubchannel(originalSubchannel,
-          delegatedHealthSubchannel.getHealthListener());
+      OutlierDetectionSubchannel subchannel = new OutlierDetectionSubchannel(
+          delegatedHealthSubchannel, delegatedHealthSubchannel.getHealthListener());
       // If the subchannel is associated with a single address that is also already in the map
       // the subchannel will be added to the map and be included in outlier detection.
       List<EquivalentAddressGroup> addressGroups = args.getAddresses();
-      boolean initialEjected = false;
       if (hasSingleAddress(addressGroups)
           && trackerMap.containsKey(addressGroups.get(0).getAddresses().get(0))) {
         AddressTracker tracker = trackerMap.get(addressGroups.get(0).getAddresses().get(0));
@@ -227,13 +225,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
         // If this address has already been ejected, we need to immediately eject this Subchannel.
         if (tracker.ejectionTimeNanos != null) {
-          initialEjected = true;
+          subchannel.eject();
         }
-      }
-      if (initialEjected) {
-        subchannel.eject();
-      } else {
-        subchannel.uneject();
       }
 
       return subchannel;
@@ -272,6 +265,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       this.delegate = delegate;
       this.logger = delegate.getChannelLogger();
       this.healthListener = hcListener;
+      uneject();
     }
 
     @Override
@@ -353,7 +347,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     void eject() {
       ejected = true;
       if (healthListener != null) {
-        healthListener.onSubchannelState(
+        healthListener.thisHealthState(
             ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
       } else {
         subchannelStateListener.onSubchannelState(
@@ -365,7 +359,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     void uneject() {
       ejected = false;
       if (healthListener != null) {
-          healthListener.onSubchannelState(
+          healthListener.thisHealthState(
               ConnectivityStateInfo.forNonError(ConnectivityState.READY));
           logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
       } else {
