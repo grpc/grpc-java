@@ -102,6 +102,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       subchannel.shutdown();
       subchannel = null;
     }
+
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
     // for time being.
     updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
