@@ -115,12 +115,13 @@ public class HealthProducerUtil {
   /**
    * Used by a health producer system to construct the subchannel health notification chain and
    * notify aggregated health status with cached health status.
-   * A parent health producer system then will call {@link #onSubchannelState} to notify health status
-   * change, and {@link #thisHealthState} is used by the current child health producer.
+   * A parent health producer system then will call {@link #onSubchannelState} to notify health
+   * status change, and {@link #thisHealthState} is used by the current child health producer.
    * Notification waits on both parent and child health status present. Users may reset health
    * status to prevent stale health status to be consumed.
    * */
-  public static final class HealthCheckProducerListener implements LoadBalancer.SubchannelStateListener {
+  public static final class HealthCheckProducerListener
+      implements LoadBalancer.SubchannelStateListener {
 
     private ConnectivityStateInfo upperStreamHealthStatus = null;
     private ConnectivityStateInfo thisHealthState = null;
@@ -152,12 +153,13 @@ public class HealthProducerUtil {
       } else if (ConnectivityState.READY == upperStreamHealthStatus.getState()) {
         next = thisHealthState;
       } else if (ConnectivityState.TRANSIENT_FAILURE == upperStreamHealthStatus.getState()) {
-        log.log(Level.FINE, "todo: add producer name in description " + healthProducerName);
+        // todo: include producer name and upper stream health status in description
         next = ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription(
             thisHealthState.getStatus().getDescription()));
       }
       if (!Objects.equal(concludedHealthStatus, next)) {
         concludedHealthStatus = next;
+        log.log(Level.FINE, "Health producer " + healthProducerName + ":" + next);
         delegate.onSubchannelState(next);
       }
     }

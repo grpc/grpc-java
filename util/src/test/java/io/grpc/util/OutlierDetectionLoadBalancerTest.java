@@ -1297,7 +1297,7 @@ public class OutlierDetectionLoadBalancerTest {
         assertThat(healthListeners.get(eag)).isNotNull();
         HealthProducerUtil.HealthCheckProducerListener healthCheckProducerListener =
             (HealthProducerUtil.HealthCheckProducerListener)
-        subchannel.getAttributes().get(HEALTH_PRODUCER_LISTENER_KEY);
+                subchannel.getAttributes().get(HEALTH_PRODUCER_LISTENER_KEY);
         assertThat(healthCheckProducerListener).isNotNull();
         healthCheckProducerListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
         subchannelList.add(subchannel);

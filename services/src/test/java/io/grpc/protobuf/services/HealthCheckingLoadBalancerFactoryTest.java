@@ -289,7 +289,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
       deliverSubchannelState(i, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
       deliverSubchannelState(i, ConnectivityStateInfo.forNonError(IDLE));
 
-      inOrder.verify(mockHealthListener).onSubchannelState(null);
       inOrder.verify(mockStateListener).onSubchannelState(
           eq(ConnectivityStateInfo.forNonError(CONNECTING)));
       inOrder.verify(mockHealthListener).onSubchannelState(
@@ -401,8 +400,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     InOrder inOrder = inOrder(mockStateListeners[0], mockStateListeners[1], mockHealthListeners[0],
         mockHealthListeners[1]);
-    inOrder.verify(mockHealthListeners[0]).onSubchannelState(null);
-    inOrder.verify(mockHealthListeners[1]).onSubchannelState(null);
 
     for (int i = 0; i < 2; i++) {
       deliverSubchannelState(i, ConnectivityStateInfo.forNonError(READY));
@@ -482,7 +479,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
         backoffPolicy1, backoffPolicy2);
 
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(mockHealthListener).onSubchannelState(null);
     inOrder.verify(mockListener).onSubchannelState(
         eq(ConnectivityStateInfo.forNonError(READY)));
     inOrder.verify(mockHealthListener).onSubchannelState(
@@ -559,7 +555,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
         inOrder(mockStateListener, mockHealthListener,
             backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
 
-    inOrder.verify(mockHealthListener).onSubchannelState(null);
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockStateListener).onSubchannelState(
         eq(ConnectivityStateInfo.forNonError(READY)));
@@ -846,8 +841,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockListener, mockHealthListener);
 
-    inOrder.verify(mockHealthListener).onSubchannelState(null);
-        deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockListener).onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));
     inOrder.verify(mockHealthListener).onSubchannelState(
         eq(ConnectivityStateInfo.forNonError(CONNECTING)));
@@ -908,7 +902,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
     SubchannelStateListener mockListener = mockStateListeners[0];
     assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockListener, mockHealthListener);
-    inOrder.verify(mockHealthListener).onSubchannelState(null);
 
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockListener).onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));

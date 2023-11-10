@@ -16,6 +16,7 @@
 
 package io.grpc.util;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
@@ -23,24 +24,19 @@ import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
 import static io.grpc.LoadBalancer.HEALTH_PRODUCER_LISTENER_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
-import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.Attributes;
-import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;

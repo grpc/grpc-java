@@ -25,7 +25,6 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
@@ -56,9 +55,6 @@ import javax.annotation.Nullable;
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
-
-
-
   private final Map<Object, ChildLbState> childLbStates = new LinkedHashMap<>();
   private final Helper helper;
   // Set to true if currently in the process of handling resolved addresses.

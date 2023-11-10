@@ -244,8 +244,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private AddressTracker addressTracker;
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
+
     /**
-     * Only one of subchannelStatelistener or healthListener exists. Backward compatibility guaranteed.
+     * Only one of subchannelStatelistener or healthListener exists. Backward compatible.
      * Before generic health check: subchannelStatelistener is nonnull and is used for state
      * notification, considering health.
      * After generic health check: healthListener is nonnull. Raw connectivity state is
@@ -261,7 +262,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     OutlierDetectionSubchannel(Subchannel delegate,
-      @Nullable HealthProducerUtil.HealthCheckProducerListener hcListener) {
+        @Nullable HealthProducerUtil.HealthCheckProducerListener hcListener) {
       this.delegate = delegate;
       this.logger = delegate.getChannelLogger();
       this.healthListener = hcListener;
@@ -359,9 +360,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     void uneject() {
       ejected = false;
       if (healthListener != null) {
-          healthListener.thisHealthState(
-              ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-          logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
+        healthListener.thisHealthState(
+            ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+        logger.log(ChannelLogLevel.INFO, "Subchannel unejected: {0}", this);
       } else {
         if (lastSubchannelState != null) {
           subchannelStateListener.onSubchannelState(lastSubchannelState);
