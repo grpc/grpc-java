@@ -51,7 +51,7 @@ public final class OpenTelemetryModule {
   private final OpenTelemetry openTelemetryInstance;
   private final MeterProvider meterProvider;
   private final Meter meter;
-  private final OpenTelemetryMetricsState state;
+  private final OpenTelemetryMetricsResource resource;
 
   public static Builder newBuilder() {
     return new Builder();
@@ -59,12 +59,12 @@ public final class OpenTelemetryModule {
 
   private OpenTelemetryModule(Builder builder) {
     this.openTelemetryInstance = checkNotNull(builder.openTelemetrySdk, "openTelemetrySdk");
-    this.meterProvider = openTelemetryInstance.getMeterProvider();
-    this.meter = openTelemetryInstance.getMeterProvider()
+    this.meterProvider = checkNotNull(openTelemetryInstance.getMeterProvider(), "meterProvider");
+    this.meter = this.meterProvider
         .meterBuilder(OpenTelemetryConstants.INSTRUMENTATION_SCOPE)
         .setInstrumentationVersion(IMPLEMENTATION_VERSION)
         .build();
-    this.state = createMetricInstruments(meter);
+    this.resource = createMetricInstruments(meter);
   }
 
   @VisibleForTesting
@@ -83,8 +83,8 @@ public final class OpenTelemetryModule {
   }
 
   @VisibleForTesting
-  OpenTelemetryMetricsState getState() {
-    return this.state;
+  OpenTelemetryMetricsResource getResource() {
+    return this.resource;
   }
 
   /**
@@ -94,7 +94,7 @@ public final class OpenTelemetryModule {
     OpenTelemetryMetricsModule openTelemetryMetricsModule =
         new OpenTelemetryMetricsModule(
             STOPWATCH_SUPPLIER,
-            state);
+            resource);
     return openTelemetryMetricsModule.getClientInterceptor();
   }
 
@@ -105,13 +105,13 @@ public final class OpenTelemetryModule {
     OpenTelemetryMetricsModule openTelemetryMetricsModule =
         new OpenTelemetryMetricsModule(
             STOPWATCH_SUPPLIER,
-            state);
+            resource);
     return openTelemetryMetricsModule.getServerTracerFactory();
   }
 
   @VisibleForTesting
-  static OpenTelemetryMetricsState createMetricInstruments(Meter meter) {
-    OpenTelemetryMetricsState.Builder builder = OpenTelemetryMetricsState.builder();
+  static OpenTelemetryMetricsResource createMetricInstruments(Meter meter) {
+    OpenTelemetryMetricsResource.Builder builder = OpenTelemetryMetricsResource.builder();
 
     builder.clientCallDurationCounter(
         meter.histogramBuilder("grpc.client.call.duration")

@@ -22,7 +22,7 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 
 @AutoValue
-abstract class OpenTelemetryMetricsState {
+abstract class OpenTelemetryMetricsResource {
 
   /* Client Metrics */
   abstract DoubleHistogram clientCallDurationCounter();
@@ -46,7 +46,7 @@ abstract class OpenTelemetryMetricsState {
   abstract LongHistogram serverTotalReceivedCompressedMessageSizeCounter();
 
   static Builder builder() {
-    return new AutoValue_OpenTelemetryMetricsState.Builder();
+    return new AutoValue_OpenTelemetryMetricsResource.Builder();
   }
 
   @AutoValue.Builder
@@ -72,6 +72,6 @@ abstract class OpenTelemetryMetricsState {
     abstract Builder serverTotalReceivedCompressedMessageSizeCounter(
         LongHistogram counter);
 
-    abstract OpenTelemetryMetricsState build();
+    abstract OpenTelemetryMetricsResource build();
   }
 }

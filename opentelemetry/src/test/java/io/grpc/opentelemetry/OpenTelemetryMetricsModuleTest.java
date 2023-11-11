@@ -150,9 +150,9 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void testClientInterceptors() {
-    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);
     OpenTelemetryMetricsModule module =
-        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
+        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     grpcServerRule.getServiceRegistry().addService(
         ServerServiceDefinition.builder("package1.service2").addMethod(
             method, new ServerCallHandler<String, String>() {
@@ -205,9 +205,9 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void clientBasicMetrics() {
-    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);;
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);;
     OpenTelemetryMetricsModule module =
-        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
+        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(module, method.getFullMethodName());
     Metadata headers = new Metadata();
@@ -339,9 +339,9 @@ public class OpenTelemetryMetricsModuleTest {
   // This test is only unit-testing the metrics recording logic. The retry behavior is faked.
   @Test
   public void recordAttemptMetrics() {
-    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);
     OpenTelemetryMetricsModule module =
-        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
+        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module,
             method.getFullMethodName());
@@ -759,9 +759,9 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void clientStreamNeverCreatedStillRecordMetrics() {
-    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);
     OpenTelemetryMetricsModule module =
-        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), state);
+        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module,
             method.getFullMethodName());
@@ -860,9 +860,9 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void serverBasicMetrics() {
-    OpenTelemetryMetricsState state = OpenTelemetryModule.createMetricInstruments(testMeter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), state);
+        fakeClock.getStopwatchSupplier(), resource);
     ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
     ServerStreamTracer tracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());

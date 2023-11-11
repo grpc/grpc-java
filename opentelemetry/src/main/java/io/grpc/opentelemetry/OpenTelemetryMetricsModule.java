@@ -67,12 +67,12 @@ final class OpenTelemetryMetricsModule {
   // fractional seconds.
   private static final double SECONDS_PER_NANO = 1e-9;
 
-  private final OpenTelemetryMetricsState state;
+  private final OpenTelemetryMetricsResource resource;
   private final Supplier<Stopwatch> stopwatchSupplier;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
-      OpenTelemetryMetricsState state) {
-    this.state = checkNotNull(state, "state");
+      OpenTelemetryMetricsResource resource) {
+    this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
 
@@ -200,11 +200,11 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
               STATUS_KEY, statusCode.toString());
 
-      module.state.clientAttemptDurationCounter()
+      module.resource.clientAttemptDurationCounter()
           .record(attemptNanos * SECONDS_PER_NANO, attribute);
-      module.state.clientTotalSentCompressedMessageSizeCounter()
+      module.resource.clientTotalSentCompressedMessageSizeCounter()
           .record(outboundWireSize, attribute);
-      module.state.clientTotalReceivedCompressedMessageSizeCounter()
+      module.resource.clientTotalReceivedCompressedMessageSizeCounter()
           .record(inboundWireSize, attribute);
     }
   }
@@ -238,7 +238,7 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName);
 
       // Record here in case mewClientStreamTracer() would never be called.
-      module.state.clientAttemptCountCounter().add(1, attribute);
+      module.resource.clientAttemptCountCounter().add(1, attribute);
     }
 
     @Override
@@ -259,7 +259,7 @@ final class OpenTelemetryMetricsModule {
         // TODO(dnvindhya): Add target as an attribute
         io.opentelemetry.api.common.Attributes attribute =
             io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName);
-        module.state.clientAttemptCountCounter().add(1, attribute);
+        module.resource.clientAttemptCountCounter().add(1, attribute);
       }
       if (!info.isTransparentRetry()) {
         attemptsPerCall.incrementAndGet();
@@ -321,7 +321,7 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
               STATUS_KEY, status.getCode().toString());
 
-      module.state.clientCallDurationCounter()
+      module.resource.clientCallDurationCounter()
           .record(callLatencyNanos * SECONDS_PER_NANO, attribute);
     }
   }
@@ -383,7 +383,7 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(
               METHOD_KEY, recordMethodName(fullMethodName, isSampledToLocalTracing));
 
-      module.state.serverCallCountCounter().add(1, attribute);
+      module.resource.serverCallCountCounter().add(1, attribute);
     }
 
     @Override
@@ -431,11 +431,11 @@ final class OpenTelemetryMetricsModule {
           METHOD_KEY, recordMethodName(fullMethodName, isGeneratedMethod),
           STATUS_KEY, status.getCode().toString());
 
-      module.state.serverCallDurationCounter()
+      module.resource.serverCallDurationCounter()
           .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes);
-      module.state.serverTotalSentCompressedMessageSizeCounter()
+      module.resource.serverTotalSentCompressedMessageSizeCounter()
           .record(outboundWireSize, attributes);
-      module.state.serverTotalReceivedCompressedMessageSizeCounter()
+      module.resource.serverTotalReceivedCompressedMessageSizeCounter()
           .record(inboundWireSize, attributes);
     }
   }
