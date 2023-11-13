@@ -23,9 +23,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,6 +62,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -376,22 +375,20 @@ public class RoundRobinLoadBalancerTest {
         TestUtils.pickerOf(subchannel), TestUtils.pickerOf(subchannel1),
         TestUtils.pickerOf(subchannel2));
 
-    ReadyPicker picker = new ReadyPicker(Collections.unmodifiableList(pickers),
-        0 /* startIndex */);
+    AtomicInteger seq = new AtomicInteger(0);
+    ReadyPicker picker = new ReadyPicker(Collections.unmodifiableList(pickers), seq);
 
     assertEquals(subchannel, picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(subchannel1, picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(subchannel2, picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(subchannel, picker.pickSubchannel(mockArgs).getSubchannel());
-  }
 
-  @Test
-  public void pickerEmptyList() throws Exception {
-    SubchannelPicker picker = new EmptyPicker(Status.UNKNOWN);
-
-    assertNull(picker.pickSubchannel(mockArgs).getSubchannel());
-    assertEquals(Status.UNKNOWN,
-        picker.pickSubchannel(mockArgs).getStatus());
+    seq.set(Integer.MAX_VALUE);
+    assertEquals(subchannel1, picker.pickSubchannel(mockArgs).getSubchannel());
+    assertEquals(subchannel, picker.pickSubchannel(mockArgs).getSubchannel());
+    assertEquals(subchannel1, picker.pickSubchannel(mockArgs).getSubchannel());
+    assertEquals(subchannel2, picker.pickSubchannel(mockArgs).getSubchannel());
+    assertEquals(subchannel, picker.pickSubchannel(mockArgs).getSubchannel());
   }
 
   @Test
@@ -481,7 +478,7 @@ public class RoundRobinLoadBalancerTest {
   public void readyPicker_emptyList() {
     // ready picker list must be non-empty
     try {
-      new ReadyPicker(Collections.emptyList(), 0);
+      new ReadyPicker(Collections.emptyList(), new AtomicInteger(0));
       fail();
     } catch (IllegalArgumentException expected) {
     }
@@ -489,28 +486,27 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void internalPickerComparisons() {
-    EmptyPicker emptyOk1 = new EmptyPicker(Status.OK);
-    EmptyPicker emptyOk2 = new EmptyPicker(Status.OK.withDescription("different OK"));
-    EmptyPicker emptyErr = new EmptyPicker(Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯"));
+    EmptyPicker empty1 = new EmptyPicker();
+    EmptyPicker empty2 = new EmptyPicker();
 
+    AtomicInteger seq = new AtomicInteger(0);
     acceptAddresses(servers, Attributes.EMPTY); // create subchannels
     Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
     SubchannelPicker sc1 = TestUtils.pickerOf(subchannelIterator.next());
     SubchannelPicker sc2 = TestUtils.pickerOf(subchannelIterator.next());
-    ReadyPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), 0);
-    ReadyPicker ready2 = new ReadyPicker(Arrays.asList(sc1), 0);
-    ReadyPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), 1);
-    ReadyPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), 1);
-    ReadyPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), 0);
+    ReadyPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), seq);
+    ReadyPicker ready2 = new ReadyPicker(Arrays.asList(sc1), seq);
+    ReadyPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), seq);
+    ReadyPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), seq);
+    ReadyPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), new AtomicInteger(0));
 
-    assertTrue(emptyOk1.isEquivalentTo(emptyOk2));
-    assertFalse(emptyOk1.isEquivalentTo(emptyErr));
-    assertFalse(ready1.isEquivalentTo(ready2));
-    assertTrue(ready1.isEquivalentTo(ready3));
-    assertTrue(ready3.isEquivalentTo(ready4));
-    assertTrue(ready4.isEquivalentTo(ready5));
-    assertFalse(emptyOk1.isEquivalentTo(ready1));
-    assertFalse(ready1.isEquivalentTo(emptyOk1));
+    assertThat(empty1).isEqualTo(empty2);
+    assertThat(ready1).isNotEqualTo(ready2);
+    assertThat(ready1).isEqualTo(ready3);
+    assertThat(ready3).isEqualTo(ready4);
+    assertThat(ready4).isNotEqualTo(ready5);
+    assertThat(empty1).isNotEqualTo(ready1);
+    assertThat(ready1).isNotEqualTo(empty1);
   }
 
   @Test

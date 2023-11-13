@@ -143,9 +143,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @Override
-  public RoundRobinPicker createReadyPicker(Collection<ChildLbState> activeList) {
+  public SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
-        config.enableOobLoadReport, config.errorUtilizationPenalty);
+        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence);
   }
 
   // Expose for tests in this package.
@@ -334,16 +334,18 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   }
 
   @VisibleForTesting
-  final class WeightedRoundRobinPicker extends RoundRobinPicker {
+  static final class WeightedRoundRobinPicker extends SubchannelPicker {
     private final List<ChildLbState> children;
     private final Map<Subchannel, OrcaPerRequestReportListener> subchannelToReportListenerMap =
         new HashMap<>();
     private final boolean enableOobLoadReport;
     private final float errorUtilizationPenalty;
+    private final AtomicInteger sequence;
+    private final int hashCode;
     private volatile StaticStrideScheduler scheduler;
 
     WeightedRoundRobinPicker(List<ChildLbState> children, boolean enableOobLoadReport,
-        float errorUtilizationPenalty) {
+        float errorUtilizationPenalty, AtomicInteger sequence) {
       checkNotNull(children, "children");
       Preconditions.checkArgument(!children.isEmpty(), "empty child list");
       this.children = children;
@@ -356,6 +358,17 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       }
       this.enableOobLoadReport = enableOobLoadReport;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
+      this.sequence = checkNotNull(sequence, "sequence");
+
+      // For equality we treat children as a set; use hash code as defined by Set
+      int sum = 0;
+      for (ChildLbState child : children) {
+        sum += child.hashCode();
+      }
+      this.hashCode = sum
+          ^ Boolean.hashCode(enableOobLoadReport)
+          ^ Float.hashCode(errorUtilizationPenalty);
+
       updateWeight();
     }
 
@@ -398,19 +411,26 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
 
     @Override
-    public boolean isEquivalentTo(RoundRobinPicker picker) {
-      if (!(picker instanceof WeightedRoundRobinPicker)) {
+    public int hashCode() {
+      return hashCode;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof WeightedRoundRobinPicker)) {
         return false;
       }
-      WeightedRoundRobinPicker other = (WeightedRoundRobinPicker) picker;
+      WeightedRoundRobinPicker other = (WeightedRoundRobinPicker) o;
       if (other == this) {
         return true;
       }
       // the lists cannot contain duplicate subchannels
-      return enableOobLoadReport == other.enableOobLoadReport
+      return hashCode == other.hashCode
+          && sequence == other.sequence
+          && enableOobLoadReport == other.enableOobLoadReport
           && Float.compare(errorUtilizationPenalty, other.errorUtilizationPenalty) == 0
-          && children.size() == other.children.size() && new HashSet<>(
-          children).containsAll(other.children);
+          && children.size() == other.children.size()
+          && new HashSet<>(children).containsAll(other.children);
     }
   }
 
