@@ -425,12 +425,14 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           return PickResult.withNoResult();
         }
 
-        if (subchannelView.connectivityState == IDLE || childLbState.isDeactivated()) {
-          if (childLbState.isDeactivated()) {
-            childLbState.activate();
-          } else {
-            syncContext.execute(() -> childLbState.getLb().requestConnection());
-          }
+        if (subchannelView.connectivityState == IDLE) {
+          syncContext.execute(() -> {
+            if (childLbState.isDeactivated()) {
+              childLbState.activate();
+            } else {
+              childLbState.getLb().requestConnection();
+            }
+          });
 
           return PickResult.withNoResult(); // Indicates that this should be retried after backoff
         }
@@ -531,11 +533,10 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       if (!isDeactivated()) {
         return;
       }
-
       currentConnectivityState = CONNECTING;
       getLb().switchTo(pickFirstLbProvider);
       markReactivated();
-      getLb().acceptResolvedAddresses(this.getResolvedAddresses()); // Time to get a subchannel
+      getLb().acceptResolvedAddresses(this.getResolvedAddresses());
       logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
     }
 
