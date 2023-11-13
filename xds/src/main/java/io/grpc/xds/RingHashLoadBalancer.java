@@ -535,7 +535,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       currentConnectivityState = CONNECTING;
       getLb().switchTo(pickFirstLbProvider);
       markReactivated();
-      getLb().acceptResolvedAddresses(this.getResolvedAddresses()); // Time to get a subchannel
+      syncContext.execute(() -> getLb().acceptResolvedAddresses(this.getResolvedAddresses()));
+
       logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
     }
 
