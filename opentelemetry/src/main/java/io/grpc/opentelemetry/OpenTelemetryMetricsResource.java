@@ -1,0 +1,77 @@
+/*
+ * Copyright 2023 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.opentelemetry;
+
+import com.google.auto.value.AutoValue;
+import io.opentelemetry.api.metrics.DoubleHistogram;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+
+@AutoValue
+abstract class OpenTelemetryMetricsResource {
+
+  /* Client Metrics */
+  abstract DoubleHistogram clientCallDurationCounter();
+
+  abstract LongCounter clientAttemptCountCounter();
+
+  abstract DoubleHistogram clientAttemptDurationCounter();
+
+  abstract LongHistogram clientTotalSentCompressedMessageSizeCounter();
+
+  abstract LongHistogram clientTotalReceivedCompressedMessageSizeCounter();
+
+
+  /* Server Metrics */
+  abstract LongCounter serverCallCountCounter();
+
+  abstract DoubleHistogram serverCallDurationCounter();
+
+  abstract LongHistogram serverTotalSentCompressedMessageSizeCounter();
+
+  abstract LongHistogram serverTotalReceivedCompressedMessageSizeCounter();
+
+  static Builder builder() {
+    return new AutoValue_OpenTelemetryMetricsResource.Builder();
+  }
+
+  @AutoValue.Builder
+  abstract static class Builder {
+
+    abstract Builder clientCallDurationCounter(DoubleHistogram counter);
+
+    abstract Builder clientAttemptCountCounter(LongCounter counter);
+
+    abstract Builder clientAttemptDurationCounter(DoubleHistogram counter);
+
+    abstract Builder clientTotalSentCompressedMessageSizeCounter(LongHistogram counter);
+
+    abstract Builder clientTotalReceivedCompressedMessageSizeCounter(
+        LongHistogram counter);
+
+    abstract Builder serverCallCountCounter(LongCounter counter);
+
+    abstract Builder serverCallDurationCounter(DoubleHistogram counter);
+
+    abstract Builder serverTotalSentCompressedMessageSizeCounter(LongHistogram counter);
+
+    abstract Builder serverTotalReceivedCompressedMessageSizeCounter(
+        LongHistogram counter);
+
+    abstract OpenTelemetryMetricsResource build();
+  }
+}
