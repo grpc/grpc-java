@@ -528,16 +528,16 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     @Override
     protected void reactivate(LoadBalancerProvider policyProvider) {
-      if (!isDeactivated()) {
-        return;
-      }
-
-      currentConnectivityState = CONNECTING;
-      getLb().switchTo(pickFirstLbProvider);
-      markReactivated();
-      syncContext.execute(() -> getLb().acceptResolvedAddresses(this.getResolvedAddresses()));
-
-      logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
+      syncContext.execute(() -> {
+        if (!isDeactivated()) {
+          return;
+        }
+        currentConnectivityState = CONNECTING;
+        getLb().switchTo(pickFirstLbProvider);
+        markReactivated();
+        getLb().acceptResolvedAddresses(this.getResolvedAddresses());
+        logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
+      });
     }
 
     public void activate() {
