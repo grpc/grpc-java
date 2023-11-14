@@ -55,22 +55,43 @@ public final class ServerSecurityPolicyTest {
   @Test
   public void testDefaultInternalOnly() throws Exception {
     policy = new ServerSecurityPolicy();
-    checkSynchronousPolicy(policy, MY_UID, SERVICE1, Code.OK);
-    checkSynchronousPolicy(policy, MY_UID, SERVICE2, Code.OK);
+    checkAsyncPolicy(policy, MY_UID, SERVICE1, Code.OK);
+    checkAsyncPolicy(policy, MY_UID, SERVICE2, Code.OK);
+  }
+
+  @Test
+  public void testDefaultInternalOnly_legacyApi() throws Exception {
+    policy = new ServerSecurityPolicy();
+    checkLegacySynchronousPolicy(policy, MY_UID, SERVICE1, Code.OK);
+    checkLegacySynchronousPolicy(policy, MY_UID, SERVICE2, Code.OK);
   }
 
   @Test
   public void testInternalOnly_AnotherUid() throws Exception {
     policy = new ServerSecurityPolicy();
-    checkSynchronousPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
-    checkSynchronousPolicy(policy, OTHER_UID, SERVICE2, Code.PERMISSION_DENIED);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE2, Code.PERMISSION_DENIED);
+  }
+
+  @Test
+  public void testInternalOnly_AnotherUid_legacyApi() throws Exception {
+    policy = new ServerSecurityPolicy();
+    checkLegacySynchronousPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
+    checkLegacySynchronousPolicy(policy, OTHER_UID, SERVICE2, Code.PERMISSION_DENIED);
   }
 
   @Test
   public void testBuilderDefault() throws Exception {
     policy = ServerSecurityPolicy.newBuilder().build();
-    checkSynchronousPolicy(policy, MY_UID, SERVICE1, Code.OK);
-    checkSynchronousPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
+    checkAsyncPolicy(policy, MY_UID, SERVICE1, Code.OK);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
+  }
+
+  @Test
+  public void testBuilderDefault_legacyApi() throws Exception {
+    policy = ServerSecurityPolicy.newBuilder().build();
+    checkLegacySynchronousPolicy(policy, MY_UID, SERVICE1, Code.OK);
+    checkLegacySynchronousPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
   }
 
   @Test
@@ -80,10 +101,24 @@ public final class ServerSecurityPolicyTest {
             .servicePolicy(SERVICE2, policy((uid) -> Status.OK))
             .build();
 
-    checkSynchronousPolicy(policy, MY_UID, SERVICE1, Code.OK);
-    checkSynchronousPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
-    checkSynchronousPolicy(policy, MY_UID, SERVICE2, Code.OK);
-    checkSynchronousPolicy(policy, OTHER_UID, SERVICE2, Code.OK);
+    checkAsyncPolicy(policy, MY_UID, SERVICE1, Code.OK);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
+    checkAsyncPolicy(policy, MY_UID, SERVICE2, Code.OK);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE2, Code.OK);
+  }
+
+
+  @Test
+  public void testPerService_legacyApi() throws Exception {
+    policy =
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(SERVICE2, policy((uid) -> Status.OK))
+            .build();
+
+    checkLegacySynchronousPolicy(policy, MY_UID, SERVICE1, Code.OK);
+    checkLegacySynchronousPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
+    checkLegacySynchronousPolicy(policy, MY_UID, SERVICE2, Code.OK);
+    checkLegacySynchronousPolicy(policy, OTHER_UID, SERVICE2, Code.OK);
   }
 
   @Test
@@ -91,22 +126,18 @@ public final class ServerSecurityPolicyTest {
     policy =
         ServerSecurityPolicy.newBuilder()
             .servicePolicy(SERVICE2, asyncPolicy(uid -> {
-                // Add some extra future transformation to confirm that a chain
-                // of futures gets properly handled.
-                ListenableFuture<Void> dependency = Futures.immediateVoidFuture();
-                return Futures
-                        .transform(dependency, unused -> Status.OK, MoreExecutors.directExecutor());
+              // Add some extra future transformation to confirm that a chain
+              // of futures gets properly handled.
+              ListenableFuture<Void> dependency = Futures.immediateVoidFuture();
+              return Futures
+                      .transform(dependency, unused -> Status.OK, MoreExecutors.directExecutor());
             }))
             .build();
 
-    assertThat(policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1).get().getCode())
-        .isEqualTo(Status.OK.getCode());
-    assertThat(policy.checkAuthorizationForServiceAsync(OTHER_UID, SERVICE1).get().getCode())
-        .isEqualTo(Status.PERMISSION_DENIED.getCode());
-    assertThat(policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE2).get().getCode())
-        .isEqualTo(Status.OK.getCode());
-    assertThat(policy.checkAuthorizationForServiceAsync(OTHER_UID, SERVICE2).get().getCode())
-        .isEqualTo(Status.OK.getCode());
+    checkAsyncPolicy(policy, MY_UID, SERVICE1, Code.OK);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE1, Code.PERMISSION_DENIED);
+    checkAsyncPolicy(policy, MY_UID, SERVICE2, Code.OK);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE2, Code.OK);
   }
 
   @Test
@@ -144,22 +175,22 @@ public final class ServerSecurityPolicyTest {
         MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor());
     CountDownLatch unsatisfiedLatch = new CountDownLatch(1);
     ListenableFuture<Status> toBeInterruptedFuture = listeningExecutorService.submit(() -> {
-        unsatisfiedLatch.await();  // waits forever
-        return null;
+      unsatisfiedLatch.await();  // waits forever
+      return null;
     });
 
     CyclicBarrier barrier = new CyclicBarrier(2);
     Thread testThread = Thread.currentThread();
     new Thread(() -> {
-        awaitOrFail(barrier);
-        testThread.interrupt();
+      awaitOrFail(barrier);
+      testThread.interrupt();
     }).start();
 
     policy =
         ServerSecurityPolicy.newBuilder()
             .servicePolicy(SERVICE1, asyncPolicy(unused -> {
-                awaitOrFail(barrier);
-                return toBeInterruptedFuture;
+              awaitOrFail(barrier);
+              return toBeInterruptedFuture;
             }))
             .build();
     ListenableFuture<Status> statusFuture =
@@ -179,76 +210,97 @@ public final class ServerSecurityPolicyTest {
             .build();
 
     // Uses the specified policy for service1.
-    checkSynchronousPolicy(policy, MY_UID, SERVICE1, Code.INTERNAL);
-    checkSynchronousPolicy(policy, OTHER_UID, SERVICE1, Code.INTERNAL);
+    checkAsyncPolicy(policy, MY_UID, SERVICE1, Code.INTERNAL);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE1, Code.INTERNAL);
 
     // Uses the specified policy for service2.
-    checkSynchronousPolicy(policy, MY_UID, SERVICE2, Code.PERMISSION_DENIED);
-    checkSynchronousPolicy(policy, OTHER_UID, SERVICE2, Code.OK);
+    checkAsyncPolicy(policy, MY_UID, SERVICE2, Code.PERMISSION_DENIED);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE2, Code.OK);
 
     // Falls back to the default.
-    checkSynchronousPolicy(policy, MY_UID, SERVICE3, Code.OK);
-    checkSynchronousPolicy(policy, OTHER_UID, SERVICE3, Code.PERMISSION_DENIED);
+    checkAsyncPolicy(policy, MY_UID, SERVICE3, Code.OK);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE3, Code.PERMISSION_DENIED);
+  }
+  @Test
+  public void testPerServiceNoDefault_legacyApi() throws Exception {
+    policy =
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(SERVICE1, policy((uid) -> Status.INTERNAL))
+            .servicePolicy(
+                SERVICE2, policy((uid) -> uid == OTHER_UID ? Status.OK : Status.PERMISSION_DENIED))
+            .build();
+
+    // Uses the specified policy for service1.
+    checkLegacySynchronousPolicy(policy, MY_UID, SERVICE1, Code.INTERNAL);
+    checkLegacySynchronousPolicy(policy, OTHER_UID, SERVICE1, Code.INTERNAL);
+
+    // Uses the specified policy for service2.
+    checkLegacySynchronousPolicy(policy, MY_UID, SERVICE2, Code.PERMISSION_DENIED);
+    checkLegacySynchronousPolicy(policy, OTHER_UID, SERVICE2, Code.OK);
+
+    // Falls back to the default.
+    checkLegacySynchronousPolicy(policy, MY_UID, SERVICE3, Code.OK);
+    checkLegacySynchronousPolicy(policy, OTHER_UID, SERVICE3, Code.PERMISSION_DENIED);
   }
 
   @Test
   public void testPerServiceNoDefaultAsync() throws Exception {
     policy =
-            ServerSecurityPolicy.newBuilder()
-                    .servicePolicy(
-                            SERVICE1,
-                            asyncPolicy((uid) -> Futures.immediateFuture(Status.INTERNAL)))
-                    .servicePolicy(
-                            SERVICE2, asyncPolicy((uid) -> {
-                              // Add some extra future transformation to confirm that a chain
-                              // of futures gets properly handled.
-                              ListenableFuture<Boolean> anotherUidFuture =
-                                      Futures.immediateFuture(uid == OTHER_UID);
-                              return Futures
-                                      .transform(
-                                              anotherUidFuture,
-                                              anotherUid ->
-                                                      anotherUid
-                                                              ? Status.OK
-                                                              : Status.PERMISSION_DENIED,
-                                              MoreExecutors.directExecutor());
-                            }))
-                    .build();
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(
+                SERVICE1,
+                asyncPolicy((uid) -> Futures.immediateFuture(Status.INTERNAL)))
+            .servicePolicy(
+                SERVICE2, asyncPolicy((uid) -> {
+                  // Add some extra future transformation to confirm that a chain
+                  // of futures gets properly handled.
+                  ListenableFuture<Boolean> anotherUidFuture =
+                      Futures.immediateFuture(uid == OTHER_UID);
+                  return Futures
+                      .transform(
+                          anotherUidFuture,
+                          anotherUid -> anotherUid ? Status.OK : Status.PERMISSION_DENIED,
+                          MoreExecutors.directExecutor());
+                }))
+                .build();
 
     // Uses the specified policy for service1.
-    assertThat(policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1).get().getCode())
-            .isEqualTo(Status.INTERNAL.getCode());
-    assertThat(policy.checkAuthorizationForServiceAsync(OTHER_UID, SERVICE1).get().getCode())
-            .isEqualTo(Status.INTERNAL.getCode());
+    checkAsyncPolicy(policy, MY_UID, SERVICE1, Code.INTERNAL);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE1, Code.INTERNAL);
 
     // Uses the specified policy for service2.
-    assertThat(policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE2).get().getCode())
-            .isEqualTo(Status.PERMISSION_DENIED.getCode());
-    assertThat(policy.checkAuthorizationForServiceAsync(OTHER_UID, SERVICE2).get().getCode())
-            .isEqualTo(Status.OK.getCode());
+    checkAsyncPolicy(policy, MY_UID, SERVICE2, Code.PERMISSION_DENIED);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE2, Code.OK);
 
     // Falls back to the default.
-    assertThat(policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE3).get().getCode())
-            .isEqualTo(Status.OK.getCode());
-    assertThat(policy.checkAuthorizationForServiceAsync(OTHER_UID, SERVICE3).get().getCode())
-            .isEqualTo(Status.PERMISSION_DENIED.getCode());
+    checkAsyncPolicy(policy, MY_UID, SERVICE3, Code.OK);
+    checkAsyncPolicy(policy, OTHER_UID, SERVICE3, Code.PERMISSION_DENIED);
   }
 
   /**
    * Checks the resulting status of a {@link io.grpc.binder.ServerSecurityPolicy} built with a
-   * synchronous {@link SecurityPolicy} using both the new API and the legacy
-   * {@link ServerSecurityPolicy#checkAuthorizationForService}.
+   * using the legacy {@link ServerSecurityPolicy#checkAuthorizationForService} API for backward
+   * compatibility.
    */
-  private static void checkSynchronousPolicy(
+  private static void checkLegacySynchronousPolicy(
           ServerSecurityPolicy policy,
           int callerUid,
           String service,
           Status.Code expectedCode) throws ExecutionException{
     // Legacy API; checked for backward compatibility
     assertThat(policy.checkAuthorizationForService(callerUid, service).getCode())
-            .isEqualTo(expectedCode);
+        .isEqualTo(expectedCode);
+  }
 
-    // New API
+  /**
+   * Checks the resulting status of a {@link io.grpc.binder.ServerSecurityPolicy} using the new,
+   * asynchronous API ({@link ServerSecurityPolicy#checkAuthorizationForServiceAsync}).
+   */
+  private static void checkAsyncPolicy(
+          ServerSecurityPolicy policy,
+          int callerUid,
+          String service,
+          Status.Code expectedCode) throws ExecutionException{
     ListenableFuture<Status> statusFuture =
         policy.checkAuthorizationForServiceAsync(callerUid, service);
     assertThat(Uninterruptibles.getUninterruptibly(statusFuture).getCode()).isEqualTo(expectedCode);
@@ -274,12 +326,12 @@ public final class ServerSecurityPolicyTest {
 
   private static void awaitOrFail(CyclicBarrier barrier) {
     try {
-        barrier.await();
+      barrier.await();
     } catch (BrokenBarrierException e) {
-        fail(e.getMessage());
+      fail(e.getMessage());
     } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        fail(e.getMessage());
+      Thread.currentThread().interrupt();
+      fail(e.getMessage());
     }
   }
 }

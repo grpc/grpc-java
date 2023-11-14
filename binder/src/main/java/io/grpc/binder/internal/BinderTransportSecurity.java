@@ -132,7 +132,7 @@ public final class BinderTransportSecurity {
         return newServerCallListenerForDoneAuthResult(authStatusFuture, call, headers, next);
       }
 
-      return new PendingAuthListener<>(authStatusFuture, executorPool, call, headers, next);
+      return PendingAuthListener.create(authStatusFuture, executorPool, call, headers, next);
     }
   }
 

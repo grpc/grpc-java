@@ -39,39 +39,29 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
    * @param headers          the 'headers' parameter from {@link io.grpc.ServerInterceptor}
    * @param next             the 'next' parameter from {@link io.grpc.ServerInterceptor}
    */
-  PendingAuthListener(
+  static <ReqT, RespT> PendingAuthListener<ReqT, RespT> create(
       ListenableFuture<Status> authStatusFuture,
       ObjectPool<? extends Executor> executorPool,
       ServerCall<ReqT, RespT> call,
       Metadata headers,
       ServerCallHandler<ReqT, RespT> next) {
+    PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
     Executor executor = executorPool.getObject();
     Futures.addCallback(
         authStatusFuture,
         new FutureCallback<Status>() {
           @Override
           public void onSuccess(Status authStatus) {
-            if (!authStatus.isOk()) {
-              call.close(authStatus, new Metadata());
-              executorPool.returnObject(executor);
-              return;
-            }
-
-            ServerCall.Listener<ReqT> delegate;
             try {
-              delegate = next.startCall(call, headers);
-            } catch (Exception e) {
-              call.close(
-                  Status
-                      .INTERNAL
-                      .withCause(e)
-                      .withDescription("Failed to start server call after authorization check"),
-                  new Metadata());
-              return;
+              if (!authStatus.isOk()) {
+                call.close(authStatus, new Metadata());
+                return;
+              }
+
+              listener.startCall(call, headers, next);
+            } finally {
+              executorPool.returnObject(executor);
             }
-            delegateRef.set(delegate);
-            maybeRunPendingSteps();
-            executorPool.returnObject(executor);
           }
 
           @Override
@@ -82,7 +72,29 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
             executorPool.returnObject(executor);
           }
         }, executor);
+    return listener;
+  }
+
+  private PendingAuthListener() {}
+
+  private void startCall(ServerCall<ReqT, RespT> call,
+                         Metadata headers,
+                         ServerCallHandler<ReqT, RespT> next) {
+    ServerCall.Listener<ReqT> delegate;
+    try {
+      delegate = next.startCall(call, headers);
+    } catch (Exception e) {
+      call.close(
+          Status
+              .INTERNAL
+              .withCause(e)
+              .withDescription("Failed to start server call after authorization check"),
+          new Metadata());
+      return;
     }
+    delegateRef.set(delegate);
+    maybeRunPendingSteps();
+  }
 
   /**
    * Runs any enqueued step in this ServerCall listener as long as the authorization check is
