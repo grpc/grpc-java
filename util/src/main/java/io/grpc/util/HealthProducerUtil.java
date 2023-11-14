@@ -17,9 +17,10 @@
 package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
-import static io.grpc.LoadBalancer.HEALTH_PRODUCER_LISTENER_KEY;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
@@ -66,6 +67,12 @@ public class HealthProducerUtil {
             .build();
       }
       LoadBalancer.Subchannel delegateSubchannel = super.createSubchannel(args);
+      if (delegateSubchannel.getAttributes() != null
+          && delegateSubchannel.getAttributes().get(HAS_HEALTH_PRODUCER_LISTENER_KEY)
+          == null && healthProducerListener != null) {
+        healthProducerListener.onSubchannelState(
+            ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+      }
       return new HealthProducerSubchannel(delegateSubchannel, healthProducerListener);
     }
 
@@ -105,7 +112,7 @@ public class HealthProducerUtil {
     @Override
     public Attributes getAttributes() {
       if (healthListener != null) {
-        return super.getAttributes().toBuilder().set(HEALTH_PRODUCER_LISTENER_KEY, healthListener)
+        return super.getAttributes().toBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, Boolean.TRUE)
             .build();
       }
       return super.getAttributes();
@@ -139,6 +146,16 @@ public class HealthProducerUtil {
     public void onSubchannelState(ConnectivityStateInfo newState) {
       upperStreamHealthStatus = newState;
       notifyHealth();
+    }
+
+    @VisibleForTesting
+    ConnectivityStateInfo getUpperStreamHealthStatus() {
+      return upperStreamHealthStatus;
+    }
+
+    @VisibleForTesting
+    ConnectivityStateInfo getThisHealthState() {
+      return thisHealthState;
     }
 
     public void thisHealthState(ConnectivityStateInfo newState) {

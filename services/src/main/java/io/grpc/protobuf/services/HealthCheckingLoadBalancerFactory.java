@@ -214,8 +214,10 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
     private SubchannelStateListener stateListener;
     // When healthListener is set, generic health check kicks in. The raw connectivity state passes
     // through stateListener. And healthListener is notified via:
-    // If disabled or service name not set, notify READY until raw connectivity state is READY.
-    // Otherwise, notify upon health stream response.
+    // If disabled or service name not set, pass through.
+    // Else if not READY yet, pass through.
+    // Else if transient to READY, notify CONNECTING.
+    // Then notify upon health stream response.
     @Nullable
     private final HealthProducerUtil.HealthCheckProducerListener healthListener;
 
@@ -433,8 +435,6 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
       }
 
       void handleStreamClosed(Status status) {
-        //TODO: disable health status in health listener. Because this breaks outlier detection
-        // to deliver health status.
         if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
           disabled = true;
           logger.log(

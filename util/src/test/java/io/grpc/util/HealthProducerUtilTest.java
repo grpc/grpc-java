@@ -20,8 +20,8 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
-import static io.grpc.LoadBalancer.HEALTH_PRODUCER_LISTENER_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
@@ -76,31 +76,66 @@ public class HealthProducerUtilTest {
   }
 
   @Test
-  public void healthStatusNotification() {
+  public void helper_rootProducerNotifyUpperStream() {
     LoadBalancer.Helper producerHelper = new HealthProducerUtil.HealthProducerHelper(
         mockHelper, HEALTH_PRODUCER_NAME);
     HealthProducerUtil.HealthProducerSubchannel subchannel =
         (HealthProducerUtil.HealthProducerSubchannel) producerHelper.createSubchannel(
-        LoadBalancer.CreateSubchannelArgs.newBuilder()
-            .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, healthConsumerListener)
-            .setAddresses(new EquivalentAddressGroup(
-                Collections.singletonList(new InetSocketAddress(10))))
-            .build());
+            LoadBalancer.CreateSubchannelArgs.newBuilder()
+                .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, healthConsumerListener)
+                .setAddresses(new EquivalentAddressGroup(
+                    Collections.singletonList(new InetSocketAddress(10))))
+                .build());
     verify(mockHelper).createSubchannel(createSubchannelArgCaptor.capture());
 
     assertThat(mockSubchannel).isSameInstanceAs(subchannel.delegate());
     HealthProducerUtil.HealthCheckProducerListener producerListener =
         subchannel.getHealthListener();
-    assertThat(subchannel.getAttributes().get(HEALTH_PRODUCER_LISTENER_KEY))
-        .isEqualTo(producerListener);
+    assertThat(subchannel.getAttributes().get(HAS_HEALTH_PRODUCER_LISTENER_KEY))
+        .isEqualTo(Boolean.TRUE);
     assertThat(createSubchannelArgCaptor.getValue().getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY))
         .isEqualTo(producerListener);
-
-    producerListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    assertThat(producerListener.getUpperStreamHealthStatus()).isEqualTo(
+        ConnectivityStateInfo.forNonError(READY));
+    assertThat(producerListener.getThisHealthState()).isNull();
     verifyNoInteractions(healthConsumerListener);
+  }
 
-    // de-dup null
-    producerListener.thisHealthState(null);
+  @Test
+  public void helper_notRootProducer() {
+    when(mockHelper.createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class))).thenReturn(
+        new HealthProducerUtil.HealthProducerSubchannel(mockSubchannel,
+            new HealthProducerUtil.HealthCheckProducerListener(healthConsumerListener, "god")
+    ));
+    LoadBalancer.Helper producerHelper = new HealthProducerUtil.HealthProducerHelper(
+        mockHelper, HEALTH_PRODUCER_NAME);
+    HealthProducerUtil.HealthProducerSubchannel subchannel =
+        (HealthProducerUtil.HealthProducerSubchannel) producerHelper.createSubchannel(
+            LoadBalancer.CreateSubchannelArgs.newBuilder()
+                .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, healthConsumerListener)
+                .setAddresses(new EquivalentAddressGroup(
+                    Collections.singletonList(new InetSocketAddress(10))))
+                .build());
+    verify(mockHelper).createSubchannel(createSubchannelArgCaptor.capture());
+
+    assertThat(mockSubchannel).isSameInstanceAs(
+        ((HealthProducerUtil.HealthProducerSubchannel)subchannel.delegate()).delegate());
+    HealthProducerUtil.HealthCheckProducerListener producerListener =
+        subchannel.getHealthListener();
+    assertThat(subchannel.getAttributes().get(HAS_HEALTH_PRODUCER_LISTENER_KEY))
+        .isEqualTo(Boolean.TRUE);
+    assertThat(createSubchannelArgCaptor.getValue().getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY))
+        .isEqualTo(producerListener);
+    assertThat(producerListener.getUpperStreamHealthStatus()).isNull();
+    assertThat(producerListener.getThisHealthState()).isNull();
+    verifyNoInteractions(healthConsumerListener);
+  }
+
+  @Test
+  public void healthStatusNotification() {
+    HealthProducerUtil.HealthCheckProducerListener producerListener =
+        new HealthProducerUtil.HealthCheckProducerListener(healthConsumerListener, "good");
+    producerListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     verifyNoMoreInteractions(healthConsumerListener);
 
     // upper stream is healthy, pass through this health status

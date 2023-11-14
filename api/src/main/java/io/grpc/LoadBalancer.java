@@ -122,9 +122,9 @@ public abstract class LoadBalancer {
       LoadBalancer.CreateSubchannelArgs.Key.create("internal:health-check-consumer-listener");
 
   @Internal
-  public static final Attributes.Key<LoadBalancer.SubchannelStateListener>
-      HEALTH_PRODUCER_LISTENER_KEY =
-      Attributes.Key.create("internal:health-check-producer-listener");
+  public static final Attributes.Key<Boolean>
+      HAS_HEALTH_PRODUCER_LISTENER_KEY =
+      Attributes.Key.create("internal:has-health-check-producer-listener");
 
   public static final SubchannelPicker EMPTY_PICKER = new SubchannelPicker() {
     @Override

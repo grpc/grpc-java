@@ -360,7 +360,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     SubchannelData subchannelData = new SubchannelData(subchannel, IDLE, hcListener);
     subchannels.put(addr, subchannelData);
     Attributes attrs = subchannel.getAttributes();
-    if (attrs == null || attrs.get(LoadBalancer.HEALTH_PRODUCER_LISTENER_KEY) == null) {
+    if (attrs == null
+        || attrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
       subchannelData.healthState = ConnectivityStateInfo.forNonError(READY);
     }
     subchannel.start(new SubchannelStateListener() {

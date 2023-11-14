@@ -75,7 +75,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -87,8 +87,18 @@ import org.mockito.stubbing.Answer;
 /**
  * Unit tests for {@link OutlierDetectionLoadBalancer}.
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class OutlierDetectionLoadBalancerTest {
+  @Parameterized.Parameters(name = "{0}")
+  public static Iterable<Object[]> data() {
+    // Before and after dual stack
+    return Arrays.asList(new Object[][] {
+        {true}, {false}
+    });
+  }
+
+  @Parameterized.Parameter
+  public boolean hasHealthConsumer;
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
@@ -167,7 +177,9 @@ public class OutlierDetectionLoadBalancerTest {
       servers.add(eag);
       Subchannel sc = mock(Subchannel.class);
       subchannels.put(Arrays.asList(eag), sc);
-      healthListeners.put(eag, mock(SubchannelStateListener.class));
+      if (hasHealthConsumer) {
+        healthListeners.put(eag, mock(SubchannelStateListener.class));
+      }
     }
 
     Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
@@ -374,7 +386,7 @@ public class OutlierDetectionLoadBalancerTest {
    * Any ClientStreamTracer.Factory set by the delegate picker should still get used.
    */
   @Test
-  public void delegatePickTracerFactoryPreserved() throws Exception {
+  public void delegatePickTracerFactoryPreserved() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
         .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
@@ -387,8 +399,10 @@ public class OutlierDetectionLoadBalancerTest {
 
     verify(mockHelper, times(2)).updateBalancingState(stateCaptor.capture(),
         pickerCaptor.capture());
-    SubchannelStateListener healthListener = healthListeners.get(servers.get(0));
-    verify(healthListener).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    if (hasHealthConsumer) {
+      SubchannelStateListener healthListener = healthListeners.get(servers.get(0));
+      verify(healthListener).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    }
 
     // Make sure that we can pick the single READY subchannel.
     SubchannelPicker picker = pickerCaptor.getAllValues().get(1);
@@ -1113,9 +1127,11 @@ public class OutlierDetectionLoadBalancerTest {
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
-    verify(healthListeners.get(servers.get(0))).onSubchannelState(eq(
-        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)
-    ));
+    if (hasHealthConsumer) {
+      verify(healthListeners.get(servers.get(0))).onSubchannelState(eq(
+          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)
+      ));
+    }
   }
 
   /** Both algorithms configured, error percentage detects an outlier. */
@@ -1175,9 +1191,11 @@ public class OutlierDetectionLoadBalancerTest {
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
-    verify(healthListeners.get(servers.get(0))).onSubchannelState(eq(
-        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)
-    ));
+    if (hasHealthConsumer) {
+      verify(healthListeners.get(servers.get(0))).onSubchannelState(eq(
+          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)
+      ));
+    }
   }
 
   @Test
@@ -1245,9 +1263,8 @@ public class OutlierDetectionLoadBalancerTest {
       ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
           .newClientStreamTracer(null, null);
 
-      Subchannel s =
-          ((OutlierDetectionSubchannel)pickResult.getSubchannel()).delegate();
-      Subchannel subchannel = ((HealthProducerUtil.HealthProducerSubchannel) s).delegate();
+      Subchannel subchannel = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
+      subchannel = ((HealthProducerUtil.HealthProducerSubchannel) subchannel).delegate();
 
       int maxCalls =
           maxCallsMap != null && maxCallsMap.containsKey(subchannel)
@@ -1290,16 +1307,13 @@ public class OutlierDetectionLoadBalancerTest {
     public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       subchannelList = new ArrayList<>();
       for (EquivalentAddressGroup eag: resolvedAddresses.getAddresses()) {
-        Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-                .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY,
-                    healthListeners.get(eag))
-            .setAddresses(eag).build());
-        assertThat(healthListeners.get(eag)).isNotNull();
-        HealthProducerUtil.HealthCheckProducerListener healthCheckProducerListener =
-            (HealthProducerUtil.HealthCheckProducerListener)
-                subchannel.getAttributes().get(HEALTH_PRODUCER_LISTENER_KEY);
-        assertThat(healthCheckProducerListener).isNotNull();
-        healthCheckProducerListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+        CreateSubchannelArgs.Builder args = CreateSubchannelArgs.newBuilder().setAddresses(eag);
+        if (hasHealthConsumer) {
+          assertThat(healthListeners.get(eag)).isNotNull();
+          args.addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY,
+              healthListeners.get(eag));
+        }
+        Subchannel subchannel = helper.createSubchannel(args.build());
         subchannelList.add(subchannel);
         subchannel.start(mock(SubchannelStateListener.class));
         deliverSubchannelState(READY);
