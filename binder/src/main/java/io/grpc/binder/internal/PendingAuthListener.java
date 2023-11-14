@@ -83,7 +83,7 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
     ServerCall.Listener<ReqT> delegate;
     try {
       delegate = next.startCall(call, headers);
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       call.close(
           Status
               .INTERNAL
