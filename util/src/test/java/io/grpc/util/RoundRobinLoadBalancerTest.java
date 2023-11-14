@@ -486,19 +486,19 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void internalPickerComparisons() {
-    EmptyPicker empty1 = new EmptyPicker();
-    EmptyPicker empty2 = new EmptyPicker();
+    SubchannelPicker empty1 = new EmptyPicker();
+    SubchannelPicker empty2 = new EmptyPicker();
 
     AtomicInteger seq = new AtomicInteger(0);
     acceptAddresses(servers, Attributes.EMPTY); // create subchannels
     Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
     SubchannelPicker sc1 = TestUtils.pickerOf(subchannelIterator.next());
     SubchannelPicker sc2 = TestUtils.pickerOf(subchannelIterator.next());
-    ReadyPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), seq);
-    ReadyPicker ready2 = new ReadyPicker(Arrays.asList(sc1), seq);
-    ReadyPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), seq);
-    ReadyPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), seq);
-    ReadyPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), new AtomicInteger(0));
+    SubchannelPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), seq);
+    SubchannelPicker ready2 = new ReadyPicker(Arrays.asList(sc1), seq);
+    SubchannelPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), seq);
+    SubchannelPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), seq);
+    SubchannelPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), new AtomicInteger(0));
 
     assertThat(empty1).isEqualTo(empty2);
     assertThat(ready1).isNotEqualTo(ready2);
