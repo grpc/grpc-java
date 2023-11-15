@@ -165,6 +165,13 @@ public final class BinderTransportSecurity {
           return authorization;
         }
       }
+      // Under high load, this may trigger a large number of concurrent authorization checks that
+      // perform essentially the same work and have the potential of exhausting the resources they
+      // depend on. This was a non-issue in the past with synchronous policy checks due to the
+      // fixed-size nature of the thread pool this method runs under.
+      //
+      // TODO(10669): evaluate if there should be at most a single pending authorization check per
+      //  (uid, serviceName) pair at any given time.
       ListenableFuture<Status> authorization =
           serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
       if (useCache) {
