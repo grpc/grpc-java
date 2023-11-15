@@ -422,6 +422,25 @@ public final class SecurityPolicies {
   /**
    * Creates a {@link SecurityPolicy} which checks if the caller has all of the given permissions
    * from {@code permissions}.
+   * 
+   * <p>The gRPC framework assumes that a {@link SecurityPolicy}'s verdict for a given peer UID will
+   * not change over the lifetime of any process with that UID. But Android runtime permissions can
+   * be granted or revoked by the user at any time and so using the {@link #hasPermissions}
+   * {@link SecurityPolicy} comes with certain special responsibilities.
+   * 
+   * <p>In particular, callers must ensure that the *subjects* of the returned
+   * {@link SecurityPolicy} hold all required {@code permissions} *before* making use of it. Android
+   * kills an app's processes when it loses any permission but the same isn't true when a permission
+   * is granted. And so without special care, a {@link #hasPermissions} denial could incorrectly
+   * persist even if the subject is later granted all required {@code permissions}.
+   * 
+   * <p>A server using {@link #hasPermissions} must, as part of its RPC API contract, require
+   * clients to request and receive all {@code permissions} before making a call. This is in line
+   * with official Android guidance to request and confirm receipt of runtime permissions before
+   * using them. 
+   * 
+   * <p>A client, on the other hand, should only use {@link #hasPermissions} policies that require
+   * install-time permissions which cannot change.
    *
    * @param permissions all permissions that the calling package needs to have
    * @throws NullPointerException if any of the inputs are {@code null}
