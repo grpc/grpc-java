@@ -16,6 +16,7 @@
 
 package io.grpc.binder.internal;
 
+import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
@@ -132,7 +133,34 @@ public final class BinderTransportSecurity {
         return newServerCallListenerForDoneAuthResult(authStatusFuture, call, headers, next);
       }
 
-      return PendingAuthListener.create(authStatusFuture, executorPool, call, headers, next);
+      PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
+      Executor executor = executorPool.getObject();
+      Futures.addCallback(
+          authStatusFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status authStatus) {
+              try {
+                if (!authStatus.isOk()) {
+                  call.close(authStatus, new Metadata());
+                  return;
+                }
+
+                listener.startCall(call, headers, next);
+              } finally {
+                executorPool.returnObject(executor);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              call.close(
+                  Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
+                  new Metadata());
+              executorPool.returnObject(executor);
+            }
+          }, executor);
+      return listener;
     }
   }
 

@@ -1,17 +1,11 @@
 package io.grpc.binder.internal;
 
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
-
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
-import io.grpc.internal.ObjectPool;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
@@ -27,57 +21,9 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
   private final AtomicReference<ServerCall.Listener<ReqT>> delegateRef =
       new AtomicReference<>(null);
 
-  /**
-   * @param authStatusFuture a ListenableFuture holding the result status of the authorization
-   *                         policy from a {@link io.grpc.binder.SecurityPolicy} or a
-   *                         {@link io.grpc.binder.AsyncSecurityPolicy}. The call only progresses
-   *                         if {@link Status#isOk()} is true.
-   * @param executorPool     a pool that can provide at least one Executor under which the result
-   *                         of {@code authStatusFuture} can be handled, progressing the gRPC
-   *                         stages.
-   * @param call             the 'call' parameter from {@link io.grpc.ServerInterceptor}
-   * @param headers          the 'headers' parameter from {@link io.grpc.ServerInterceptor}
-   * @param next             the 'next' parameter from {@link io.grpc.ServerInterceptor}
-   */
-  static <ReqT, RespT> PendingAuthListener<ReqT, RespT> create(
-      ListenableFuture<Status> authStatusFuture,
-      ObjectPool<? extends Executor> executorPool,
-      ServerCall<ReqT, RespT> call,
-      Metadata headers,
-      ServerCallHandler<ReqT, RespT> next) {
-    PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
-    Executor executor = executorPool.getObject();
-    Futures.addCallback(
-        authStatusFuture,
-        new FutureCallback<Status>() {
-          @Override
-          public void onSuccess(Status authStatus) {
-            try {
-              if (!authStatus.isOk()) {
-                call.close(authStatus, new Metadata());
-                return;
-              }
+  PendingAuthListener() {}
 
-              listener.startCall(call, headers, next);
-            } finally {
-              executorPool.returnObject(executor);
-            }
-          }
-
-          @Override
-          public void onFailure(Throwable t) {
-            call.close(
-                Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
-                new Metadata());
-            executorPool.returnObject(executor);
-          }
-        }, executor);
-    return listener;
-  }
-
-  private PendingAuthListener() {}
-
-  private void startCall(ServerCall<ReqT, RespT> call,
+  void startCall(ServerCall<ReqT, RespT> call,
                          Metadata headers,
                          ServerCallHandler<ReqT, RespT> next) {
     ServerCall.Listener<ReqT> delegate;
