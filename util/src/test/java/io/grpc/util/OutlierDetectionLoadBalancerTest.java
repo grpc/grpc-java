@@ -378,8 +378,7 @@ public class OutlierDetectionLoadBalancerTest {
     SubchannelPicker picker = pickerCaptor.getAllValues().get(2);
     PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
     Subchannel s = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
-    assertThat(((HealthProducerUtil.HealthProducerSubchannel)s).delegate()).isEqualTo(
-        readySubchannel);
+    assertThat(s).isEqualTo(readySubchannel);
   }
 
   /**
@@ -1116,9 +1115,6 @@ public class OutlierDetectionLoadBalancerTest {
         .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
-    for (SubchannelStateListener healthListener : healthListeners.values()) {
-      verify(healthListener).onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));
-    }
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
 
@@ -1180,9 +1176,6 @@ public class OutlierDetectionLoadBalancerTest {
         .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
-    for (SubchannelStateListener healthListener : healthListeners.values()) {
-      verify(healthListener).onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));
-    }
 
     generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
 
@@ -1264,7 +1257,9 @@ public class OutlierDetectionLoadBalancerTest {
           .newClientStreamTracer(null, null);
 
       Subchannel subchannel = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
-      subchannel = ((HealthProducerUtil.HealthProducerSubchannel) subchannel).delegate();
+      if (subchannel instanceof HealthProducerUtil.HealthProducerSubchannel) {
+        subchannel = ((HealthProducerUtil.HealthProducerSubchannel) subchannel).delegate();
+      }
 
       int maxCalls =
           maxCallsMap != null && maxCallsMap.containsKey(subchannel)

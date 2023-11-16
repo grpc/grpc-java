@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
+import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -102,8 +103,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
 
     HelperImpl(Helper delegate) {
       this.delegate = new HealthProducerUtil.HealthProducerHelper(
-          checkNotNull(delegate, "delegate"),
-          "Client-Health-Check");
+          checkNotNull(delegate, "delegate"));
       this.syncContext = checkNotNull(delegate.getSynchronizationContext(), "syncContext");
     }
 
@@ -117,13 +117,17 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
       // HealthCheckState is not thread-safe, we are requiring the original LoadBalancer calls
       // createSubchannel() from the SynchronizationContext.
       syncContext.throwIfNotInThisSynchronizationContext();
-      HealthProducerUtil.HealthProducerSubchannel delegatedHealthSubchannel =
-          (HealthProducerUtil.HealthProducerSubchannel) super.createSubchannel(args);
+      LoadBalancer.SubchannelStateListener healthConsumerListener =
+          args.getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
       HealthCheckState hcState = new HealthCheckState(
-          this, delegatedHealthSubchannel, syncContext, delegate.getScheduledExecutorService(),
-          delegatedHealthSubchannel.getHealthListener());
+          this, syncContext, delegate.getScheduledExecutorService(), healthConsumerListener);
+      if (healthConsumerListener != null) {
+        args = args.toBuilder().addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcState).build();
+      }
+      Subchannel delegate = super.createSubchannel(args);
+      hcState.setSubchannel(delegate);
       hcStates.add(hcState);
-      Subchannel subchannel = new SubchannelImpl(delegatedHealthSubchannel, hcState);
+      Subchannel subchannel = new SubchannelImpl(delegate, hcState);
       if (healthCheckedService != null) {
         hcState.setServiceName(healthCheckedService);
       }
@@ -160,8 +164,12 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
 
     @Override
     public void start(final SubchannelStateListener listener) {
-      hcState.init(listener);
-      delegate().start(hcState);
+      if (hcState.stateListener == null) {
+        hcState.init(listener);
+        delegate().start(hcState);
+      } else {
+        delegate().start(listener);
+      }
     }
   }
 
@@ -209,17 +217,11 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
     private final SynchronizationContext syncContext;
     private final ScheduledExecutorService timerService;
     private final HelperImpl helperImpl;
-    private final Subchannel subchannel;
-    private final ChannelLogger subchannelLogger;
+    private Subchannel subchannel;
+    private ChannelLogger subchannelLogger;
+
+    // In dual stack new pick first, this becomes health listener from create subchannel args.
     private SubchannelStateListener stateListener;
-    // When healthListener is set, generic health check kicks in. The raw connectivity state passes
-    // through stateListener. And healthListener is notified via:
-    // If disabled or service name not set, pass through.
-    // Else if not READY yet, pass through.
-    // Else if transient to READY, notify CONNECTING.
-    // Then notify upon health stream response.
-    @Nullable
-    private final HealthProducerUtil.HealthCheckProducerListener healthListener;
 
     // Set when RPC started. Cleared when the RPC has closed or abandoned.
     @Nullable
@@ -240,18 +242,21 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
     private ScheduledHandle retryTimer;
 
     HealthCheckState(
-        HelperImpl helperImpl,
-        Subchannel subchannel, SynchronizationContext syncContext,
+        HelperImpl helperImpl, SynchronizationContext syncContext,
         ScheduledExecutorService timerService,
-        @Nullable HealthProducerUtil.HealthCheckProducerListener healthListener) {
+        @Nullable SubchannelStateListener healthListener) {
       this.helperImpl = checkNotNull(helperImpl, "helperImpl");
-      this.subchannel = checkNotNull(subchannel, "subchannel");
-      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
       this.syncContext = checkNotNull(syncContext, "syncContext");
       this.timerService = checkNotNull(timerService, "timerService");
-      this.healthListener = healthListener;
+      this.stateListener = healthListener;
     }
 
+    void setSubchannel(Subchannel subchannel) {
+      this.subchannel = checkNotNull(subchannel, "subchannel");
+      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
+    }
+
+    // Only called in old pick first. Can be removed after migration.
     void init(SubchannelStateListener listener) {
       checkState(this.stateListener == null, "init() already called");
       this.stateListener = checkNotNull(listener, "listener");
@@ -278,18 +283,11 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
         // A connection was lost.  We will reset disabled flag because health check
         // may be available on the new connection.
         disabled = false;
-        if (healthListener != null) {
-          healthListener.thisHealthState(null);
-        }
       }
       if (Objects.equal(rawState.getState(), SHUTDOWN)) {
         helperImpl.hcStates.remove(this);
       }
       this.rawState = rawState;
-      if (healthListener != null) { // raw connectivity state pass through for generic health check
-        checkState(subchannel != null, "init() not called");
-        stateListener.onSubchannelState(rawState);
-      }
       adjustHealthCheck();
     }
 
@@ -347,11 +345,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
       checkState(subchannel != null, "init() not called");
       if (!Objects.equal(concludedState, newState)) {
         concludedState = newState;
-        if (healthListener != null) {
-          healthListener.thisHealthState(concludedState);
-        } else {
-          stateListener.onSubchannelState(concludedState);
-        }
+        stateListener.onSubchannelState(concludedState);
       }
     }
 
