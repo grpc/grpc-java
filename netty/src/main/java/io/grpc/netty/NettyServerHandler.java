@@ -125,6 +125,8 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final long keepAliveTimeoutInNanos;
   private final long maxConnectionAgeInNanos;
   private final long maxConnectionAgeGraceInNanos;
+  private final int maxRstCount;
+  private final long maxRstPeriodNanos;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
@@ -146,6 +148,9 @@ class NettyServerHandler extends AbstractNettyHandler {
   private ScheduledFuture<?> maxConnectionAgeMonitor;
   @CheckForNull
   private GracefulShutdown gracefulShutdown;
+  private int rstCount;
+  private long lastRstNanoTime = System.nanoTime();
+
 
   static NettyServerHandler newHandler(
       ServerTransportListener transportListener,
@@ -164,6 +169,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
       long permitKeepAliveTimeInNanos,
+      int maxRstCount,
+      long maxRstPeriodNanos,
       Attributes eagAttributes) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
         maxHeaderListSize);
@@ -192,6 +199,8 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
+        maxRstCount,
+        maxRstPeriodNanos,
         eagAttributes,
         Ticker.systemTicker());
   }
@@ -215,6 +224,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
       long permitKeepAliveTimeInNanos,
+      int maxRstCount,
+      long maxRstPeriodNanos,
       Attributes eagAttributes,
       Ticker ticker) {
     Preconditions.checkArgument(maxStreams > 0, "maxStreams must be positive: %s", maxStreams);
@@ -266,6 +277,8 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         keepAliveEnforcer,
         autoFlowControl,
+        maxRstCount,
+        maxRstPeriodNanos,
         eagAttributes, ticker);
   }
 
@@ -286,6 +299,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeGraceInNanos,
       final KeepAliveEnforcer keepAliveEnforcer,
       boolean autoFlowControl,
+      int maxRstCount,
+      long maxRstPeriodNanos,
       Attributes eagAttributes,
       Ticker ticker) {
     super(channelUnused, decoder, encoder, settings, new ServerChannelLogger(),
@@ -328,6 +343,8 @@ class NettyServerHandler extends AbstractNettyHandler {
     this.maxConnectionAgeInNanos = maxConnectionAgeInNanos;
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.keepAliveEnforcer = checkNotNull(keepAliveEnforcer, "keepAliveEnforcer");
+    this.maxRstCount = maxRstCount;
+    this.maxRstPeriodNanos = maxRstPeriodNanos;
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
 
     streamKey = encoder.connection().newKey();
@@ -527,6 +544,19 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private void onRstStreamRead(int streamId, long errorCode) throws Http2Exception {
+    if (maxRstCount > 0) {
+      long now = System.nanoTime();
+      if (now - lastRstNanoTime > maxRstPeriodNanos) {
+        lastRstNanoTime = now;
+        rstCount = 1;
+      } else {
+        rstCount++;
+        if (rstCount > maxRstCount) {
+          throw Http2Exception.connectionError(Http2Error.ENHANCE_YOUR_CALM, "too_many_rststreams");
+        }
+      }
+    }
+
     try {
       NettyServerStream.TransportState stream = serverStream(connection().stream(streamId));
       if (stream != null) {

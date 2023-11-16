@@ -99,6 +99,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
+  private final int maxRstCount;
+  private final long maxRstPeriodNanos;
   private final Attributes eagAttributes;
   private final ReferenceCounted sharedResourceReferenceCounter =
       new SharedResourceReferenceCounter();
@@ -127,6 +129,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
+      int maxRstCount, long maxRstPeriodNanos,
       Attributes eagAttributes, InternalChannelz channelz) {
     this.addresses = checkNotNull(addresses, "addresses");
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
@@ -156,6 +159,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+    this.maxRstCount = maxRstCount;
+    this.maxRstPeriodNanos = maxRstPeriodNanos;
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
     this.channelz = Preconditions.checkNotNull(channelz);
     this.logId = InternalLogId.allocate(getClass(), addresses.isEmpty() ? "No address" :
@@ -257,6 +262,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
                 maxConnectionAgeGraceInNanos,
                 permitKeepAliveWithoutCalls,
                 permitKeepAliveTimeInNanos,
+                maxRstCount,
+                maxRstPeriodNanos,
                 eagAttributes);
         ServerTransportListener transportListener;
         // This is to order callbacks on the listener, not to guard access to channel.

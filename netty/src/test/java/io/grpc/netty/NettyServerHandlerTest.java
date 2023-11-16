@@ -23,6 +23,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
+import static io.grpc.netty.NettyServerBuilder.MAX_RST_COUNT_DISABLED;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
@@ -33,6 +34,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -85,6 +87,7 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import java.io.InputStream;
+import java.nio.channels.ClosedChannelException;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -143,6 +146,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
+  private int maxRstCount = MAX_RST_COUNT_DISABLED;
+  private long maxRstPeriodNanos;
 
   private class ServerTransportListenerImpl implements ServerTransportListener {
 
@@ -1249,6 +1254,42 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertFalse(channel().isOpen());
   }
 
+  @Test
+  public void maxRstCount_withinLimit_succeeds() throws Exception {
+    maxRstCount = 10;
+    maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    manualSetUp();
+    rapidReset(maxRstCount);
+    assertTrue(channel().isOpen());
+  }
+
+  @Test
+  public void maxRstCount_exceedsLimit_fails() throws Exception {
+    maxRstCount = 10;
+    maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    manualSetUp();
+    assertThrows(ClosedChannelException.class, () -> rapidReset(maxRstCount+1));
+    assertFalse(channel().isOpen());
+  }
+
+  private void rapidReset(int burstSize) throws Exception {
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, new AsciiString("application/grpc", UTF_8))
+        .set(TE_HEADER, TE_TRAILERS)
+        .path(new AsciiString("/foo/bar"));
+    int streamId = 1;
+    for (int period = 0; period < 5; period++) {
+      for (int i = 0; i < burstSize; i++) {
+        channelRead(headersFrame(streamId, headers));
+        channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
+        streamId += 2;
+      }
+      while (channel().readOutbound() != null) {}
+      TimeUnit.NANOSECONDS.sleep(maxRstPeriodNanos);
+    }
+  }
+
   private void createStream() throws Exception {
     Http2Headers headers = new DefaultHttp2Headers()
         .method(HTTP_METHOD)
@@ -1296,6 +1337,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
+        maxRstCount,
+        maxRstPeriodNanos,
         Attributes.EMPTY,
         fakeClock().getTicker());
   }
