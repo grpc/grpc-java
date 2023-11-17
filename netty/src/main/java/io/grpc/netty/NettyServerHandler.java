@@ -555,7 +555,14 @@ class NettyServerHandler extends AbstractNettyHandler {
       } else {
         rstCount++;
         if (rstCount > maxRstCount) {
-          throw Http2Exception.connectionError(Http2Error.ENHANCE_YOUR_CALM, "too_many_rststreams");
+          throw new Http2Exception(Http2Error.ENHANCE_YOUR_CALM, "too_many_rststreams") {
+            @SuppressWarnings("UnsynchronizedOverridesSynchronized") // No memory accesses
+            @Override
+            public Throwable fillInStackTrace() {
+              // Avoid the CPU cycles, since the resets may be a CPU consumption attack
+              return this;
+            }
+          };
         }
       }
     }
