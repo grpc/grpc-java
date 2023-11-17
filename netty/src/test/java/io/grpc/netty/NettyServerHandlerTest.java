@@ -1279,14 +1279,16 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(TE_HEADER, TE_TRAILERS)
         .path(new AsciiString("/foo/bar"));
     int streamId = 1;
-    for (int period = 0; period < 5; period++) {
+    long rpcTimeNanos = maxRstPeriodNanos / 2 / burstSize;
+    for (int period = 0; period < 3; period++) {
       for (int i = 0; i < burstSize; i++) {
         channelRead(headersFrame(streamId, headers));
         channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
         streamId += 2;
+        fakeClock().forwardNanos(rpcTimeNanos);
       }
       while (channel().readOutbound() != null) {}
-      TimeUnit.NANOSECONDS.sleep(maxRstPeriodNanos);
+      fakeClock().forwardNanos(maxRstPeriodNanos - rpcTimeNanos * burstSize + 1);
     }
   }
 

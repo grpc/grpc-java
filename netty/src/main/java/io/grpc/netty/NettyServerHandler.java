@@ -131,6 +131,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
   private final Attributes eagAttributes;
+  private final Ticker ticker;
   /** Incomplete attributes produced by negotiator. */
   private Attributes negotiationAttributes;
   private InternalChannelz.Security securityInfo;
@@ -149,7 +150,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   @CheckForNull
   private GracefulShutdown gracefulShutdown;
   private int rstCount;
-  private long lastRstNanoTime = System.nanoTime();
+  private long lastRstNanoTime;
 
 
   static NettyServerHandler newHandler(
@@ -346,7 +347,9 @@ class NettyServerHandler extends AbstractNettyHandler {
     this.maxRstCount = maxRstCount;
     this.maxRstPeriodNanos = maxRstPeriodNanos;
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
+    this.ticker = checkNotNull(ticker, "ticker");
 
+    this.lastRstNanoTime = ticker.read();
     streamKey = encoder.connection().newKey();
     this.transportListener = checkNotNull(transportListener, "transportListener");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
@@ -545,7 +548,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void onRstStreamRead(int streamId, long errorCode) throws Http2Exception {
     if (maxRstCount > 0) {
-      long now = System.nanoTime();
+      long now = ticker.read();
       if (now - lastRstNanoTime > maxRstPeriodNanos) {
         lastRstNanoTime = now;
         rstCount = 1;
