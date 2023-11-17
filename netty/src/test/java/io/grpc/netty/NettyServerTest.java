@@ -153,6 +153,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> serverShutdownCalled = SettableFuture.create();
@@ -203,6 +204,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
@@ -276,6 +278,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
@@ -337,6 +340,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
 
@@ -411,6 +415,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         eagAttributes,
         channelz);
     ns.start(new ServerListener() {
@@ -458,6 +463,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
@@ -600,6 +606,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
   }
