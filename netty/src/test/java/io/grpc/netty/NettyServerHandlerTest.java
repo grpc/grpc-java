@@ -1268,7 +1268,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     maxRstCount = 10;
     maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
     manualSetUp();
-    assertThrows(ClosedChannelException.class, () -> rapidReset(maxRstCount+1));
+    assertThrows(ClosedChannelException.class, () -> rapidReset(maxRstCount + 1));
     assertFalse(channel().isOpen());
   }
 
