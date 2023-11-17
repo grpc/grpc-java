@@ -299,7 +299,7 @@ final class XdsClientImpl extends XdsClient
           subscribedResourceTypeUrls.put(type.typeUrl(), type);
         }
         ResourceSubscriber<T> subscriber =
-            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);;
+            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);
         if (subscriber == null) {
           logger.log(XdsLogLevel.INFO, "Subscribe {0} resource {1}", type, resourceName);
           subscriber = new ResourceSubscriber<>(type, resourceName);
@@ -483,6 +483,9 @@ final class XdsClientImpl extends XdsClient
         subscriber.onAbsent();
       }
     }
+    for (Map.Entry<String, ResourceSubscriber<?>> entry : subscribedResources.entrySet()) {
+      entry.getValue().onFinishUpdate();
+    }
   }
 
   /**
@@ -556,14 +559,32 @@ final class XdsClientImpl extends XdsClient
     void addWatcher(ResourceWatcher<T> watcher) {
       checkArgument(!watchers.contains(watcher), "watcher %s already registered", watcher);
       watchers.add(watcher);
-      if (errorDescription != null) {
-        watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
-        return;
+      if (xdsChannel != null) {
+        xdsChannel.onFanOut(1);
       }
-      if (data != null) {
-        notifyWatcher(watcher, data);
-      } else if (absent) {
-        watcher.onResourceDoesNotExist(resource);
+      syncContext.execute(() -> {
+        try {
+          if (errorDescription != null) {
+            watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
+            return;
+          }
+          if (data != null) {
+            notifyWatcher(watcher, data);
+          } else if (absent) {
+            watcher.onResourceDoesNotExist(resource);
+          }
+        } finally {
+          callbackFlowControl();
+        }
+      });
+    }
+
+    private void callbackFlowControl() {
+      if (xdsChannel != null) {
+        SettableFuture<Void> cb = xdsChannel.createFlowControlCallBack();
+        if (cb != null) {
+          cb.set(null);
+        }
       }
     }
 
@@ -650,9 +671,18 @@ final class XdsClientImpl extends XdsClient
         resourceDeletionIgnored = false;
       }
       if (!Objects.equals(oldData, data)) {
-        for (ResourceWatcher<T> watcher : watchers) {
-          notifyWatcher(watcher, data);
+        if (xdsChannel != null) {
+          xdsChannel.onFanOut(watchers.size());
         }
+        syncContext.execute(() -> {
+          for (ResourceWatcher<T> watcher : watchers) {
+            try {
+              notifyWatcher(watcher, data);
+            } finally {
+              callbackFlowControl();
+            }
+          }
+        });
       }
     }
 
@@ -680,9 +710,18 @@ final class XdsClientImpl extends XdsClient
         data = null;
         absent = true;
         metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
-        for (ResourceWatcher<T> watcher : watchers) {
-          watcher.onResourceDoesNotExist(resource);
+        if (xdsChannel != null) {
+          xdsChannel.onFanOut(watchers.size());
         }
+        syncContext.execute(() -> {
+          for (ResourceWatcher<T> watcher : watchers) {
+            try {
+              watcher.onResourceDoesNotExist(resource);
+            } finally {
+              callbackFlowControl();
+            }
+          }
+        });
       }
     }
 
@@ -699,9 +738,18 @@ final class XdsClientImpl extends XdsClient
           .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())
           .withCause(error.getCause());
 
-      for (ResourceWatcher<T> watcher : watchers) {
-        watcher.onError(errorAugmented);
+      if (xdsChannel != null) {
+        xdsChannel.onFanOut(watchers.size());
       }
+      syncContext.execute(() -> {
+        for (ResourceWatcher<T> watcher : watchers) {
+          try {
+            watcher.onError(errorAugmented);
+          } finally {
+            callbackFlowControl();
+          }
+        }
+      });
     }
 
     void onRejected(String rejectedVersion, long rejectedTime, String rejectedDetails) {
@@ -711,6 +759,13 @@ final class XdsClientImpl extends XdsClient
 
     private void notifyWatcher(ResourceWatcher<T> watcher, T update) {
       watcher.onChanged(update);
+    }
+
+    // For flow control
+    void onFinishUpdate() {
+      if (xdsChannel != null) {
+        xdsChannel.onFanOutDone();
+      }
     }
   }
 

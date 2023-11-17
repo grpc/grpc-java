@@ -23,6 +23,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
@@ -38,7 +39,6 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
-import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ResourceStore;
@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
@@ -125,6 +126,12 @@ final class ControlPlaneClient {
   // Currently, only externally used for LrsClient.
   Channel channel() {
     return channel;
+  }
+
+  void flowControlRequest(int count) {
+    if (adsStream != null) {
+      adsStream.request(count);
+    }
   }
 
   void shutdown() {
@@ -271,6 +278,64 @@ final class ControlPlaneClient {
     return resourceStore.getSubscribedResourceTypesWithTypeUrl().get(typeUrl);
   }
 
+  void onFanOutDone() {
+    if (adsStream != null) {
+      adsStream.onFanOutDone();
+    }
+  }
+
+  void onFanOut(int count) {
+    if (adsStream != null) {
+      adsStream.onResourceFanOut(count);
+    }
+  }
+
+  SettableFuture<Void> createFlowControlCallBack() {
+    if (adsStream != null) {
+      return adsStream.createFlowControlCb();
+    }
+    return null;
+  }
+
+  /**
+   * For xds client flow control.
+   * For each xds response, increment counter when sending out one notification for a watcher with a
+   * callback.
+   * Mark waitComplete when all the watchers are notified (add integer MIN_VALUE). Listener on each
+   * watcher that calls back upon finish and decrement the counter. When all the watchers finish
+   * update, reset the counter and request the next response message.
+   */
+  private final class FlowControlCounter {
+    private final AtomicInteger pendingWatcherCounter = new AtomicInteger(0);
+    private final Runnable callbackRunnable = new Runnable() {
+      @Override
+      public void run() {
+        if (pendingWatcherCounter.decrementAndGet() == Integer.MIN_VALUE) {
+          pendingWatcherCounter.getAndSet(0);
+          flowControlRequest(1);
+        }
+      }
+    };
+
+    void onFanOut(int newEventsCount) {
+      pendingWatcherCounter.getAndAdd(newEventsCount);
+    }
+
+    void onFanOutDone() {
+      if (pendingWatcherCounter.get() >= 0
+          && pendingWatcherCounter.addAndGet(Integer.MIN_VALUE) == Integer.MIN_VALUE) {
+        pendingWatcherCounter.getAndSet(0);
+        flowControlRequest(1);
+      }
+    }
+
+    SettableFuture<Void> callback() {
+      SettableFuture<Void> callback = SettableFuture.create();
+      callback.addListener(callbackRunnable, syncContext);
+      return callback;
+    }
+  }
+
   private abstract class AbstractAdsStream {
     private boolean responseReceived;
     private boolean closed;
@@ -287,6 +352,22 @@ final class ControlPlaneClient {
     abstract void sendError(Exception error);
 
     abstract boolean isReady();
+
+    abstract void request(int count);
+
+    /**
+     * For xDS stream flow control. Sending each watcher notification increment the counter
+     * {@link #onFanOut(int)}.
+     * Processing completion on each watcher decrement the counter via the callback
+     * {@link #createFlowControlCb}. When all the watchers subscribed to the resources in the
+     * response have been notified {@link #onFanOutDone} and counter reaches zero, ads stream is
+     * ready to receive the next message.
+     */
+    abstract void onFanOutDone();
+
+    abstract void onResourceFanOut(int count);
+
+    abstract SettableFuture<Void> createFlowControlCb();
 
     /**
      * Sends a discovery request with the given {@code versionInfo}, {@code nonce} and
@@ -372,7 +453,8 @@ final class ControlPlaneClient {
   }
 
   private final class AdsStreamV3 extends AbstractAdsStream {
-    private StreamObserver<DiscoveryRequest> requestWriter;
+    private ClientCallStreamObserver<DiscoveryRequest> requestWriter;
+    private final FlowControlCounter flowControlCounter = new FlowControlCounter();
 
     @Override
     public boolean isReady() {
@@ -380,6 +462,7 @@ final class ControlPlaneClient {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     void start() {
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
           AggregatedDiscoveryServiceGrpc.newStub(channel);
@@ -389,6 +472,7 @@ final class ControlPlaneClient {
 
         @Override
         public void beforeStart(ClientCallStreamObserver<DiscoveryRequest> requestStream) {
+          requestStream.disableAutoRequestWithInitial(1);
           requestStream.setOnReadyHandler(ControlPlaneClient.this::readyHandler);
         }
 
@@ -437,7 +521,8 @@ final class ControlPlaneClient {
         }
       }
 
-      requestWriter = stub.streamAggregatedResources(new AdsClientResponseObserver());
+      requestWriter = (ClientCallStreamObserver) stub.streamAggregatedResources(
+          new AdsClientResponseObserver());
     }
 
     @Override
@@ -465,6 +550,26 @@ final class ControlPlaneClient {
       if (logger.isLoggable(XdsLogLevel.DEBUG)) {
         logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", MessagePrinter.print(request));
       }
+    }
+
+    @Override
+    void request(int count) {
+      requestWriter.request(count);
+    }
+
+    @Override
+    void onFanOutDone() {
+      flowControlCounter.onFanOutDone();
+    }
+
+    @Override
+    void onResourceFanOut(int count) {
+      flowControlCounter.onFanOut(count);
+    }
+
+    @Override
+    SettableFuture<Void> createFlowControlCb() {
+      return flowControlCounter.callback();
     }
 
     @Override
