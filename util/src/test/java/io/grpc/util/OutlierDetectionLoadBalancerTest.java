@@ -1261,7 +1261,8 @@ public class OutlierDetectionLoadBalancerTest {
       List<Subchannel> newSubchannelList = new ArrayList<>(subchannelList.size());
       for (Subchannel subchannel : subchannelList) {
         Subchannel newSubchannel = helper
-            .createSubchannel(CreateSubchannelArgs.newBuilder().setAddresses(subchannel.getAddresses()).build());
+            .createSubchannel(
+                CreateSubchannelArgs.newBuilder().setAddresses(subchannel.getAddresses()).build());
         newSubchannel.start(mock(SubchannelStateListener.class));
         subchannel.shutdown();
         newSubchannelList.add(newSubchannel);
