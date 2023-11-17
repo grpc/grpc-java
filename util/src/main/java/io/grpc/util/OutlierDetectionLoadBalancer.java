@@ -258,6 +258,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     @Override
+    public void shutdown() {
+      if (addressTracker != null) {
+        addressTracker.removeSubchannel(this);
+      }
+      super.shutdown();
+    }
+
+    @Override
     public Attributes getAttributes() {
       if (addressTracker != null) {
         return delegate.getAttributes().toBuilder().set(ADDRESS_TRACKER_ATTR_KEY, addressTracker)
