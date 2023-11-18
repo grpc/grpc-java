@@ -664,7 +664,7 @@ public class CdsLoadBalancer2Test {
                   outlierDetection)
               .lbPolicyConfig(ImmutableMap.of("unknown", ImmutableMap.of("foo", "bar"))).build());
     } catch (Exception e) {
-      assertThat(e).hasCauseThat().hasMessageThat().contains("No provider available");
+      assertThat(e).hasMessageThat().contains("No provider available");
       return;
     }
     fail("Expected the unknown LB to cause an exception");
@@ -679,7 +679,7 @@ public class CdsLoadBalancer2Test {
                   ImmutableMap.of("ring_hash_experimental", ImmutableMap.of("minRingSize", "-1")))
               .build());
     } catch (Exception e) {
-      assertThat(e).hasCauseThat().hasMessageThat().contains("Unable to parse");
+      assertThat(e).hasMessageThat().contains("Unable to parse");
       return;
     }
     fail("Expected the invalid config to cause an exception");
