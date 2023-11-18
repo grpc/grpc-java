@@ -138,7 +138,7 @@ final class XdsNameResolver extends NameResolver {
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride) {
     this(targetAuthority, name, overrideAuthority, serviceConfigParser, syncContext, scheduler,
-        SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
+        new SharedXdsClientPoolProvider(syncContext), ThreadSafeRandomImpl.instance,
         FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
@@ -161,7 +161,7 @@ final class XdsNameResolver extends NameResolver {
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
     this.xdsClientPoolFactory = bootstrapOverride == null ? checkNotNull(xdsClientPoolFactory,
-            "xdsClientPoolFactory") : new SharedXdsClientPoolProvider();
+            "xdsClientPoolFactory") : new SharedXdsClientPoolProvider(syncContext);
     this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
