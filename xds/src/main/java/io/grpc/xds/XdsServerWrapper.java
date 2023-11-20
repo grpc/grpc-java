@@ -366,7 +366,7 @@ final class XdsServerWrapper extends Server {
 
     private DiscoveryState(String resourceName) {
       this.resourceName = checkNotNull(resourceName, "resourceName");
-      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), resourceName, this);
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), resourceName, this, syncContext);
     }
 
     @Override
@@ -398,7 +398,7 @@ final class XdsServerWrapper extends Server {
             rdsState = new RouteDiscoveryState(hcm.rdsName());
             routeDiscoveryStates.put(hcm.rdsName(), rdsState);
             xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
-                hcm.rdsName(), rdsState);
+                hcm.rdsName(), rdsState, syncContext);
           }
           if (rdsState.isPending) {
             pendingRds.add(hcm.rdsName());

@@ -655,7 +655,7 @@ final class XdsNameResolver extends NameResolver {
             httpConnectionManager.httpFilterConfigs());
         logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
         xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
-            rdsName, routeDiscoveryState);
+            rdsName, routeDiscoveryState, syncContext);
       }
     }
 
@@ -682,7 +682,7 @@ final class XdsNameResolver extends NameResolver {
 
     private void start() {
       logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", ldsResourceName);
-      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName, this);
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName, this, syncContext);
     }
 
     private void stop() {

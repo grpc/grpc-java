@@ -290,6 +290,13 @@ final class XdsClientImpl extends XdsClient
   @Override
   <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                                                    ResourceWatcher<T> watcher) {
+    watchXdsResource(type, resourceName, watcher, syncContext);
+  }
+
+  @Override
+  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
+                                                   ResourceWatcher<T> watcher,
+                                                   SynchronizationContext watcherSyncContext) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
@@ -308,7 +315,7 @@ final class XdsClientImpl extends XdsClient
             subscriber.xdsChannel.adjustResourceSubscription(type);
           }
         }
-        subscriber.addWatcher(watcher);
+        subscriber.addWatcher(watcher, watcherSyncContext);
       }
     });
   }
@@ -496,7 +503,7 @@ final class XdsClientImpl extends XdsClient
     @Nullable private final ControlPlaneClient xdsChannel;
     private final XdsResourceType<T> type;
     private final String resource;
-    private final Set<ResourceWatcher<T>> watchers = new HashSet<>();
+    private final Map<ResourceWatcher<T>, SynchronizationContext> watchers = new HashMap<>();
     @Nullable private T data;
     private boolean absent;
     // Tracks whether the deletion has been ignored per bootstrap server feature.
@@ -556,13 +563,13 @@ final class XdsClientImpl extends XdsClient
       return bootstrapInfo.servers().get(0); // use first server
     }
 
-    void addWatcher(ResourceWatcher<T> watcher) {
-      checkArgument(!watchers.contains(watcher), "watcher %s already registered", watcher);
-      watchers.add(watcher);
+    void addWatcher(ResourceWatcher<T> watcher, SynchronizationContext watcherSyncContext) {
+      checkArgument(!watchers.containsKey(watcher), "watcher %s already registered", watcher);
+      watchers.put(watcher, watcherSyncContext);
       if (xdsChannel != null) {
         xdsChannel.onFanOut(1);
       }
-      syncContext.execute(() -> {
+      watchers.get(watcher).execute(() -> {
         try {
           if (errorDescription != null) {
             watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
@@ -589,7 +596,7 @@ final class XdsClientImpl extends XdsClient
     }
 
     void removeWatcher(ResourceWatcher<T>  watcher) {
-      checkArgument(watchers.contains(watcher), "watcher %s not registered", watcher);
+      checkArgument(watchers.containsKey(watcher), "watcher %s not registered", watcher);
       watchers.remove(watcher);
     }
 
@@ -674,15 +681,15 @@ final class XdsClientImpl extends XdsClient
         if (xdsChannel != null) {
           xdsChannel.onFanOut(watchers.size());
         }
-        syncContext.execute(() -> {
-          for (ResourceWatcher<T> watcher : watchers) {
+        for (ResourceWatcher<T> watcher : watchers.keySet()) {
+          watchers.get(watcher).execute(() -> {
             try {
               notifyWatcher(watcher, data);
             } finally {
               callbackFlowControl();
             }
-          }
-        });
+          });
+        }
       }
     }
 
@@ -713,15 +720,15 @@ final class XdsClientImpl extends XdsClient
         if (xdsChannel != null) {
           xdsChannel.onFanOut(watchers.size());
         }
-        syncContext.execute(() -> {
-          for (ResourceWatcher<T> watcher : watchers) {
+        for (ResourceWatcher<T> watcher : watchers.keySet()) {
+          watchers.get(watcher).execute(() -> {
             try {
               watcher.onResourceDoesNotExist(resource);
             } finally {
               callbackFlowControl();
             }
-          }
-        });
+          });
+        }
       }
     }
 
@@ -741,15 +748,15 @@ final class XdsClientImpl extends XdsClient
       if (xdsChannel != null) {
         xdsChannel.onFanOut(watchers.size());
       }
-      syncContext.execute(() -> {
-        for (ResourceWatcher<T> watcher : watchers) {
+      for (ResourceWatcher<T> watcher : watchers.keySet()) {
+        watchers.get(watcher).execute(() -> {
           try {
             watcher.onError(errorAugmented);
           } finally {
             callbackFlowControl();
           }
-        }
-      });
+        });
+      }
     }
 
     void onRejected(String rejectedVersion, long rejectedTime, String rejectedDetails) {

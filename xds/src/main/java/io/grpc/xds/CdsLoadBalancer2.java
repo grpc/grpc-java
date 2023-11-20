@@ -27,6 +27,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
@@ -59,6 +60,7 @@ import javax.annotation.Nullable;
 final class CdsLoadBalancer2 extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
+  private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
   // Following fields are effectively final.
   private ObjectPool<XdsClient> xdsClientPool;
@@ -73,6 +75,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   @VisibleForTesting
   CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
+    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
@@ -317,7 +320,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
       private void start() {
         shutdown = false;
-        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this);
+        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this, syncContext);
       }
 
       void shutdown() {

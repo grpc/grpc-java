@@ -26,6 +26,7 @@ import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
@@ -304,6 +305,12 @@ abstract class XdsClient {
   /**
    * Registers a data watcher for the given Xds resource.
    */
+  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
+                                                   ResourceWatcher<T> watcher,
+                                                   SynchronizationContext syncContext) {
+    throw new UnsupportedOperationException();
+  }
+
   <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                                                    ResourceWatcher<T> watcher) {
     throw new UnsupportedOperationException();

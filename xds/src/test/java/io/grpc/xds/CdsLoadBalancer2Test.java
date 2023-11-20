@@ -797,6 +797,15 @@ public class CdsLoadBalancer2Test {
 
     @Override
     @SuppressWarnings("unchecked")
+    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
+                                                     String resourceName,
+                                                     ResourceWatcher<T> watcher,
+                                                     SynchronizationContext synchronizationContext) {
+      watchXdsResource(resourceType, resourceName, watcher);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
                                                            String resourceName,
                                                            ResourceWatcher<T> watcher) {
