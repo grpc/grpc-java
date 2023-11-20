@@ -58,7 +58,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -293,13 +292,6 @@ public abstract class XdsClientImplTestBase {
   private final String serverName = InProcessServerBuilder.generateName();
   private BindableService adsService = createAdsService();
   private BindableService lrsService = createLrsService();
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          throw new AssertionError(e);
-        }
-      });
 
   @Before
   public void setUp() throws IOException {
@@ -366,7 +358,6 @@ public abstract class XdsClientImplTestBase {
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();
-
     xdsClient =
         new XdsClientImpl(
             xdsChannelFactory,
@@ -376,8 +367,7 @@ public abstract class XdsClientImplTestBase {
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
             timeProvider,
-            tlsContextManager,
-            syncContext);
+            tlsContextManager);
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();
@@ -3623,8 +3613,7 @@ public abstract class XdsClientImplTestBase {
         backoffPolicyProvider,
         fakeClock.getStopwatchSupplier(),
         timeProvider,
-        tlsContextManager,
-        syncContext);
+        tlsContextManager);
   }
 
   private  BootstrapInfo buildBootStrap(String serverUri) {

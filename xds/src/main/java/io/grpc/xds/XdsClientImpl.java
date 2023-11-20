@@ -78,7 +78,18 @@ final class XdsClientImpl extends XdsClient
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
-  private final SynchronizationContext syncContext;
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          logger.log(
+              XdsLogLevel.ERROR,
+              "Uncaught exception in XdsClient SynchronizationContext. Panic!",
+              e);
+          // TODO(chengyuanzhang): better error handling.
+          throw new AssertionError(e);
+        }
+      });
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private final LoadBalancerRegistry loadBalancerRegistry
       = LoadBalancerRegistry.getDefaultRegistry();
@@ -109,8 +120,7 @@ final class XdsClientImpl extends XdsClient
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier,
       TimeProvider timeProvider,
-      TlsContextManager tlsContextManager,
-      SynchronizationContext syncContext) {
+      TlsContextManager tlsContextManager) {
     this.xdsChannelFactory = xdsChannelFactory;
     this.bootstrapInfo = bootstrapInfo;
     this.context = context;
@@ -125,7 +135,6 @@ final class XdsClientImpl extends XdsClient
     if (LOG_XDS_NODE_ID) {
       classLogger.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
     }
-    this.syncContext = checkNotNull(syncContext, "syncContext");
   }
 
   private void maybeCreateXdsChannelWithLrs(ServerInfo serverInfo) {

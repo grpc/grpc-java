@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -33,8 +32,6 @@ import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -45,37 +42,19 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
-  private static final Logger log = Logger.getLogger(SharedXdsClientPoolProvider.class.getName());
+
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
   private final AtomicReference<Map<String, ?>> bootstrapOverride = new AtomicReference<>();
   private volatile ObjectPool<XdsClient> xdsClientPool;
-  private final SynchronizationContext syncContext;
 
   SharedXdsClientPoolProvider() {
     this(new BootstrapperImpl());
   }
 
-  SharedXdsClientPoolProvider(SynchronizationContext syncContext) {
-    this(new BootstrapperImpl(), syncContext);
-  }
-
   @VisibleForTesting
   SharedXdsClientPoolProvider(Bootstrapper bootstrapper) {
-    this(bootstrapper, new SynchronizationContext(
-        new Thread.UncaughtExceptionHandler() {
-          @Override
-          public void uncaughtException(Thread t, Throwable e) {
-            log.log(Level.WARNING,
-                "Uncaught exception in XdsClient SynchronizationContext. Panic!", e);
-            throw new AssertionError(e);
-          }
-        }));
-  }
-
-  SharedXdsClientPoolProvider(Bootstrapper bootstrapper, SynchronizationContext syncContext) {
     this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
-    this.syncContext = checkNotNull(syncContext, "syncContext");
   }
 
   static SharedXdsClientPoolProvider getDefaultProvider() {
@@ -110,7 +89,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           if (bootstrapInfo.servers().isEmpty()) {
             throw new XdsInitializationException("No xDS server provided");
           }
-          ref = xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo, syncContext);
+          ref = xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
         }
       }
     }
@@ -133,27 +112,10 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private XdsClient xdsClient;
     @GuardedBy("lock")
     private int refCount;
-    private final SynchronizationContext syncContext;
 
     @VisibleForTesting
     RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo) {
-      this(bootstrapInfo, new SynchronizationContext(
-          new Thread.UncaughtExceptionHandler() {
-            @Override
-            public void uncaughtException(Thread t, Throwable e) {
-              log.log(
-                  Level.WARNING,
-                  "Uncaught exception in XdsClient SynchronizationContext. Panic!",
-                  e);
-              // TODO(chengyuanzhang): better error handling.
-              throw new AssertionError(e);
-            }
-          }));
-    }
-
-    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, SynchronizationContext syncContext) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
-      this.syncContext = checkNotNull(syncContext);
     }
 
     @Override
@@ -169,8 +131,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               new ExponentialBackoffPolicy.Provider(),
               GrpcUtil.STOPWATCH_SUPPLIER,
               TimeProvider.SYSTEM_TIME_PROVIDER,
-              new TlsContextManagerImpl(bootstrapInfo),
-              syncContext);
+              new TlsContextManagerImpl(bootstrapInfo));
         }
         refCount++;
         return xdsClient;
