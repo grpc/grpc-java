@@ -1195,7 +1195,7 @@ public class ClusterResolverLoadBalancerTest {
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                                                      ResourceWatcher<T> watcher,
-                                                     SynchronizationContext synchronizationContext) {
+                                                     SynchronizationContext syncContext) {
       assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);

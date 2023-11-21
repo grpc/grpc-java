@@ -682,7 +682,8 @@ final class XdsNameResolver extends NameResolver {
 
     private void start() {
       logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", ldsResourceName);
-      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName, this, syncContext);
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+          ldsResourceName, this, syncContext);
     }
 
     private void stop() {

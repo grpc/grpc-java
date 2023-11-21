@@ -800,7 +800,7 @@ public class CdsLoadBalancer2Test {
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
                                                      String resourceName,
                                                      ResourceWatcher<T> watcher,
-                                                     SynchronizationContext synchronizationContext) {
+                                                     SynchronizationContext syncContext) {
       watchXdsResource(resourceType, resourceName, watcher);
     }
 

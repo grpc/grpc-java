@@ -366,7 +366,8 @@ final class XdsServerWrapper extends Server {
 
     private DiscoveryState(String resourceName) {
       this.resourceName = checkNotNull(resourceName, "resourceName");
-      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), resourceName, this, syncContext);
+      xdsClient.watchXdsResource(
+          XdsListenerResource.getInstance(), resourceName, this, syncContext);
     }
 
     @Override

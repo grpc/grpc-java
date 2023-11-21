@@ -1941,7 +1941,7 @@ public class XdsNameResolverTest {
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
                                                      String resourceName,
                                                      ResourceWatcher<T> watcher,
-                                                     SynchronizationContext synchronizationContext) {
+                                                     SynchronizationContext syncContext) {
       watchXdsResource(resourceType, resourceName, watcher);
     }
 

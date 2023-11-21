@@ -366,7 +366,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       void start() {
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Start watching EDS resource {0}", resourceName);
-        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), resourceName, this, syncContext);
+        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),
+            resourceName, this, syncContext);
       }
 
       @Override
