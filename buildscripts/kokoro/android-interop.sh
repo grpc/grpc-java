@@ -28,39 +28,39 @@ unset JAVA_HOME
 
 GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 
-# Build and run interop instrumentation tests on Firebase Test Lab
-cd android-interop-testing
-../gradlew assembleDebug $GRADLE_FLAGS
-../gradlew assembleDebugAndroidTest $GRADLE_FLAGS
+./gradlew $GRADLE_FLAGS \
+  :grpc-android-interop-testing:assembleDebug \
+  :grpc-android-interop-testing:assembleDebugAndroidTest \
+  :grpc-binder:assembleDebugAndroidTest
+
+# Run interop instrumentation tests on Firebase Test Lab
 gcloud firebase test android run \
   --type instrumentation \
-  --app build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
-  --test build/outputs/apk/androidTest/debug/grpc-android-interop-testing-debug-androidTest.apk \
+  --app android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
+  --test android-interop-testing/build/outputs/apk/androidTest/debug/grpc-android-interop-testing-debug-androidTest.apk \
   --environment-variables \
       server_host=grpc-test.sandbox.googleapis.com,server_port=443,test_case=all \
-  --device model=Pixel3,version=30,locale=en,orientation=portrait \
-  --device model=Pixel2,version=29,locale=en,orientation=portrait \
-  --device model=Pixel2,version=28,locale=en,orientation=portrait \
-  --device model=Pixel2,version=27,locale=en,orientation=portrait \
-  --device model=Pixel2,version=26,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=30,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=29,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=28,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=27,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=26,locale=en,orientation=portrait \
   --device model=Nexus6P,version=25,locale=en,orientation=portrait \
   --device model=Nexus6P,version=24,locale=en,orientation=portrait \
   --device model=Nexus6P,version=23,locale=en,orientation=portrait \
   --device model=Nexus6,version=22,locale=en,orientation=portrait \
   --device model=Nexus6,version=21,locale=en,orientation=portrait
 
-# Build and run binderchannel instrumentation tests on Firebase Test Lab
-cd ../binder
-../gradlew assembleDebugAndroidTest $GRADLE_FLAGS
+# Run binderchannel instrumentation tests on Firebase Test Lab
 gcloud firebase test android run \
   --type instrumentation \
-  --app ../android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
-  --test build/outputs/apk/androidTest/debug/grpc-binder-debug-androidTest.apk \
-  --device model=Pixel3,version=30,locale=en,orientation=portrait \
-  --device model=Pixel2,version=29,locale=en,orientation=portrait \
-  --device model=Pixel2,version=28,locale=en,orientation=portrait \
-  --device model=Pixel2,version=27,locale=en,orientation=portrait \
-  --device model=Pixel2,version=26,locale=en,orientation=portrait \
+  --app android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
+  --test binder/build/outputs/apk/androidTest/debug/grpc-binder-debug-androidTest.apk \
+  --device model=MediumPhone.arm,version=30,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=29,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=28,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=27,locale=en,orientation=portrait \
+  --device model=MediumPhone.arm,version=26,locale=en,orientation=portrait \
   --device model=Nexus6P,version=25,locale=en,orientation=portrait \
   --device model=Nexus6P,version=24,locale=en,orientation=portrait \
   --device model=Nexus6P,version=23,locale=en,orientation=portrait \
