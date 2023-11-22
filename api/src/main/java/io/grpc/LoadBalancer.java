@@ -126,6 +126,12 @@ public abstract class LoadBalancer {
       HAS_HEALTH_PRODUCER_LISTENER_KEY =
       Attributes.Key.create("internal:has-health-check-producer-listener");
 
+  /**
+   * A picker that always returns an erring pick.
+   *
+   * @deprecated Use {@code new FixedResultPicker(PickResult.withNoResult())} instead.
+   */
+  @Deprecated
   public static final SubchannelPicker EMPTY_PICKER = new SubchannelPicker() {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {

@@ -81,6 +81,7 @@ dependencies {
             libraries.javax.annotation
 
     implementation project(':grpc-util'),
+            project(':grpc-core'),
             libraries.guava
 
     itImplementation project(':grpc-servlet-jakarta'),

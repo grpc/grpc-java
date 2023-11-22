@@ -382,7 +382,11 @@ public final class ManagedChannelImplBuilder
         directServerAddress);
     if (resolverFactory != null) {
       NameResolverRegistry reg = new NameResolverRegistry();
-      reg.register(new NameResolverFactoryToProviderFacade(resolverFactory));
+      if (resolverFactory instanceof NameResolverProvider) {
+        reg.register((NameResolverProvider) resolverFactory);
+      } else {
+        reg.register(new NameResolverFactoryToProviderFacade(resolverFactory));
+      }
       this.nameResolverRegistry = reg;
     } else {
       this.nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();

@@ -334,10 +334,11 @@ public final class GrpcAuthorizationEngine {
             return Collections.unmodifiableCollection(principalNames);
           }
         }
-        if (cert.getSubjectDN() == null || cert.getSubjectDN().getName() == null) {
+        if (cert.getSubjectX500Principal() == null
+            || cert.getSubjectX500Principal().getName() == null) {
           return Collections.singleton("");
         }
-        return Collections.singleton(cert.getSubjectDN().getName());
+        return Collections.singleton(cert.getSubjectX500Principal().getName());
       } catch (SSLPeerUnverifiedException | CertificateParsingException ex) {
         log.log(Level.FINE, "Unexpected getPrincipalNames error.", ex);
         return Collections.singleton("");

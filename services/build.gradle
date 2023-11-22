@@ -26,7 +26,8 @@ dependencies {
     api project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-util')
-    implementation libraries.protobuf.java.util,
+    implementation project(':grpc-core'),
+            libraries.protobuf.java.util,
             libraries.guava.jre // JRE required by protobuf-java-util
 
     runtimeOnly libraries.errorprone.annotations,

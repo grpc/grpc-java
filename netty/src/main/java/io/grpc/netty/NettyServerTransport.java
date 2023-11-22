@@ -77,6 +77,8 @@ class NettyServerTransport implements ServerTransport {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
+  private final int maxRstCount;
+  private final long maxRstPeriodNanos;
   private final Attributes eagAttributes;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
@@ -99,6 +101,8 @@ class NettyServerTransport implements ServerTransport {
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
       long permitKeepAliveTimeInNanos,
+      int maxRstCount,
+      long maxRstPeriodNanos,
       Attributes eagAttributes) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
     this.channelUnused = channelUnused;
@@ -118,6 +122,8 @@ class NettyServerTransport implements ServerTransport {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+    this.maxRstCount = maxRstCount;
+    this.maxRstPeriodNanos = maxRstPeriodNanos;
     this.eagAttributes = Preconditions.checkNotNull(eagAttributes, "eagAttributes");
     SocketAddress remote = channel.remoteAddress();
     this.logId = InternalLogId.allocate(getClass(), remote != null ? remote.toString() : null);
@@ -277,6 +283,8 @@ class NettyServerTransport implements ServerTransport {
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
+        maxRstCount,
+        maxRstPeriodNanos,
         eagAttributes);
   }
 }

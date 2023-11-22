@@ -123,6 +123,8 @@ public class OutlierDetectionLoadBalancerTest {
   @Captor
   private ArgumentCaptor<ConnectivityState> stateCaptor;
 
+  private FakeLoadBalancer fakeChildLb;
+
   private final LoadBalancerProvider mockChildLbProvider = new StandardLoadBalancerProvider(
       "foo_policy") {
     @Override
@@ -134,7 +136,10 @@ public class OutlierDetectionLoadBalancerTest {
       "fake_policy") {
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      return new FakeLoadBalancer(helper);
+      if (fakeChildLb == null) {
+        fakeChildLb = new FakeLoadBalancer(helper);
+      }
+      return fakeChildLb;
     }
   };
   private final LoadBalancerProvider roundRobinLbProvider = new StandardLoadBalancerProvider(
@@ -281,6 +286,29 @@ public class OutlierDetectionLoadBalancerTest {
     // The task is scheduled to run after a delay set in the config.
     ScheduledTask task = fakeClock.getPendingTasks().iterator().next();
     assertThat(task.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(config.intervalNanos);
+  }
+
+  /**
+   * The child LB might recreate subchannels leaving the ones we are tracking
+   * orphaned in the address tracker. Make sure subchannels that are shut down get
+   * removed from the tracker.
+   */
+  @Test
+  public void childLbRecreatesSubchannels() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+
+    assertThat(loadBalancer.trackerMap).hasSize(1);
+    AddressTracker addressTracker = (AddressTracker) loadBalancer.trackerMap.values().toArray()[0];
+    assertThat(addressTracker).isNotNull();
+    OutlierDetectionSubchannel trackedSubchannel
+        = (OutlierDetectionSubchannel) addressTracker.getSubchannels().toArray()[0];
+
+    fakeChildLb.recreateSubchannels();
+    assertThat(addressTracker.getSubchannels()).doesNotContain(trackedSubchannel);
   }
 
   /**
@@ -1322,6 +1350,22 @@ public class OutlierDetectionLoadBalancerTest {
 
     @Override
     public void shutdown() {
+    }
+
+    // Simulates a situation where a load balancer might recreate some of the subchannels it is
+    // tracking even if acceptResolvedAddresses() has not been called.
+    void recreateSubchannels() {
+      List<Subchannel> newSubchannelList = new ArrayList<>(subchannelList.size());
+      for (Subchannel subchannel : subchannelList) {
+        Subchannel newSubchannel = helper
+            .createSubchannel(
+                CreateSubchannelArgs.newBuilder().setAddresses(subchannel.getAddresses()).build());
+        newSubchannel.start(mock(SubchannelStateListener.class));
+        subchannel.shutdown();
+        newSubchannelList.add(newSubchannel);
+      }
+      subchannelList = newSubchannelList;
+      deliverSubchannelState(READY);
     }
 
     void deliverSubchannelState(ConnectivityState state) {

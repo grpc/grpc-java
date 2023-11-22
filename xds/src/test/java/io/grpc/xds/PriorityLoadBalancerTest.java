@@ -21,7 +21,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.LoadBalancer.EMPTY_PICKER;
+import static io.grpc.LoadBalancerMatchers.pickerReturns;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -76,6 +76,9 @@ import org.mockito.junit.MockitoRule;
 /** Tests for {@link PriorityLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class PriorityLoadBalancerTest {
+  private static final SubchannelPicker EMPTY_PICKER
+      = new FixedResultPicker(PickResult.withNoResult());
+
   private final List<LoadBalancer> fooBalancers = new ArrayList<>();
   private final List<LoadBalancer> barBalancers = new ArrayList<>();
   private final List<Helper> fooHelpers = new ArrayList<>();
@@ -457,6 +460,9 @@ public class PriorityLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
             .build());
+    // Nothing important about this verify, other than to provide a baseline
+    verify(helper, times(2))
+        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
     assertThat(fooBalancers).hasSize(1);
     assertThat(fooHelpers).hasSize(1);
     Helper helper0 = Iterables.getOnlyElement(fooHelpers);
@@ -472,7 +478,8 @@ public class PriorityLoadBalancerTest {
     helper0.updateBalancingState(
         CONNECTING,
         EMPTY_PICKER);
-    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
+    verify(helper, times(3))
+        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
 
     // failover happens
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
