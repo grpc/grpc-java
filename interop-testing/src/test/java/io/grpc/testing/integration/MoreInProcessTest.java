@@ -249,11 +249,7 @@ public class MoreInProcessTest {
         .onNext(StreamingInputCallRequest.getDefaultInstance());
 
     assertTrue(finishLatch.await(900, TimeUnit.MILLISECONDS));
-    Status actualStatus = Status.fromThrowable(throwableRef.get());
-    Status expectedStatus = Status.UNKNOWN.withDescription("Application error processing RPC");
-    assertEquals(expectedStatus.getCode(), actualStatus.getCode());
-    assertEquals(expectedStatus.getDescription(), actualStatus.getDescription());
-    assertNull(actualStatus.getCause());
+    assertEquals(Status.UNKNOWN, Status.fromThrowable(throwableRef.get()));
     assertNull(responseRef.get());
   }
 }
