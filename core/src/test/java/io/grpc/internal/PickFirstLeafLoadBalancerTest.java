@@ -22,6 +22,8 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
+import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -346,6 +348,88 @@ public class PickFirstLeafLoadBalancerTest {
 
     verifyNoMoreInteractions(mockSubchannel1);
     verify(mockSubchannel2).start(any(SubchannelStateListener.class));
+  }
+
+  @Test
+  public void healthCheckFlow() {
+    when(mockSubchannel1.getAttributes()).thenReturn(
+        Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
+    when(mockSubchannel2.getAttributes()).thenReturn(
+        Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
+    List<EquivalentAddressGroup> oneServer = Lists.newArrayList(servers.get(0), servers.get(1));
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(oneServer)
+        .setAttributes(Attributes.EMPTY).build());
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2);
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    SubchannelStateListener healthListener = createArgsCaptor.getValue()
+        .getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).createSubchannel(any(CreateSubchannelArgs.class));
+    inOrder.verify(mockSubchannel2).start(any(SubchannelStateListener.class));
+
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(mockSubchannel1).requestConnection();
+    // subchannel  |  state    |   health
+    // subchannel1 | CONNECTING| CONNECTING
+    // sunchannel2 | IDLE      | IDLE
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verifyNoMoreInteractions(mockHelper);
+
+    // subchannel  |  state    |   health
+    // subchannel1 | READY     | CONNECTING
+    // sunchannel2 | IDLE      | IDLE
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    verifyNoMoreInteractions(mockHelper);
+    inOrder.verify(mockSubchannel2).shutdown();
+
+    // subchannel  |  state    |   health
+    // subchannel1 | READY     | READY
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+    healthListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.CANCELLED));
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs)
+        .getStatus()).isEqualTo(Status.CANCELLED);
+    //sticky tf
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).refreshNameResolution();
+    inOrder.verify(mockSubchannel1).requestConnection();
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verifyNoMoreInteractions(mockHelper);
+    when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class))).thenReturn(mockSubchannel2);
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.INTERNAL));
+
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    SubchannelStateListener healthListener2 = createArgsCaptor.getValue()
+        .getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
+    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    inOrder.verify(mockSubchannel2).requestConnection();
+    //ignore health update not current index
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    verifyNoMoreInteractions(mockHelper);
+
+    // subchannel  |  state    |   health
+    // subchannel1 | TF     | READY
+    // sunchannel2 | TF      | IDLE
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    inOrder.verify(mockHelper).refreshNameResolution();
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs)
+        .getStatus()).isEqualTo(Status.UNAVAILABLE);
+    // subchannel  |  state    |   health
+    // subchannel1 | READY     | READY
+    // sunchannel2 | TF      | IDLE
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs)
+        .getSubchannel()).isSameInstanceAs(mockSubchannel1);
+
+    healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    verifyNoMoreInteractions(mockHelper);
   }
 
   @Test
