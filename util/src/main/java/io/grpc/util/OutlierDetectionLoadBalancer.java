@@ -219,7 +219,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         args = args.toBuilder().addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY,
             subchannel.new OutlierDetectionSubchannelStateListener(healthConsumerListener)).build();
       }
-      Subchannel originalSubchannel = super.createSubchannel(args);
+      Subchannel originalSubchannel = delegate.createSubchannel(args);
       subchannel.setDelegate(originalSubchannel);
 
       // If the subchannel is associated with a single address that is also already in the map
@@ -252,9 +252,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
 
-    /**
-     * This becomes the health listener in the new pick first policy.
-     * */
+    // This becomes the health listener in the new pick first policy.
     private SubchannelStateListener subchannelStateListener;
     private ChannelLogger logger;
 
@@ -269,7 +267,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     @Override
     public void start(SubchannelStateListener listener) {
-      if (subchannelStateListener != null) { // generic hc
+      if (subchannelStateListener != null) {
         super.start(listener);
       } else {
         subchannelStateListener = listener;

@@ -243,14 +243,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private void updateHealthCheckedState(SubchannelData subchannelData) {
-    if (subchannelData.state != READY ||
-        (concludedState == TRANSIENT_FAILURE && subchannelData.healthState.getState() != READY)) {
+    if (subchannelData.state != READY || (concludedState == TRANSIENT_FAILURE
+        && subchannelData.healthState.getState() != READY)) {
       return;
     }
     SubchannelPicker picker = new Picker(PickResult.withNoResult());
     if (subchannelData.healthState.getState() == READY) {
       picker = new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel));
-    } else if (subchannelData.healthState.getState() == TRANSIENT_FAILURE){
+    } else if (subchannelData.healthState.getState() == TRANSIENT_FAILURE) {
       picker = new Picker(PickResult.withError(subchannelData.healthState.getStatus()));
     }
     updateBalancingState(subchannelData.healthState.getState(), picker);
@@ -351,7 +351,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     SubchannelData subchannelData = new SubchannelData(subchannel, IDLE, hcListener);
     subchannels.put(addr, subchannelData);
     Attributes attrs = subchannel.getAttributes();
-    if (attrs == null || attrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
+    if (attrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
       subchannelData.healthState = ConnectivityStateInfo.forNonError(READY);
     }
     subchannel.start(new SubchannelStateListener() {

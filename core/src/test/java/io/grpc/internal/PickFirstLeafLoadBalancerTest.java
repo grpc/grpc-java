@@ -125,6 +125,10 @@ public class PickFirstLeafLoadBalancerTest {
     mockSubchannel2 = mock(FakeSubchannel.class);
     mockSubchannel3 = mock(FakeSubchannel.class);
     mockSubchannel4 = mock(FakeSubchannel.class);
+    when(mockSubchannel1.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(mockSubchannel2.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(mockSubchannel3.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(mockSubchannel4.getAttributes()).thenReturn(Attributes.EMPTY);
     when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
         .thenReturn(mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
 

@@ -26,13 +26,42 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 
 /**
- * Utility function used by health producer systems to build health notification chain.
- * The leaf health consumer is pick first. Each health producer using this helper.
- * The most root health producer in the chain will fan out the subchannel state change to both
+ * Utility functions used by health producer systems to build health notification chain, via
+ * {@link LoadBalancer.CreateSubchannelArgs}.
+ * The leaf health consumer is pick first. Each health producer uses this helper.
+ * The health producers should make state listener a pass-through and manipulate the
+ * {@link LoadBalancer.CreateSubchannelArgs} for health notifications.
+ * The root health producer in the chain will fan out the subchannel state change to both
  * state listener and health listener.
  */
 @Internal
 public class HealthProducerUtil {
+
+  /**
+   * A new {@link LoadBalancer.Helper} that detects health listener parent and fans out the
+   * subchannel state change to both state listener and health listener.
+   * <p>Example usage:
+   * <pre>{@code
+   * class HealthProducerLB {
+   *   private final LoadBalancer.Helper helper;
+   *   public HealthProducer(Helper helper) {
+   *     this.helper = new MyHelper(HealthCheckUtil.HealthCheckHelper(helper));
+   *   }
+   *   class MyHelper implements LoadBalancer.Helper {
+   *     public void CreateSubchannel(CreateSubchannelArgs args) {
+   *       SubchannelStateListener originalListener =
+   *         args.getAttributes(HEALTH_CHECK_CONSUMER_LISTENER);
+   *       if (hcListener != null) {
+   *         // Implement a health listener that producers health check information.
+   *         SubchannelStateListener myListener = MyHealthListener(originalListener);
+   *         args = args.toBuilder.setOption(HEALTH_CHECK_CONSUMER_LISTENER, myListener);
+   *       }
+   *       return super.createSubchannel(args);
+   *     }
+   *   }
+   *  }
+   * }</pre>
+   */
   public static final class HealthProducerHelper extends ForwardingLoadBalancerHelper {
     private final LoadBalancer.Helper delegate;
 
@@ -60,6 +89,10 @@ public class HealthProducerUtil {
     }
   }
 
+  /**
+   * The parent subchannel in the health check producer LB chain. It duplicates subchannel state to
+   * both the state listener and health listener.
+   */
   public static final class HealthProducerSubchannel extends ForwardingSubchannel {
     private final LoadBalancer.Subchannel delegate;
     private final LoadBalancer.SubchannelStateListener healthListener;
