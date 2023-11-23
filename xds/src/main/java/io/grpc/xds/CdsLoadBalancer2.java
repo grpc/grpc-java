@@ -82,9 +82,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (this.resolvedAddresses != null) {
-      return true;
+      return Status.OK;
     }
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
@@ -94,7 +94,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     logger.log(XdsLogLevel.INFO, "Config: {0}", config);
     cdsLbState = new CdsLbState(config.name);
     cdsLbState.start();
-    return true;
+    return Status.OK;
   }
 
   @Override
@@ -103,7 +103,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     if (cdsLbState != null && cdsLbState.childLb != null) {
       cdsLbState.childLb.handleNameResolutionError(error);
     } else {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 
@@ -211,7 +212,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       if (loopStatus != null) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(loopStatus));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(loopStatus)));
         return;
       }
 
@@ -223,7 +225,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         Status unavailable =
             Status.UNAVAILABLE.withDescription("CDS error: found 0 leaf (logical DNS or EDS) "
                 + "clusters for root cluster " + root.name);
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(unavailable)));
         return;
       }
 
@@ -295,7 +298,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (childLb != null) {
         childLb.handleNameResolutionError(error);
       } else {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
       }
     }
 

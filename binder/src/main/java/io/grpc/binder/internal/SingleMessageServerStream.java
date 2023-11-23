@@ -80,7 +80,7 @@ final class SingleMessageServerStream implements ServerStream {
   }
 
   @Override
-  public void writeHeaders(Metadata headers) {
+  public void writeHeaders(Metadata headers, boolean flush) {
     pendingHeaders = headers;
   }
 

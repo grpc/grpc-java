@@ -101,7 +101,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
@@ -135,7 +135,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
             .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
             .build());
-    return true;
+    return Status.OK;
   }
 
   @Override
@@ -143,7 +143,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (childSwitchLb != null) {
       childSwitchLb.handleNameResolutionError(error);
     } else {
-      helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new ErrorPicker(error));
+      helper.updateBalancingState(
+          ConnectivityState.TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 
@@ -171,7 +172,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final class ClusterImplLbHelper extends ForwardingLoadBalancerHelper {
     private final AtomicLong inFlights;
     private ConnectivityState currentState = ConnectivityState.IDLE;
-    private SubchannelPicker currentPicker = LoadBalancer.EMPTY_PICKER;
+    private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
     private List<DropOverload> dropPolicies = Collections.emptyList();
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable

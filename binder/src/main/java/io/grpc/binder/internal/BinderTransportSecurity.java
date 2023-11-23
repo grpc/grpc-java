@@ -16,6 +16,7 @@
 
 package io.grpc.binder.internal;
 
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.Internal;
 import io.grpc.Metadata;
@@ -26,9 +27,9 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
-import io.grpc.binder.ServerSecurityPolicy;
 import io.grpc.internal.GrpcAttributes;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import javax.annotation.CheckReturnValue;
 
 /**
@@ -60,15 +61,15 @@ public final class BinderTransportSecurity {
    *
    * @param builder The {@link Attributes.Builder} for the transport being created.
    * @param remoteUid The remote UID of the transport.
-   * @param securityPolicy The policy to enforce on this transport.
+   * @param serverPolicyChecker The policy checker for this transport.
    */
   @Internal
   public static void attachAuthAttrs(
-      Attributes.Builder builder, int remoteUid, ServerSecurityPolicy securityPolicy) {
+      Attributes.Builder builder, int remoteUid, ServerPolicyChecker serverPolicyChecker) {
     builder
         .set(
             TRANSPORT_AUTHORIZATION_STATE,
-            new TransportAuthorizationState(remoteUid, securityPolicy))
+            new TransportAuthorizationState(remoteUid, serverPolicyChecker))
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY);
   }
 
@@ -99,12 +100,12 @@ public final class BinderTransportSecurity {
    */
   private static final class TransportAuthorizationState {
     private final int uid;
-    private final ServerSecurityPolicy policy;
+    private final ServerPolicyChecker serverPolicyChecker;
     private final ConcurrentHashMap<String, Status> serviceAuthorization;
 
-    TransportAuthorizationState(int uid, ServerSecurityPolicy policy) {
+    TransportAuthorizationState(int uid, ServerPolicyChecker serverPolicyChecker) {
       this.uid = uid;
-      this.policy = policy;
+      this.serverPolicyChecker = serverPolicyChecker;
       serviceAuthorization = new ConcurrentHashMap<>(8);
     }
 
@@ -123,11 +124,47 @@ public final class BinderTransportSecurity {
           return authorization;
         }
       }
-      authorization = policy.checkAuthorizationForService(uid, serviceName);
+      try {
+        // TODO(10566): provide a synchronous version of "checkAuthorization" to avoid blocking the
+        // calling thread on the completion of the future.
+        authorization =
+            serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName).get();
+      } catch (ExecutionException e) {
+        // Do not cache this failure since it may be transient.
+        return Status.fromThrowable(e);
+      } catch (InterruptedException e) {
+        // Do not cache this failure since it may be transient.
+        Thread.currentThread().interrupt();
+        return Status.CANCELLED.withCause(e);
+      }
       if (useCache) {
         serviceAuthorization.putIfAbsent(serviceName, authorization);
       }
       return authorization;
     }
+  }
+
+  /**
+   * Decides whether a given Android UID is authorized to access some resource.
+   *
+   * <p>This class provides the asynchronous version of {@link io.grpc.binder.SecurityPolicy},
+   * allowing implementations of authorization logic that involves slow or asynchronous calls
+   * without necessarily blocking the calling thread.
+   *
+   * @see io.grpc.binder.SecurityPolicy
+   */
+  public interface ServerPolicyChecker {
+    /**
+     * Returns whether the given Android UID is authorized to access a particular service.
+     *
+     * <p>This method never throws an exception. If the execution of the security policy check
+     * fails, a failed future with such exception is returned.
+     *
+     * @param uid The Android UID to authenticate.
+     * @param serviceName The name of the gRPC service being called.
+     * @return a future with the result of the authorization check. A failed future represents a
+     *    failure to perform the authorization check, not that the access is denied.
+     */
+    ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName);
   }
 }

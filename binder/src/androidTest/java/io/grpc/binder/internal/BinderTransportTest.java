@@ -25,6 +25,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BindServiceFlags;
 import io.grpc.binder.BinderChannelCredentials;
+import io.grpc.binder.BinderInternal;
 import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
@@ -69,7 +70,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
     BinderServer binderServer = new BinderServer(addr,
         executorServicePool,
         streamTracerFactories,
-        SecurityPolicies.serverInternalOnly(),
+        BinderInternal.createPolicyChecker(SecurityPolicies.serverInternalOnly()),
         InboundParcelablePolicy.DEFAULT);
 
     HostServices.configureService(addr,

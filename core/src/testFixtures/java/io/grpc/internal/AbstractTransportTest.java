@@ -290,7 +290,7 @@ public abstract class AbstractTransportTest {
     stream.flush();
     stream.cancel(Status.CANCELLED);
     stream.flush();
-    serverStreamCreation.stream.writeHeaders(new Metadata());
+    serverStreamCreation.stream.writeHeaders(new Metadata(), true);
     serverStreamCreation.stream.flush();
     serverStreamCreation.stream.writeMessage(methodDescriptor.streamResponse("bar"));
     serverStreamCreation.stream.flush();
@@ -308,7 +308,7 @@ public abstract class AbstractTransportTest {
     stream.start(mockClientStreamListener2);
     serverStreamCreation
         = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-    serverStreamCreation.stream.writeHeaders(new Metadata());
+    serverStreamCreation.stream.writeHeaders(new Metadata(), true);
     serverStreamCreation.stream.flush();
 
     verify(mockClientStreamListener2, timeout(TIMEOUT_MS)).headersRead(any(Metadata.class));
@@ -468,7 +468,7 @@ public abstract class AbstractTransportTest {
 
     // Try to "flush" out any listener notifications on client and server. This also ensures that
     // the stream still functions.
-    serverStream.writeHeaders(new Metadata());
+    serverStream.writeHeaders(new Metadata(), true);
     clientStream.halfClose();
     assertNotNull(clientStreamListener.headers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     assertTrue(serverStreamListener.awaitHalfClosed(TIMEOUT_MS, TimeUnit.MILLISECONDS));
@@ -886,7 +886,7 @@ public abstract class AbstractTransportTest {
     serverHeaders.put(binaryKey, "dup,value");
     Metadata serverHeadersCopy = new Metadata();
     serverHeadersCopy.merge(serverHeaders);
-    serverStream.writeHeaders(serverHeaders);
+    serverStream.writeHeaders(serverHeaders, true);
     Metadata headers = clientStreamListener.headers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertNotNull(headers);
     assertAsciiMetadataValuesEqual(serverHeadersCopy.getAll(asciiKey), headers.getAll(asciiKey));
@@ -1010,7 +1010,7 @@ public abstract class AbstractTransportTest {
     clientStream.halfClose();
     assertTrue(serverStreamListener.awaitHalfClosed(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-    serverStream.writeHeaders(new Metadata());
+    serverStream.writeHeaders(new Metadata(), true);
     assertNotNull(clientStreamListener.headers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     Status status = Status.OK.withDescription("Nice talking to you");
@@ -1047,7 +1047,7 @@ public abstract class AbstractTransportTest {
     ServerStream serverStream = serverStreamCreation.stream;
     ServerStreamListenerBase serverStreamListener = serverStreamCreation.listener;
 
-    serverStream.writeHeaders(new Metadata());
+    serverStream.writeHeaders(new Metadata(), true);
     assertNotNull(clientStreamListener.headers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     Status strippedStatus = Status.OK.withDescription("Hello. Goodbye.");
@@ -1273,7 +1273,7 @@ public abstract class AbstractTransportTest {
     assertTrue(serverStreamListener.awaitOnReadyAndDrain(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     assertTrue(serverStream.isReady());
-    serverStream.writeHeaders(new Metadata());
+    serverStream.writeHeaders(new Metadata(), true);
     serverStream.writeMessage(methodDescriptor.streamRequest("foo"));
     serverStream.flush();
 
@@ -1362,7 +1362,7 @@ public abstract class AbstractTransportTest {
     ServerStream serverStream = serverStreamCreation.stream;
     ServerStreamListenerBase serverStreamListener = serverStreamCreation.listener;
 
-    serverStream.writeHeaders(new Metadata());
+    serverStream.writeHeaders(new Metadata(), true);
 
     String largeMessage;
     {
@@ -1559,7 +1559,7 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     // Ensure that for a closed ServerStream, interactions are noops
-    server.stream.writeHeaders(new Metadata());
+    server.stream.writeHeaders(new Metadata(), true);
     server.stream.writeMessage(methodDescriptor.streamResponse("response"));
     server.stream.close(Status.INTERNAL, new Metadata());
 
@@ -1868,7 +1868,7 @@ public abstract class AbstractTransportTest {
     assertEquals(0, clientBefore.lastMessageReceivedTimeNanos);
 
     clientStream.request(1);
-    serverStream.writeHeaders(new Metadata());
+    serverStream.writeHeaders(new Metadata(), true);
     serverStream.writeMessage(methodDescriptor.streamResponse("response"));
     serverStream.flush();
     verifyMessageCountAndClose(clientStreamListener.messageQueue, 1);
@@ -1984,7 +1984,7 @@ public abstract class AbstractTransportTest {
         = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     serverStreamCreation.stream.request(1);
-    serverStreamCreation.stream.writeHeaders(tooLargeMetadata);
+    serverStreamCreation.stream.writeHeaders(tooLargeMetadata, true);
     serverStreamCreation.stream.writeMessage(methodDescriptor.streamResponse("response"));
     serverStreamCreation.stream.close(Status.OK, new Metadata());
 
@@ -2029,7 +2029,7 @@ public abstract class AbstractTransportTest {
         = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     serverStreamCreation.stream.request(1);
-    serverStreamCreation.stream.writeHeaders(new Metadata());
+    serverStreamCreation.stream.writeHeaders(new Metadata(), true);
     serverStreamCreation.stream.writeMessage(methodDescriptor.streamResponse("response"));
     serverStreamCreation.stream.close(Status.OK, tooLargeMetadata);
 

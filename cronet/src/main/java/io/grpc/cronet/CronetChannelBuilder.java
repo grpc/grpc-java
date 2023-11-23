@@ -28,9 +28,9 @@ import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -42,6 +42,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -52,8 +54,7 @@ import org.chromium.net.ExperimentalCronetEngine;
 
 /** Convenience class for building channels with the cronet transport. */
 @ExperimentalApi("There is no plan to make this API stable, given transport API instability")
-public final class CronetChannelBuilder
-    extends AbstractManagedChannelImplBuilder<CronetChannelBuilder> {
+public final class CronetChannelBuilder extends ForwardingChannelBuilder2<CronetChannelBuilder> {
 
   private static final String LOG_TAG = "CronetChannelBuilder";
 
@@ -283,6 +284,11 @@ public final class CronetChannelBuilder
       if (usingSharedScheduler) {
         SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeoutService);
       }
+    }
+
+    @Override
+    public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      return Collections.singleton(InetSocketAddress.class);
     }
   }
 

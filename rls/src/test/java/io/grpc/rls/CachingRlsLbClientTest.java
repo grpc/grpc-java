@@ -40,7 +40,7 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -703,7 +703,7 @@ public class CachingRlsLbClientTest {
       LoadBalancer loadBalancer = new LoadBalancer() {
 
         @Override
-        public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           Map<?, ?> config = (Map<?, ?>) resolvedAddresses.getLoadBalancingPolicyConfig();
           if (DEFAULT_TARGET.equals(config.get("target"))) {
             helper.updateBalancingState(
@@ -727,7 +727,7 @@ public class CachingRlsLbClientTest {
                 });
           }
 
-          return true;
+          return Status.OK;
         }
 
         @Override
@@ -817,7 +817,7 @@ public class CachingRlsLbClientTest {
       final InProcessChannelBuilder builder =
           InProcessChannelBuilder.forName(target).directExecutor();
 
-      class CleaningChannelBuilder extends ForwardingChannelBuilder<CleaningChannelBuilder> {
+      class CleaningChannelBuilder extends ForwardingChannelBuilder2<CleaningChannelBuilder> {
 
         @Override
         protected ManagedChannelBuilder<?> delegate() {

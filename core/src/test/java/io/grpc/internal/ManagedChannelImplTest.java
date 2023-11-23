@@ -122,6 +122,7 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.ForwardingSubchannel;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -161,7 +162,7 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link ManagedChannelImpl}. */
 @RunWith(JUnit4.class)
 // TODO(creamsoup) remove backward compatible check when fully migrated
-@SuppressWarnings("deprecation")
+@SuppressWarnings({"deprecation"})
 public class ManagedChannelImplTest {
   private static final int DEFAULT_PORT = 447;
 
@@ -287,6 +288,8 @@ public class ManagedChannelImplTest {
       ClientInterceptor... interceptors) {
     checkState(channel == null);
 
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
@@ -316,7 +319,8 @@ public class ManagedChannelImplTest {
 
   @Before
   public void setUp() throws Exception {
-    when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
+    when(mockLoadBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(
+        Status.OK);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
     transports = TestUtils.captureTransports(mockTransportFactory);
@@ -472,6 +476,8 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
@@ -534,6 +540,8 @@ public class ManagedChannelImplTest {
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
@@ -1078,7 +1086,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void delayedNameResolution() {
+  public void delayedNameResolution() throws Exception {
     ClientStream mockStream = mock(ClientStream.class);
     final ClientStreamTracer tracer = new ClientStreamTracer() {};
     ClientStreamTracer.Factory factory = new ClientStreamTracer.Factory() {
@@ -1096,6 +1104,7 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, callOptions);
     call.start(mockCallListener, new Metadata());
 
+    Thread.sleep(500);
     nsFactory.allResolved();
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
@@ -1118,7 +1127,10 @@ public class ManagedChannelImplTest {
         same(method), any(Metadata.class), callOptionsCaptor.capture(),
         tracersCaptor.capture());
     assertThat(Arrays.asList(tracersCaptor.getValue()).contains(tracer)).isTrue();
-    assertThat(callOptionsCaptor.getValue().getOption(NAME_RESOLUTION_DELAYED)).isTrue();
+    Long realDelay = callOptionsCaptor.getValue().getOption(NAME_RESOLUTION_DELAYED);
+    assertThat(realDelay).isNotNull();
+    assertThat(realDelay).isAtLeast(
+        TimeUnit.MILLISECONDS.toNanos(400));//sleep not precise
   }
 
   @Test
@@ -1713,7 +1725,7 @@ public class ManagedChannelImplTest {
     // Verify that resolving oob channel does not
     oob = helper.createResolvingOobChannelBuilder("oobauthority")
         .nameResolverFactory(
-            new FakeNameResolverFactory.Builder(URI.create("oobauthority")).build())
+            new FakeNameResolverFactory.Builder(URI.create("fake:///oobauthority")).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
         .disableRetry() // irrelevant to what we test, disable retry to make verification easy
@@ -2037,11 +2049,11 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void lbHelper_getNameResolverRegistry() {
+  public void lbHelper_getNonDefaultNameResolverRegistry() {
     createChannel();
 
     assertThat(helper.getNameResolverRegistry())
-        .isSameInstanceAs(NameResolverRegistry.getDefaultRegistry());
+        .isNotSameInstanceAs(NameResolverRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -2606,7 +2618,7 @@ public class ManagedChannelImplTest {
       }
 
       @Override public String getDefaultScheme() {
-        return "fakescheme";
+        return "fake";
       }
     });
     createChannel();
@@ -3740,6 +3752,8 @@ public class ManagedChannelImplTest {
           }
         },
         null);
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     customBuilder.executorPool = executorPool;
     customBuilder.channelz = channelz;
     ManagedChannel mychannel = customBuilder.nameResolverFactory(factory).build();
@@ -3820,7 +3834,7 @@ public class ManagedChannelImplTest {
 
         @Override
         public String getDefaultScheme() {
-          return "fakescheme";
+          return "fake";
         }
       };
     channelBuilder.nameResolverFactory(factory).proxyDetector(neverProxy);

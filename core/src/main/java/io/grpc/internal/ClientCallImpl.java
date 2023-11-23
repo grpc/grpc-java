@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.Contexts.statusFromCancelled;
 import static io.grpc.Status.DEADLINE_EXCEEDED;
 import static io.grpc.internal.GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY;
@@ -261,9 +262,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           GrpcUtil.getClientStreamTracers(callOptions, headers, 0, false);
       String deadlineName =
           isFirstMin(callOptions.getDeadline(), context.getDeadline()) ? "CallOptions" : "Context";
+      Long nameResolutionDelay = callOptions.getOption(NAME_RESOLUTION_DELAYED);
       String description = String.format(
-          "ClientCall started after %s deadline was exceeded .9%f seconds ago", deadlineName,
-          effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS) / NANO_TO_SECS);
+          "ClientCall started after %s deadline was exceeded %.9f seconds ago. "
+              + "Name resolution delay %.9f seconds.", deadlineName,
+          effectiveDeadline.timeRemaining(TimeUnit.NANOSECONDS) / NANO_TO_SECS,
+          nameResolutionDelay == null ? 0 : nameResolutionDelay / NANO_TO_SECS);
       stream = new FailingClientStream(DEADLINE_EXCEEDED.withDescription(description), tracers);
     }
 
@@ -404,6 +408,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       buf.append(seconds);
       buf.append(String.format(Locale.US, ".%09d", nanos));
       buf.append("s. ");
+      Long nsDelay = callOptions.getOption(NAME_RESOLUTION_DELAYED);
+      buf.append(String.format(Locale.US, "Name resolution delay %.9f seconds. ",
+          nsDelay == null ? 0 : nsDelay / NANO_TO_SECS));
       buf.append(insight);
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(buf.toString()));
     }

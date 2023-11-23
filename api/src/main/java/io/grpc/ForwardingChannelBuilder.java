@@ -16,8 +16,6 @@
 
 package io.grpc;
 
-import com.google.common.base.MoreObjects;
-import com.google.errorprone.annotations.DoNotCall;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -28,38 +26,39 @@ import javax.annotation.Nullable;
  * A {@link ManagedChannelBuilder} that delegates all its builder methods to another builder by
  * default.
  *
- * @param <T> The type of the subclass extending this abstract class.
+ * <p>DEPRECATED: Use {@link ForwardingChannelBuilder2} instead!
  *
+ * <p>This class mistakenly used {@code <T extends ForwardingChannelBuilder<T>>} which causes
+ * return types to be {@link ForwardingChannelBuilder} instead of {@link ManagedChannelBuilder}.
+ * This pollutes the ABI of its subclasses with undesired method signatures.
+ * {@link ForwardingChannelBuilder2} generates correct return types; use it instead.
+ *
+ * @param <T> The type of the subclass extending this abstract class.
  * @since 1.7.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/3363")
 public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilder<T>>
-    extends ManagedChannelBuilder<T> {
-
+    extends ForwardingChannelBuilder2<T> {
   /**
    * The default constructor.
    */
-  protected ForwardingChannelBuilder() {}
-
-  /**
-   * This method serves to force sub classes to "hide" this static factory.
-   */
-  @DoNotCall("Unsupported")
-  public static ManagedChannelBuilder<?> forAddress(String name, int port) {
-    throw new UnsupportedOperationException("Subclass failed to hide static factory");
+  protected ForwardingChannelBuilder() {
   }
 
-  /**
-   * This method serves to force sub classes to "hide" this static factory.
-   */
-  @DoNotCall("Unsupported")
-  public static ManagedChannelBuilder<?> forTarget(String target) {
-    throw new UnsupportedOperationException("Subclass failed to hide static factory");
-  }
 
   /**
    * Returns the delegated {@code ManagedChannelBuilder}.
+   *
+   * <p>NOTE: this method is marked deprecated instead the class itself, so that classes extending
+   * {@link ForwardingChannelBuilder2} won't need class-level
+   * {@code @SuppressWarnings("deprecation")} annotation. Such annotation would suppress all
+   * deprecation warnings in all methods, inadvertently hiding any real deprecation warnings needing
+   * to be addressed. However, each child class is expected to implement {@code delegate()}.
+   * Therefore, the {@code @Deprecated} annotation is added to this method, and not to the class.
+   *
+   * @deprecated As of 1.60.0, use {@link ForwardingChannelBuilder2} instead.
    */
+  @Override
+  @Deprecated
   protected abstract ManagedChannelBuilder<?> delegate();
 
   @Override
@@ -250,23 +249,9 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   /**
-   * Returns the {@link ManagedChannel} built by the delegate by default. Overriding method can
-   * return different value.
-   */
-  @Override
-  public ManagedChannel build() {
-    return delegate().build();
-  }
-
-  @Override
-  public String toString() {
-    return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
-  }
-
-  /**
    * Returns the correctly typed version of the builder.
    */
-  protected final T thisT() {
+  private T thisT() {
     @SuppressWarnings("unchecked")
     T thisT = (T) this;
     return thisT;

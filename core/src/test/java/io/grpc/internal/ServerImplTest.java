@@ -681,7 +681,7 @@ public class ServerImplTest {
     Metadata responseHeaders = new Metadata();
     responseHeaders.put(metadataKey, "response value");
     call.sendHeaders(responseHeaders);
-    verify(stream).writeHeaders(responseHeaders);
+    verify(stream).writeHeaders(responseHeaders, true);
     verify(stream).setCompressor(isA(Compressor.class));
 
     call.sendMessage(firstResponse);

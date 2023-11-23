@@ -16,20 +16,17 @@
 
 package io.grpc.util;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
-import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
@@ -37,13 +34,10 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import javax.annotation.Nonnull;
 
@@ -52,131 +46,18 @@ import javax.annotation.Nonnull;
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
 @Internal
-public class RoundRobinLoadBalancer extends LoadBalancer {
-  @VisibleForTesting
-  static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
-      Attributes.Key.create("state-info");
-
-  private final Helper helper;
-  private final Map<EquivalentAddressGroup, Subchannel> subchannels =
-      new HashMap<>();
+public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private final Random random;
-  private ConnectivityState currentState;
   protected RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
 
   public RoundRobinLoadBalancer(Helper helper) {
-    this.helper = checkNotNull(helper, "helper");
+    super(helper);
     this.random = new Random();
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (resolvedAddresses.getAddresses().isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
-              + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
-    }
-
-    List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
-    Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
-    Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(servers);
-    Set<EquivalentAddressGroup> removedAddrs = setsDifference(currentAddrs, latestAddrs.keySet());
-
-    for (Map.Entry<EquivalentAddressGroup, EquivalentAddressGroup> latestEntry :
-        latestAddrs.entrySet()) {
-      EquivalentAddressGroup strippedAddressGroup = latestEntry.getKey();
-      EquivalentAddressGroup originalAddressGroup = latestEntry.getValue();
-      Subchannel existingSubchannel = subchannels.get(strippedAddressGroup);
-      if (existingSubchannel != null) {
-        // EAG's Attributes may have changed.
-        existingSubchannel.updateAddresses(Collections.singletonList(originalAddressGroup));
-        continue;
-      }
-      // Create new subchannels for new addresses.
-
-      // NB(lukaszx0): we don't merge `attributes` with `subchannelAttr` because subchannel
-      // doesn't need them. They're describing the resolved server list but we're not taking
-      // any action based on this information.
-      Attributes.Builder subchannelAttrs = Attributes.newBuilder()
-          // NB(lukaszx0): because attributes are immutable we can't set new value for the key
-          // after creation but since we can mutate the values we leverage that and set
-          // AtomicReference which will allow mutating state info for given channel.
-          .set(STATE_INFO,
-              new Ref<>(ConnectivityStateInfo.forNonError(IDLE)));
-
-      final Subchannel subchannel = checkNotNull(
-          helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-              .setAddresses(originalAddressGroup)
-              .setAttributes(subchannelAttrs.build())
-              .build()),
-          "subchannel");
-      subchannel.start(new SubchannelStateListener() {
-          @Override
-          public void onSubchannelState(ConnectivityStateInfo state) {
-            processSubchannelState(subchannel, state);
-          }
-        });
-      subchannels.put(strippedAddressGroup, subchannel);
-      subchannel.requestConnection();
-    }
-
-    ArrayList<Subchannel> removedSubchannels = new ArrayList<>();
-    for (EquivalentAddressGroup addressGroup : removedAddrs) {
-      removedSubchannels.add(subchannels.remove(addressGroup));
-    }
-
-    // Update the picker before shutting down the subchannels, to reduce the chance of the race
-    // between picking a subchannel and shutting it down.
-    updateBalancingState();
-
-    // Shutdown removed subchannels
-    for (Subchannel removedSubchannel : removedSubchannels) {
-      shutdownSubchannel(removedSubchannel);
-    }
-
-    return true;
-  }
-
-  @Override
-  public void handleNameResolutionError(Status error) {
-    if (currentState != READY)  {
-      updateBalancingState(TRANSIENT_FAILURE, new EmptyPicker(error));
-    }
-  }
-
-  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
-      return;
-    }
-    if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
-      helper.refreshNameResolution();
-    }
-    if (stateInfo.getState() == IDLE) {
-      subchannel.requestConnection();
-    }
-    Ref<ConnectivityStateInfo> subchannelStateRef = getSubchannelStateInfoRef(subchannel);
-    if (subchannelStateRef.value.getState().equals(TRANSIENT_FAILURE)) {
-      if (stateInfo.getState().equals(CONNECTING) || stateInfo.getState().equals(IDLE)) {
-        return;
-      }
-    }
-    subchannelStateRef.value = stateInfo;
-    updateBalancingState();
-  }
-
-  private void shutdownSubchannel(Subchannel subchannel) {
-    subchannel.shutdown();
-    getSubchannelStateInfoRef(subchannel).value =
-        ConnectivityStateInfo.forNonError(SHUTDOWN);
-  }
-
-  @Override
-  public void shutdown() {
-    for (Subchannel subchannel : getSubchannels()) {
-      shutdownSubchannel(subchannel);
-    }
-    subchannels.clear();
+  protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
+    throw new UnsupportedOperationException(); // local updateOverallBalancingState doesn't use this
   }
 
   private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
@@ -184,102 +65,54 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
   /**
    * Updates picker with the list of active subchannels (state == READY).
    */
-  @SuppressWarnings("ReferenceEquality")
-  private void updateBalancingState() {
-    List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
+  @Override
+  protected void updateOverallBalancingState() {
+    List<ChildLbState> activeList = getReadyChildren();
     if (activeList.isEmpty()) {
-      // No READY subchannels, determine aggregate state and error status
+      // No READY subchannels
+
+      // RRLB will request connection immediately on subchannel IDLE.
       boolean isConnecting = false;
-      Status aggStatus = EMPTY_OK;
-      for (Subchannel subchannel : getSubchannels()) {
-        ConnectivityStateInfo stateInfo = getSubchannelStateInfoRef(subchannel).value;
-        // This subchannel IDLE is not because of channel IDLE_TIMEOUT,
-        // in which case LB is already shutdown.
-        // RRLB will request connection immediately on subchannel IDLE.
-        if (stateInfo.getState() == CONNECTING || stateInfo.getState() == IDLE) {
+      for (ChildLbState childLbState : getChildLbStates()) {
+        ConnectivityState state = childLbState.getCurrentState();
+        if (state == CONNECTING || state == IDLE) {
           isConnecting = true;
-        }
-        if (aggStatus == EMPTY_OK || !aggStatus.isOk()) {
-          aggStatus = stateInfo.getStatus();
+          break;
         }
       }
-      updateBalancingState(isConnecting ? CONNECTING : TRANSIENT_FAILURE,
-          // If all subchannels are TRANSIENT_FAILURE, return the Status associated with
-          // an arbitrary subchannel, otherwise return OK.
-          new EmptyPicker(aggStatus));
+
+      if (isConnecting) {
+        updateBalancingState(CONNECTING,  new EmptyPicker(Status.OK));
+      } else {
+        updateBalancingState(TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
+      }
     } else {
       updateBalancingState(READY, createReadyPicker(activeList));
     }
   }
 
   private void updateBalancingState(ConnectivityState state, RoundRobinPicker picker) {
-    if (state != currentState || !picker.isEquivalentTo(currentPicker)) {
-      helper.updateBalancingState(state, picker);
-      currentState = state;
+    if (state != currentConnectivityState || !picker.isEquivalentTo(currentPicker)) {
+      getHelper().updateBalancingState(state, picker);
+      currentConnectivityState = state;
       currentPicker = picker;
     }
   }
 
-  protected RoundRobinPicker createReadyPicker(List<Subchannel> activeList) {
+  protected RoundRobinPicker createReadyPicker(Collection<ChildLbState> children) {
     // initialize the Picker to a random start index to ensure that a high frequency of Picker
     // churn does not skew subchannel selection.
-    int startIndex = random.nextInt(activeList.size());
-    return new ReadyPicker(activeList, startIndex);
-  }
+    int startIndex = random.nextInt(children.size());
 
-  /**
-   * Filters out non-ready subchannels.
-   */
-  private static List<Subchannel> filterNonFailingSubchannels(
-      Collection<Subchannel> subchannels) {
-    List<Subchannel> readySubchannels = new ArrayList<>(subchannels.size());
-    for (Subchannel subchannel : subchannels) {
-      if (isReady(subchannel)) {
-        readySubchannels.add(subchannel);
-      }
+    List<SubchannelPicker> pickerList = new ArrayList<>();
+    for (ChildLbState child : children) {
+      SubchannelPicker picker = child.getCurrentPicker();
+      pickerList.add(picker);
     }
-    return readySubchannels;
+
+    return new ReadyPicker(pickerList, startIndex);
   }
 
-  /**
-   * Converts list of {@link EquivalentAddressGroup} to {@link EquivalentAddressGroup} set and
-   * remove all attributes. The values are the original EAGs.
-   */
-  private static Map<EquivalentAddressGroup, EquivalentAddressGroup> stripAttrs(
-      List<EquivalentAddressGroup> groupList) {
-    Map<EquivalentAddressGroup, EquivalentAddressGroup> addrs = new HashMap<>(groupList.size() * 2);
-    for (EquivalentAddressGroup group : groupList) {
-      addrs.put(stripAttrs(group), group);
-    }
-    return addrs;
-  }
-
-  private static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
-    return new EquivalentAddressGroup(eag.getAddresses());
-  }
-
-  @VisibleForTesting
-  protected Collection<Subchannel> getSubchannels() {
-    return subchannels.values();
-  }
-
-  private static Ref<ConnectivityStateInfo> getSubchannelStateInfoRef(
-      Subchannel subchannel) {
-    return checkNotNull(subchannel.getAttributes().get(STATE_INFO), "STATE_INFO");
-  }
-    
-  // package-private to avoid synthetic access
-  static boolean isReady(Subchannel subchannel) {
-    return getSubchannelStateInfoRef(subchannel).value.getState() == READY;
-  }
-
-  private static <T> Set<T> setsDifference(Set<T> a, Set<T> b) {
-    Set<T> aCopy = new HashSet<>(a);
-    aCopy.removeAll(b);
-    return aCopy;
-  }
-
-  // Only subclasses are ReadyPicker or EmptyPicker
   public abstract static class RoundRobinPicker extends SubchannelPicker {
     public abstract boolean isEquivalentTo(RoundRobinPicker picker);
   }
@@ -289,40 +122,42 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
     private static final AtomicIntegerFieldUpdater<ReadyPicker> indexUpdater =
         AtomicIntegerFieldUpdater.newUpdater(ReadyPicker.class, "index");
 
-    private final List<Subchannel> list; // non-empty
+    private final List<SubchannelPicker> subchannelPickers; // non-empty
     @SuppressWarnings("unused")
     private volatile int index;
 
-    public ReadyPicker(List<Subchannel> list, int startIndex) {
-      Preconditions.checkArgument(!list.isEmpty(), "empty list");
-      this.list = list;
+    public ReadyPicker(List<SubchannelPicker> list, int startIndex) {
+      checkArgument(!list.isEmpty(), "empty list");
+      this.subchannelPickers = list;
       this.index = startIndex - 1;
     }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withSubchannel(nextSubchannel());
+      return subchannelPickers.get(nextIndex()).pickSubchannel(args);
     }
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(ReadyPicker.class).add("list", list).toString();
+      return MoreObjects.toStringHelper(ReadyPicker.class)
+          .add("subchannelPickers", subchannelPickers)
+          .toString();
     }
 
-    private Subchannel nextSubchannel() {
-      int size = list.size();
+    private int nextIndex() {
+      int size = subchannelPickers.size();
       int i = indexUpdater.incrementAndGet(this);
       if (i >= size) {
         int oldi = i;
         i %= size;
         indexUpdater.compareAndSet(this, oldi, i);
       }
-      return list.get(i);
+      return i;
     }
 
     @VisibleForTesting
-    List<Subchannel> getList() {
-      return list;
+    List<SubchannelPicker> getSubchannelPickers() {
+      return subchannelPickers;
     }
 
     @Override
@@ -333,7 +168,8 @@ public class RoundRobinLoadBalancer extends LoadBalancer {
       ReadyPicker other = (ReadyPicker) picker;
       // the lists cannot contain duplicate subchannels
       return other == this
-          || (list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list));
+          || (subchannelPickers.size() == other.subchannelPickers.size() && new HashSet<>(
+          subchannelPickers).containsAll(other.subchannelPickers));
     }
   }
 

@@ -313,6 +313,11 @@ public abstract class AbstractInteropTest {
 
   private final LinkedBlockingQueue<TestClientStreamTracer> clientStreamTracers =
       new LinkedBlockingQueue<>();
+  private boolean enableClientStreamTracers = true;
+
+  void setEnableClientStreamTracers(boolean enableClientStreamTracers) {
+    this.enableClientStreamTracers = enableClientStreamTracers;
+  }
 
   private final ClientStreamTracer.Factory clientStreamTracerFactory =
       new ClientStreamTracer.Factory() {
@@ -343,9 +348,14 @@ public abstract class AbstractInteropTest {
     startServer(serverBuilder);
     channel = createChannel();
 
-    blockingStub =
-        TestServiceGrpc.newBlockingStub(channel).withInterceptors(tracerSetupInterceptor);
-    asyncStub = TestServiceGrpc.newStub(channel).withInterceptors(tracerSetupInterceptor);
+    if (enableClientStreamTracers) {
+      blockingStub =
+          TestServiceGrpc.newBlockingStub(channel).withInterceptors(tracerSetupInterceptor);
+      asyncStub = TestServiceGrpc.newStub(channel).withInterceptors(tracerSetupInterceptor);
+    } else {
+      blockingStub = TestServiceGrpc.newBlockingStub(channel);
+      asyncStub = TestServiceGrpc.newStub(channel);
+    }
 
     ClientInterceptor[] additionalInterceptors = getAdditionalInterceptors();
     if (additionalInterceptors != null) {
@@ -2198,7 +2208,7 @@ public abstract class AbstractInteropTest {
     X509Certificate x509cert = (X509Certificate) certificates.get(0);
 
     assertEquals(1, certificates.size());
-    assertEquals(tlsInfo, x509cert.getSubjectDN().toString());
+    assertEquals(tlsInfo, x509cert.getSubjectX500Principal().toString());
   }
 
   protected int operationTimeoutMillis() {

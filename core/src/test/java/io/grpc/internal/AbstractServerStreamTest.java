@@ -285,28 +285,28 @@ public class AbstractServerStreamTest {
   public void writeHeaders_failsOnNullHeaders() {
     thrown.expect(NullPointerException.class);
 
-    stream.writeHeaders(null);
+    stream.writeHeaders(null, true);
   }
 
   @Test
   public void writeHeaders() {
     Metadata headers = new Metadata();
-    stream.writeHeaders(headers);
-    verify(sink).writeHeaders(same(headers));
+    stream.writeHeaders(headers, true);
+    verify(sink).writeHeaders(same(headers), eq(true));
   }
 
   @Test
   public void writeMessage_dontWriteDuplicateHeaders() {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
     stream.writeMessage(new ByteArrayInputStream(new byte[]{}));
 
     // Make sure it wasn't called twice
-    verify(sink).writeHeaders(any(Metadata.class));
+    verify(sink).writeHeaders(any(Metadata.class), eq(true));
   }
 
   @Test
   public void writeMessage_ignoreIfFramerClosed() {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
     stream.endOfMessages();
     reset(sink);
 
@@ -317,7 +317,7 @@ public class AbstractServerStreamTest {
 
   @Test
   public void writeMessage() {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
 
     stream.writeMessage(new ByteArrayInputStream(new byte[]{}));
     stream.flush();
@@ -327,7 +327,7 @@ public class AbstractServerStreamTest {
 
   @Test
   public void writeMessage_closesStream() throws Exception {
-    stream.writeHeaders(new Metadata());
+    stream.writeHeaders(new Metadata(), true);
     InputStream input = mock(InputStream.class, delegatesTo(new ByteArrayInputStream(new byte[1])));
     stream.writeMessage(input);
     verify(input).close();

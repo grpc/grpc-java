@@ -116,6 +116,12 @@ public abstract class LoadBalancer {
   public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
       Attributes.Key.create("internal:health-checking-config");
 
+  /**
+   * A picker that always returns an erring pick.
+   *
+   * @deprecated Use {@code new FixedResultPicker(PickResult.withNoResult())} instead.
+   */
+  @Deprecated
   public static final SubchannelPicker EMPTY_PICKER = new SubchannelPicker() {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
@@ -162,20 +168,21 @@ public abstract class LoadBalancer {
    * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
    * @since 1.49.0
    */
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getAddresses().isEmpty()
         && !canHandleEmptyAddressListFromNameResolution()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
-              + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     } else {
       if (recursionCount++ == 0) {
         handleResolvedAddresses(resolvedAddresses);
       }
       recursionCount = 0;
 
-      return true;
+      return Status.OK;
     }
   }
 
@@ -1412,6 +1419,12 @@ public abstract class LoadBalancer {
     public abstract LoadBalancer newLoadBalancer(Helper helper);
   }
 
+  /**
+   * A picker that always returns an erring pick.
+   *
+   * @deprecated Use {@code new FixedResultPicker(PickResult.withError(error))} instead.
+   */
+  @Deprecated
   public static final class ErrorPicker extends SubchannelPicker {
 
     private final Status error;
@@ -1433,4 +1446,22 @@ public abstract class LoadBalancer {
     }
   }
 
+  /** A picker that always returns the same result. */
+  public static final class FixedResultPicker extends SubchannelPicker {
+    private final PickResult result;
+
+    public FixedResultPicker(PickResult result) {
+      this.result = Preconditions.checkNotNull(result, "result");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return result;
+    }
+
+    @Override
+    public String toString() {
+      return "FixedResultPicker(" + result + ")";
+    }
+  }
 }

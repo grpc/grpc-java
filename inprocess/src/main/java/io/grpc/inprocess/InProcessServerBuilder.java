@@ -22,10 +22,10 @@ import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
@@ -73,8 +73,7 @@ import java.util.concurrent.TimeUnit;
  * </pre>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1783")
-public final class InProcessServerBuilder extends
-    AbstractServerImplBuilder<InProcessServerBuilder> {
+public final class InProcessServerBuilder extends ForwardingServerBuilder<InProcessServerBuilder> {
   /**
    * Create a server builder that will bind with the given name.
    *

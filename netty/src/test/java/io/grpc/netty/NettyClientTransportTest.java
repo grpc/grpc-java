@@ -27,6 +27,7 @@ import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
+import static io.grpc.netty.NettyServerBuilder.MAX_RST_COUNT_DISABLED;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -36,6 +37,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
@@ -69,6 +71,7 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.grpc.testing.TlsTesting;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelDuplexHandler;
@@ -76,6 +79,7 @@ import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.local.LocalChannel;
@@ -92,6 +96,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -101,6 +106,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
@@ -539,6 +545,46 @@ public class NettyClientTransportTest {
   }
 
   @Test
+  public void huffmanCodingShouldNotBePerformed() throws Exception {
+    String longStringOfA = Strings.repeat("a", 128);
+
+    negotiator = ProtocolNegotiators.serverPlaintext();
+    startServer();
+
+    NettyClientTransport transport = newTransport(ProtocolNegotiators.plaintext(),
+        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, false,
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
+
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        longStringOfA);
+
+    callMeMaybe(transport.start(clientTransportListener));
+
+    AtomicBoolean foundExpectedHeaderBytes = new AtomicBoolean(false);
+
+    transport.channel().pipeline().addFirst(new ChannelDuplexHandler() {
+      @Override
+      public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+          throws Exception {
+        if (msg instanceof ByteBuf) {
+          if (((ByteBuf) msg).toString(StandardCharsets.UTF_8).contains(longStringOfA)) {
+            foundExpectedHeaderBytes.set(true);
+          }
+        }
+        super.write(ctx, msg, promise);
+      }
+    });
+
+    new Rpc(transport, headers).halfClose().waitForResponse();
+
+    if (!foundExpectedHeaderBytes.get()) {
+      fail("expected to find UTF-8 encoded 'a's in the header");
+    }
+  }
+
+  @Test
   public void maxHeaderListSizeShouldBeEnforcedOnServer() throws Exception {
     startServer(100, 1);
 
@@ -781,7 +827,7 @@ public class NettyClientTransportTest {
         DEFAULT_SERVER_KEEPALIVE_TIME_NANOS, DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
         MAX_CONNECTION_IDLE_NANOS_DISABLED,
         MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE, true, 0,
-        Attributes.EMPTY,
+        MAX_RST_COUNT_DISABLED, 0, Attributes.EMPTY,
         channelz);
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
@@ -923,7 +969,7 @@ public class NettyClientTransportTest {
         public void streamCreated(ServerStream stream, String method, Metadata headers) {
           EchoServerStreamListener listener = new EchoServerStreamListener(stream, headers);
           stream.setListener(listener);
-          stream.writeHeaders(new Metadata());
+          stream.writeHeaders(new Metadata(), true);
           stream.request(1);
           streamListeners.add(listener);
         }

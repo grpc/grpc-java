@@ -30,11 +30,11 @@ import com.google.errorprone.annotations.CheckReturnValue;
 import com.google.errorprone.annotations.InlineMe;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
@@ -67,7 +67,7 @@ import javax.net.ssl.SSLException;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 @CheckReturnValue
-public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
+public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServerBuilder> {
 
   // 1MiB
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
@@ -75,6 +75,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
   static final long MAX_CONNECTION_AGE_NANOS_DISABLED = Long.MAX_VALUE;
   static final long MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE = Long.MAX_VALUE;
+  static final int MAX_RST_COUNT_DISABLED = 0;
 
   private static final long MIN_KEEPALIVE_TIME_NANO = TimeUnit.MILLISECONDS.toNanos(1L);
   private static final long MIN_KEEPALIVE_TIMEOUT_NANO = TimeUnit.MICROSECONDS.toNanos(499L);
@@ -113,6 +114,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
   private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  private int maxRstCount;
+  private long maxRstPeriodNanos;
   private Attributes eagAttributes = Attributes.EMPTY;
 
   /**
@@ -644,6 +647,33 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     return this;
   }
 
+  /**
+   * Limits the rate of incoming RST_STREAM frames per connection to maxRstStream per
+   * secondsPerWindow. When exceeded on a connection, the connection is closed. This can reduce the
+   * impact of an attacker continually resetting RPCs before they complete, when combined with TLS
+   * and {@link #maxConcurrentCallsPerConnection(int)}.
+   *
+   * <p>gRPC clients send RST_STREAM when they cancel RPCs, so some RST_STREAMs are normal and
+   * setting this too low can cause errors for legimitate clients.
+   *
+   * <p>By default there is no limit.
+   *
+   * @param maxRstStream the positive limit of RST_STREAM frames per connection per period, or
+   *     {@code Integer.MAX_VALUE} for unlimited
+   * @param secondsPerWindow the positive number of seconds per period
+   */
+  @CanIgnoreReturnValue
+  public NettyServerBuilder maxRstFramesPerWindow(int maxRstStream, int secondsPerWindow) {
+    checkArgument(maxRstStream > 0, "maxRstStream must be positive");
+    checkArgument(secondsPerWindow > 0, "secondsPerWindow must be positive");
+    if (maxRstStream == Integer.MAX_VALUE) {
+      maxRstStream = MAX_RST_COUNT_DISABLED;
+    }
+    this.maxRstCount = maxRstStream;
+    this.maxRstPeriodNanos = TimeUnit.SECONDS.toNanos(secondsPerWindow);
+    return this;
+  }
+
   /** Sets the EAG attributes available to protocol negotiators. Not for general use. */
   void eagAttributes(Attributes eagAttributes) {
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
@@ -664,7 +694,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos, maxConnectionAgeInNanos,
         maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
-        eagAttributes, this.serverImplBuilder.getChannelz());
+        maxRstCount, maxRstPeriodNanos, eagAttributes, this.serverImplBuilder.getChannelz());
   }
 
   @VisibleForTesting

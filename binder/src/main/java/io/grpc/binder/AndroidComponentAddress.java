@@ -23,30 +23,35 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import java.net.SocketAddress;
+import javax.annotation.Nullable;
 
 /**
  * The target of an Android {@link android.app.Service} binding.
  *
- * <p>Consists of a {@link ComponentName} reference to the Service and the action, data URI, type,
- * and category set for an {@link Intent} used to bind to it. All together, these fields identify
- * the {@link android.os.IBinder} that would be returned by some implementation of {@link
- * android.app.Service#onBind(Intent)}. Indeed, the semantics of {@link #equals(Object)} match
- * Android's internal equivalence relation for caching the result of calling this method. See <a
+ * <p>Consists of an explicit {@link Intent} that identifies an {@link android.os.IBinder} returned
+ * by some Service's {@link android.app.Service#onBind(Intent)} method. You can specify that Service
+ * by {@link ComponentName} or let Android resolve it using the Intent's other fields (package,
+ * action, data URI, type and category set). See <a
  * href="https://developer.android.com/guide/components/bound-services">Bound Services Overview</a>
- * for more.
+ * and <a href="https://developer.android.com/guide/components/intents-filters">Intents and Intent
+ * Filters</a> for more.
  *
  * <p>For convenience in the common case where a {@link android.app.Service} exposes just one {@link
  * android.os.IBinder} IPC interface, we provide default values for the binding {@link Intent}
  * fields, namely, an action of {@link ApiConstants#ACTION_BIND}, an empty category set and null
  * type and data URI.
+ *
+ * <p>The semantics of {@link #equals(Object)} are the same as {@link Intent#filterEquals(Intent)}.
  */
 public final class AndroidComponentAddress extends SocketAddress {
   private static final long serialVersionUID = 0L;
 
-  private final Intent bindIntent; // An "explicit" Intent. In other words, getComponent() != null.
+  private final Intent bindIntent; // "Explicit", having either a component or package restriction.
 
   protected AndroidComponentAddress(Intent bindIntent) {
-    checkArgument(bindIntent.getComponent() != null, "Missing required component");
+    checkArgument(
+        bindIntent.getComponent() != null || bindIntent.getPackage() != null,
+        "'bindIntent' must be explicit. Specify either a package or ComponentName.");
     this.bindIntent = bindIntent;
   }
 
@@ -79,14 +84,19 @@ public final class AndroidComponentAddress extends SocketAddress {
   }
 
   /**
-   * Creates a new address that refers to <code>intent</code>'s component and that uses the "filter
-   * matching" fields of <code>intent</code> as the binding {@link Intent}.
+   * Creates a new address that uses the "filter matching" fields of <code>intent</code> as the
+   * binding {@link Intent}.
+   *
+   * <p><code>intent</code> must be "explicit", i.e. having either a target component ({@link
+   * Intent#getComponent()}) or package restriction ({@link Intent#getPackage()}). See <a
+   * href="https://developer.android.com/guide/components/intents-filters">Intents and Intent
+   * Filters</a> for more.
    *
    * <p>A multi-tenant {@link android.app.Service} can call this from its {@link
    * android.app.Service#onBind(Intent)} method to locate an appropriate {@link io.grpc.Server} by
    * listening address.
    *
-   * @throws IllegalArgumentException if intent's component is null
+   * @throws IllegalArgumentException if 'intent' isn't "explicit"
    */
   public static AndroidComponentAddress forBindIntent(Intent intent) {
     return new AndroidComponentAddress(intent.cloneFilter());
@@ -104,12 +114,26 @@ public final class AndroidComponentAddress extends SocketAddress {
   /**
    * Returns the Authority which is the package name of the target app.
    *
-   * <p>See {@link android.content.ComponentName}.
+   * <p>See {@link android.content.ComponentName} and {@link Intent#getPackage()}.
    */
   public String getAuthority() {
-    return getComponent().getPackageName();
+    return getPackage();
   }
 
+  /**
+   * Returns the package target of the wrapped {@link Intent}, either from its package restriction
+   * or, if not present, its fully qualified {@link ComponentName}.
+   */
+  public String getPackage() {
+    if (bindIntent.getPackage() != null) {
+      return bindIntent.getPackage();
+    } else {
+      return bindIntent.getComponent().getPackageName();
+    }
+  }
+
+  /** Returns the {@link ComponentName} of this binding {@link Intent}, or null if one isn't set. */
+  @Nullable
   public ComponentName getComponent() {
     return bindIntent.getComponent();
   }
@@ -131,7 +155,7 @@ public final class AndroidComponentAddress extends SocketAddress {
     Intent intentForUri = bindIntent;
     if (intentForUri.getPackage() == null) {
       // URI_ANDROID_APP_SCHEME requires an "explicit package name" which isn't set by any of our
-      // factory methods. Oddly, our explicit ComponentName is not enough.
+      // factory methods. Oddly, a ComponentName is not enough.
       intentForUri = intentForUri.cloneFilter().setPackage(getComponent().getPackageName());
     }
     return intentForUri.toUri(URI_ANDROID_APP_SCHEME);
