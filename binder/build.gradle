@@ -7,7 +7,7 @@ description = 'gRPC BinderChannel'
 
 android {
     namespace 'io.grpc.binder'
-    compileSdkVersion 33
+    compileSdkVersion 34
     compileOptions {
         sourceCompatibility 1.8
         targetCompatibility 1.8

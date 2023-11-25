@@ -18,6 +18,7 @@ package io.grpc.binder;
 
 import static android.content.Context.BIND_ABOVE_CLIENT;
 import static android.content.Context.BIND_ADJUST_WITH_ACTIVITY;
+import static android.content.Context.BIND_ALLOW_ACTIVITY_STARTS;
 import static android.content.Context.BIND_ALLOW_OOM_MANAGEMENT;
 import static android.content.Context.BIND_AUTO_CREATE;
 import static android.content.Context.BIND_IMPORTANT;
@@ -29,7 +30,6 @@ import static java.lang.Integer.toHexString;
 
 import android.os.Build;
 import androidx.annotation.RequiresApi;
-import io.grpc.ExperimentalApi;
 
 /**
  * An immutable set of flags affecting the behavior of {@link android.content.Context#bindService}.
@@ -103,24 +103,16 @@ public final class BindServiceFlags {
       return setFlag(BIND_ADJUST_WITH_ACTIVITY, newValue);
     }
 
-    // TODO(b/274061424): Reference official constant and add RequiresApi declaration in place of
-    // informal Javadoc warning when U is final.
     /**
      * Sets or clears the {@code android.content.Context#BIND_ALLOW_ACTIVITY_STARTS} flag.
-     *
-     * <p>This method allows for testing and development on Android U developer previews. Before
-     * releasing production code which depends on this flag, verify that either the
-     * {@code BIND_ALLOW_ACTIVITY_STARTS} flag has not changed from 0x200 during SDK development,
-     * or wait for this method to be updated to point to the final flag and made non-experimental.
      *
      * <p>This flag has no additional meaning at the gRPC layer. See the Android docs for more.
      *
      * @return this, for fluent construction
      */
-    @ExperimentalApi("To be finalized after Android U SDK finalization")
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public Builder setAllowActivityStarts(boolean newValue) {
-      // https://developer.android.com/reference/android/content/Context#BIND_ALLOW_ACTIVITY_STARTS
-      return setFlag(0x200, newValue);
+      return setFlag(BIND_ALLOW_ACTIVITY_STARTS, newValue);
     }
 
     /**

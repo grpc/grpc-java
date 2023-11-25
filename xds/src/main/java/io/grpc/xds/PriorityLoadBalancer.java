@@ -85,7 +85,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
     PriorityLbConfig config = (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -111,7 +111,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     }
     handlingResolvedAddresses = false;
     tryNextPriority();
-    return true;
+    return Status.OK;
   }
 
   @Override
@@ -148,7 +148,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         ChildLbState child =
             new ChildLbState(priority, priorityConfigs.get(priority).ignoreReresolution);
         children.put(priority, child);
-        updateOverallState(priority, CONNECTING, LoadBalancer.EMPTY_PICKER);
+        updateOverallState(priority, CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
         // Calling the child's updateResolvedAddresses() can result in tryNextPriority() being
         // called recursively. We need to be sure to be done with processing here before it is
         // called.
@@ -209,7 +209,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     @Nullable ScheduledHandle deletionTimer;
     @Nullable String policy;
     ConnectivityState connectivityState = CONNECTING;
-    SubchannelPicker picker = LoadBalancer.EMPTY_PICKER;
+    SubchannelPicker picker = new FixedResultPicker(PickResult.withNoResult());
 
     ChildLbState(final String priority, boolean ignoreReresolution) {
       this.priority = priority;

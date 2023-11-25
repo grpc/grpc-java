@@ -95,7 +95,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(ChannelLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     OutlierDetectionLoadBalancerConfig config
         = (OutlierDetectionLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -149,7 +149,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     switchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
             .build());
-    return true;
+    return Status.OK;
   }
 
   @Override
@@ -255,6 +255,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public void start(SubchannelStateListener listener) {
       subchannelStateListener = listener;
       super.start(new OutlierDetectionSubchannelStateListener(listener));
+    }
+
+    @Override
+    public void shutdown() {
+      if (addressTracker != null) {
+        addressTracker.removeSubchannel(this);
+      }
+      super.shutdown();
     }
 
     @Override

@@ -76,6 +76,9 @@ public abstract class NameResolver {
    * Starts the resolution. The method is not supposed to throw any exceptions. That might cause the
    * Channel that the name resolver is serving to crash. Errors should be propagated
    * through {@link Listener#onError}.
+   * 
+   * <p>An instance may not be started more than once, by any overload of this method, even after
+   * an intervening call to {@link #shutdown}.
    *
    * @param listener used to receive updates on the target
    * @since 1.0.0
@@ -102,6 +105,9 @@ public abstract class NameResolver {
    * Starts the resolution. The method is not supposed to throw any exceptions. That might cause the
    * Channel that the name resolver is serving to crash. Errors should be propagated
    * through {@link Listener2#onError}.
+   * 
+   * <p>An instance may not be started more than once, by any overload of this method, even after
+   * an intervening call to {@link #shutdown}.
    *
    * @param listener used to receive updates on the target
    * @since 1.21.0

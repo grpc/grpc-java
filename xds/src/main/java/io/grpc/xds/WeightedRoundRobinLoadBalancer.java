@@ -97,30 +97,49 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker) {
+      SubchannelPicker initialPicker, ResolvedAddresses unused) {
     ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
         initialPicker);
     return childLbState;
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (resolvedAddresses.getLoadBalancingPolicyConfig() == null) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
               "NameResolver returned no WeightedRoundRobinLoadBalancerConfig. addrs="
                       + resolvedAddresses.getAddresses()
-                      + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    boolean accepted = super.acceptResolvedAddresses(resolvedAddresses);
-    if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
-      weightUpdateTimer.cancel();
+    AcceptResolvedAddressRetVal acceptRetVal;
+    try {
+      resolvingAddresses = true;
+      acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
+      if (!acceptRetVal.status.isOk()) {
+        return acceptRetVal.status;
+      }
+
+      if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
+        weightUpdateTimer.cancel();
+      }
+      updateWeightTask.run();
+
+      createAndApplyOrcaListeners();
+
+      // Must update channel picker before return so that new RPCs will not be routed to deleted
+      // clusters and resolver can remove them in service config.
+      updateOverallBalancingState();
+
+      shutdownRemoved(acceptRetVal.removedChildren);
+    } finally {
+      resolvingAddresses = false;
     }
-    updateWeightTask.run();
-    afterAcceptAddresses();
-    return accepted;
+
+    return acceptRetVal.status;
   }
 
   @Override
@@ -227,7 +246,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
   }
 
-  private void afterAcceptAddresses() {
+  private void createAndApplyOrcaListeners() {
     for (ChildLbState child : getChildLbStates()) {
       WeightedChildLbState wChild = (WeightedChildLbState) child;
       for (WrrSubchannel weightedSubchannel : wChild.subchannels) {

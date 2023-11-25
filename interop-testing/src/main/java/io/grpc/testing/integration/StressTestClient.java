@@ -92,7 +92,7 @@ public class StressTestClient {
       client.runStressTest();
       client.startMetricsLogging();
       client.blockUntilStressTestComplete();
-      log.log(Level.INFO, "Total calls made: {0}", client.getTotalCallCount());
+      log.log(Level.INFO, "Total calls made: " + client.getTotalCallCount());
     } catch (Exception e) {
       log.log(Level.WARNING, "The stress test client encountered an error!", e);
     } finally {
@@ -472,10 +472,10 @@ public class StressTestClient {
       Thread.currentThread().setName(gaugeName);
 
       Tester tester = new Tester();
-      tester.setUp();
       // The client stream tracers that AbstractInteropTest installs by default would fill up the
       // heap in no time in a long running stress test with many requests.
       tester.setEnableClientStreamTracers(false);
+      tester.setUp();
 
       WeightedTestCaseSelector testCaseSelector = new WeightedTestCaseSelector(testCaseWeightPairs);
       Long endTime = durationSec == null ? null : System.nanoTime() + SECONDS.toNanos(durationSecs);

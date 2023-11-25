@@ -741,11 +741,11 @@ public class ClusterImplLoadBalancerTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
       attributes = resolvedAddresses.getAttributes();
-      return true;
+      return Status.OK;
     }
 
     @Override

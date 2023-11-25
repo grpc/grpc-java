@@ -82,7 +82,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     // Need to update choiceCount before calling super so that the updateBalancingState call has the
     // new value.  However, if the update fails we need to revert it.
     int oldChoiceCount = choiceCount;
@@ -92,13 +92,13 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
       choiceCount = config.choiceCount;
     }
 
-    boolean successfulUpdate = super.acceptResolvedAddresses(resolvedAddresses);
+    Status addressAcceptanceStatus = super.acceptResolvedAddresses(resolvedAddresses);
 
-    if (!successfulUpdate) {
+    if (!addressAcceptanceStatus.isOk()) {
       choiceCount = oldChoiceCount;
     }
 
-    return successfulUpdate;
+    return addressAcceptanceStatus;
   }
 
   @Override
@@ -145,13 +145,13 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker) {
+      SubchannelPicker initialPicker, ResolvedAddresses unused) {
     return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
   }
 
   private void updateBalancingState(ConnectivityState state, LeastRequestPicker picker) {
     if (state != currentConnectivityState || !picker.isEquivalentTo(currentPicker)) {
-      super.updateHelperBalancingState(state, picker);
+      getHelper().updateBalancingState(state, picker);
       currentConnectivityState = state;
       currentPicker = picker;
     }

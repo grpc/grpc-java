@@ -93,6 +93,31 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     return newChildPolicies;
   }
 
+  /**
+   * This is like the parent except that it doesn't shutdown the removed children since we want that
+   * to be done by the timer.
+   */
+  @Override
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    try {
+      resolvingAddresses = true;
+
+      // process resolvedAddresses to update children
+      AcceptResolvedAddressRetVal acceptRetVal =
+          acceptResolvedAddressesInternal(resolvedAddresses);
+      if (!acceptRetVal.status.isOk()) {
+        return acceptRetVal.status;
+      }
+
+      // Update the picker
+      updateOverallBalancingState();
+
+      return acceptRetVal.status;
+    } finally {
+      resolvingAddresses = false;
+    }
+  }
+
   @Override
   protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
     return new SubchannelPicker() {

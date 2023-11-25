@@ -33,6 +33,8 @@ import io.grpc.internal.ManagedChannelImplBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.SharedResourceHolder;
 import java.net.SocketAddress;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -283,6 +285,11 @@ public final class InProcessChannelBuilder extends
       if (useSharedTimer) {
         SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timerService);
       }
+    }
+
+    @Override
+    public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      return Arrays.asList(InProcessSocketAddress.class, AnonymousInProcessSocketAddress.class);
     }
   }
 }

@@ -74,6 +74,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -114,7 +115,7 @@ public class RoundRobinLoadBalancerTest {
     loadBalancer = new RoundRobinLoadBalancer(mockHelper);
   }
 
-  private boolean acceptAddresses(List<EquivalentAddressGroup> eagList, Attributes attrs) {
+  private Status acceptAddresses(List<EquivalentAddressGroup> eagList, Attributes attrs) {
     return loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(eagList).setAttributes(attrs).build());
   }
@@ -126,8 +127,8 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void pickAfterResolved() throws Exception {
-    boolean addressesAccepted = acceptAddresses(servers, affinity);
-    assertThat(addressesAccepted).isTrue();
+    Status addressesAcceptanceStatus = acceptAddresses(servers, affinity);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     final Subchannel readySubchannel = subchannels.values().iterator().next();
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
 
@@ -181,8 +182,8 @@ public class RoundRobinLoadBalancerTest {
 
     InOrder inOrder = inOrder(mockHelper);
 
-    boolean addressesAccepted = acceptAddresses(currentServers, affinity);
-    assertThat(addressesAccepted).isTrue();
+    Status addressesAcceptanceStatus = acceptAddresses(currentServers, affinity);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
@@ -205,9 +206,9 @@ public class RoundRobinLoadBalancerTest {
     // This time with Attributes
     List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
 
-    addressesAccepted = loadBalancer.acceptResolvedAddresses(
+    addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(latestServers).setAttributes(affinity).build());
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     verify(newSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).updateAddresses(Arrays.asList(oldEag2));
@@ -233,8 +234,8 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
-    boolean addressesAccepted = acceptAddresses(servers, Attributes.EMPTY);
-    assertThat(addressesAccepted).isTrue();
+    Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // TODO figure out if this method testing the right things
 
@@ -270,8 +271,8 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void ignoreShutdownSubchannelStateChange() {
     InOrder inOrder = inOrder(mockHelper);
-    boolean addressesAccepted = acceptAddresses(servers, Attributes.EMPTY);
-    assertThat(addressesAccepted).isTrue();
+    Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
     loadBalancer.shutdown();
@@ -289,8 +290,8 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void stayTransientFailureUntilReady() {
     InOrder inOrder = inOrder(mockHelper);
-    boolean addressesAccepted = acceptAddresses(servers, Attributes.EMPTY);
-    assertThat(addressesAccepted).isTrue();
+    Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
@@ -326,8 +327,8 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void refreshNameResolutionWhenSubchannelConnectionBroken() {
     InOrder inOrder = inOrder(mockHelper);
-    boolean addressesAccepted = acceptAddresses(servers, Attributes.EMPTY);
-    assertThat(addressesAccepted).isTrue();
+    Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
@@ -350,6 +351,19 @@ public class RoundRobinLoadBalancerTest {
     }
 
     verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void removingAddressShutsdownSubchannel() {
+    acceptAddresses(servers, affinity);
+    final Subchannel subchannel2 = subchannels.get(Collections.singletonList(servers.get(2)));
+
+    InOrder inOrder = Mockito.inOrder(mockHelper, subchannel2);
+    // send LB only the first 2 addresses
+    List<EquivalentAddressGroup> svs2 = Arrays.asList(servers.get(0), servers.get(1));
+    acceptAddresses(svs2, affinity);
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any());
+    inOrder.verify(subchannel2).shutdown();
   }
 
   @Test
@@ -393,9 +407,9 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void nameResolutionErrorWithActiveChannels() throws Exception {
-    boolean addressesAccepted = acceptAddresses(servers, affinity);
+    Status addressesAcceptanceStatus = acceptAddresses(servers, affinity);
     final Subchannel readySubchannel = subchannels.values().iterator().next();
-    assertThat(addressesAccepted).isTrue();
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
     loadBalancer.resolvingAddresses = true;
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
@@ -420,8 +434,8 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void subchannelStateIsolation() throws Exception {
-    boolean addressesAccepted = acceptAddresses(servers, Attributes.EMPTY);
-    assertThat(addressesAccepted).isTrue();
+    Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
     Subchannel sc1 = subchannelIterator.next();
@@ -505,7 +519,7 @@ public class RoundRobinLoadBalancerTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.emptyList())
             .setAttributes(affinity)
-            .build())).isFalse();
+            .build()).isOk()).isFalse();
   }
 
   private List<Subchannel> getList(SubchannelPicker picker) {

@@ -181,4 +181,8 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb.shutdown();
     currentLb.shutdown();
   }
+
+  public String delegateType() {
+    return delegate().getClass().getSimpleName();
+  }
 }
