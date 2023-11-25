@@ -89,7 +89,7 @@ public class HelloWorldClientTls {
         int port = Integer.parseInt(args[1]);
         ManagedChannel channel = Grpc.newChannelBuilderForAddress(host, port, tlsBuilder.build())
                 /* Only for using provided test certs. */
-                .overrideAuthority("foo.test.google.fr")
+                .overrideAuthority("foo.test.google.com.au")
                 .build();
         try {
             HelloWorldClientTls client = new HelloWorldClientTls(channel);
