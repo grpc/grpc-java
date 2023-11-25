@@ -42,7 +42,7 @@ USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath [clientCertCha
 - Note `trustCertCollectionFilePath` is not needed if you are using system default certificate authority.
 
 You can run this example with our [test credentials](../../testing/src/main/resources/certs) with 
-`.overrideAuthority("foo.test.google.fr")` for `ManagedChannelBuilder` to match the Subject Alternative Names
+`.overrideAuthority("foo.test.google.com.au")` for `ManagedChannelBuilder` to match the Subject Alternative Names
 in the test certificates. You can generate your own self-signed certificates with commands in the test certs
 [README](../../testing/src/main/resources/certs/README).
 
