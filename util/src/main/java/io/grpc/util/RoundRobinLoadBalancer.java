@@ -114,6 +114,10 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
       this.subchannelPickers = list;
       this.index = Preconditions.checkNotNull(index, "index");
 
+      // Every created picker is checked for equality in updateBalancingState() at least once.
+      // Pre-compute the hash so it can be checked cheaply. Using the hash in equals() makes it very
+      // fast except when the pickers are (very likely) equal.
+      //
       // For equality we treat children as a set; use hash code as defined by Set
       int sum = 0;
       for (SubchannelPicker picker : subchannelPickers) {
