@@ -234,8 +234,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
+  private boolean shouldUpdateState(ConnectivityState state, ConnectivityState currentState) {
+    boolean isDifferentState = state != currentState;
+    boolean isReadyState = state == READY;
+    boolean isTransientFailureState = state == TRANSIENT_FAILURE;
+
+    return isDifferentState || isReadyState || isTransientFailureState;
+  }
+
+
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
-    if (state != currentState || state == READY || state == TRANSIENT_FAILURE) {
+    if (shouldUpdateState(state, currentState)) {
       currentState = state;
       helper.updateBalancingState(state, picker);
     }

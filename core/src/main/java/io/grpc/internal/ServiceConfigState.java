@@ -87,37 +87,46 @@ final class ServiceConfigState {
     checkState(expectUpdates(), "unexpected service config update");
     boolean firstUpdate = !updated;
     updated = true;
+
     if (firstUpdate) {
-      if (coe == null) {
-        currentServiceConfigOrError = defaultServiceConfig;
-      } else if (coe.getError() != null) {
-        if (defaultServiceConfig != null) {
-          currentServiceConfigOrError = defaultServiceConfig;
-        } else {
-          currentServiceConfigOrError = coe;
-        }
-      } else {
-        assert coe.getConfig() != null;
-        currentServiceConfigOrError = coe;
-      }
+      handleFirstUpdate(coe);
     } else {
-      if (coe == null) {
-        if (defaultServiceConfig != null) {
-          currentServiceConfigOrError = defaultServiceConfig;
-        } else {
-          currentServiceConfigOrError = null;
-        }
-      } else if (coe.getError() != null) {
-        if (currentServiceConfigOrError != null && currentServiceConfigOrError.getError() != null) {
-          currentServiceConfigOrError = coe;
-        } else {
-          // discard
-        }
-      } else {
-        assert coe.getConfig() != null;
-        currentServiceConfigOrError = coe;
-      }
+      handleSubsequentUpdate(coe);
     }
+  }
+
+  private void handleFirstUpdate(@Nullable ConfigOrError coe) {
+    if (coe == null || coe.getError() != null) {
+      currentServiceConfigOrError = handleConfigErrorCase(coe);
+    } else {
+      assert coe.getConfig() != null;
+      currentServiceConfigOrError = coe;
+    }
+  }
+
+  private void handleSubsequentUpdate(@Nullable ConfigOrError coe) {
+    if (coe == null || coe.getError() != null) {
+      currentServiceConfigOrError = handleSubsequentErrorCase(coe);
+    } else {
+      assert coe.getConfig() != null;
+      currentServiceConfigOrError = coe;
+    }
+  }
+
+  @Nullable
+  private ConfigOrError handleConfigErrorCase(@Nullable ConfigOrError coe) {
+    if (defaultServiceConfig != null) {
+      return defaultServiceConfig;
+    }
+    return coe;
+  }
+
+  @Nullable
+  private ConfigOrError handleSubsequentErrorCase(@Nullable ConfigOrError coe) {
+    if (currentServiceConfigOrError != null && currentServiceConfigOrError.getError() != null) {
+      return coe;
+    }
+    return currentServiceConfigOrError;
   }
 
   boolean expectUpdates() {

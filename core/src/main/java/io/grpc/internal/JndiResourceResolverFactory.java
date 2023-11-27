@@ -167,29 +167,29 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
      */
     @VisibleForTesting
     static String unquote(String txtRecord) {
-      StringBuilder sb = new StringBuilder(txtRecord.length());
+      StringBuilder stringBuilder = new StringBuilder(txtRecord.length());
       boolean inquote = false;
       for (int i = 0; i < txtRecord.length(); i++) {
-        char c = txtRecord.charAt(i);
+        char currentCharacter = txtRecord.charAt(i);
         if (!inquote) {
-          if (c == ' ') {
+          if (currentCharacter == ' ') {
             continue;
-          } else if (c == '"') {
+          } else if (currentCharacter == '"') {
             inquote = true;
             continue;
           }
         } else {
-          if (c == '"') {
+          if (currentCharacter == '"') {
             inquote = false;
             continue;
-          } else if (c == '\\') {
-            c = txtRecord.charAt(++i);
-            assert c == '"' || c == '\\';
+          } else if (currentCharacter == '\\') {
+            currentCharacter = txtRecord.charAt(++i);
+            assert currentCharacter == '"' || currentCharacter == '\\';
           }
         }
-        sb.append(c);
+        stringBuilder.append(currentCharacter);
       }
-      return sb.toString();
+      return stringBuilder.toString();
     }
   }
 
