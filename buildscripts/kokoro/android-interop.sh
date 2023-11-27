@@ -30,7 +30,8 @@ GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 
 ./gradlew $GRADLE_FLAGS \
   :grpc-android-interop-testing:assembleDebug \
-  :grpc-android-interop-testing:assembleDebugAndroidTest \
+  :grpc-android-interop-testing:assembleDebugAndroidTest
+./gradlew $GRADLE_FLAGS \
   :grpc-binder:assembleDebugAndroidTest
 
 # Run interop instrumentation tests on Firebase Test Lab
