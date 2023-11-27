@@ -635,51 +635,57 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
     }
 
+    final class MessagesAvailable extends ContextRunnable {
+      private Link link;
+      private MessageProducer producer;
+
+      MessagesAvailable(Link link, MessageProducer producer) {
+        super(context);
+        this.link = link;
+        this.producer = producer;
+      }
+
+      @Override
+      public void runInContext() {
+        try (TaskCloseable ignore =
+                     PerfMark.traceTask("ClientCall$Listener.messagesAvailable")) {
+          PerfMark.attachTag(tag);
+          PerfMark.linkIn(link);
+          runInternal();
+        }
+      }
+
+      private void runInternal() {
+        if (exceptionStatus != null) {
+          GrpcUtil.closeQuietly(producer);
+          return;
+        }
+        try {
+          InputStream message;
+          while ((message = producer.next()) != null) {
+            try {
+              observer.onMessage(method.parseResponse(message));
+            } catch (Throwable t) {
+              GrpcUtil.closeQuietly(message);
+              throw t;
+            }
+            message.close();
+          }
+        } catch (Throwable t) {
+          GrpcUtil.closeQuietly(producer);
+          exceptionThrown(
+                  Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
+        }
+      }
+    }
+
     @Override
     public void messagesAvailable(final MessageProducer producer) {
       try (TaskCloseable ignore = PerfMark.traceTask("ClientStreamListener.messagesAvailable")) {
         PerfMark.attachTag(tag);
         final Link link = PerfMark.linkOut();
-        final class MessagesAvailable extends ContextRunnable {
-          MessagesAvailable() {
-            super(context);
-          }
 
-          @Override
-          public void runInContext() {
-            try (TaskCloseable ignore =
-                     PerfMark.traceTask("ClientCall$Listener.messagesAvailable")) {
-              PerfMark.attachTag(tag);
-              PerfMark.linkIn(link);
-              runInternal();
-            }
-          }
-
-          private void runInternal() {
-            if (exceptionStatus != null) {
-              GrpcUtil.closeQuietly(producer);
-              return;
-            }
-            try {
-              InputStream message;
-              while ((message = producer.next()) != null) {
-                try {
-                  observer.onMessage(method.parseResponse(message));
-                } catch (Throwable t) {
-                  GrpcUtil.closeQuietly(message);
-                  throw t;
-                }
-                message.close();
-              }
-            } catch (Throwable t) {
-              GrpcUtil.closeQuietly(producer);
-              exceptionThrown(
-                  Status.CANCELLED.withCause(t).withDescription("Failed to read message."));
-            }
-          }
-        }
-
-        callExecutor.execute(new MessagesAvailable());
+        callExecutor.execute(new MessagesAvailable(link, producer));
       }
     }
 
