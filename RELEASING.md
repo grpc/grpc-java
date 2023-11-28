@@ -76,7 +76,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
 
    ```bash
    $ echo "## gRPC Java $MAJOR.$MINOR.0 Release Notes" && echo && \
-     git shortlog "$(git merge-base upstream/v$MAJOR.$((MINOR-1)).x upstream/v$MAJOR.$MINOR.x)"..upstream/v$MAJOR.$MINOR.x | cat && \
+     git shortlog --format='%s (%h)' "$(git merge-base upstream/v$MAJOR.$((MINOR-1)).x upstream/v$MAJOR.$MINOR.x)"..upstream/v$MAJOR.$MINOR.x | cat && \
      echo && echo && echo "Backported commits in previous release:" && \
      git log --oneline "$(git merge-base v$MAJOR.$((MINOR-1)).0 upstream/v$MAJOR.$MINOR.x)"..v$MAJOR.$((MINOR-1)).0^
    ```
