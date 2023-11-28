@@ -568,15 +568,17 @@ final class XdsClientImpl extends XdsClient
       if (xdsChannel != null) {
         xdsChannel.onFanOut(1);
       }
+      T savedData = data;
+      boolean savedAbsent = absent;
       watchers.get(watcher).execute(() -> {
         try {
           if (errorDescription != null) {
             watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
             return;
           }
-          if (data != null) {
+          if (savedData != null) {
             notifyWatcher(watcher, data);
-          } else if (absent) {
+          } else if (savedAbsent) {
             watcher.onResourceDoesNotExist(resource);
           }
         } finally {
@@ -587,9 +589,9 @@ final class XdsClientImpl extends XdsClient
 
     private void callbackFlowControl() {
       if (xdsChannel != null) {
-        SettableFuture<Void> cb = xdsChannel.createFlowControlCallBack();
+        Runnable cb = xdsChannel.getFlowControlCallback();
         if (cb != null) {
-          cb.set(null);
+          cb.run();
         }
       }
     }

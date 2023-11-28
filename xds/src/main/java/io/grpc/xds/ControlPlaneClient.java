@@ -23,7 +23,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
@@ -290,9 +289,9 @@ final class ControlPlaneClient {
     }
   }
 
-  SettableFuture<Void> createFlowControlCallBack() {
+  Runnable getFlowControlCallback() {
     if (adsStream != null) {
-      return adsStream.createFlowControlCb();
+      return adsStream.getFlowControlCallback();
     }
     return null;
   }
@@ -329,10 +328,8 @@ final class ControlPlaneClient {
       }
     }
 
-    SettableFuture<Void> callback() {
-      SettableFuture<Void> callback = SettableFuture.create();
-      callback.addListener(callbackRunnable, syncContext);
-      return callback;
+    Runnable getCallbackRunnable() {
+      return callbackRunnable;
     }
   }
 
@@ -359,7 +356,7 @@ final class ControlPlaneClient {
      * For xDS stream flow control. Sending each watcher notification increment the counter
      * {@link #onFanOut(int)}.
      * Processing completion on each watcher decrement the counter via the callback
-     * {@link #createFlowControlCb}. When all the watchers subscribed to the resources in the
+     * {@link #getFlowControlCallback}. When all the watchers subscribed to the resources in the
      * response have been notified {@link #onFanOutDone} and counter reaches zero, ads stream is
      * ready to receive the next message.
      */
@@ -367,7 +364,7 @@ final class ControlPlaneClient {
 
     abstract void onResourceFanOut(int count);
 
-    abstract SettableFuture<Void> createFlowControlCb();
+    abstract Runnable getFlowControlCallback();
 
     /**
      * Sends a discovery request with the given {@code versionInfo}, {@code nonce} and
@@ -568,8 +565,8 @@ final class ControlPlaneClient {
     }
 
     @Override
-    SettableFuture<Void> createFlowControlCb() {
-      return flowControlCounter.callback();
+    Runnable getFlowControlCallback() {
+      return flowControlCounter.getCallbackRunnable();
     }
 
     @Override
