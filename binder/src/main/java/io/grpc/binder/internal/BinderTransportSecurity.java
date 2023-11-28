@@ -31,7 +31,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.ObjectPool;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -56,12 +55,11 @@ public final class BinderTransportSecurity {
    * Install a security policy on an about-to-be created server.
    *
    * @param serverBuilder The ServerBuilder being used to create the server.
+   * @param executor The executor in which the authorization result will be handled.
    */
   @Internal
-  public static void installAuthInterceptor(
-      ServerBuilder<?> serverBuilder,
-      ObjectPool<? extends Executor> executorPool) {
-    serverBuilder.intercept(new ServerAuthInterceptor(executorPool));
+  public static void installAuthInterceptor(ServerBuilder<?> serverBuilder, Executor executor) {
+    serverBuilder.intercept(new ServerAuthInterceptor(executor));
   }
 
   /**
@@ -88,10 +86,10 @@ public final class BinderTransportSecurity {
    */
   private static final class ServerAuthInterceptor implements ServerInterceptor {
 
-    private final ObjectPool<? extends Executor> executorPool;
+    private final Executor executor;
 
-    ServerAuthInterceptor(ObjectPool<? extends Executor> executorPool) {
-      this.executorPool = executorPool;
+    ServerAuthInterceptor(Executor executor) {
+      this.executor = executor;
     }
 
     /**
@@ -134,22 +132,17 @@ public final class BinderTransportSecurity {
       }
 
       PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
-      Executor executor = executorPool.getObject();
       Futures.addCallback(
           authStatusFuture,
           new FutureCallback<Status>() {
             @Override
             public void onSuccess(Status authStatus) {
-              try {
-                if (!authStatus.isOk()) {
-                  call.close(authStatus, new Metadata());
-                  return;
-                }
-
-                listener.startCall(call, headers, next);
-              } finally {
-                executorPool.returnObject(executor);
+              if (!authStatus.isOk()) {
+                call.close(authStatus, new Metadata());
+                return;
               }
+
+              listener.startCall(call, headers, next);
             }
 
             @Override
@@ -157,7 +150,6 @@ public final class BinderTransportSecurity {
               call.close(
                   Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
                   new Metadata());
-              executorPool.returnObject(executor);
             }
           }, executor);
       return listener;

@@ -71,7 +71,8 @@ public final class BinderTransportTest extends AbstractTransportTest {
         executorServicePool,
         streamTracerFactories,
         BinderInternal.createPolicyChecker(SecurityPolicies.serverInternalOnly()),
-        InboundParcelablePolicy.DEFAULT);
+        InboundParcelablePolicy.DEFAULT,
+        /* closeableExecutor=*/ null);
 
     HostServices.configureService(addr,
         HostServices.serviceParamsBuilder()
