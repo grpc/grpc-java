@@ -32,8 +32,8 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
-import io.grpc.internal.PickFirstLoadBalancerProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -60,7 +60,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   // Set to true if currently in the process of handling resolved addresses.
   protected boolean resolvingAddresses;
 
-  protected final LoadBalancerProvider pickFirstLbProvider = new PickFirstLoadBalancerProvider();
+  // Finds the HealthCheckingPickFirstLoadBalancerProvider, which has high priority than the normal
+  // pickFirstLoadBalancerProvider
+  protected final LoadBalancerProvider pickFirstLbProvider =
+      LoadBalancerRegistry.getDefaultRegistry().getProvider("pick_first");
 
   protected ConnectivityState currentConnectivityState;
 
