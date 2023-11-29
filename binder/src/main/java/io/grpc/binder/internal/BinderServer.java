@@ -62,7 +62,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private final LeakSafeOneWayBinder hostServiceBinder;
   private final BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker;
   private final InboundParcelablePolicy inboundParcelablePolicy;
-  @Nullable private final Closeable closeableExecutor;
+  private final BinderTransportSecurity.ShutdownListener shutdownListener;
 
   @GuardedBy("this")
   private ServerListener listener;
@@ -74,8 +74,8 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private boolean shutdown;
 
   /**
-   * @param closeableExecutor if non-null, represents an Executor from an {@link ObjectPool} that
-   *                          should be returned once the server shuts down.
+   * @param shutdownListener represents resources that should be cleaned up once the server shuts
+   *                         down.
    */
   public BinderServer(
       AndroidComponentAddress listenAddress,
@@ -83,14 +83,14 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker,
       InboundParcelablePolicy inboundParcelablePolicy,
-      @Nullable Closeable closeableExecutor) {
+      BinderTransportSecurity.ShutdownListener shutdownListener) {
     this.listenAddress = listenAddress;
     this.executorServicePool = executorServicePool;
     this.streamTracerFactories =
         ImmutableList.copyOf(checkNotNull(streamTracerFactories, "streamTracerFactories"));
     this.serverPolicyChecker = checkNotNull(serverPolicyChecker, "serverPolicyChecker");
     this.inboundParcelablePolicy = inboundParcelablePolicy;
-    this.closeableExecutor = closeableExecutor;
+    this.shutdownListener = shutdownListener;
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -134,14 +134,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       hostServiceBinder.detach();
       listener.serverShutdown();
       executorService = executorServicePool.returnObject(executorService);
-      try {
-        if (closeableExecutor != null) {
-          closeableExecutor.close();
-        }
-      } catch (IOException e) {
-        // Impossible. This should be just a call to "ObjectPool.return()".
-        throw new AssertionError(e);
-      }
+      shutdownListener.onShutdown();
     }
   }
 

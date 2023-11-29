@@ -77,7 +77,7 @@ public final class BinderServerBuilder
   private ServerSecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private boolean isBuilt;
-  @Nullable private Closeable closeableExecutor = null;
+  @Nullable private BinderTransportSecurity.ShutdownListener shutdownListener = null;
 
   private BinderServerBuilder(
       AndroidComponentAddress listenAddress,
@@ -92,7 +92,8 @@ public final class BinderServerBuilder
           streamTracerFactories,
           BinderInternal.createPolicyChecker(securityPolicy),
           inboundParcelablePolicy,
-          closeableExecutor);
+          // 'shutdownListener' should have been set by build()
+          checkNotNull(shutdownListener));
       BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;
     });
@@ -181,7 +182,7 @@ public final class BinderServerBuilder
     ObjectPool<? extends Executor> executorPool = serverImplBuilder.getExecutorPool();
     Executor executor = executorPool.getObject();
     BinderTransportSecurity.installAuthInterceptor(this, executor);
-    closeableExecutor = () -> executorPool.returnObject(executor);
+    shutdownListener = () -> executorPool.returnObject(executor);
     return super.build();
   }
 }

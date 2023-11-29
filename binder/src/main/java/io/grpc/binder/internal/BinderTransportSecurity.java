@@ -96,24 +96,33 @@ public final class BinderTransportSecurity {
      * @param authStatusFuture a Future that is known to be complete, i.e.
      *                         {@link ListenableFuture#isDone()} returns true.
      */
-    private <ReqT, RespT> ServerCall.Listener<ReqT> newServerCallListenerForDoneAuthResult(
+    private <ReqT, RespT> ServerCall.Listener<ReqT> newServerCallListenerForPendingAuthResult(
         ListenableFuture<Status> authStatusFuture,
         ServerCall<ReqT, RespT> call,
         Metadata headers,
         ServerCallHandler<ReqT, RespT> next) {
-      Status authStatus;
-      try {
-        authStatus = Futures.getDone(authStatusFuture);
-      } catch (ExecutionException e) {
-        authStatus = Status.INTERNAL.withCause(e);
-      }
+      PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
+      Futures.addCallback(
+              authStatusFuture,
+              new FutureCallback<Status>() {
+                @Override
+                public void onSuccess(Status authStatus) {
+                  if (!authStatus.isOk()) {
+                    call.close(authStatus, new Metadata());
+                    return;
+                  }
 
-      if (authStatus.isOk()) {
-        return next.startCall(call, headers);
-      }
-      call.close(authStatus, new Metadata());
-      return new ServerCall.Listener<ReqT>() {
-      };
+                  listener.startCall(call, headers, next);
+                }
+
+                @Override
+                public void onFailure(Throwable t) {
+                  call.close(
+                          Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
+                          new Metadata());
+                }
+              }, executor);
+      return listener;
     }
 
     @Override
@@ -126,33 +135,24 @@ public final class BinderTransportSecurity {
 
       // Most SecurityPolicy will have synchronous implementations that provide an
       // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
-      // and asynchronous code.
-      if (authStatusFuture.isDone()) {
-        return newServerCallListenerForDoneAuthResult(authStatusFuture, call, headers, next);
+      // and asynchronous code if the authorization result is already present.
+      if (!authStatusFuture.isDone()) {
+        return newServerCallListenerForPendingAuthResult(authStatusFuture, call, headers, next);
       }
 
-      PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
-      Futures.addCallback(
-          authStatusFuture,
-          new FutureCallback<Status>() {
-            @Override
-            public void onSuccess(Status authStatus) {
-              if (!authStatus.isOk()) {
-                call.close(authStatus, new Metadata());
-                return;
-              }
+      Status authStatus;
+      try {
+        authStatus = Futures.getDone(authStatusFuture);
+      } catch (ExecutionException e) {
+        authStatus = Status.INTERNAL.withCause(e);
+      }
 
-              listener.startCall(call, headers, next);
-            }
-
-            @Override
-            public void onFailure(Throwable t) {
-              call.close(
-                  Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
-                  new Metadata());
-            }
-          }, executor);
-      return listener;
+      if (authStatus.isOk()) {
+        return next.startCall(call, headers);
+      } else {
+        call.close(authStatus, new Metadata());
+        return new ServerCall.Listener<ReqT>() {};
+      }
     }
   }
 
@@ -223,5 +223,13 @@ public final class BinderTransportSecurity {
      *    failure to perform the authorization check, not that the access is denied.
      */
     ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName);
+  }
+
+  /**
+   * A listener invoked when the {@link io.grpc.binder.internal.BinderServer} shuts down, allowing
+   * resources to be potentially cleaned up.
+   */
+  public interface ShutdownListener {
+    void onShutdown();
   }
 }
