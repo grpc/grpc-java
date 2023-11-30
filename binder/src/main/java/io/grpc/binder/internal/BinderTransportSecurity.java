@@ -92,15 +92,42 @@ public final class BinderTransportSecurity {
       this.executor = executor;
     }
 
-    /**
-     * @param authStatusFuture a Future that is known to be complete, i.e.
-     *                         {@link ListenableFuture#isDone()} returns true.
-     */
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      ListenableFuture<Status> authStatusFuture =
+          call.getAttributes()
+              .get(TRANSPORT_AUTHORIZATION_STATE)
+              .checkAuthorization(call.getMethodDescriptor());
+
+      // Most SecurityPolicy will have synchronous implementations that provide an
+      // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
+      // and asynchronous code if the authorization result is already present.
+      if (!authStatusFuture.isDone()) {
+        return newServerCallListenerForPendingAuthResult(authStatusFuture, call, headers, next);
+      }
+
+      Status authStatus;
+      try {
+        authStatus = Futures.getDone(authStatusFuture);
+      } catch (ExecutionException e) {
+        // Failed futures are treated as an internal error rather than a security rejection.
+        authStatus = Status.INTERNAL.withCause(e);
+      }
+
+      if (authStatus.isOk()) {
+        return next.startCall(call, headers);
+      } else {
+        call.close(authStatus, new Metadata());
+        return new ServerCall.Listener<ReqT>() {};
+      }
+    }
+
     private <ReqT, RespT> ServerCall.Listener<ReqT> newServerCallListenerForPendingAuthResult(
-        ListenableFuture<Status> authStatusFuture,
-        ServerCall<ReqT, RespT> call,
-        Metadata headers,
-        ServerCallHandler<ReqT, RespT> next) {
+            ListenableFuture<Status> authStatusFuture,
+            ServerCall<ReqT, RespT> call,
+            Metadata headers,
+            ServerCallHandler<ReqT, RespT> next) {
       PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
       Futures.addCallback(
               authStatusFuture,
@@ -123,36 +150,6 @@ public final class BinderTransportSecurity {
                 }
               }, executor);
       return listener;
-    }
-
-    @Override
-    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      ListenableFuture<Status> authStatusFuture =
-          call.getAttributes()
-              .get(TRANSPORT_AUTHORIZATION_STATE)
-              .checkAuthorization(call.getMethodDescriptor());
-
-      // Most SecurityPolicy will have synchronous implementations that provide an
-      // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
-      // and asynchronous code if the authorization result is already present.
-      if (!authStatusFuture.isDone()) {
-        return newServerCallListenerForPendingAuthResult(authStatusFuture, call, headers, next);
-      }
-
-      Status authStatus;
-      try {
-        authStatus = Futures.getDone(authStatusFuture);
-      } catch (ExecutionException e) {
-        authStatus = Status.INTERNAL.withCause(e);
-      }
-
-      if (authStatus.isOk()) {
-        return next.startCall(call, headers);
-      } else {
-        call.close(authStatus, new Metadata());
-        return new ServerCall.Listener<ReqT>() {};
-      }
     }
   }
 
@@ -230,6 +227,6 @@ public final class BinderTransportSecurity {
    * resources to be potentially cleaned up.
    */
   public interface ShutdownListener {
-    void onShutdown();
+    void onServerShutdown();
   }
 }
