@@ -1287,7 +1287,8 @@ public abstract class LoadBalancer {
      */
     public final EquivalentAddressGroup getAddresses() {
       List<EquivalentAddressGroup> groups = getAllAddresses();
-      Preconditions.checkState(groups.size() == 1, "%s does not have exactly one group", groups);
+      Preconditions.checkState(groups != null && groups.size() == 1,
+          "%s does not have exactly one group", groups);
       return groups.get(0);
     }
 
