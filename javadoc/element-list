@@ -4,6 +4,7 @@ io.grpc.binarylog.v1
 io.grpc.channelz.v1
 io.grpc.grpclb
 io.grpc.health.v1
+io.grpc.inprocess
 io.grpc.lb.v1
 io.grpc.netty
 io.grpc.okhttp
