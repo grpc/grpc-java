@@ -27,10 +27,10 @@ import io.grpc.LoadBalancer;
 
 /**
  * Utility functions used by health producer systems to build health notification chain, via
- * {@link LoadBalancer.CreateSubchannelArgs}.
+ * {@link io.grpc.LoadBalancer.CreateSubchannelArgs}.
  * The leaf health consumer is pick first. Each health producer uses this helper.
  * The health producers should make state listener a pass-through and manipulate the
- * {@link LoadBalancer.CreateSubchannelArgs} for health notifications.
+ * {@link io.grpc.LoadBalancer.CreateSubchannelArgs} for health notifications.
  * The root health producer in the chain will fan out the subchannel state change to both
  * state listener and health listener.
  */
@@ -38,8 +38,9 @@ import io.grpc.LoadBalancer;
 public class HealthProducerUtil {
 
   /**
-   * A new {@link LoadBalancer.Helper} that detects health listener parent and fans out the
+   * A new {@link io.grpc.LoadBalancer.Helper} that detects health listener parent and fans out the
    * subchannel state change to both state listener and health listener.
+   *
    * <p>Example usage:
    * <pre>{@code
    * class HealthProducerLB {

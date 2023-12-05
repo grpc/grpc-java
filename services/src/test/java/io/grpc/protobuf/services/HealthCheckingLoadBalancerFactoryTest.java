@@ -496,7 +496,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     SubchannelStateListener mockHealthListener = mockHealthListeners[0];
-    FakeSubchannel subchannel = unwrap(createSubchannel(0, Attributes.EMPTY, maybeGetMockListener()));
+    FakeSubchannel subchannel = unwrap(createSubchannel(0, Attributes.EMPTY,
+        maybeGetMockListener()));
     assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     SubchannelStateListener mockListener = mockStateListeners[0];
     InOrder inOrder = inOrder(mockListener, mockHealthListener, backoffPolicyProvider,
