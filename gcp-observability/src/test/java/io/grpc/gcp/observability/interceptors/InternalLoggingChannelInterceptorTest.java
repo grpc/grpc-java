@@ -58,7 +58,6 @@ import io.opencensus.trace.SpanId;
 import io.opencensus.trace.TraceId;
 import io.opencensus.trace.TraceOptions;
 import io.opencensus.trace.Tracestate;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
@@ -104,7 +103,8 @@ public class InternalLoggingChannelInterceptorTest {
   private AtomicReference<Object> actualRequest;
   private SettableFuture<Void> halfCloseCalled;
   private SettableFuture<Void> cancelCalled;
-  private SocketAddress peer;
+  @SuppressWarnings("AddressSelection") // It will only be one address
+  private SocketAddress peer = new InetSocketAddress("127.0.0.1", 1234);
   private LogHelper mockLogHelper;
   private ConfigFilterHelper mockFilterHelper;
   private FilterParams filterParams;
@@ -119,7 +119,6 @@ public class InternalLoggingChannelInterceptorTest {
     actualRequest = new AtomicReference<>();
     halfCloseCalled = SettableFuture.create();
     cancelCalled = SettableFuture.create();
-    peer = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 1234);
     filterParams = FilterParams.create(true, 0, 0);
   }
 

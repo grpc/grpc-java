@@ -139,6 +139,7 @@ public class NettyChannelBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid host or port");
 
+    @SuppressWarnings("AddressSelection") // We actually expect zero addresses!
     Object unused =
         NettyChannelBuilder.forAddress(new InetSocketAddress("invalid_authority", 1234));
   }

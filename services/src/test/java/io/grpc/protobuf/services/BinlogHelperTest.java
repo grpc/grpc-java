@@ -92,6 +92,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 
 /** Tests for {@link BinlogHelper}. */
+@SuppressWarnings("AddressSelection") // It will only be one address
 @RunWith(JUnit4.class)
 public final class BinlogHelperTest {
   private static final Charset US_ASCII = Charset.forName("US-ASCII");
