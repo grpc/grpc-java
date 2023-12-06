@@ -32,7 +32,7 @@ android {
 }
 
 protobuf {
-    protoc { artifact = 'com.google.protobuf:protoc:3.24.0' }
+    protoc { artifact = 'com.google.protobuf:protoc:3.25.1' }
     plugins {
         grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.61.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
@@ -60,6 +60,6 @@ dependencies {
     implementation 'org.apache.tomcat:annotations-api:6.0.53'
 
     testImplementation 'junit:junit:4.13.2'
-    testImplementation 'com.google.truth:truth:1.0.1'
+    testImplementation 'com.google.truth:truth:1.1.5'
     testImplementation 'io.grpc:grpc-testing:1.61.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 }

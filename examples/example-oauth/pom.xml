@@ -14,8 +14,8 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <grpc.version>1.61.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protobuf.version>3.24.0</protobuf.version>
-    <protoc.version>3.24.0</protoc.version>
+    <protobuf.version>3.25.1</protobuf.version>
+    <protoc.version>3.25.1</protoc.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
@@ -82,7 +82,7 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
-      <version>3.4.0</version>
+      <version>4.4.0</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
