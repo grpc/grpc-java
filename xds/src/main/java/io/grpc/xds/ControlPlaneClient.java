@@ -53,7 +53,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
@@ -277,62 +276,6 @@ final class ControlPlaneClient {
     return resourceStore.getSubscribedResourceTypesWithTypeUrl().get(typeUrl);
   }
 
-  void onFanOutDone() {
-    if (adsStream != null) {
-      adsStream.onFanOutDone();
-    }
-  }
-
-  void onFanOut(int count) {
-    if (adsStream != null) {
-      adsStream.onResourceFanOut(count);
-    }
-  }
-
-  Runnable getFlowControlCallback() {
-    if (adsStream != null) {
-      return adsStream.getFlowControlCallback();
-    }
-    return null;
-  }
-
-  /**
-   * For xds client flow control.
-   * For each xds response, increment counter when sending out one notification for a watcher with a
-   * callback.
-   * Mark waitComplete when all the watchers are notified (add integer MIN_VALUE). Listener on each
-   * watcher that calls back upon finish and decrement the counter. When all the watchers finish
-   * update, reset the counter and request the next response message.
-   */
-  private final class FlowControlCounter {
-    private final AtomicInteger pendingWatcherCounter = new AtomicInteger(0);
-    private final Runnable callbackRunnable = new Runnable() {
-      @Override
-      public void run() {
-        if (pendingWatcherCounter.decrementAndGet() == Integer.MIN_VALUE) {
-          pendingWatcherCounter.getAndSet(0);
-          flowControlRequest(1);
-        }
-      }
-    };
-
-    void onFanOut(int newEventsCount) {
-      pendingWatcherCounter.getAndAdd(newEventsCount);
-    }
-
-    void onFanOutDone() {
-      if (pendingWatcherCounter.get() >= 0
-          && pendingWatcherCounter.addAndGet(Integer.MIN_VALUE) == Integer.MIN_VALUE) {
-        pendingWatcherCounter.getAndSet(0);
-        flowControlRequest(1);
-      }
-    }
-
-    Runnable getCallbackRunnable() {
-      return callbackRunnable;
-    }
-  }
-
   private abstract class AbstractAdsStream {
     private boolean responseReceived;
     private boolean closed;
@@ -351,20 +294,6 @@ final class ControlPlaneClient {
     abstract boolean isReady();
 
     abstract void request(int count);
-
-    /**
-     * For xDS stream flow control. Sending each watcher notification increment the counter
-     * {@link #onFanOut(int)}.
-     * Processing completion on each watcher decrement the counter via the callback
-     * {@link #getFlowControlCallback}. When all the watchers subscribed to the resources in the
-     * response have been notified {@link #onFanOutDone} and counter reaches zero, ads stream is
-     * ready to receive the next message.
-     */
-    abstract void onFanOutDone();
-
-    abstract void onResourceFanOut(int count);
-
-    abstract Runnable getFlowControlCallback();
 
     /**
      * Sends a discovery request with the given {@code versionInfo}, {@code nonce} and
@@ -451,7 +380,6 @@ final class ControlPlaneClient {
 
   private final class AdsStreamV3 extends AbstractAdsStream {
     private ClientCallStreamObserver<DiscoveryRequest> requestWriter;
-    private final FlowControlCounter flowControlCounter = new FlowControlCounter();
 
     @Override
     public boolean isReady() {
@@ -552,21 +480,6 @@ final class ControlPlaneClient {
     @Override
     void request(int count) {
       requestWriter.request(count);
-    }
-
-    @Override
-    void onFanOutDone() {
-      flowControlCounter.onFanOutDone();
-    }
-
-    @Override
-    void onResourceFanOut(int count) {
-      flowControlCounter.onFanOut(count);
-    }
-
-    @Override
-    Runnable getFlowControlCallback() {
-      return flowControlCounter.getCallbackRunnable();
     }
 
     @Override
