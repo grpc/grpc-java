@@ -116,6 +116,10 @@ public abstract class LoadBalancer {
   public static final Attributes.Key<Map<String, ?>> ATTR_HEALTH_CHECKING_CONFIG =
       Attributes.Key.create("internal:health-checking-config");
 
+  @Internal
+  public static final Attributes.Key<Boolean> IS_PETIOLE_POLICY =
+      Attributes.Key.create("io.grpc.IS_PETIOLE_POLICY");
+
   /**
    * A picker that always returns an erring pick.
    *

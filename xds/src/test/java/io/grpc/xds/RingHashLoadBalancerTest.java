@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.util.MultiChildLoadBalancer.IS_PETIOLE_POLICY;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.DO_NOT_RESET_HELPER;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.DO_NOT_VERIFY;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.RESET_SUBCHANNEL_MOCKS;
@@ -929,6 +930,8 @@ public class RingHashLoadBalancerTest {
     // Activate them all to create the child LB and subchannel
     for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
       ((RingHashChildLbState)childLbState).activate();
+      assertThat(childLbState.getResolvedAddresses().getAttributes().get(IS_PETIOLE_POLICY))
+          .isTrue();
     }
 
     if (doVerifies) {
