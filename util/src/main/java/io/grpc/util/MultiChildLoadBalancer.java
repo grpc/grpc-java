@@ -27,6 +27,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Internal;
@@ -63,6 +64,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   protected final LoadBalancerProvider pickFirstLbProvider = new PickFirstLoadBalancerProvider();
 
   protected ConnectivityState currentConnectivityState;
+
+  public static final Attributes.Key<Boolean> IS_PETIOLE_POLICY =
+      Attributes.Key.create("io.grpc.util.IS_PETIOLE_POLICY");
 
   protected MultiChildLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -198,6 +202,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
     return resolvedAddresses.toBuilder()
         .setAddresses(Collections.singletonList(eagToUse))
+        .setAttributes(Attributes.newBuilder().set(IS_PETIOLE_POLICY, true).build())
         .setLoadBalancingPolicyConfig(childConfig)
         .build();
   }
@@ -507,7 +512,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
      * <p>The ChildLbState updates happen during updateBalancingState.  Otherwise, it is doing
      * simple forwarding.
      */
-    protected ResolvedAddresses getResolvedAddresses() {
+    @VisibleForTesting
+    public ResolvedAddresses getResolvedAddresses() {
       return resolvedAddresses;
     }
 
