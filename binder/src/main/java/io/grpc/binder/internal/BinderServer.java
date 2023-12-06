@@ -60,6 +60,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private final LeakSafeOneWayBinder hostServiceBinder;
   private final BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker;
   private final InboundParcelablePolicy inboundParcelablePolicy;
+  private final BinderTransportSecurity.ShutdownListener transportSecurityShutdownListener;
 
   @GuardedBy("this")
   private ServerListener listener;
@@ -70,18 +71,24 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   @GuardedBy("this")
   private boolean shutdown;
 
+  /**
+   * @param transportSecurityShutdownListener represents resources that should be cleaned up once
+   *                                          the server shuts down.
+   */
   public BinderServer(
       AndroidComponentAddress listenAddress,
       ObjectPool<ScheduledExecutorService> executorServicePool,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker,
-      InboundParcelablePolicy inboundParcelablePolicy) {
+      InboundParcelablePolicy inboundParcelablePolicy,
+      BinderTransportSecurity.ShutdownListener transportSecurityShutdownListener) {
     this.listenAddress = listenAddress;
     this.executorServicePool = executorServicePool;
     this.streamTracerFactories =
         ImmutableList.copyOf(checkNotNull(streamTracerFactories, "streamTracerFactories"));
     this.serverPolicyChecker = checkNotNull(serverPolicyChecker, "serverPolicyChecker");
     this.inboundParcelablePolicy = inboundParcelablePolicy;
+    this.transportSecurityShutdownListener = transportSecurityShutdownListener;
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -125,6 +132,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       hostServiceBinder.detach();
       listener.serverShutdown();
       executorService = executorServicePool.returnObject(executorService);
+      transportSecurityShutdownListener.onServerShutdown();
     }
   }
 

@@ -33,8 +33,13 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
+
+import java.io.Closeable;
 import java.io.File;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+
+import javax.annotation.Nullable;
 
 /**
  * Builder for a server that services requests from an Android Service.
@@ -72,6 +77,7 @@ public final class BinderServerBuilder
   private ServerSecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private boolean isBuilt;
+  @Nullable private BinderTransportSecurity.ShutdownListener shutdownListener = null;
 
   private BinderServerBuilder(
       AndroidComponentAddress listenAddress,
@@ -85,7 +91,9 @@ public final class BinderServerBuilder
           schedulerPool,
           streamTracerFactories,
           BinderInternal.createPolicyChecker(securityPolicy),
-          inboundParcelablePolicy);
+          inboundParcelablePolicy,
+          // 'shutdownListener' should have been set by build()
+          checkNotNull(shutdownListener));
       BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;
     });
@@ -171,7 +179,10 @@ public final class BinderServerBuilder
     checkState(!isBuilt, "BinderServerBuilder can only be used to build one server instance.");
     isBuilt = true;
     // We install the security interceptor last, so it's closest to the transport.
-    BinderTransportSecurity.installAuthInterceptor(this);
+    ObjectPool<? extends Executor> executorPool = serverImplBuilder.getExecutorPool();
+    Executor executor = executorPool.getObject();
+    BinderTransportSecurity.installAuthInterceptor(this, executor);
+    shutdownListener = () -> executorPool.returnObject(executor);
     return super.build();
   }
 }
