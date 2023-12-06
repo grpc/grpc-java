@@ -65,8 +65,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   protected ConnectivityState currentConnectivityState;
 
-  public static final Attributes.Key<Boolean> IS_PETIOLE_POLICY =
-      Attributes.Key.create("io.grpc.util.IS_PETIOLE_POLICY");
 
   protected MultiChildLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
