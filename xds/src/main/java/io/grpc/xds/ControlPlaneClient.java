@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
@@ -88,6 +89,7 @@ final class ControlPlaneClient {
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
   private ScheduledHandle rpcRetryTimer;
+  private final AtomicInteger pendingPub = new AtomicInteger();
 
   /** An entity that manages ADS RPCs over a single channel. */
   // TODO: rename to XdsChannel
@@ -130,6 +132,10 @@ final class ControlPlaneClient {
     if (adsStream != null) {
       adsStream.request(count);
     }
+  }
+
+  AtomicInteger flowControlWindow() {
+    return pendingPub;
   }
 
   void shutdown() {
