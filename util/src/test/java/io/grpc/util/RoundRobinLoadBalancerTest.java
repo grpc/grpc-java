@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.util.MultiChildLoadBalancer.IS_PETIOLE_POLICY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
@@ -197,6 +198,10 @@ public class RoundRobinLoadBalancerTest {
     verify(oldSubchannel, times(1)).requestConnection();
 
     assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(2);
+    for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
+      assertThat(childLbState.getResolvedAddresses().getAttributes().get(IS_PETIOLE_POLICY))
+          .isTrue();
+    }
     assertThat(loadBalancer.getChildLbStateEag(removedEag).getCurrentPicker().pickSubchannel(null)
         .getSubchannel()).isEqualTo(removedSubchannel);
     assertThat(loadBalancer.getChildLbStateEag(oldEag1).getCurrentPicker().pickSubchannel(null)

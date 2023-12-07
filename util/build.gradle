@@ -52,3 +52,6 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/util/OutlierDetectionLoadBalancer*'
     exclude 'io/grpc/util/RoundRobinLoadBalancer*'
 }
+
+components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
+components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }

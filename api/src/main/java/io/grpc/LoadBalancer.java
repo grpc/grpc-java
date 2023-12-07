@@ -126,6 +126,9 @@ public abstract class LoadBalancer {
       HAS_HEALTH_PRODUCER_LISTENER_KEY =
       Attributes.Key.create("internal:has-health-check-producer-listener");
 
+  public static final Attributes.Key<Boolean> IS_PETIOLE_POLICY =
+      Attributes.Key.create("io.grpc.IS_PETIOLE_POLICY");
+
   /**
    * A picker that always returns an erring pick.
    *
