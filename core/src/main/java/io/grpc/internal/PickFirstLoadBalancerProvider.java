@@ -36,7 +36,7 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
 
   static boolean enableNewPickFirst =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST"))
-          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST"));
+          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST"));
 
   @Override
   public boolean isAvailable() {

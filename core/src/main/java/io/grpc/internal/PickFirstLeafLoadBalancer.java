@@ -216,7 +216,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
         break;
       case READY:
-        shutdownRemaining(subchannel);
+        shutdownRemaining(subchannelData);
         addressIndex.seekTo(getAddress(subchannel));
         rawConnectivityState = READY;
         updateHealthCheckedState(subchannelData);
@@ -246,18 +246,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (subchannelData.state != READY) {
       return;
     }
-    SubchannelPicker picker = new Picker(PickResult.withNoResult());
     if (subchannelData.getHealthState() == READY) {
-      picker = new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel));
+      updateBalancingState(READY,
+          new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel)));
     } else if (subchannelData.getHealthState() == TRANSIENT_FAILURE) {
-      picker = new Picker(PickResult.withError(
-          subchannelData.healthListener.healthStateInfo.getStatus()));
+      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(
+          subchannelData.healthListener.healthStateInfo.getStatus())));
+    } else if (concludedState != TRANSIENT_FAILURE) {
+      updateBalancingState(subchannelData.getHealthState(),
+          new Picker(PickResult.withNoResult()));
     }
-    ConnectivityState nextConcludedState = subchannelData.getHealthState();
-    if (concludedState == TRANSIENT_FAILURE && subchannelData.getHealthState() != READY) {
-      nextConcludedState = TRANSIENT_FAILURE;
-    }
-    updateBalancingState(nextConcludedState, picker);
   }
 
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
@@ -281,18 +279,15 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   * Shuts down remaining subchannels. Called when a subchannel becomes ready, which means
   * that all other subchannels must be shutdown.
   */
-  private void shutdownRemaining(Subchannel activeSubchannel) {
-    SubchannelData activeSubchannelData = null;
+  private void shutdownRemaining(SubchannelData activeSubchannelData) {
     for (SubchannelData subchannelData : subchannels.values()) {
-      if (!subchannelData.getSubchannel().equals(activeSubchannel)) {
+      if (!subchannelData.getSubchannel().equals(activeSubchannelData.subchannel)) {
         subchannelData.getSubchannel().shutdown();
-      } else {
-        activeSubchannelData = subchannelData;
       }
     }
     subchannels.clear();
     activeSubchannelData.updateState(READY);
-    subchannels.put(getAddress(activeSubchannel), activeSubchannelData);
+    subchannels.put(getAddress(activeSubchannelData.subchannel), activeSubchannelData);
   }
 
   /**
@@ -366,7 +361,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   @VisibleForTesting
-  ConnectivityState getConnectivityState() {
+  ConnectivityState getConcludedConnectivityState() {
     return this.concludedState;
   }
 

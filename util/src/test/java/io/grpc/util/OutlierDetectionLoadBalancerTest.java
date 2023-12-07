@@ -182,6 +182,7 @@ public class OutlierDetectionLoadBalancerTest {
       servers.add(eag);
       Subchannel sc = mock(Subchannel.class);
       subchannels.put(Arrays.asList(eag), sc);
+      when(sc.getInternalSubchannel()).thenReturn(sc);
       if (hasHealthConsumer) {
         healthListeners.put(eag, mock(SubchannelStateListener.class));
       }
@@ -1284,10 +1285,7 @@ public class OutlierDetectionLoadBalancerTest {
       ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
           .newClientStreamTracer(null, null);
 
-      Subchannel subchannel = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
-      if (subchannel instanceof HealthProducerUtil.HealthProducerSubchannel) {
-        subchannel = ((HealthProducerUtil.HealthProducerSubchannel) subchannel).delegate();
-      }
+      Subchannel subchannel = (Subchannel) pickResult.getSubchannel().getInternalSubchannel();
 
       int maxCalls =
           maxCallsMap != null && maxCallsMap.containsKey(subchannel)

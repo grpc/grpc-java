@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Internal;
@@ -49,7 +50,7 @@ public class HealthProducerUtil {
    *     this.helper = new MyHelper(HealthCheckUtil.HealthCheckHelper(helper));
    *   }
    *   class MyHelper implements LoadBalancer.Helper {
-   *     public void CreateSubchannel(CreateSubchannelArgs args) {
+   *     public void createSubchannel(CreateSubchannelArgs args) {
    *       SubchannelStateListener originalListener =
    *         args.getAttributes(HEALTH_CHECK_CONSUMER_LISTENER);
    *       if (hcListener != null) {
@@ -75,9 +76,8 @@ public class HealthProducerUtil {
       LoadBalancer.SubchannelStateListener healthConsumerListener =
           args.getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
       LoadBalancer.Subchannel delegateSubchannel = super.createSubchannel(args);
-      boolean alreadyParent = (delegateSubchannel.getAttributes() == null
-          || delegateSubchannel.getAttributes().get(HAS_HEALTH_PRODUCER_LISTENER_KEY) == null)
-          && healthConsumerListener != null;
+      boolean alreadyParent = healthConsumerListener != null
+          && delegateSubchannel.getAttributes().get(HAS_HEALTH_PRODUCER_LISTENER_KEY) == null;
       if (!alreadyParent) {
         return delegateSubchannel;
       }
@@ -94,14 +94,15 @@ public class HealthProducerUtil {
    * The parent subchannel in the health check producer LB chain. It duplicates subchannel state to
    * both the state listener and health listener.
    */
-  public static final class HealthProducerSubchannel extends ForwardingSubchannel {
+  @VisibleForTesting
+  static final class HealthProducerSubchannel extends ForwardingSubchannel {
     private final LoadBalancer.Subchannel delegate;
     private final LoadBalancer.SubchannelStateListener healthListener;
 
     HealthProducerSubchannel(LoadBalancer.Subchannel delegate,
                              LoadBalancer.SubchannelStateListener healthListener) {
       this.delegate = checkNotNull(delegate, "delegate");
-      this.healthListener = healthListener;
+      this.healthListener = checkNotNull(healthListener, "healthListener");
     }
 
     @Override

@@ -69,7 +69,6 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.protobuf.services.HealthCheckingLoadBalancerFactory.SubchannelImpl;
 import io.grpc.stub.StreamObserver;
-import io.grpc.util.HealthProducerUtil;
 import java.net.SocketAddress;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
@@ -1300,6 +1299,11 @@ public class HealthCheckingLoadBalancerFactoryTest {
     }
 
     @Override
+    public Object getInternalSubchannel() {
+      return this;
+    }
+
+    @Override
     public void start(SubchannelStateListener listener) {
       checkState(this.listener == null);
       this.listener = listener;
@@ -1431,10 +1435,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
   private FakeSubchannel unwrap(Subchannel s) {
     Subchannel s1 = ((SubchannelImpl) s).delegate();
-    if (hasHealthConsumer) {
-      return (FakeSubchannel) ((HealthProducerUtil.HealthProducerSubchannel) s1).delegate();
-    } else {
-      return (FakeSubchannel) s1;
-    }
+    return (FakeSubchannel) s1.getInternalSubchannel();
   }
 }
