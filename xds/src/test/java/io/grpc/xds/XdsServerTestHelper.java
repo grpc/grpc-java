@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
@@ -40,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /**
@@ -183,7 +183,8 @@ public class XdsServerTestHelper {
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
                                                      String resourceName,
-                                                     ResourceWatcher<T> watcher) {
+                                                     ResourceWatcher<T> watcher,
+                                                     Executor syncContext) {
       switch (resourceType.typeName()) {
         case "LDS":
           assertThat(ldsWatcher).isNull();
@@ -197,15 +198,6 @@ public class XdsServerTestHelper {
           break;
         default:
       }
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                     String resourceName,
-                                                     ResourceWatcher<T> watcher,
-                                                     SynchronizationContext syncContext) {
-      watchXdsResource(resourceType, resourceName, watcher);
     }
 
     @Override

@@ -65,6 +65,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -789,19 +790,10 @@ public class CdsLoadBalancer2Test {
     @Override
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                          ResourceWatcher<T> watcher) {
+                          ResourceWatcher<T> watcher, Executor syncContext) {
       assertThat(type.typeName()).isEqualTo("CDS");
       watchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
           .add((ResourceWatcher<CdsUpdate>)watcher);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                     String resourceName,
-                                                     ResourceWatcher<T> watcher,
-                                                     SynchronizationContext syncContext) {
-      watchXdsResource(resourceType, resourceName, watcher);
     }
 
     @Override

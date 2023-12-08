@@ -24,9 +24,9 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
@@ -37,6 +37,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /**
@@ -307,13 +308,13 @@ abstract class XdsClient {
    */
   <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                                                    ResourceWatcher<T> watcher,
-                                                   SynchronizationContext syncContext) {
+                                                   Executor executor) {
     throw new UnsupportedOperationException();
   }
 
   <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                                                    ResourceWatcher<T> watcher) {
-    throw new UnsupportedOperationException();
+    watchXdsResource(type, resourceName, watcher, MoreExecutors.directExecutor());
   }
 
   /**

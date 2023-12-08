@@ -58,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -289,14 +290,8 @@ final class XdsClientImpl extends XdsClient
 
   @Override
   <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                                                   ResourceWatcher<T> watcher) {
-    watchXdsResource(type, resourceName, watcher, syncContext);
-  }
-
-  @Override
-  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                                                    ResourceWatcher<T> watcher,
-                                                   SynchronizationContext watcherSyncContext) {
+                                                   Executor watcherExecutor) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
@@ -315,7 +310,7 @@ final class XdsClientImpl extends XdsClient
             subscriber.xdsChannel.adjustResourceSubscription(type);
           }
         }
-        subscriber.addWatcher(watcher, watcherSyncContext);
+        subscriber.addWatcher(watcher, watcherExecutor);
       }
     });
   }
@@ -452,14 +447,19 @@ final class XdsClientImpl extends XdsClient
     long updateTime = timeProvider.currentTimeNanos();
     Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscribedResources =
         resourceSubscribers.getOrDefault(xdsResourceType, Collections.emptyMap());
-    if (subscribedResources.size() == 0) {
-      maybeCompletedHandleResourceUpdate(args.serverInfo);
-    } else {
-      serverChannelMap.get(args.serverInfo).flowControlWindow().set(subscribedResources.size());
+    AtomicInteger flowControlWindow = serverChannelMap.get(args.serverInfo).flowControlWindow();
+    if (flowControlWindow.get() != 0) {
+      logger.log(XdsLogLevel.WARNING, "Flow control window for server {0} before "
+              + "processing resource update is {1} (should be 0). There is a bug.",
+          args.serverInfo.target(), flowControlWindow.get());
     }
+    flowControlWindow.set(1);
     for (Map.Entry<String, ResourceSubscriber<?>> entry : subscribedResources.entrySet()) {
       String resourceName = entry.getKey();
       ResourceSubscriber<T> subscriber = (ResourceSubscriber<T>) entry.getValue();
+      if (!args.serverInfo.equals(subscriber.serverInfo)) {
+        continue;
+      }
       if (invalidResources.contains(resourceName)) {
         // The resource update is invalid. Capture the error without notifying the watchers.
         subscriber.onRejected(args.versionInfo, updateTime, errorDetail);
@@ -469,7 +469,6 @@ final class XdsClientImpl extends XdsClient
         // Happy path: the resource updated successfully. Notify the watchers of the update.
         subscriber.onData(parsedResources.get(resourceName), args.versionInfo, updateTime);
       } else if (!xdsResourceType.isFullStateOfTheWorld()) {
-        maybeCompletedHandleResourceUpdate(args.serverInfo);
         // Nothing else to do for incremental ADS resources.
       } else if (invalidResources.contains(resourceName)) {
         // Handle State of the World ADS: invalid resources.
@@ -477,18 +476,15 @@ final class XdsClientImpl extends XdsClient
         if (subscriber.data == null) {
           // No cached data. Notify the watchers of an invalid update.
           subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail), true);
-        } else {
-          maybeCompletedHandleResourceUpdate(args.serverInfo);
         }
-      } else if (subscriber.serverInfo.equals(args.serverInfo)) {
+      } else {
         // For State of the World services, notify watchers when their watched resource is missing
         // from the ADS update. Note that we can only do this if the resource update is coming from
         // the same xDS server that the ResourceSubscriber is subscribed to.
         subscriber.onAbsent();
-      } else {
-        maybeCompletedHandleResourceUpdate(args.serverInfo);
       }
     }
+    maybeCompletedHandleResourceUpdate(args.serverInfo);
   }
 
   private void maybeCompletedHandleResourceUpdate(ServerInfo serverInfo) {
@@ -506,7 +502,7 @@ final class XdsClientImpl extends XdsClient
     @Nullable private final ControlPlaneClient xdsChannel;
     private final XdsResourceType<T> type;
     private final String resource;
-    private final Map<ResourceWatcher<T>, SynchronizationContext> watchers = new HashMap<>();
+    private final Map<ResourceWatcher<T>, Executor> watchers = new HashMap<>();
     @Nullable private T data;
     private boolean absent;
     // Tracks whether the deletion has been ignored per bootstrap server feature.
@@ -566,18 +562,19 @@ final class XdsClientImpl extends XdsClient
       return bootstrapInfo.servers().get(0); // use first server
     }
 
-    void addWatcher(ResourceWatcher<T> watcher, SynchronizationContext watcherSyncContext) {
+    void addWatcher(ResourceWatcher<T> watcher, Executor watcherExecutor) {
       checkArgument(!watchers.containsKey(watcher), "watcher %s already registered", watcher);
-      watchers.put(watcher, watcherSyncContext);
+      watchers.put(watcher, watcherExecutor);
       T savedData = data;
       boolean savedAbsent = absent;
-      watchers.get(watcher).execute(() -> {
-        if (errorDescription != null) {
-          watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
+      String savedErrorDescription = errorDescription;
+      watcherExecutor.execute(() -> {
+        if (savedErrorDescription != null) {
+          watcher.onError(Status.INVALID_ARGUMENT.withDescription(savedErrorDescription));
           return;
         }
         if (savedData != null) {
-          notifyWatcher(watcher, data);
+          notifyWatcher(watcher, savedData);
         } else if (savedAbsent) {
           watcher.onResourceDoesNotExist(resource);
         }
@@ -651,92 +648,70 @@ final class XdsClientImpl extends XdsClient
     }
 
     void onData(ParsedResource<T> parsedResource, String version, long updateTime) {
-      boolean pendingProcess = false;
-      try {
-        if (respTimer != null && respTimer.isPending()) {
-          respTimer.cancel();
-          respTimer = null;
-        }
-        this.metadata = ResourceMetadata
-            .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
-        ResourceUpdate oldData = this.data;
-        this.data = parsedResource.getResourceUpdate();
-        absent = false;
-        if (resourceDeletionIgnored) {
-          logger.log(XdsLogLevel.FORCE_INFO, "xds server {0}: server returned new version "
-                  + "of resource for which we previously ignored a deletion: type {1} name {2}",
-              serverInfo != null ? serverInfo.target() : "unknown", type, resource);
-          resourceDeletionIgnored = false;
-        }
-        if (!Objects.equals(oldData, data)) {
-          AtomicInteger fanOutCount = new AtomicInteger(watchers.size());
-          if (fanOutCount.get() > 0) {
-            pendingProcess = true;
-          }
-          for (ResourceWatcher<T> watcher : watchers.keySet()) {
-            watchers.get(watcher).execute(() -> {
-              try {
-                notifyWatcher(watcher, data);
-              } finally {
-                if (fanOutCount.decrementAndGet() == 0) {
-                  maybeCompletedHandleResourceUpdate(serverInfo);
-                }
-              }
-            });
-          }
-        }
-      } finally {
-        if (!pendingProcess) {
-          maybeCompletedHandleResourceUpdate(serverInfo);
+      if (respTimer != null && respTimer.isPending()) {
+        respTimer.cancel();
+        respTimer = null;
+      }
+      this.metadata = ResourceMetadata
+          .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
+      ResourceUpdate oldData = this.data;
+      this.data = parsedResource.getResourceUpdate();
+      absent = false;
+      if (resourceDeletionIgnored) {
+        logger.log(XdsLogLevel.FORCE_INFO, "xds server {0}: server returned new version "
+                + "of resource for which we previously ignored a deletion: type {1} name {2}",
+            serverInfo != null ? serverInfo.target() : "unknown", type, resource);
+        resourceDeletionIgnored = false;
+      }
+      if (!Objects.equals(oldData, data)) {
+        for (ResourceWatcher<T> watcher : watchers.keySet()) {
+          assert xdsChannel != null;
+          xdsChannel.flowControlWindow().incrementAndGet();
+          watchers.get(watcher).execute(() -> {
+            try {
+              notifyWatcher(watcher, data);
+            } finally {
+              maybeCompletedHandleResourceUpdate(serverInfo);
+            }
+          });
         }
       }
     }
 
     void onAbsent() {
-      boolean pendingProcess = false;
-      try {
-        if (respTimer != null && respTimer.isPending()) {  // too early to conclude absence
-          return;
-        }
+      if (respTimer != null && respTimer.isPending()) {  // too early to conclude absence
+        return;
+      }
 
-        // Ignore deletion of State of the World resources when this feature is on,
-        // and the resource is reusable.
-        boolean ignoreResourceDeletionEnabled =
-            serverInfo != null && serverInfo.ignoreResourceDeletion();
-        if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
-          if (!resourceDeletionIgnored) {
-            logger.log(XdsLogLevel.FORCE_WARNING,
-                "xds server {0}: ignoring deletion for resource type {1} name {2}}",
-                serverInfo.target(), type, resource);
-            resourceDeletionIgnored = true;
-          }
-          return;
+      // Ignore deletion of State of the World resources when this feature is on,
+      // and the resource is reusable.
+      boolean ignoreResourceDeletionEnabled =
+          serverInfo != null && serverInfo.ignoreResourceDeletion();
+      if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
+        if (!resourceDeletionIgnored) {
+          logger.log(XdsLogLevel.FORCE_WARNING,
+              "xds server {0}: ignoring deletion for resource type {1} name {2}}",
+              serverInfo.target(), type, resource);
+          resourceDeletionIgnored = true;
         }
+        return;
+      }
 
-        logger.log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
-        if (!absent) {
-          data = null;
-          absent = true;
-          metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
-          AtomicInteger fanOutCount = new AtomicInteger(watchers.size());
-          if (fanOutCount.get() > 0) {
-            pendingProcess = true;
-          }
-          for (ResourceWatcher<T> watcher : watchers.keySet()) {
-            watchers.get(watcher).execute(() -> {
-              try {
-                watcher.onResourceDoesNotExist(resource);
-              } finally {
-                if (fanOutCount.decrementAndGet() == 0) {
-                  maybeCompletedHandleResourceUpdate(serverInfo);
-                }
-              }
-            });
-          }
-        }
-      } finally {
-        if (!pendingProcess) {
-          maybeCompletedHandleResourceUpdate(serverInfo);
+      logger.log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
+      if (!absent) {
+        data = null;
+        absent = true;
+        metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
+        for (ResourceWatcher<T> watcher : watchers.keySet()) {
+          assert xdsChannel != null;
+          xdsChannel.flowControlWindow().incrementAndGet();
+          watchers.get(watcher).execute(() -> {
+            try {
+              watcher.onResourceDoesNotExist(resource);
+            } finally {
+              maybeCompletedHandleResourceUpdate(serverInfo);
+            }
+          });
         }
       }
     }
@@ -754,16 +729,16 @@ final class XdsClientImpl extends XdsClient
           .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())
           .withCause(error.getCause());
 
-      AtomicInteger fanOutCount = new AtomicInteger(watchers.size());
-      if (fanOutCount.get() == 0 && doFlowControl) {
-        maybeCompletedHandleResourceUpdate(serverInfo);
-      }
       for (ResourceWatcher<T> watcher : watchers.keySet()) {
+        if (doFlowControl) {
+          assert xdsChannel != null;
+          xdsChannel.flowControlWindow().incrementAndGet();
+        }
         watchers.get(watcher).execute(() -> {
           try {
             watcher.onError(errorAugmented);
           } finally {
-            if (fanOutCount.decrementAndGet() == 0 && doFlowControl) {
+            if (doFlowControl) {
               maybeCompletedHandleResourceUpdate(serverInfo);
             }
           }

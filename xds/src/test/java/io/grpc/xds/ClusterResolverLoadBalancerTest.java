@@ -88,6 +88,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -1181,21 +1182,11 @@ public class ClusterResolverLoadBalancerTest {
   private static final class FakeXdsClient extends XdsClient {
     private final Map<String, ResourceWatcher<EdsUpdate>> watchers = new HashMap<>();
 
-
-    @Override
-    @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                          ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo("EDS");
-      assertThat(watchers).doesNotContainKey(resourceName);
-      watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);
-    }
-
     @Override
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                                                      ResourceWatcher<T> watcher,
-                                                     SynchronizationContext syncContext) {
+                                                     Executor syncContext) {
       assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);

@@ -96,6 +96,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -1915,8 +1916,9 @@ public class XdsNameResolverTest {
     @Override
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                    String resourceName,
-                                                    ResourceWatcher<T> watcher) {
+                                                     String resourceName,
+                                                     ResourceWatcher<T> watcher,
+                                                     Executor syncContext) {
 
       switch (resourceType.typeName()) {
         case "LDS":
@@ -1934,15 +1936,6 @@ public class XdsNameResolverTest {
           break;
         default:
       }
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                     String resourceName,
-                                                     ResourceWatcher<T> watcher,
-                                                     SynchronizationContext syncContext) {
-      watchXdsResource(resourceType, resourceName, watcher);
     }
 
     @Override
