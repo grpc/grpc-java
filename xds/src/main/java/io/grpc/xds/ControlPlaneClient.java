@@ -40,6 +40,7 @@ import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.XdsClient.ProcessingTracker;
 import io.grpc.xds.XdsClient.ResourceStore;
 import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
@@ -53,7 +54,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
@@ -89,7 +89,6 @@ final class ControlPlaneClient {
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
   private ScheduledHandle rpcRetryTimer;
-  private final AtomicInteger pendingPub = new AtomicInteger();
 
   /** An entity that manages ADS RPCs over a single channel. */
   // TODO: rename to XdsChannel
@@ -126,16 +125,6 @@ final class ControlPlaneClient {
   // Currently, only externally used for LrsClient.
   Channel channel() {
     return channel;
-  }
-
-  void flowControlRequest(int count) {
-    if (adsStream != null) {
-      adsStream.request(count);
-    }
-  }
-
-  AtomicInteger flowControlWindow() {
-    return pendingPub;
   }
 
   void shutdown() {
@@ -327,7 +316,10 @@ final class ControlPlaneClient {
       }
       responseReceived = true;
       respNonces.put(type, nonce);
-      xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce);
+      ProcessingTracker processingTracker = new ProcessingTracker(() -> request(1), syncContext);
+      xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce,
+          processingTracker);
+      processingTracker.onComplete();
     }
 
     final void handleRpcError(Throwable t) {

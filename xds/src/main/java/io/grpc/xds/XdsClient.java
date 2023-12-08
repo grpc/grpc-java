@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
@@ -361,11 +362,32 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
+  static final class ProcessingTracker {
+    private final AtomicInteger pendingTask = new AtomicInteger(1);
+    private final Executor executor;
+    private final Runnable completionListener;
+
+    ProcessingTracker(Runnable completionListener, Executor executor) {
+      this.executor = executor;
+      this.completionListener = completionListener;
+    }
+
+    void startTask() {
+      pendingTask.incrementAndGet();
+    }
+
+    void onComplete() {
+      if (pendingTask.decrementAndGet() == 0) {
+        executor.execute(completionListener);
+      }
+    }
+  }
+
   interface XdsResponseHandler {
     /** Called when a xds response is received. */
     void handleResourceResponse(
         XdsResourceType<?> resourceType, ServerInfo serverInfo, String versionInfo,
-        List<Any> resources, String nonce);
+        List<Any> resources, String nonce, ProcessingTracker processingTracker);
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.
