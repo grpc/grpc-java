@@ -45,7 +45,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
-public class HealthProducerUtilTest {
+public class HealthProducerHelperTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -70,10 +70,9 @@ public class HealthProducerUtilTest {
 
   @Test
   public void helper_parentProducer() {
-    LoadBalancer.Helper producerHelper = new HealthProducerUtil.HealthProducerHelper(
-        mockHelper);
-    HealthProducerUtil.HealthProducerSubchannel subchannel =
-        (HealthProducerUtil.HealthProducerSubchannel) producerHelper.createSubchannel(
+    LoadBalancer.Helper producerHelper = new HealthProducerHelper(mockHelper);
+    HealthProducerHelper.HealthProducerSubchannel subchannel =
+        (HealthProducerHelper.HealthProducerSubchannel) producerHelper.createSubchannel(
             LoadBalancer.CreateSubchannelArgs.newBuilder()
                 .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, healthConsumerListener)
                 .setAddresses(new EquivalentAddressGroup(
@@ -103,11 +102,11 @@ public class HealthProducerUtilTest {
   @Test
   public void helper_notParentProducer() {
     when(mockHelper.createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class))).thenReturn(
-        new HealthProducerUtil.HealthProducerSubchannel(
+        new HealthProducerHelper.HealthProducerSubchannel(
             mockSubchannel, mock(LoadBalancer.SubchannelStateListener.class)));
-    LoadBalancer.Helper producerHelper = new HealthProducerUtil.HealthProducerHelper(mockHelper);
-    HealthProducerUtil.HealthProducerSubchannel subchannel =
-        (HealthProducerUtil.HealthProducerSubchannel) producerHelper.createSubchannel(
+    LoadBalancer.Helper producerHelper = new HealthProducerHelper(mockHelper);
+    HealthProducerHelper.HealthProducerSubchannel subchannel =
+        (HealthProducerHelper.HealthProducerSubchannel) producerHelper.createSubchannel(
             LoadBalancer.CreateSubchannelArgs.newBuilder()
                 .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, healthConsumerListener)
                 .setAddresses(new EquivalentAddressGroup(

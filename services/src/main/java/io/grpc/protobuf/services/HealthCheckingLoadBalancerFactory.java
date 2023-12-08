@@ -53,7 +53,7 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
-import io.grpc.util.HealthProducerUtil;
+import io.grpc.util.HealthProducerHelper;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -102,8 +102,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
     final HashSet<HealthCheckState> hcStates = new HashSet<>();
 
     HelperImpl(Helper delegate) {
-      this.delegate = new HealthProducerUtil.HealthProducerHelper(
-          checkNotNull(delegate, "delegate"));
+      this.delegate = new HealthProducerHelper(checkNotNull(delegate, "delegate"));
       this.syncContext = checkNotNull(delegate.getSynchronizationContext(), "syncContext");
     }
 
