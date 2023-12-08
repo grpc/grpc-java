@@ -16,8 +16,8 @@ Many of the following commands expect release-specific variables to be set. Set
 them before continuing, and set them again when resuming.
 
 ```bash
-$ MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
-$ VERSION_FILES=(
+MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
+VERSION_FILES=(
   build.gradle
   core/src/main/java/io/grpc/internal/GrpcUtil.java
   examples/build.gradle
@@ -48,23 +48,23 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
    ``1.8.0-SNAPSHOT``).
 
    ```bash
-   $ git checkout -b bump-version master
+   git checkout -b bump-version master
    # Change version to next minor (and keep -SNAPSHOT)
-   $ sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$((MINOR+1)).0'\1/' \
+   sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$((MINOR+1)).0'\1/' \
      "${VERSION_FILES[@]}"
-   $ sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$((MINOR+1)).0/ \
+   sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$((MINOR+1)).0/ \
      compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
-   $ ./gradlew build
-   $ git commit -a -m "Start $MAJOR.$((MINOR+1)).0 development cycle"
+   ./gradlew build
+   git commit -a -m "Start $MAJOR.$((MINOR+1)).0 development cycle"
    ```
 3. Go through PR review and submit.
 4. Create the release branch starting just before your commit and push it to GitHub:
 
    ```bash
-   $ git fetch upstream
-   $ git checkout -b v$MAJOR.$MINOR.x \
+   git fetch upstream
+   git checkout -b v$MAJOR.$MINOR.x \
      $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
-   $ git push upstream v$MAJOR.$MINOR.x
+   git push upstream v$MAJOR.$MINOR.x
    ```
 5. Continue with Google-internal steps at go/grpc-java/releasing, but stop
    before `Auto releasing using kokoro`.
@@ -75,7 +75,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
 8. Begin compiling release notes. This produces a starting point:
 
    ```bash
-   $ echo "## gRPC Java $MAJOR.$MINOR.0 Release Notes" && echo && \
+   echo "## gRPC Java $MAJOR.$MINOR.0 Release Notes" && echo && \
      git shortlog --format='%s (%h)' "$(git merge-base upstream/v$MAJOR.$((MINOR-1)).x upstream/v$MAJOR.$MINOR.x)"..upstream/v$MAJOR.$MINOR.x | cat && \
      echo && echo && echo "Backported commits in previous release:" && \
      git log --oneline "$(git merge-base v$MAJOR.$((MINOR-1)).0 upstream/v$MAJOR.$MINOR.x)"..v$MAJOR.$((MINOR-1)).0^
@@ -98,47 +98,47 @@ Tagging the Release
    version was updated since the last release.
 
    ```bash
-   $ git checkout v$MAJOR.$MINOR.x
-   $ git pull upstream v$MAJOR.$MINOR.x
-   $ git checkout -b release-v$MAJOR.$MINOR.$PATCH
+   git checkout v$MAJOR.$MINOR.x
+   git pull upstream v$MAJOR.$MINOR.x
+   git checkout -b release-v$MAJOR.$MINOR.$PATCH
    
    # Bump documented gRPC versions.
    # Also update protoc version to match protobuf version in gradle/libs.versions.toml.
-   $ ${EDITOR:-nano -w} README.md
+   ${EDITOR:-nano -w} README.md
    
-   $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
+   git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 4. Change root build files to remove "-SNAPSHOT" for the next release version
    (e.g. `0.7.0`). Commit the result and make a tag:
 
    ```bash
    # Change version to remove -SNAPSHOT
-   $ sed -i 's/-SNAPSHOT\(.*CURRENT_GRPC_VERSION\)/\1/' "${VERSION_FILES[@]}"
-   $ sed -i s/-SNAPSHOT// compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
-   $ ./gradlew build
-   $ git commit -a -m "Bump version to $MAJOR.$MINOR.$PATCH"
-   $ git tag -a v$MAJOR.$MINOR.$PATCH -m "Version $MAJOR.$MINOR.$PATCH"
+   sed -i 's/-SNAPSHOT\(.*CURRENT_GRPC_VERSION\)/\1/' "${VERSION_FILES[@]}"
+   sed -i s/-SNAPSHOT// compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
+   ./gradlew build
+   git commit -a -m "Bump version to $MAJOR.$MINOR.$PATCH"
+   git tag -a v$MAJOR.$MINOR.$PATCH -m "Version $MAJOR.$MINOR.$PATCH"
    ```
 5. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
    Commit the result:
 
    ```bash
    # Change version to next patch and add -SNAPSHOT
-   $ sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT'\1/' \
+   sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT'\1/' \
      "${VERSION_FILES[@]}"
-   $ sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT/ \
+   sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT/ \
      compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
-   $ ./gradlew build
-   $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
+   ./gradlew build
+   git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```
 6. Go through PR review and push the release tag and updated release branch to
    GitHub (DO NOT click the merge button on the GitHub page):
 
    ```bash
-   $ git checkout v$MAJOR.$MINOR.x
-   $ git merge --ff-only release-v$MAJOR.$MINOR.$PATCH
-   $ git push upstream v$MAJOR.$MINOR.x
-   $ git push upstream v$MAJOR.$MINOR.$PATCH
+   git checkout v$MAJOR.$MINOR.x
+   git merge --ff-only release-v$MAJOR.$MINOR.$PATCH
+   git push upstream v$MAJOR.$MINOR.x
+   git push upstream v$MAJOR.$MINOR.$PATCH
    ```
 7. Close the release milestone.
 
@@ -210,9 +210,9 @@ Central](https://search.maven.org/search?q=g:io.grpc), cherry-pick the commit
 that updated the README into the master branch.
 
 ```bash
-$ git checkout -b bump-readme master
-$ git cherry-pick v$MAJOR.$MINOR.$PATCH^
-$ git push --set-upstream origin bump-readme
+git checkout -b bump-readme master
+git cherry-pick v$MAJOR.$MINOR.$PATCH^
+git push --set-upstream origin bump-readme
 ```
 
 Create a PR and go through the review process
