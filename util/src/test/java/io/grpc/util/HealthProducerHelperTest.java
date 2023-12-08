@@ -79,12 +79,12 @@ public class HealthProducerHelperTest {
                     Collections.singletonList(new InetSocketAddress(10))))
                 .build());
     verify(mockHelper).createSubchannel(createSubchannelArgCaptor.capture());
-
     assertThat(mockSubchannel).isSameInstanceAs(subchannel.delegate());
     assertThat(subchannel.getAttributes().get(HAS_HEALTH_PRODUCER_LISTENER_KEY))
         .isEqualTo(Boolean.TRUE);
     assertThat(createSubchannelArgCaptor.getValue().getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY))
         .isEqualTo(healthConsumerListener);
+
     LoadBalancer.SubchannelStateListener listener =
         mock(LoadBalancer.SubchannelStateListener.class);
     subchannel.start(listener);
@@ -122,7 +122,12 @@ public class HealthProducerHelperTest {
     ArgumentCaptor<LoadBalancer.SubchannelStateListener> listenerCaptor =
         ArgumentCaptor.forClass(LoadBalancer.SubchannelStateListener.class);
     verify(mockSubchannel).start(listenerCaptor.capture());
-    listenerCaptor.getValue().onSubchannelState(
+    LoadBalancer.SubchannelStateListener parentListener = listenerCaptor.getValue();
+    parentListener.onSubchannelState(
+        ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
+    verify(listener).onSubchannelState(
+        ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
+    parentListener.onSubchannelState(
         ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     verify(listener).onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     verifyNoInteractions(healthConsumerListener);
