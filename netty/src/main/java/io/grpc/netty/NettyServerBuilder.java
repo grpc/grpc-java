@@ -77,8 +77,6 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   static final long MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE = Long.MAX_VALUE;
   static final int MAX_RST_COUNT_DISABLED = 0;
 
-  private static final long MIN_KEEPALIVE_TIME_NANO = TimeUnit.MILLISECONDS.toNanos(1L);
-  private static final long MIN_KEEPALIVE_TIMEOUT_NANO = TimeUnit.MICROSECONDS.toNanos(499L);
   private static final long MIN_MAX_CONNECTION_IDLE_NANO = TimeUnit.SECONDS.toNanos(1L);
   private static final long MIN_MAX_CONNECTION_AGE_NANO = TimeUnit.SECONDS.toNanos(1L);
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
@@ -514,10 +512,6 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
       // Bump keepalive time to infinite. This disables keep alive.
       keepAliveTimeInNanos = SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
     }
-    if (keepAliveTimeInNanos < MIN_KEEPALIVE_TIME_NANO) {
-      // Bump keepalive time.
-      keepAliveTimeInNanos = MIN_KEEPALIVE_TIME_NANO;
-    }
     return this;
   }
 
@@ -535,10 +529,6 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
     keepAliveTimeoutInNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutInNanos =
         KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutInNanos);
-    if (keepAliveTimeoutInNanos < MIN_KEEPALIVE_TIMEOUT_NANO) {
-      // Bump keepalive timeout.
-      keepAliveTimeoutInNanos = MIN_KEEPALIVE_TIMEOUT_NANO;
-    }
     return this;
   }
 
