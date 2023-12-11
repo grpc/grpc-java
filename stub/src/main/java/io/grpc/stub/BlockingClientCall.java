@@ -21,7 +21,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.stub.ClientCalls.ThreadlessExecutor;
+import io.grpc.stub.ClientCalls.ThreadSafeThreadlessExecutor;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -47,12 +47,12 @@ public final class BlockingClientCall<ReqT, RespT> {
   private final BlockingQueue<RespT> buffer;
   private final ClientCall<ReqT, RespT> call;
 
-  private final ThreadlessExecutor executor;
+  private final ThreadSafeThreadlessExecutor executor;
 
   private boolean writeClosed;
   private Status closedStatus;
 
-  BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadlessExecutor executor) {
+  BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadSafeThreadlessExecutor executor) {
     this.call = call;
     this.executor = executor;
     buffer = new ArrayBlockingQueue<>(1);

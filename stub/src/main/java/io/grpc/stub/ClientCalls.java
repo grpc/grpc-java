@@ -265,7 +265,7 @@ public final class ClientCalls {
    */
   public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingBidiStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
-    ThreadlessExecutor executor = new ThreadlessExecutor();
+    ThreadSafeThreadlessExecutor executor = new ThreadSafeThreadlessExecutor();
     ClientCall<ReqT, RespT> call = channel.newCall(method,
         callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING)
             .withExecutor(executor));
@@ -482,7 +482,7 @@ public final class ClientCalls {
     public void request(int count) {
       if (!streamingResponse && count == 1) {
         // Initially ask for two responses from flow-control so that if a misbehaving server
-        // sends more than one responses, we can catch it and fail it in the listener.
+        // sends more than one response, we can catch it and fail it in the listener.
         call.request(2);
       } else {
         call.request(count);
@@ -705,7 +705,7 @@ public final class ClientCalls {
     public T next() {
       // Eagerly call request(1) so it can be processing the next message while we wait for the
       // current one, which reduces latency for the next message. With MigratingThreadDeframer and
-      // if the data has already been recieved, every other message can be delivered instantly. This
+      // if the data has already been received, every other message can be delivered instantly. This
       // can be run after hasNext(), but just would be slower.
       if (!(last instanceof StatusRuntimeException) && last != this) {
         call.request(1);
@@ -794,11 +794,85 @@ public final class ClientCalls {
 
     // Set to the calling thread while it's parked, SHUTDOWN on RPC completion
     private volatile Object waiter;
+
+    // Non private to avoid synthetic class
+    ThreadlessExecutor() {}
+
+    /**
+     * Waits until there is a Runnable, then executes it and all queued Runnables after it.
+     * Must only be called by one thread at a time.
+     */
+    public void waitAndDrain() throws InterruptedException {
+      throwIfInterrupted();
+      Runnable runnable = poll();
+      if (runnable == null) {
+        waiter = Thread.currentThread();
+        try {
+          while ((runnable = poll()) == null) {
+            LockSupport.park(this);
+            throwIfInterrupted();
+          }
+        } finally {
+          waiter = null;
+        }
+      }
+      do {
+        runQuietly(runnable);
+      } while ((runnable = poll()) != null);
+    }
+
+    /**
+     * Called after final call to {@link #waitAndDrain()}, from same thread.
+     */
+    public void shutdown() {
+      waiter = SHUTDOWN;
+      Runnable runnable;
+      while ((runnable = poll()) != null) {
+        runQuietly(runnable);
+      }
+    }
+
+    private static void runQuietly(Runnable runnable) {
+      try {
+        runnable.run();
+      } catch (Throwable t) {
+        log.log(Level.WARNING, "Runnable threw exception", t);
+      }
+    }
+
+    private static void throwIfInterrupted() throws InterruptedException {
+      if (Thread.interrupted()) {
+        throw new InterruptedException();
+      }
+    }
+
+    @Override
+    public void execute(Runnable runnable) {
+      add(runnable);
+      Object waiter = this.waiter;
+      if (waiter != SHUTDOWN) {
+        LockSupport.unpark((Thread) waiter); // no-op if null
+      } else if (remove(runnable) && rejectRunnableOnExecutor) {
+        throw new RejectedExecutionException();
+      }
+    }
+  }
+
+  @SuppressWarnings("serial")
+  static final class ThreadSafeThreadlessExecutor extends ConcurrentLinkedQueue<Runnable>
+      implements Executor {
+    private static final Logger log =
+        Logger.getLogger(ThreadSafeThreadlessExecutor.class.getName());
+
+    private static final Object SHUTDOWN = new Object(); // sentinel
+
+    // Set to the calling thread while it's parked, SHUTDOWN on RPC completion
+    private volatile Object waiter;
     private final Collection<Thread> waitingThreads = new ArrayList<>();
     private final List<ValidatingThread<?>> validatingThreadList = new ArrayList<>();
 
     // Non private to avoid synthetic class
-    ThreadlessExecutor() {}
+    ThreadSafeThreadlessExecutor() {}
 
     /**
      * Waits until there is a Runnable, then executes it and all queued Runnables after it.
@@ -883,7 +957,7 @@ public final class ClientCalls {
 
     /**
      * Executes all queued Runnables
-     * This and {@link #drain} must only be called by one thread at a time.
+     * <br>This must only be called by one thread at a time.
      */
     public void drain() throws InterruptedException {
       throwIfInterrupted();
