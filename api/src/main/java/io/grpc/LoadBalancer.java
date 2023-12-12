@@ -117,6 +117,15 @@ public abstract class LoadBalancer {
       Attributes.Key.create("internal:health-checking-config");
 
   @Internal
+  public static final LoadBalancer.CreateSubchannelArgs.Key<LoadBalancer.SubchannelStateListener>
+      HEALTH_CONSUMER_LISTENER_ARG_KEY =
+      LoadBalancer.CreateSubchannelArgs.Key.create("internal:health-check-consumer-listener");
+
+  @Internal
+  public static final Attributes.Key<Boolean>
+      HAS_HEALTH_PRODUCER_LISTENER_KEY =
+      Attributes.Key.create("internal:has-health-check-producer-listener");
+
   public static final Attributes.Key<Boolean> IS_PETIOLE_POLICY =
       Attributes.Key.create("io.grpc.IS_PETIOLE_POLICY");
 

@@ -199,7 +199,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private Helper delegate;
 
     ChildHelper(Helper delegate) {
-      this.delegate = delegate;
+      this.delegate = new HealthProducerHelper(delegate);
     }
 
     @Override
@@ -211,8 +211,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       // Subchannels are wrapped so that we can monitor call results and to trigger failures when
       // we decide to eject the subchannel.
-      OutlierDetectionSubchannel subchannel = new OutlierDetectionSubchannel(
-          delegate.createSubchannel(args));
+      OutlierDetectionSubchannel subchannel = new OutlierDetectionSubchannel(args, delegate);
 
       // If the subchannel is associated with a single address that is also already in the map
       // the subchannel will be added to the map and be included in outlier detection.
@@ -243,18 +242,35 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private AddressTracker addressTracker;
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
+
+    // In the new pick first: created at construction, delegates to health consumer listener;
+    // In th old pick first: created at subchannel.start(), delegates to subchannel state listener.
     private SubchannelStateListener subchannelStateListener;
     private final ChannelLogger logger;
 
-    OutlierDetectionSubchannel(Subchannel delegate) {
-      this.delegate = delegate;
+    OutlierDetectionSubchannel(CreateSubchannelArgs args, Helper helper) {
+      LoadBalancer.SubchannelStateListener healthConsumerListener =
+          args.getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
+      if (healthConsumerListener != null) {
+        this.subchannelStateListener = healthConsumerListener;
+        SubchannelStateListener upstreamListener =
+            new OutlierDetectionSubchannelStateListener(healthConsumerListener);
+        this.delegate = helper.createSubchannel(args.toBuilder()
+             .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, upstreamListener).build());
+      } else {
+        this.delegate = helper.createSubchannel(args);
+      }
       this.logger = delegate.getChannelLogger();
     }
 
     @Override
     public void start(SubchannelStateListener listener) {
-      subchannelStateListener = listener;
-      super.start(new OutlierDetectionSubchannelStateListener(listener));
+      if (subchannelStateListener != null) {
+        super.start(listener);
+      } else {
+        subchannelStateListener = listener;
+        super.start(new OutlierDetectionSubchannelStateListener(listener));
+      }
     }
 
     @Override

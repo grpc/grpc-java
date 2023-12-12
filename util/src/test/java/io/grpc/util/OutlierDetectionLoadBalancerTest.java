@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.ConnectivityState.READY;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -74,7 +75,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -86,8 +87,18 @@ import org.mockito.stubbing.Answer;
 /**
  * Unit tests for {@link OutlierDetectionLoadBalancer}.
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class OutlierDetectionLoadBalancerTest {
+  @Parameterized.Parameters(name = "{0}")
+  public static Iterable<Object[]> data() {
+    // Before and after dual stack
+    return Arrays.asList(new Object[][] {
+        {true}, {false}
+    });
+  }
+
+  @Parameterized.Parameter
+  public boolean hasHealthConsumer;
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
@@ -154,6 +165,9 @@ public class OutlierDetectionLoadBalancerTest {
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners
       = Maps.newLinkedHashMap();
 
+  private final Map<EquivalentAddressGroup, SubchannelStateListener> healthListeners =
+      Maps.newLinkedHashMap();
+
   private Subchannel subchannel1;
   private Subchannel subchannel2;
   private Subchannel subchannel3;
@@ -168,6 +182,10 @@ public class OutlierDetectionLoadBalancerTest {
       servers.add(eag);
       Subchannel sc = mock(Subchannel.class);
       subchannels.put(Arrays.asList(eag), sc);
+      when(sc.getInternalSubchannel()).thenReturn(sc);
+      if (hasHealthConsumer) {
+        healthListeners.put(eag, mock(SubchannelStateListener.class));
+      }
     }
 
     Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
@@ -388,15 +406,15 @@ public class OutlierDetectionLoadBalancerTest {
     // Make sure that we can pick the single READY subchannel.
     SubchannelPicker picker = pickerCaptor.getAllValues().get(2);
     PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate()).isEqualTo(
-        readySubchannel);
+    Subchannel s = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
+    assertThat(s).isEqualTo(readySubchannel);
   }
 
   /**
    * Any ClientStreamTracer.Factory set by the delegate picker should still get used.
    */
   @Test
-  public void delegatePickTracerFactoryPreserved() throws Exception {
+  public void delegatePickTracerFactoryPreserved() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
         .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
@@ -409,6 +427,10 @@ public class OutlierDetectionLoadBalancerTest {
 
     verify(mockHelper, times(2)).updateBalancingState(stateCaptor.capture(),
         pickerCaptor.capture());
+    if (hasHealthConsumer) {
+      SubchannelStateListener healthListener = healthListeners.get(servers.get(0));
+      verify(healthListener).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    }
 
     // Make sure that we can pick the single READY subchannel.
     SubchannelPicker picker = pickerCaptor.getAllValues().get(1);
@@ -1101,6 +1123,40 @@ public class OutlierDetectionLoadBalancerTest {
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
+    for (SubchannelStateListener healthListener : healthListeners.values()) {
+      verifyNoInteractions(healthListener);
+    }
+  }
+
+  @Test
+  public void successRateAndFailurePercentage_successRateOutlier_() { // with health listener
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10)
+                .setEnforcementPercentage(0).build()) // Configured, but not enforcing.
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
+    if (hasHealthConsumer) {
+      verify(healthListeners.get(servers.get(0))).onSubchannelState(eq(
+          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)
+      ));
+    }
   }
 
   /** Both algorithms configured, error percentage detects an outlier. */
@@ -1128,6 +1184,40 @@ public class OutlierDetectionLoadBalancerTest {
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
+    for (SubchannelStateListener healthListener : healthListeners.values()) {
+      verifyNoInteractions(healthListener);
+    }
+  }
+
+  @Test
+  public void successRateAndFailurePercentage_errorPercentageOutlier_() { // with health listener
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10)
+                .setEnforcementPercentage(0).build())
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build()) // Configured, but not enforcing.
+        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 6);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(servers.get(0).getAddresses().get(0)));
+    if (hasHealthConsumer) {
+      verify(healthListeners.get(servers.get(0))).onSubchannelState(eq(
+          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)
+      ));
+    }
   }
 
   @Test
@@ -1195,7 +1285,7 @@ public class OutlierDetectionLoadBalancerTest {
       ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
           .newClientStreamTracer(null, null);
 
-      Subchannel subchannel = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
+      Subchannel subchannel = (Subchannel) pickResult.getSubchannel().getInternalSubchannel();
 
       int maxCalls =
           maxCallsMap != null && maxCallsMap.containsKey(subchannel)
@@ -1238,8 +1328,13 @@ public class OutlierDetectionLoadBalancerTest {
     public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       subchannelList = new ArrayList<>();
       for (EquivalentAddressGroup eag: resolvedAddresses.getAddresses()) {
-        Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-            .setAddresses(eag).build());
+        CreateSubchannelArgs.Builder args = CreateSubchannelArgs.newBuilder().setAddresses(eag);
+        if (hasHealthConsumer) {
+          assertThat(healthListeners.get(eag)).isNotNull();
+          args.addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY,
+              healthListeners.get(eag));
+        }
+        Subchannel subchannel = helper.createSubchannel(args.build());
         subchannelList.add(subchannel);
         subchannel.start(mock(SubchannelStateListener.class));
         deliverSubchannelState(READY);
