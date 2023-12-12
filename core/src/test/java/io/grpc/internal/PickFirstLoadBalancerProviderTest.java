@@ -22,7 +22,6 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.util.HashMap;
 import java.util.Map;
-import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -30,14 +29,8 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class PickFirstLoadBalancerProviderTest {
 
-  @After
-  public void resetConfigFlag() {
-    PickFirstLoadBalancerProvider.enablePickFirstConfig = false;
-  }
-
   @Test
-  public void parseWithConfigEnabled() {
-    PickFirstLoadBalancerProvider.enablePickFirstConfig = true;
+  public void parseWithConfig() {
     Map<String, Object> rawConfig = new HashMap<>();
     rawConfig.put("shuffleAddressList", true);
     ConfigOrError parsedConfig = new PickFirstLoadBalancerProvider().parseLoadBalancingPolicyConfig(
@@ -45,17 +38,17 @@ public class PickFirstLoadBalancerProviderTest {
     PickFirstLoadBalancerConfig config = (PickFirstLoadBalancerConfig) parsedConfig.getConfig();
 
     assertThat(config.shuffleAddressList).isTrue();
+    assertThat(config.randomSeed).isNull();
   }
 
   @Test
-  public void parseWithConfigDisabled() {
-    PickFirstLoadBalancerProvider.enablePickFirstConfig = false;
+  public void parseWithoutConfig() {
     Map<String, Object> rawConfig = new HashMap<>();
-    rawConfig.put("shuffleAddressList", true);
     ConfigOrError parsedConfig = new PickFirstLoadBalancerProvider().parseLoadBalancingPolicyConfig(
         rawConfig);
-    String config = (String) parsedConfig.getConfig();
+    PickFirstLoadBalancerConfig config = (PickFirstLoadBalancerConfig) parsedConfig.getConfig();
 
-    assertThat(config).isEqualTo("no service config");
+    assertThat(config.shuffleAddressList).isNull();
+    assertThat(config.randomSeed).isNull();
   }
 }
