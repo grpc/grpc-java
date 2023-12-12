@@ -258,12 +258,6 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void fullStreamDecompression_enabled() {
-    assertEquals(builder, builder.enableFullStreamDecompression());
-    assertTrue(builder.fullStreamDecompression);
-  }
-
-  @Test
   public void decompressorRegistry_default() {
     assertNotNull(builder.decompressorRegistry);
   }
