@@ -45,6 +45,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -76,6 +78,7 @@ public final class BinderSecurityTest {
             MethodDescriptor.newBuilder(marshaller, marshaller)
                 .setFullMethodName(name)
                 .setType(MethodDescriptor.MethodType.UNARY)
+                .setSampledToLocalTracing(true)
                 .build();
         ServerCallHandler<Empty, Empty> callHandler =
             ServerCalls.asyncUnaryCall(
@@ -142,7 +145,7 @@ public final class BinderSecurityTest {
   private void assertCallFailure(MethodDescriptor<Empty, Empty> method, Status status) {
     try {
       ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, null);
-      fail();
+      fail("Expected call to " + method.getFullMethodName() + " to fail but it succeeded.");
     } catch (StatusRuntimeException sre) {
       assertThat(sre.getStatus().getCode()).isEqualTo(status.getCode());
     }
@@ -170,6 +173,50 @@ public final class BinderSecurityTest {
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
       assertCallFailure(method, Status.PERMISSION_DENIED);
     }
+  }
+
+  @Test
+  public void testFailedFuturesAreNotCachedPermanently() throws Exception {
+    AtomicReference<Boolean> firstAttempt = new AtomicReference<>(true);
+    createChannel(
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy("foo", new AsyncSecurityPolicy() {
+              @Override
+              ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                if (firstAttempt.getAndSet(false)) {
+                  return Futures.immediateFailedFuture(new IllegalStateException());
+                }
+                return Futures.immediateFuture(Status.OK);
+              }
+            })
+            .build(),
+        SecurityPolicies.internalOnly());
+    MethodDescriptor<Empty, Empty> method = methods.get("foo/method0");
+
+    assertCallFailure(method, Status.INTERNAL);
+    assertCallSuccess(method);
+  }
+
+  @Test
+  public void testCancelledFuturesAreNotCachedPermanently() throws Exception {
+    AtomicReference<Boolean> firstAttempt = new AtomicReference<>(true);
+    createChannel(
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy("foo", new AsyncSecurityPolicy() {
+              @Override
+              ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                if (firstAttempt.getAndSet(false)) {
+                  return Futures.immediateCancelledFuture();
+                }
+                return Futures.immediateFuture(Status.OK);
+              }
+            })
+            .build(),
+        SecurityPolicies.internalOnly());
+    MethodDescriptor<Empty, Empty> method = methods.get("foo/method0");
+
+    assertCallFailure(method, Status.INTERNAL);
+    assertCallSuccess(method);
   }
 
   @Test

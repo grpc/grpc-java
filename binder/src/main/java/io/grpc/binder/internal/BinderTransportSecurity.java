@@ -32,9 +32,12 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
+
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
@@ -103,7 +106,7 @@ public final class BinderTransportSecurity {
       // Most SecurityPolicy will have synchronous implementations that provide an
       // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
       // and asynchronous code if the authorization result is already present.
-      if (!authStatusFuture.isDone()) {
+      if (!authStatusFuture.isDone() || authStatusFuture.isCancelled()) {
         return newServerCallListenerForPendingAuthResult(authStatusFuture, call, headers, next);
       }
 
@@ -178,9 +181,12 @@ public final class BinderTransportSecurity {
       boolean useCache = method.isSampledToLocalTracing();
       if (useCache) {
         @Nullable ListenableFuture<Status> authorization = serviceAuthorization.get(serviceName);
-        if (authorization != null) {
+        if (authorization != null && !isFailedOrCancelled(authorization)) {
+          // Authorization check exists and is a pending or successful future (even if for a failed
+          // authorization).
           return authorization;
         }
+        serviceAuthorization.remove(serviceName);
       }
       // Under high load, this may trigger a large number of concurrent authorization checks that
       // perform essentially the same work and have the potential of exhausting the resources they
@@ -195,6 +201,18 @@ public final class BinderTransportSecurity {
         serviceAuthorization.putIfAbsent(serviceName, authorization);
       }
       return authorization;
+    }
+  }
+
+  private static <T> boolean isFailedOrCancelled(Future<T> doneFuture) {
+    if (!doneFuture.isDone()) {
+      return false;
+    }
+    try {
+      T unused = Futures.getDone(doneFuture);
+      return false;
+    } catch (ExecutionException | CancellationException e) {
+      return true;
     }
   }
 
