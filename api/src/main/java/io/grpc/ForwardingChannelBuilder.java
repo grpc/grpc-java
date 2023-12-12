@@ -129,12 +129,6 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
-  public T enableFullStreamDecompression() {
-    delegate().enableFullStreamDecompression();
-    return thisT();
-  }
-
-  @Override
   public T decompressorRegistry(DecompressorRegistry registry) {
     delegate().decompressorRegistry(registry);
     return thisT();

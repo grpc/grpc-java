@@ -88,7 +88,6 @@ public class TestServiceClient {
   private String defaultServiceAccount;
   private String serviceAccountKeyFile;
   private String oauthScope;
-  private boolean fullStreamDecompression;
   private int localHandshakerPort = -1;
   private Map<String, ?> serviceConfig = null;
   private int soakIterations = 10;
@@ -159,8 +158,6 @@ public class TestServiceClient {
         serviceAccountKeyFile = value;
       } else if ("oauth_scope".equals(key)) {
         oauthScope = value;
-      } else if ("full_stream_decompression".equals(key)) {
-        fullStreamDecompression = Boolean.parseBoolean(value);
       } else if ("local_handshaker_port".equals(key)) {
         localHandshakerPort = Integer.parseInt(value);
       } else if ("service_config_json".equals(key)) {
@@ -226,8 +223,6 @@ public class TestServiceClient {
           + "\n  --service_account_key_file  Path to service account json key file."
             + c.serviceAccountKeyFile
           + "\n  --oauth_scope               Scope for OAuth tokens. Default " + c.oauthScope
-          + "\n  --full_stream_decompression Enable full-stream decompression. Default "
-            + c.fullStreamDecompression
           + "\n --service_config_json=SERVICE_CONFIG_JSON"
           + "\n                              Disables service config lookups and sets the provided "
           + "\n                              string as the default service config."
@@ -638,9 +633,6 @@ public class TestServiceClient {
         if (serverHostOverride != null) {
           nettyBuilder.overrideAuthority(serverHostOverride);
         }
-        if (fullStreamDecompression) {
-          nettyBuilder.enableFullStreamDecompression();
-        }
         // Disable the default census stats interceptor, use testing interceptor instead.
         InternalNettyChannelBuilder.setStatsEnabled(nettyBuilder, false);
         if (serviceConfig != null) {
@@ -663,9 +655,6 @@ public class TestServiceClient {
         // Force the hostname to match the cert the server uses.
         okBuilder.overrideAuthority(
             GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
-      }
-      if (fullStreamDecompression) {
-        okBuilder.enableFullStreamDecompression();
       }
       // Disable the default census stats interceptor, use testing interceptor instead.
       InternalOkHttpChannelBuilder.setStatsEnabled(okBuilder, false);

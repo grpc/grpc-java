@@ -410,12 +410,6 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  public ManagedChannelImplBuilder enableFullStreamDecompression() {
-    this.fullStreamDecompression = true;
-    return this;
-  }
-
-  @Override
   public ManagedChannelImplBuilder decompressorRegistry(DecompressorRegistry registry) {
     if (registry != null) {
       this.decompressorRegistry = registry;
