@@ -23,11 +23,6 @@ dependencies {
     // Make okhttp dependencies compile only
     compileOnly libraries.okhttp
 
-    // Needed because com.google.guava:guava:32.0.1-android requires
-    // com.google.errorprone:error_prone_annotations version 2.18.0, while we are running newer.
-    // TODO(any release manager): remove when guava is updated
-    runtimeOnly libraries.errorprone.annotations
-
     // Tests depend on base class defined by core module.
     testImplementation testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api')),

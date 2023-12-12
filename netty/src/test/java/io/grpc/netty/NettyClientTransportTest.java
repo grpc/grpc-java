@@ -546,6 +546,7 @@ public class NettyClientTransportTest {
 
   @Test
   public void huffmanCodingShouldNotBePerformed() throws Exception {
+    @SuppressWarnings("InlineMeInliner") // Requires Java 11
     String longStringOfA = Strings.repeat("a", 128);
 
     negotiator = ProtocolNegotiators.serverPlaintext();

@@ -24,7 +24,7 @@ java {
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.61.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.24.0'
+def protobufVersion = '3.25.1'
 def protocVersion = protobufVersion
 
 dependencies {
@@ -40,7 +40,7 @@ dependencies {
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
     testImplementation "junit:junit:4.13.2"
-    testImplementation "org.mockito:mockito-core:3.4.0"
+    testImplementation "org.mockito:mockito-core:4.4.0"
 }
 
 protobuf {

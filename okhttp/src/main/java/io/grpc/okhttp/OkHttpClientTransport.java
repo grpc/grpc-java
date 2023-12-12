@@ -293,6 +293,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   /**
    * Create a transport connected to a fake peer for test.
    */
+  @SuppressWarnings("AddressSelection") // An IP address always returns one address
   @VisibleForTesting
   OkHttpClientTransport(
       OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
