@@ -24,7 +24,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.re2j:re2j:1.7",
     "com.google.truth:truth:1.1.5",
     "com.squareup.okhttp:okhttp:2.7.5",
-    "com.squareup.okio:okio:2.10.0",  # 3.0+ exposes jvm vs android to targets
+    "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
     "io.netty:netty-buffer:4.1.100.Final",
     "io.netty:netty-codec-http2:4.1.100.Final",
     "io.netty:netty-codec-http:4.1.100.Final",
