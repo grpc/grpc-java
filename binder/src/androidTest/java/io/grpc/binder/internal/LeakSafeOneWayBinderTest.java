@@ -16,6 +16,7 @@
 
 package io.grpc.binder.internal;
 
+import static android.os.IBinder.FLAG_ONEWAY;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.os.Parcel;
@@ -46,7 +47,7 @@ public final class LeakSafeOneWayBinderTest {
   @Test
   public void testTransaction() {
     Parcel p = Parcel.obtain();
-    assertThat(binder.onTransact(123, p, null, 0)).isTrue();
+    assertThat(binder.onTransact(123, p, null, FLAG_ONEWAY)).isTrue();
     assertThat(transactionsHandled).isEqualTo(1);
     assertThat(lastCode).isEqualTo(123);
     assertThat(lastParcel).isSameInstanceAs(p);
@@ -54,10 +55,20 @@ public final class LeakSafeOneWayBinderTest {
   }
 
   @Test
+  public void testDropsTwoWayTransactions() {
+    Parcel p = Parcel.obtain();
+    Parcel reply = Parcel.obtain();
+    assertThat(binder.onTransact(123, p, reply, 0)).isFalse();
+    assertThat(transactionsHandled).isEqualTo(0);
+    p.recycle();
+    reply.recycle();
+  }
+
+  @Test
   public void testDetach() {
     Parcel p = Parcel.obtain();
     binder.detach();
-    assertThat(binder.onTransact(456, p, null, 0)).isFalse();
+    assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isFalse();
 
     // The transaction shouldn't have been processed.
     assertThat(transactionsHandled).isEqualTo(0);
@@ -68,8 +79,8 @@ public final class LeakSafeOneWayBinderTest {
   @Test
   public void testMultipleTransactions() {
     Parcel p = Parcel.obtain();
-    assertThat(binder.onTransact(123, p, null, 0)).isTrue();
-    assertThat(binder.onTransact(456, p, null, 0)).isTrue();
+    assertThat(binder.onTransact(123, p, null, FLAG_ONEWAY)).isTrue();
+    assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isTrue();
     assertThat(transactionsHandled).isEqualTo(2);
     assertThat(lastCode).isEqualTo(456);
     assertThat(lastParcel).isSameInstanceAs(p);
