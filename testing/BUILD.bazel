@@ -21,16 +21,3 @@ java_library(
         "@junit_junit//jar",
     ],
 )
-
-java_library(
-    name = "internal",
-    srcs = glob([
-        "src/main/java/io/grpc/internal/*.java",
-    ]),
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "//api",
-        "//core:internal",
-        "@io_opencensus_opencensus_api//jar",
-    ],
-)
