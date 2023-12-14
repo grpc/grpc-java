@@ -46,7 +46,6 @@ dependencies {
             libraries.mockito.core
     testImplementation project(':grpc-testing')
     testImplementation libraries.guava.testlib
-    jmh project(':grpc-core')
 
     signature libraries.signature.java
     signature libraries.signature.android
