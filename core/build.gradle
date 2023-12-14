@@ -33,8 +33,7 @@ dependencies {
             libraries.truth,
             project(':grpc-testing')
     testImplementation testFixtures(project(':grpc-api')),
-            project(':grpc-testing'),
-            project(':grpc-grpclb')
+            project(':grpc-testing')
     testImplementation libraries.guava.testlib
 
     testRuntimeOnly project(':grpc-census')
