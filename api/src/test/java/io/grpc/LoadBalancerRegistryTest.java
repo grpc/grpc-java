@@ -19,7 +19,6 @@ package io.grpc;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
-import io.grpc.grpclb.GrpclbLoadBalancerProvider;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
 import java.util.List;
 import org.junit.Test;
@@ -41,7 +40,7 @@ public class LoadBalancerRegistryTest {
   @Test
   public void stockProviders() {
     LoadBalancerRegistry defaultRegistry = LoadBalancerRegistry.getDefaultRegistry();
-    assertThat(defaultRegistry.providers()).hasSize(4);
+    assertThat(defaultRegistry.providers()).hasSize(3);
 
     LoadBalancerProvider pickFirst = defaultRegistry.getProvider("pick_first");
     assertThat(pickFirst).isInstanceOf(PickFirstLoadBalancerProvider.class);
@@ -57,10 +56,6 @@ public class LoadBalancerRegistryTest {
     assertThat(outlierDetection.getClass().getName()).isEqualTo(
         "io.grpc.util.OutlierDetectionLoadBalancerProvider");
     assertThat(roundRobin.getPriority()).isEqualTo(5);
-
-    LoadBalancerProvider grpclb = defaultRegistry.getProvider("grpclb");
-    assertThat(grpclb).isInstanceOf(GrpclbLoadBalancerProvider.class);
-    assertThat(grpclb.getPriority()).isEqualTo(5);
   }
 
   @Test
