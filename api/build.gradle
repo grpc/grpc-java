@@ -47,7 +47,6 @@ dependencies {
     testImplementation project(':grpc-testing'),
             project(':grpc-grpclb')
     testImplementation libraries.guava.testlib
-    jmh project(':grpc-core')
 
     signature libraries.signature.java
     signature libraries.signature.android
