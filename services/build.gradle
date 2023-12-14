@@ -36,7 +36,8 @@ dependencies {
     compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),
             libraries.netty.transport.epoll, // for DomainSocketAddress
-            testFixtures(project(':grpc-core'))
+            testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api'))
     testCompileOnly libraries.javax.annotation
     signature libraries.signature.java
 }

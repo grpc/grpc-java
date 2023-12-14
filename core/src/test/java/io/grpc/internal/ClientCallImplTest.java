@@ -59,6 +59,7 @@ import io.grpc.InternalConfigSelector;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.NoopClientCall;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
