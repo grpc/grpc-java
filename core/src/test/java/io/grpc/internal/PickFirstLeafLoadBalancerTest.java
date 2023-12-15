@@ -22,9 +22,9 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.internal.PickFirstLeafLoadBalancer.CONNECTION_DELAY_INTERVAL_MS;
 import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
+import static io.grpc.internal.PickFirstLeafLoadBalancer.CONNECTION_DELAY_INTERVAL_MS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -375,7 +376,6 @@ public class PickFirstLeafLoadBalancerTest {
     // subchannel1 | READY     | CONNECTING
     // subchannel2 | IDLE      | IDLE
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(mockSubchannel2).shutdown();
     inOrder.verify(mockHelper, times(0)).updateBalancingState(any(), any());
 
     // subchannel  |  state    |   health
@@ -397,6 +397,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class))).thenReturn(mockSubchannel2);
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.INTERNAL));
+
     inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     SubchannelStateListener healthListener2 = createArgsCaptor.getValue()
         .getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
@@ -405,6 +406,9 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel2).requestConnection();
     //ignore health update on non-ready subchannel
     healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, atLeastOnce()).getSynchronizationContext();
+    verify(mockHelper, atLeastOnce()).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
 
     // subchannel  |  state    |   health
@@ -622,7 +626,7 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     assertFalse(loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
-    .setAddresses(Collections.emptyList()).setAttributes(affinity).build()).isOk());
+            .setAddresses(Collections.emptyList()).setAttributes(affinity).build()).isOk());
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
   }
 
@@ -798,12 +802,12 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Mark first subchannel ready, verify state change
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    // Successful connection shuts down other subchannel
+    inOrder.verify(mockSubchannel2).shutdown();
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
 
-    // Successful connection shuts down other subchannel
-    inOrder.verify(mockSubchannel2).shutdown();
 
     // Verify that picker returns correct subchannel
     assertEquals(PickResult.withSubchannel(mockSubchannel1), picker.pickSubchannel(mockArgs));
@@ -885,11 +889,11 @@ public class PickFirstLeafLoadBalancerTest {
     // Connection attempt to address 2 is successful
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
+    inOrder.verify(mockSubchannel1).shutdown();
 
     // Successful connection shuts down other subchannel
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     picker = pickerCaptor.getValue();
-    inOrder.verify(mockSubchannel1).shutdown();
 
     // Verify that picker still returns correct subchannel
     assertEquals(PickResult.withSubchannel(mockSubchannel2), picker.pickSubchannel(mockArgs));
@@ -928,7 +932,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Failing second connection attempt
     stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
-    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState()); // sticky transient failure
+    // sticky transient failure
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
 
     // Creating second set of endpoints/addresses
     List<EquivalentAddressGroup> newServers = Lists.newArrayList(servers.get(2), servers.get(3));
@@ -1180,6 +1185,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // subchannel 3 still attempts a connection even though we stay in transient failure
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
+    inOrder.verify(mockSubchannel3).getAttributes();
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
     inOrder.verify(mockSubchannel3).requestConnection();
 
@@ -1634,7 +1640,8 @@ public class PickFirstLeafLoadBalancerTest {
     stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
     inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState()); // sticky transient failure
+    //   sticky transient failure
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
 
     // Failing connection attempt to first address
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
