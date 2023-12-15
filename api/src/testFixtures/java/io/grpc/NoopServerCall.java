@@ -14,38 +14,42 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
-
-import io.grpc.ClientCall;
-import io.grpc.Metadata;
+package io.grpc;
 
 /**
- * {@link NoopClientCall} is a class that is designed for use in tests.  It is designed to be used
+ * {@link NoopServerCall} is a class that is designed for use in tests.  It is designed to be used
  * in places where a scriptable call is necessary.  By default, all methods are noops, and designed
  * to be overridden.
  */
-public class NoopClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+public class NoopServerCall<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   /**
-   * {@link NoopClientCall.NoopClientCallListener} is a class that is designed for use in tests.
+   * {@link NoopServerCall.NoopServerCallListener} is a class that is designed for use in tests.
    * It is designed to be used in places where a scriptable call listener is necessary.  By
    * default, all methods are noops, and designed to be overridden.
    */
-  public static class NoopClientCallListener<T> extends ClientCall.Listener<T> {
+  public static class NoopServerCallListener<T> extends ServerCall.Listener<T> {
   }
-
-  @Override
-  public void start(ClientCall.Listener<RespT> listener, Metadata headers) {}
 
   @Override
   public void request(int numMessages) {}
 
   @Override
-  public void cancel(String message, Throwable cause) {}
+  public void sendHeaders(Metadata headers) {}
 
   @Override
-  public void halfClose() {}
+  public void sendMessage(RespT message) {}
 
   @Override
-  public void sendMessage(ReqT message) {}
+  public void close(Status status, Metadata trailers) {}
+
+  @Override
+  public boolean isCancelled() {
+    return false;
+  }
+
+  @Override
+  public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+    return null;
+  }
 }
