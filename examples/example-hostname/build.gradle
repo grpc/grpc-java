@@ -35,6 +35,7 @@ dependencies {
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+    testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
 }
 
 protobuf {
