@@ -24,6 +24,7 @@ dependencies {
             project(':grpc-rls'),
             project(':grpc-services'),
             project(':grpc-testing'),
+            project(':grpc-protobuf-lite'),
             project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.hdrhistogram,
             libraries.truth,
@@ -49,6 +50,8 @@ dependencies {
             project(':grpc-rls')
     testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
+            project(':grpc-inprocess'),
+            project(':grpc-core'),
             libraries.mockito.core,
             libraries.okhttp
     alpnagent libraries.jetty.alpn.agent

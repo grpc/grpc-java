@@ -43,8 +43,9 @@ android {
 }
 
 dependencies {
-    api project(':grpc-core'),
+    api project(':grpc-api'),
             libraries.cronet.api
+    implementation project(':grpc-core')
     implementation libraries.guava
     testImplementation project(':grpc-testing')
 

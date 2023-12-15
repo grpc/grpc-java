@@ -14,8 +14,9 @@ tasks.named("jar").configure {
 }
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-api')
 
+    implementation project(':grpc-core')
     implementation libraries.guava
     testImplementation project(':grpc-testing'),
             testFixtures(project(':grpc-core'))

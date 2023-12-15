@@ -10,8 +10,9 @@ plugins {
 description = "gRPC: ALTS"
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-api')
     implementation project(':grpc-auth'),
+            project(':grpc-core'),
             project(':grpc-grpclb'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
@@ -27,6 +28,7 @@ dependencies {
 
     testImplementation project(':grpc-testing'),
             testFixtures(project(':grpc-core')),
+            project(':grpc-inprocess'),
             project(':grpc-testing-proto'),
             libraries.guava,
             libraries.junit,

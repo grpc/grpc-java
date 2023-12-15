@@ -23,10 +23,10 @@ tasks.named("jar").configure {
 }
 
 dependencies {
-    api project(':grpc-protobuf'),
-            project(':grpc-stub'),
-            project(':grpc-util')
+    api project(':grpc-stub')
     implementation project(':grpc-core'),
+            project(':grpc-protobuf'),
+            project(':grpc-util'),
             libraries.protobuf.java.util,
             libraries.guava.jre // JRE required by protobuf-java-util
 
@@ -35,6 +35,7 @@ dependencies {
             libraries.gson  // to fix checkUpperBoundDeps error here
     compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),
+            project(':grpc-inprocess'),
             libraries.netty.transport.epoll, // for DomainSocketAddress
             testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api'))

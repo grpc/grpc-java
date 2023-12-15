@@ -27,7 +27,7 @@ dependencies {
         exclude group: 'com.google.api', module: 'api-common'
     }
 
-    api (project(':grpc-protobuf-lite')) {
+    implementation (project(':grpc-protobuf-lite')) {
         exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     }
 

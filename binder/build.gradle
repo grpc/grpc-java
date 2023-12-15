@@ -35,8 +35,9 @@ repositories {
 }
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-api')
 
+    implementation project(':grpc-core')
     implementation libraries.androidx.annotation
     implementation libraries.androidx.core
     implementation libraries.androidx.lifecycle.common
@@ -51,6 +52,7 @@ dependencies {
     testImplementation libraries.guava.testlib
     testImplementation libraries.truth
     testImplementation project(':grpc-testing')
+    testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core'))
 
     androidTestAnnotationProcessor libraries.auto.value
