@@ -44,6 +44,7 @@ dependencies {
     testFixturesImplementation libraries.guava,
             libraries.junit,
             libraries.mockito.core
+    testImplementation project(':grpc-core')
     testImplementation project(':grpc-testing')
     testImplementation libraries.guava.testlib
 

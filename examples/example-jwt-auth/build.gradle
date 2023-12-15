@@ -38,6 +38,7 @@ dependencies {
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+    testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.mockito:mockito-core:4.4.0"
 }

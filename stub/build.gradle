@@ -19,6 +19,7 @@ dependencies {
         libraries.guava
     implementation libraries.errorprone.annotations
     testImplementation libraries.truth,
+            project(':grpc-inprocess'),
             project(':grpc-testing'),
             testFixtures(project(':grpc-api'))
     signature libraries.signature.java

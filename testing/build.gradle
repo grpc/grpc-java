@@ -9,10 +9,11 @@ plugins {
 description = "gRPC: Testing"
 
 dependencies {
-    api project(':grpc-inprocess'),
-            project(':grpc-util'),
+    api project(':grpc-util'),
             project(':grpc-stub'),
             libraries.junit
+    implementation project(':grpc-inprocess')
+    implementation project(':grpc-core')
     // Only io.grpc.internal.testing.StatsTestUtils depends on opencensus_api, for internal use.
     compileOnly libraries.opencensus.api
     runtimeOnly project(":grpc-api")   // Pull in newer version than census-api
