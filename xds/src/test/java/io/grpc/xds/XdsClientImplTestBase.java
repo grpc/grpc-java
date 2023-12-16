@@ -3768,30 +3768,28 @@ public abstract class XdsClientImplTestBase {
 
   private <T extends ResourceUpdate> DiscoveryRpcCall startResourceWatcher(
       XdsResourceType<T> type, String name, ResourceWatcher<T> watcher, Executor executor) {
+    xdsClient.watchXdsResource(type, name, watcher, executor);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    call.verifyRequest(type, Collections.singletonList(name), "", "", NODE);
+
     FakeClock.TaskFilter timeoutTaskFilter;
     switch (type.typeName()) {
       case "LDS":
         timeoutTaskFilter = LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher, executor);
         break;
       case "RDS":
         timeoutTaskFilter = RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher, executor);
         break;
       case "CDS":
         timeoutTaskFilter = CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher, executor);
         break;
       case "EDS":
         timeoutTaskFilter = EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher, executor);
         break;
       default:
         throw new AssertionError("should never be here");
     }
-
-    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
-    call.verifyRequest(type, Collections.singletonList(name), "", "", NODE);
     ScheduledTask timeoutTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
     assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
@@ -3801,35 +3799,7 @@ public abstract class XdsClientImplTestBase {
 
   private <T extends ResourceUpdate> DiscoveryRpcCall startResourceWatcher(
       XdsResourceType<T> type, String name, ResourceWatcher<T> watcher) {
-    FakeClock.TaskFilter timeoutTaskFilter;
-    switch (type.typeName()) {
-      case "LDS":
-        timeoutTaskFilter = LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher);
-        break;
-      case "RDS":
-        timeoutTaskFilter = RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher);
-        break;
-      case "CDS":
-        timeoutTaskFilter = CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher);
-        break;
-      case "EDS":
-        timeoutTaskFilter = EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher);
-        break;
-      default:
-        throw new AssertionError("should never be here");
-    }
-
-    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
-    call.verifyRequest(type, Collections.singletonList(name), "", "", NODE);
-    ScheduledTask timeoutTask =
-        Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
-    assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
-        .isEqualTo(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
-    return call;
+    return startResourceWatcher(type, name, watcher, MoreExecutors.directExecutor());
   }
 
   protected abstract static class DiscoveryRpcCall {
