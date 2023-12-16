@@ -38,9 +38,9 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
-import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.XdsClient.ProcessingTracker;
 import io.grpc.xds.XdsClient.ResourceStore;
 import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
@@ -288,6 +288,8 @@ final class ControlPlaneClient {
 
     abstract boolean isReady();
 
+    abstract void request(int count);
+
     /**
      * Sends a discovery request with the given {@code versionInfo}, {@code nonce} and
      * {@code errorDetail}. Used for reacting to a specific discovery response. For
@@ -314,7 +316,10 @@ final class ControlPlaneClient {
       }
       responseReceived = true;
       respNonces.put(type, nonce);
-      xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce);
+      ProcessingTracker processingTracker = new ProcessingTracker(() -> request(1), syncContext);
+      xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce,
+          processingTracker);
+      processingTracker.onComplete();
     }
 
     final void handleRpcError(Throwable t) {
@@ -372,7 +377,7 @@ final class ControlPlaneClient {
   }
 
   private final class AdsStreamV3 extends AbstractAdsStream {
-    private StreamObserver<DiscoveryRequest> requestWriter;
+    private ClientCallStreamObserver<DiscoveryRequest> requestWriter;
 
     @Override
     public boolean isReady() {
@@ -380,6 +385,7 @@ final class ControlPlaneClient {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     void start() {
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
           AggregatedDiscoveryServiceGrpc.newStub(channel);
@@ -389,6 +395,7 @@ final class ControlPlaneClient {
 
         @Override
         public void beforeStart(ClientCallStreamObserver<DiscoveryRequest> requestStream) {
+          requestStream.disableAutoRequestWithInitial(1);
           requestStream.setOnReadyHandler(ControlPlaneClient.this::readyHandler);
         }
 
@@ -437,7 +444,8 @@ final class ControlPlaneClient {
         }
       }
 
-      requestWriter = stub.streamAggregatedResources(new AdsClientResponseObserver());
+      requestWriter = (ClientCallStreamObserver) stub.streamAggregatedResources(
+          new AdsClientResponseObserver());
     }
 
     @Override
@@ -465,6 +473,11 @@ final class ControlPlaneClient {
       if (logger.isLoggable(XdsLogLevel.DEBUG)) {
         logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", MessagePrinter.print(request));
       }
+    }
+
+    @Override
+    void request(int count) {
+      requestWriter.request(count);
     }
 
     @Override

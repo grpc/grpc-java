@@ -98,6 +98,7 @@ import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -246,6 +247,11 @@ public class XdsClientImplV3Test extends XdsClientImplTestBase {
     @Override
     protected void sendCompleted() {
       responseObserver.onCompleted();
+    }
+
+    @Override
+    protected boolean isReady() {
+      return ((ServerCallStreamObserver)responseObserver).isReady();
     }
   }
 

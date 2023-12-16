@@ -47,6 +47,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -152,7 +153,8 @@ public class XdsServerWrapperTest {
     verify(xdsClient, timeout(5000)).watchXdsResource(
         eq(listenerResource),
         eq("grpc/server?udpa.resource.listening_address=[::FFFF:129.144.52.38]:80"),
-        any(ResourceWatcher.class));
+        any(ResourceWatcher.class),
+        any(SynchronizationContext.class));
   }
 
   @Test
@@ -224,7 +226,8 @@ public class XdsServerWrapperTest {
         eq(listenerResource),
         eq("xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/"
             + "%5B::FFFF:129.144.52.38%5D:80"),
-        any(ResourceWatcher.class));
+        any(ResourceWatcher.class),
+        any(SynchronizationContext.class));
   }
 
   @Test
