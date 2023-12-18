@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import io.grpc.Attributes;
 import io.grpc.Status;
 import io.grpc.internal.ManagedClientTransport;
 
@@ -36,12 +37,14 @@ final class ClientTransportLifecycleManager {
     this.listener = listener;
   }
 
-  public void notifyReady() {
+  public Attributes notifyReady(Attributes attributes) {
     if (transportReady || transportShutdown) {
-      return;
+      return attributes;
     }
     transportReady = true;
+    attributes = listener.filterTransport(Attributes.EMPTY);
     listener.transportReady();
+    return attributes;
   }
 
   /**

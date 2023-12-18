@@ -72,7 +72,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.ClientTransportHook;
+import io.grpc.ClientTransportFilter;
 import io.grpc.CompositeChannelCredentials;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -4248,15 +4248,11 @@ public class ManagedChannelImplTest {
     final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
     final AtomicInteger shutdownCallbackCalled = new AtomicInteger(0);
     final AtomicInteger terminationCallbackCalled = new AtomicInteger(0);
-    ClientTransportHook transportHook = new ClientTransportHook() {
+    ClientTransportFilter transportFilter = new ClientTransportFilter() {
       @Override
-      public void transportReady(Attributes transportAttrs) {
+      public Attributes transportReady(Attributes transportAttrs) {
         readyCallbackCalled.incrementAndGet();
-      }
-
-      @Override
-      public void transportShutdown(Status s, Attributes transportAttrs) {
-        shutdownCallbackCalled.incrementAndGet();
+        return transportAttrs;
       }
 
       @Override
@@ -4265,7 +4261,7 @@ public class ManagedChannelImplTest {
       }
     };
 
-    channelBuilder.addTransportHook(transportHook);
+    channelBuilder.addTransportFilter(transportFilter);
     assertEquals(0, readyCallbackCalled.get());
 
     createChannel();
@@ -4278,14 +4274,13 @@ public class ManagedChannelImplTest {
     MockClientTransportInfo transportInfo = transports.poll();
     ManagedClientTransport.Listener transportListener = transportInfo.listener;
 
+    transportListener.filterTransport(Attributes.EMPTY);
     transportListener.transportReady();
     assertEquals(1, readyCallbackCalled.get());
     assertEquals(0, shutdownCallbackCalled.get());
     assertEquals(0, terminationCallbackCalled.get());
 
     transportListener.transportShutdown(Status.OK);
-    assertEquals(1, shutdownCallbackCalled.get());
-    assertEquals(0, terminationCallbackCalled.get());
 
     transportListener.transportTerminated();
     assertEquals(1, terminationCallbackCalled.get());

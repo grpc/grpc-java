@@ -28,7 +28,7 @@ import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientInterceptor;
-import io.grpc.ClientTransportHook;
+import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
@@ -139,7 +139,7 @@ public final class ManagedChannelImplBuilder
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
 
-  final List<ClientTransportHook> transportHooks = new ArrayList<>();
+  final List<ClientTransportFilter> transportFilters = new ArrayList<>();
 
   final String target;
   @Nullable
@@ -379,8 +379,8 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  public ManagedChannelImplBuilder addTransportHook(ClientTransportHook hook) {
-    transportHooks.add(checkNotNull(hook, "transport hook"));
+  public ManagedChannelImplBuilder addTransportFilter(ClientTransportFilter hook) {
+    transportFilters.add(checkNotNull(hook, "transport filter"));
     return this;
   }
 

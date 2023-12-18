@@ -95,8 +95,8 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
-  public T addTransportHook(ClientTransportHook transportHook) {
-    delegate().addTransportHook(transportHook);
+  public T addTransportFilter(ClientTransportFilter transportFilter) {
+    delegate().addTransportFilter(transportFilter);
     return thisT();
   }
 

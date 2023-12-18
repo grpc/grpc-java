@@ -21,30 +21,31 @@ package io.grpc;
  * to modify the channels or transport life-cycle event behavior, but they can be useful hooks
  * for transport observability. Multiple filters may be registered to the client.
  *
- * @since 1.60.0
+ * @since 1.61.0
  */
 @ExperimentalApi("https://gitub.com/grpc/grpc-java/issues/10652")
-public interface ClientTransportHook {
+public abstract class ClientTransportFilter {
   /**
    * Called when a transport is ready to accept traffic (when a connection has been established).
    * The default implementation is a no-op.
-   */
-  void transportReady(Attributes transportAttrs);
-
-  /**
-   * Called when a transport is shutting down. Shutdown could have been caused by an error or normal
-   * operation.
-   * This is called prior to {@link #transportTerminated}.
-   * Default implementation is a no-op.
    *
-   * @param s the reason for the shutdown.
+   * @param transportAttrs current transport attributes
+   *
+   * @return new transport attributes. Default implementation returns the passed-in attributes
+   * intact.
    */
-  void transportShutdown(Status s, Attributes transportAttrs);
+  public Attributes transportReady(Attributes transportAttrs){
+    return transportAttrs;
+  }
 
   /**
    * Called when a transport completed shutting down. All resources have been released.
    * All streams have either been closed or transferred off this transport.
    * Default implementation is a no-op
+   *
+   * @param transportAttrs the effective transport attributes, which is what is returned by {@link
+   * #transportReady} of the last executed filter.
    */
-  void transportTerminated(Attributes transportAttrs);
+  public void transportTerminated(Attributes transportAttrs) {
+  }
 }

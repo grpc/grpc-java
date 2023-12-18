@@ -169,6 +169,7 @@ class CronetClientTransport implements ConnectionClientTransport {
     return new Runnable() {
       @Override
       public void run() {
+        attrs = CronetClientTransport.this.listener.filterTransport(attrs);
         // Listener callbacks should not be called simultaneously
         CronetClientTransport.this.listener.transportReady();
       }
