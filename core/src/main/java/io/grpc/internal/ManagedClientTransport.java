@@ -106,6 +106,10 @@ public interface ManagedClientTransport extends ClientTransport {
      */
     void transportInUse(boolean inUse);
 
+    /**
+     * Called just before {@link #transportReady} to allow direct modification of transport
+     * Attributes.
+     */
     Attributes filterTransport(Attributes attributes);
   }
 }
