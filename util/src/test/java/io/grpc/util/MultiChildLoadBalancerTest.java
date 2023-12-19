@@ -192,11 +192,11 @@ public class MultiChildLoadBalancerTest {
   public void pickFromMultiAddressEags() throws Exception {
     List<SocketAddress> addressList1 = new ArrayList<>();
     List<SocketAddress> addressList2 = new ArrayList<>();
-    for (int i = 0; i < servers.size(); i++) {
+    for (int i = 0; i < 3; i++) {
       if (i % 2 == 0) {
-        addressList1.addAll(servers.get(i).getAddresses());
+        addressList1.add(new FakeSocketAddress("multi_" + i));
       } else {
-        addressList2.addAll(servers.get(i).getAddresses());
+        addressList2.add(new FakeSocketAddress("multi_" + i));
       }
     }
 
