@@ -560,7 +560,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       addrs = new String[eag.getAddresses().size()];
       int i = 0;
       for (SocketAddress address : eag.getAddresses()) {
-        addrs[i] = address.toString();
+        addrs[i++] = address.toString();
       }
       Arrays.sort(addrs);
 
