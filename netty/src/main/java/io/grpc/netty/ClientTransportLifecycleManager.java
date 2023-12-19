@@ -42,7 +42,7 @@ final class ClientTransportLifecycleManager {
       return attributes;
     }
     transportReady = true;
-    attributes = listener.filterTransport(Attributes.EMPTY);
+    attributes = listener.filterTransport(attributes);
     listener.transportReady();
     return attributes;
   }

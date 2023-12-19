@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
-import io.grpc.EquivalentAddressGroup.Attr;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.AbstractTransportTest;
