@@ -548,7 +548,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     public Attributes filterTransport(Attributes attributes) {
       for (ClientTransportFilter filter : transportFilters) {
         attributes = Preconditions.checkNotNull(filter.transportReady(attributes),
-        "Filter %s returned null", filter);
+            "Filter %s returned null", filter);
       }
       return attributes;
     }
