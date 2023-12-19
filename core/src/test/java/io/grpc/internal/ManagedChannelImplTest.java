@@ -4246,7 +4246,6 @@ public class ManagedChannelImplTest {
   public void transportFilters() {
 
     final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
-    final AtomicInteger shutdownCallbackCalled = new AtomicInteger(0);
     final AtomicInteger terminationCallbackCalled = new AtomicInteger(0);
     ClientTransportFilter transportFilter = new ClientTransportFilter() {
       @Override
@@ -4277,7 +4276,6 @@ public class ManagedChannelImplTest {
     transportListener.filterTransport(Attributes.EMPTY);
     transportListener.transportReady();
     assertEquals(1, readyCallbackCalled.get());
-    assertEquals(0, shutdownCallbackCalled.get());
     assertEquals(0, terminationCallbackCalled.get());
 
     transportListener.transportShutdown(Status.OK);
