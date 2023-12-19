@@ -31,6 +31,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
+import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -196,6 +197,19 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
     @Override
     public String toString() {
       return "Mock Subchannel" + args.toString();
+    }
+  }
+
+  public static class FakeSocketAddress extends SocketAddress {
+    final String name;
+
+    FakeSocketAddress(String name) {
+      this.name = name;
+    }
+
+    @Override
+    public String toString() {
+      return "FakeSocketAddress-" + name;
     }
   }
 }
