@@ -758,7 +758,8 @@ public abstract class BinderTransport
             // triggers), could have shut us down.
             if (!isShutdown()) {
               setState(TransportState.READY);
-              clientTransportListener.filterTransport(attributes);
+              attributes = clientTransportListener.filterTransport(attributes);
+```
               clientTransportListener.transportReady();
             }
           }
