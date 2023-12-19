@@ -21,7 +21,9 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -41,6 +43,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.util.AbstractTestHelper.FakeSocketAddress;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
+import io.grpc.util.MultiChildLoadBalancer.Endpoint;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -63,12 +66,15 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class MultiChildLoadBalancerTest {
+  private static final Attributes.Key<String> FOO = Attributes.Key.create("foo");
+
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private final Map<List<EquivalentAddressGroup>, LoadBalancer.Subchannel> subchannels =
       new ConcurrentHashMap<>();
+  private final Attributes affinity = Attributes.newBuilder().set(FOO, "bar").build();
   @Captor
   private ArgumentCaptor<LoadBalancer.SubchannelPicker> pickerCaptor;
   @Captor
@@ -216,6 +222,71 @@ public class MultiChildLoadBalancerTest {
     assertThat(((TestLb.TestSubchannelPicker)pickerCaptor.getValue()).childPickerMap).hasSize(2);
   }
 
+  @Test
+  public void testEndpoint_toString() {
+    try {
+      new Endpoint(null);
+      fail("No exception thrown for null");
+    } catch (NullPointerException e) {
+      assertThat(e.getMessage()).contains("eag");
+    }
+    
+    // Simple eag
+    EquivalentAddressGroup eagSimple = servers.get(0);
+    Endpoint simple = new Endpoint(eagSimple);
+    assertEquals(addressesOnlyString(eagSimple), simple.toString());
+    
+    // Multiple address eag
+    EquivalentAddressGroup eagMulti = createEag("addr1", "addr2");
+    Endpoint multi = new Endpoint(eagMulti);
+    assertEquals(addressesOnlyString(eagMulti), multi.toString());
+  }
+
+  @Test
+  public void testEndpoint_equals() {
+    assertEquals(
+        createEndpoint(Attributes.EMPTY, "addr1"),
+        createEndpoint(Attributes.EMPTY, "addr1"));
+
+    assertEquals(
+        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
+        createEndpoint(Attributes.EMPTY, "addr2", "addr1"));
+
+    assertEquals(
+        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
+        createEndpoint(affinity, "addr2", "addr1"));
+
+    assertEquals(
+        createEndpoint(Attributes.EMPTY, "addr1", "addr2").hashCode(),
+        createEndpoint(affinity, "addr2", "addr1").hashCode());
+
+  }
+
+  @Test
+  public void testEndpoint_notEquals() {
+    assertNotEquals(
+        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
+        createEndpoint(Attributes.EMPTY, "addr1", "addr3"));
+
+    assertNotEquals(
+        createEndpoint(Attributes.EMPTY, "addr1"),
+        createEndpoint(Attributes.EMPTY, "addr1", "addr2"));
+
+    assertNotEquals(
+        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
+        createEndpoint(Attributes.EMPTY, "addr1"));
+  }
+
+  private String addressesOnlyString(EquivalentAddressGroup eag) {
+    if (eag == null) {
+      return null;
+    }
+
+    System.out.println(eag.getAddresses().toString());
+    String withoutAttrs = eag.toString().replaceAll("\\/\\{\\}","");
+    return "[" + withoutAttrs.replaceAll("[\\[\\]]", "") + "]";
+  }
+
   private List<LoadBalancer.Subchannel> getList(LoadBalancer.SubchannelPicker picker) {
     if (picker instanceof LoadBalancer.FixedResultPicker) {
       LoadBalancer.Subchannel subchannel = picker.pickSubchannel(null).getSubchannel();
@@ -232,6 +303,24 @@ public class MultiChildLoadBalancerTest {
     return Collections.emptyList();
   }
 
+  private EquivalentAddressGroup createEag(String... names) {
+    List<SocketAddress> addresses = buildAddressList(names);
+    return new EquivalentAddressGroup(addresses, Attributes.EMPTY);
+  }
+
+  private static List<SocketAddress> buildAddressList(String... names) {
+    List<SocketAddress> addresses = new ArrayList<>();
+    for (String name : names) {
+      addresses.add(new FakeSocketAddress(name));
+    }
+    return addresses;
+  }
+
+  private Endpoint createEndpoint(Attributes attr, String... names) {
+    EquivalentAddressGroup eag = new EquivalentAddressGroup(buildAddressList(names), attr);
+    return new Endpoint(eag);
+  }
+  
   private LoadBalancer.Subchannel getSubchannel(EquivalentAddressGroup removedEag) {
     return subchannels.get(Collections.singletonList(removedEag));
   }
