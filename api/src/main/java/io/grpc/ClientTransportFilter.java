@@ -34,7 +34,7 @@ public abstract class ClientTransportFilter {
    * @return new transport attributes. Default implementation returns the passed-in attributes
    * intact.
    */
-  public Attributes transportReady(Attributes transportAttrs){
+  public Attributes transportReady(Attributes transportAttrs) {
     return transportAttrs;
   }
 
