@@ -263,8 +263,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             requestConnection(); // is recursive so might hit the end of the addresses
           }
 
-          if (!addressIndex.isValid() &&
-              (!enableHappyEyeballs || numTfSinceAccept >= addressIndex.size())) {
+          if (!addressIndex.isValid()
+              && (!enableHappyEyeballs || numTfSinceAccept >= addressIndex.size())) {
             // If no addresses remaining, go into TRANSIENT_FAILURE
             helper.refreshNameResolution();
             rawConnectivityState = TRANSIENT_FAILURE;
