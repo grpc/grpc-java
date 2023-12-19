@@ -59,13 +59,18 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
+  public static final String GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS =
+      "GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS";
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new LinkedHashMap<>();
   private Index addressIndex;
+  private int numTfSinceAccept = 0;
   @Nullable
   private ScheduledHandle scheduleConnectionTask;
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
+  private boolean enableHappyEyeballs =
+      GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -94,6 +99,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
+    numTfSinceAccept = 0; // Since we have a new set of addresses, we are again at first pass
+
     // We can optionally be configured to shuffle the address list. This can help better distribute
     // the load.
     if (resolvedAddresses.getLoadBalancingPolicyConfig()
@@ -110,8 +117,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // Make sure we're storing our own list rather than what was passed in
     final List<EquivalentAddressGroup> newImmutableAddressGroups =
         Collections.unmodifiableList(new ArrayList<>(servers));
-
-    boolean reuseReadyChannel = false;
 
     if (addressIndex == null) {
       addressIndex = new Index(newImmutableAddressGroups);
@@ -143,10 +148,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       if (!newAddrs.contains(oldAddr)) {
         subchannels.remove(oldAddr).getSubchannel().shutdown();
       }
-    }
-
-    if (reuseReadyChannel) {
-      return Status.OK;
     }
 
     if (oldAddrs.size() == 0 || rawConnectivityState == CONNECTING
@@ -193,6 +194,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
     if (newState == SHUTDOWN) {
       return;
+    }
+
+    if (newState == TRANSIENT_FAILURE) {
+      ++numTfSinceAccept;
     }
 
     SubchannelData activeSubchannel = addressIndex.isValid()
@@ -258,7 +263,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             requestConnection(); // is recursive so might hit the end of the addresses
           }
 
-          if (!addressIndex.isValid()) {
+          if (!addressIndex.isValid() && numTfSinceAccept >= addressIndex.size()) {
             // If no addresses remaining, go into TRANSIENT_FAILURE
             helper.refreshNameResolution();
             rawConnectivityState = TRANSIENT_FAILURE;
@@ -268,10 +273,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
         } else if (!addressIndex.isValid()) {
           if (concludedState == TRANSIENT_FAILURE) {
-            // sticky TRANSIENT_FAILURE
-            helper.refreshNameResolution();
-            updateBalancingState(TRANSIENT_FAILURE,
-                new Picker(PickResult.withError(stateInfo.getStatus())));
+            if (numTfSinceAccept >= addressIndex.size()) {
+              helper.refreshNameResolution();
+              // sticky TRANSIENT_FAILURE
+              updateBalancingState(TRANSIENT_FAILURE,
+                  new Picker(PickResult.withError(stateInfo.getStatus())));
+            }
             break;
           }
 
@@ -368,10 +375,18 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return;
     }
 
-    SocketAddress currentAddress = addressIndex.getCurrentAddress();
-    Subchannel subchannel = subchannels.containsKey(currentAddress)
-        ? subchannels.get(currentAddress).getSubchannel()
-        : createNewSubchannel(currentAddress);
+    Subchannel subchannel;
+    SocketAddress currentAddress;
+    do {
+      currentAddress = addressIndex.getCurrentAddress();
+      subchannel = subchannels.containsKey(currentAddress)
+          ? subchannels.get(currentAddress).getSubchannel()
+          : createNewSubchannel(currentAddress);
+    } while (subchannel == null && addressIndex.isValid());
+
+    if (subchannel == null) {
+      return;
+    }
 
     ConnectivityState subchannelState = subchannels.get(currentAddress).getState();
     switch (subchannelState) {
@@ -385,8 +400,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         addressIndex.increment();
         requestConnection();
         break;
-      case READY: // Since we aren't doing anything there won't be a state change
-        updateBalancingState(READY, new Picker(PickResult.withSubchannel(subchannel)));
+      case READY: // Shouldn't ever happen
+        log.warning("Requesting a connection even though we have a READY subchannel");
         break;
       case SHUTDOWN:
       default:
@@ -400,6 +415,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   * Schedules connection attempt to happen after a delay to the next available address.
   */
   private void scheduleNextConnection() {
+    if (!enableHappyEyeballs) {
+      return;
+    }
+
     class StartNextConnection implements Runnable {
       @Override
       public void run() {
@@ -433,7 +452,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
             .build());
     if (subchannel == null) {
-      throw new IllegalArgumentException("Was not able to create subchannel for " + addr);
+      log.warning("Was not able to create subchannel for " + addr);
+      return null;
     }
     SubchannelData subchannelData = new SubchannelData(subchannel, IDLE, hcListener);
     hcListener.subchannelData = subchannelData;
@@ -612,6 +632,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         return true;
       }
       return false;
+    }
+
+    public int size() {
+      return (addressGroups != null) ? addressGroups.size() : 0;
     }
   }
 

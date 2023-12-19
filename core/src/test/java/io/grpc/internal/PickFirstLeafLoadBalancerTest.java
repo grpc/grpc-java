@@ -126,6 +126,7 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Before
   public void setUp() {
+    System.setProperty(PickFirstLeafLoadBalancer.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, "TRUE");
     for (int i = 1; i <= 5; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       servers.add(new EquivalentAddressGroup(addr));
