@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
@@ -219,6 +220,8 @@ public class PickFirstLeafLoadBalancerTest {
         pickerCaptor.getValue().pickSubchannel(mockArgs));
 
     verifyNoMoreInteractions(mockHelper);
+
+    assertThat(pickerCaptor.getValue().toString()).contains("result");
   }
 
   @Test
@@ -1813,6 +1816,35 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void shutdown() {
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3,
+        mockSubchannel4, mockSubchannel5);
+
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).build());
+
+    forwardTimeByConnectionDelay(servers.size() - 1);
+    inOrder.verify(mockHelper, times(servers.size())).createSubchannel(any());
+
+    loadBalancer.shutdown();
+
+    inOrder.verify(mockSubchannel1).shutdown();
+    verify(mockSubchannel2).shutdown();
+    verify(mockSubchannel3).shutdown();
+    verify(mockSubchannel4).shutdown();
+    verify(mockSubchannel5).shutdown();
+    assertEquals(SHUTDOWN, loadBalancer.getConcludedConnectivityState());
+
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).build());
+    forwardTimeByConnectionDelay();
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+    inOrder.verify(mockSubchannel1, never()).start(any());
+    inOrder.verify(mockSubchannel1, never()).requestConnection();
+    inOrder.verify(mockSubchannel2, never()).requestConnection();
+  }
+
+  @Test
   public void ready_then_transient_failure_again() {
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
@@ -1988,6 +2020,17 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     assertEquals(PickResult.withSubchannel(mockSubchannel2), picker.pickSubchannel(mockArgs));
+  }
+
+  @Test
+  public void advance_index_then_request_connection() {
+    loadBalancer.requestConnection(); // should be handled without throwing exception
+
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+    forwardTimeByConnectionDelay(servers.size());
+
+    loadBalancer.requestConnection(); // should be handled without throwing exception
   }
 
   @Test

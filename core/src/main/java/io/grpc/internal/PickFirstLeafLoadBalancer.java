@@ -313,9 +313,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   @Override
   public void shutdown() {
+    log.log(Level.FINE,
+        "Shutting down, currently have {} subchannels created", subchannels.size());
+    rawConnectivityState = SHUTDOWN;
+    concludedState = SHUTDOWN;
+    cancelScheduleTask();
+
     for (SubchannelData subchannelData : subchannels.values()) {
       subchannelData.getSubchannel().shutdown();
     }
+
     subchannels.clear();
   }
 
