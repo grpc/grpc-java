@@ -71,35 +71,36 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     logger.log(Level.FINE, "Created");
   }
 
-  protected abstract SubchannelPicker getSubchannelPicker(
-      Map<Object, SubchannelPicker> childPickers);
-
+  /**
+   * Creates a picker representing the state before any connections have been established.
+   *
+   * <p/>Override to produce a custom picker.
+   */
   protected SubchannelPicker getInitialPicker() {
     return new FixedResultPicker(PickResult.withNoResult());
   }
 
+  /**
+   * Creates a new picker representing an error status.
+   *
+   * <p/>Override to produce a custom picker when there are errors.
+   */
   protected SubchannelPicker getErrorPicker(Status error)  {
     return new FixedResultPicker(PickResult.withError(error));
   }
 
-  /**
-   * Generally, the only reason to override this is to expose it to a test of a LB in a different
-   * package.
-   */
-  protected ImmutableMap<Object, ChildLbState> getImmutableChildMap() {
+  @VisibleForTesting
+  public final ImmutableMap<Object, ChildLbState> getImmutableChildMap() {
     return ImmutableMap.copyOf(childLbStates);
   }
 
   @VisibleForTesting
-  protected Collection<ChildLbState> getChildLbStates() {
+  public final Collection<ChildLbState> getChildLbStates() {
     return childLbStates.values();
   }
 
-  /**
-   * Generally, the only reason to override this is to expose it to a test of a LB in a
-   * different package.
-   */
-  protected ChildLbState getChildLbState(Object key) {
+  @VisibleForTesting
+  public final ChildLbState getChildLbState(Object key) {
     if (key == null) {
       return null;
     }
@@ -109,11 +110,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates.get(key);
   }
 
-  /**
-   * Generally, the only reason to override this is to expose it to a test of a LB in a different
-   * package.
-   */
-  protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
+  @VisibleForTesting
+  public final ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
     return getChildLbState(new Endpoint(eag));
   }
 
@@ -210,7 +208,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    *   You must call {@link #updateOverallBalancingState} to update the picker
    *   and call {@link #shutdownRemoved(List)} to shutdown the endpoints that have been removed.
     */
-  protected AcceptResolvedAddressRetVal acceptResolvedAddressesInternal(
+  protected final AcceptResolvedAddressRetVal acceptResolvedAddressesInternal(
       ResolvedAddresses resolvedAddresses) {
     logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
     Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
@@ -258,7 +256,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return new AcceptResolvedAddressRetVal(Status.OK, removedChildren);
   }
 
-  protected void shutdownRemoved(List<ChildLbState> removedChildren) {
+  protected final void shutdownRemoved(List<ChildLbState> removedChildren) {
     // Do shutdowns after updating picker to reduce the chance of failing an RPC by picking a
     // subchannel that has been shutdown.
     for (ChildLbState childLbState : removedChildren) {
@@ -273,6 +271,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
   }
 
+  /**
+   * Handle the name resolution error only for the specified child.
+   */
   protected void handleNameResolutionError(ChildLbState child, Status error) {
     child.lb.handleNameResolutionError(error);
   }
@@ -304,22 +305,12 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     childLbStates.clear();
   }
 
-  protected void updateOverallBalancingState() {
-    ConnectivityState overallState = null;
-    final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
-    for (ChildLbState childLbState : getChildLbStates()) {
-      if (childLbState.deactivated) {
-        continue;
-      }
-      childPickers.put(childLbState.key, childLbState.currentPicker);
-      overallState = aggregateState(overallState, childLbState.currentState);
-    }
-
-    if (overallState != null) {
-      helper.updateBalancingState(overallState, getSubchannelPicker(childPickers));
-      currentConnectivityState = overallState;
-    }
-  }
+  /**
+   * Using the state of all children will calculate the current connectivity state,
+   * update fields, generate a picker and then call
+   * {@link Helper#updateBalancingState(ConnectivityState, SubchannelPicker)}.
+   */
+  protected abstract void updateOverallBalancingState();
 
   @Nullable
   protected static ConnectivityState aggregateState(
@@ -339,18 +330,18 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return overallState;
   }
 
-  protected Helper getHelper() {
+  protected final Helper getHelper() {
     return helper;
   }
 
-  protected void removeChild(Object key) {
+  protected final void removeChild(Object key) {
     childLbStates.remove(key);
   }
 
   /**
    * Filters out non-ready and deactivated child load balancers (subchannels).
    */
-  protected List<ChildLbState> getReadyChildren() {
+  protected final List<ChildLbState> getReadyChildren() {
     List<ChildLbState> activeChildren = new ArrayList<>();
     for (ChildLbState child : getChildLbStates()) {
       if (!child.isDeactivated() && child.getCurrentState() == READY) {
@@ -413,57 +404,58 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
           + (deactivated ? ", deactivated" : "");
     }
 
-    public Object getKey() {
+    public final Object getKey() {
       return key;
     }
 
-    Object getConfig() {
+    private Object getConfig() {
       return config;
     }
 
-    protected GracefulSwitchLoadBalancer getLb() {
+    @VisibleForTesting
+    public final GracefulSwitchLoadBalancer getLb() {
       return lb;
     }
 
-    public LoadBalancerProvider getPolicyProvider() {
+    protected final LoadBalancerProvider getPolicyProvider() {
       return policyProvider;
     }
 
-    protected Subchannel getSubchannels(PickSubchannelArgs args) {
+    protected final Subchannel getSubchannels(PickSubchannelArgs args) {
       if (getCurrentPicker() == null) {
         return null;
       }
       return getCurrentPicker().pickSubchannel(args).getSubchannel();
     }
 
-    public ConnectivityState getCurrentState() {
+    public final ConnectivityState getCurrentState() {
       return currentState;
     }
 
-    public SubchannelPicker getCurrentPicker() {
+    public final SubchannelPicker getCurrentPicker() {
       return currentPicker;
     }
 
-    public EquivalentAddressGroup getEag() {
+    public final EquivalentAddressGroup getEag() {
       if (resolvedAddresses == null || resolvedAddresses.getAddresses().isEmpty()) {
         return null;
       }
       return resolvedAddresses.getAddresses().get(0);
     }
 
-    public boolean isDeactivated() {
+    public final boolean isDeactivated() {
       return deactivated;
     }
 
-    protected void setDeactivated() {
+    protected final void setDeactivated() {
       deactivated = true;
     }
 
-    protected void markReactivated() {
+    protected final void markReactivated() {
       deactivated = false;
     }
 
-    protected void setResolvedAddresses(ResolvedAddresses newAddresses) {
+    protected final void setResolvedAddresses(ResolvedAddresses newAddresses) {
       checkNotNull(newAddresses, "Missing address list for child");
       resolvedAddresses = newAddresses;
     }
@@ -511,7 +503,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
      * simple forwarding.
      */
     @VisibleForTesting
-    public ResolvedAddresses getResolvedAddresses() {
+    public final ResolvedAddresses getResolvedAddresses() {
       return resolvedAddresses;
     }
 

@@ -38,12 +38,10 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -446,11 +444,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
   }
 
-  @Override
-  protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
-    throw new UnsupportedOperationException("Not used by RingHash");
-  }
-
   /**
    * An unmodifiable view of a subchannel with state not subject to its real connectivity
    * state changes.
@@ -505,23 +498,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
   }
 
-  static Set<EquivalentAddressGroup> getStrippedChildEags(Collection<ChildLbState> states) {
-    return states.stream()
-        .map(ChildLbState::getEag)
-        .map(RingHashLoadBalancer::stripAttrs)
-        .collect(Collectors.toSet());
-  }
-
-  @Override
-  protected Collection<ChildLbState> getChildLbStates() {
-    return super.getChildLbStates();
-  }
-
-  @Override
-  protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
-    return super.getChildLbStateEag(eag);
-  }
-
   class RingHashChildLbState extends MultiChildLoadBalancer.ChildLbState {
 
     public RingHashChildLbState(Endpoint key, ResolvedAddresses resolvedAddresses) {
@@ -548,12 +524,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     @Override
     protected void shutdown() {
       super.shutdown();
-    }
-
-    // Need to expose this to the LB class
-    @Override
-    protected GracefulSwitchLoadBalancer getLb() {
-      return super.getLb();
     }
 
   }

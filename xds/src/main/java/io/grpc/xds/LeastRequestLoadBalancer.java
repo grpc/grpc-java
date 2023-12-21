@@ -41,10 +41,8 @@ import io.grpc.Status;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 
@@ -73,12 +71,6 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   LeastRequestLoadBalancer(Helper helper, ThreadSafeRandom random) {
     super(helper);
     this.random = checkNotNull(random, "random");
-  }
-
-  @Override
-  protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
-    throw new UnsupportedOperationException(
-        "LeastRequestLoadBalancer uses its ChildLbStates, not these child pickers directly");
   }
 
   @Override
@@ -163,18 +155,6 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   @VisibleForTesting
   void setResolvingAddresses(boolean newValue) {
     super.resolvingAddresses = newValue;
-  }
-
-  // Expose for tests in this package.
-  @Override
-  protected Collection<ChildLbState> getChildLbStates() {
-    return super.getChildLbStates();
-  }
-
-  // Expose for tests in this package.
-  @Override
-  protected ChildLbState getChildLbState(Object key) {
-    return super.getChildLbState(key);
   }
 
   // Expose for tests in this package.

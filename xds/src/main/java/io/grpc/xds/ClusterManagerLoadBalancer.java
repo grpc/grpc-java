@@ -21,6 +21,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
@@ -118,7 +119,29 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     }
   }
 
+  /**
+   * Using the state of all children will calculate the current connectivity state,
+   * update currentConnectivityState, generate a picker and then call
+   * {@link Helper#updateBalancingState(ConnectivityState, SubchannelPicker)}.
+   */
   @Override
+  protected void updateOverallBalancingState() {
+    ConnectivityState overallState = null;
+    final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
+    for (ChildLbState childLbState : getChildLbStates()) {
+      if (childLbState.isDeactivated()) {
+        continue;
+      }
+      childPickers.put(childLbState.getKey(), childLbState.getCurrentPicker());
+      overallState = aggregateState(overallState, childLbState.getCurrentState());
+    }
+
+    if (overallState != null) {
+      getHelper().updateBalancingState(overallState, getSubchannelPicker(childPickers));
+      currentConnectivityState = overallState;
+    }
+  }
+
   protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
     return new SubchannelPicker() {
       @Override
