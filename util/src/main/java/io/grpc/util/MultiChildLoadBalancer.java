@@ -44,6 +44,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -151,8 +152,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       resolvingAddresses = true;
 
       // process resolvedAddresses to update children
-      AcceptResolvedAddressRetVal acceptRetVal =
-          acceptResolvedAddressesInternal(resolvedAddresses);
+      AcceptResolvedAddrRetVal acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
       if (!acceptRetVal.status.isOk()) {
         return acceptRetVal.status;
       }
@@ -208,52 +208,78 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    *   You must call {@link #updateOverallBalancingState} to update the picker
    *   and call {@link #shutdownRemoved(List)} to shutdown the endpoints that have been removed.
     */
-  protected final AcceptResolvedAddressRetVal acceptResolvedAddressesInternal(
+  protected final AcceptResolvedAddrRetVal acceptResolvedAddressesInternal(
       ResolvedAddresses resolvedAddresses) {
     logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
+
+    // Subclass handles any special manipulation to create appropriate types of keyed ChildLbStates
     Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
 
+    // Handle error case
     if (newChildren.isEmpty()) {
       Status unavailableStatus = Status.UNAVAILABLE.withDescription(
           "NameResolver returned no usable address. " + resolvedAddresses);
       handleNameResolutionError(unavailableStatus);
-      return new AcceptResolvedAddressRetVal(unavailableStatus, null);
+      return new AcceptResolvedAddrRetVal(unavailableStatus, null);
     }
 
-    // Do adds and updates
+    Collection<ChildLbState> reusedChildren = addMissingChildrenAndIdReuse(newChildren);
+
+    // Raactivate deactivated children
+    for (ChildLbState reusedChild : reusedChildren) {
+      reusedChild.reactivate(reusedChild.getPolicyProvider());
+    }
+
+    updateChildrenWithResolvedAddresses(resolvedAddresses, newChildren);
+
+    return new AcceptResolvedAddrRetVal(Status.OK, removedChildren(newChildren.keySet()));
+  }
+
+  protected final Collection<ChildLbState> addMissingChildrenAndIdReuse(
+      Map<Object, ChildLbState> newChildren) {
+    Collection<ChildLbState> reusedChildren = new ArrayList<>();
+
+    // Do adds and identify reused children
     for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
       final Object key = entry.getKey();
-      LoadBalancerProvider childPolicyProvider = entry.getValue().getPolicyProvider();
-      Object childConfig = entry.getValue().getConfig();
       if (!childLbStates.containsKey(key)) {
         childLbStates.put(key, entry.getValue());
       } else {
         // Reuse the existing one
         ChildLbState existingChildLbState = childLbStates.get(key);
-        if (existingChildLbState.isDeactivated() && reactivateChildOnReuse()) {
-          existingChildLbState.reactivate(childPolicyProvider);
+        if (existingChildLbState.isDeactivated()) {
+          reusedChildren.add(existingChildLbState);
         }
       }
+    }
+    return reusedChildren;
+  }
 
-      ChildLbState childLbState = childLbStates.get(key);
-      ResolvedAddresses childAddresses = getChildAddresses(key, resolvedAddresses, childConfig);
-      childLbStates.get(key).setResolvedAddresses(childAddresses); // update child
+  protected void updateChildrenWithResolvedAddresses(ResolvedAddresses resolvedAddresses,
+                                                     Map<Object, ChildLbState> newChildren) {
+    for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
+      Object childConfig = entry.getValue().getConfig();
+      ChildLbState childLbState = childLbStates.get(entry.getKey());
+      ResolvedAddresses childAddresses =
+          getChildAddresses(entry.getKey(), resolvedAddresses, childConfig);
+      childLbState.setResolvedAddresses(childAddresses); // update child
       if (!childLbState.deactivated) {
         childLbState.lb.handleResolvedAddresses(childAddresses); // update child LB
       }
     }
+  }
 
+  protected List<ChildLbState> removedChildren(Set<Object> newChildKeys) {
     List<ChildLbState> removedChildren = new ArrayList<>();
     // Do removals
     for (Object key : ImmutableList.copyOf(childLbStates.keySet())) {
-      if (!newChildren.containsKey(key)) {
+      if (!newChildKeys.contains(key)) {
         ChildLbState childLbState = childLbStates.get(key);
         childLbState.deactivate();
         removedChildren.add(childLbState);
       }
     }
-
-    return new AcceptResolvedAddressRetVal(Status.OK, removedChildren);
+    return removedChildren;
   }
 
   protected final void shutdownRemoved(List<ChildLbState> removedChildren) {
@@ -276,24 +302,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    */
   protected void handleNameResolutionError(ChildLbState child, Status error) {
     child.lb.handleNameResolutionError(error);
-  }
-
-  /**
-   * If true, then when a subchannel state changes to idle, the corresponding child will
-   * have requestConnection called on its LB.  Also causes the PickFirstLB to be created when
-   * the child is created or reused.
-   */
-  protected boolean reconnectOnIdle() {
-    return true;
-  }
-
-  /**
-   * If true, then when {@link #acceptResolvedAddresses} sees a key that was already part of the
-   * child map which is deactivated, it will call reactivate on the child.
-   * If false, it will leave it deactivated.
-   */
-  protected boolean reactivateChildOnReuse() {
-    return true;
   }
 
   @Override
@@ -387,12 +395,16 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       this.deactivated = deactivated;
       this.currentPicker = initialPicker;
       this.config = childConfig;
-      this.lb = new GracefulSwitchLoadBalancer(new ChildLbStateHelper());
+      this.lb = new GracefulSwitchLoadBalancer(createChildHelper());
       this.currentState = deactivated ? IDLE : CONNECTING;
       this.resolvedAddresses = resolvedAddrs;
       if (!deactivated) {
         lb.switchTo(policyProvider);
       }
+    }
+
+    protected ChildLbStateHelper createChildHelper() {
+      return new ChildLbStateHelper();
     }
 
     @Override
@@ -432,8 +444,16 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return currentState;
     }
 
+    protected final void setCurrentState(ConnectivityState newState) {
+      currentState = newState;
+    }
+
     public final SubchannelPicker getCurrentPicker() {
       return currentPicker;
+    }
+
+    protected void setCurrentPicker(SubchannelPicker newPicker) {
+      currentPicker = newPicker;
     }
 
     public final EquivalentAddressGroup getEag() {
@@ -507,8 +527,14 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return resolvedAddresses;
     }
 
-    private final class ChildLbStateHelper extends ForwardingLoadBalancerHelper {
+    protected class ChildLbStateHelper extends ForwardingLoadBalancerHelper {
 
+      /**
+       * Update current state and picker for this child and then use
+       * {@link #updateOverallBalancingState()} for the parent LB.
+       *
+       * <p/>Override this if you don't want to automatically request a connection when in IDLE
+       */
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
@@ -517,12 +543,13 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         if (!childLbStates.containsKey(key)) {
           return;
         }
+
         // Subchannel picker and state are saved, but will only be propagated to the channel
         // when the child instance exits deactivated state.
         currentState = newState;
         currentPicker = newPicker;
         if (!deactivated && !resolvingAddresses) {
-          if (newState == IDLE && reconnectOnIdle()) {
+          if (newState == IDLE) {
             lb.requestConnection();
           }
           updateOverallBalancingState();
@@ -590,11 +617,11 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
   }
 
-  protected static class AcceptResolvedAddressRetVal {
+  protected static class AcceptResolvedAddrRetVal {
     public final Status status;
     public final List<ChildLbState> removedChildren;
 
-    public AcceptResolvedAddressRetVal(Status status, List<ChildLbState> removedChildren) {
+    public AcceptResolvedAddrRetVal(Status status, List<ChildLbState> removedChildren) {
       this.status = status;
       this.removedChildren = removedChildren;
     }

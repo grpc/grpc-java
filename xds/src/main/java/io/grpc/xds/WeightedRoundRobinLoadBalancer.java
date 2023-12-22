@@ -115,7 +115,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    AcceptResolvedAddressRetVal acceptRetVal;
+    AcceptResolvedAddrRetVal acceptRetVal;
     try {
       resolvingAddresses = true;
       acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);

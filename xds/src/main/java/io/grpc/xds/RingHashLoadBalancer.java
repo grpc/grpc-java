@@ -85,18 +85,22 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       return addressValidityStatus;
     }
 
-    AcceptResolvedAddressRetVal acceptRetVal;
+    AcceptResolvedAddrRetVal acceptRetVal;
     try {
       resolvingAddresses = true;
-      // Update the child list by creating-adding, updating addresses, and removing
-      acceptRetVal = super.acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
+      // Subclass handles any special manipulation to create appropriate types of ChildLbStates
+      Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
+
+      if (newChildren.isEmpty()) {
         addressValidityStatus = Status.UNAVAILABLE.withDescription(
-            "Ring hash lb error: EDS resolution was successful, but was not accepted by base class"
-                + " (" + acceptRetVal.status + ")");
+            "Ring hash lb error: EDS resolution was successful, but there were no valid addresses");
         handleNameResolutionError(addressValidityStatus);
         return addressValidityStatus;
       }
+
+      // We don't care about reuse because we don't want to activate them
+      addMissingChildrenAndIdReuse(newChildren);
+      updateChildrenWithResolvedAddresses(resolvedAddresses, newChildren);
 
       // Now do the ringhash specific logic with weights and building the ring
       RingHashConfig config = (RingHashConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -141,13 +145,14 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // clusters and resolver can remove them in service config.
       updateOverallBalancingState();
 
-      shutdownRemoved(acceptRetVal.removedChildren);
+      shutdownRemoved(removedChildren(newChildren.keySet()));
     } finally {
       this.resolvingAddresses = false;
     }
 
     return Status.OK;
   }
+
 
   /**
    * Updates the overall balancing state by aggregating the connectivity states of all subchannels.
@@ -219,16 +224,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     RingHashPicker picker = new RingHashPicker(syncContext, ring, getImmutableChildMap());
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
-  }
-
-  @Override
-  protected boolean reconnectOnIdle() {
-    return false;
-  }
-
-  @Override
-  protected boolean reactivateChildOnReuse() {
-    return false;
   }
 
   @Override
@@ -505,6 +500,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
 
     @Override
+    protected ChildLbStateHelper createChildHelper() {
+      return new RingHashChildHelper();
+    }
+
+    @Override
     protected void reactivate(LoadBalancerProvider policyProvider) {
       if (!isDeactivated()) {
         return;
@@ -526,5 +526,25 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       super.shutdown();
     }
 
+    private class RingHashChildHelper extends ChildLbStateHelper {
+      @Override
+      public void updateBalancingState(final ConnectivityState newState,
+                                       final SubchannelPicker newPicker) {
+        // If we are already in the process of resolving addresses, the overall balancing state
+        // will be updated at the end of it, and we don't need to trigger that update here.
+        if (getChildLbState(getKey()) == null) {
+          return;
+        }
+
+        // Subchannel picker and state are saved, but will only be propagated to the channel
+        // when the child instance exits deactivated state.
+        setCurrentState(newState);
+        setCurrentPicker(newPicker);
+        if (!isDeactivated() && !resolvingAddresses) {
+          updateOverallBalancingState();
+        }
+      }
+    }
   }
+
 }

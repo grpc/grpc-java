@@ -104,7 +104,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
       resolvingAddresses = true;
 
       // process resolvedAddresses to update children
-      AcceptResolvedAddressRetVal acceptRetVal =
+      AcceptResolvedAddrRetVal acceptRetVal =
           acceptResolvedAddressesInternal(resolvedAddresses);
       if (!acceptRetVal.status.isOk()) {
         return acceptRetVal.status;
@@ -180,11 +180,6 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     }
   }
 
-  @Override
-  protected boolean reconnectOnIdle() {
-    return false;
-  }
-
   /**
    * This differs from the base class in the use of the deletion timer.  When it is deactivated,
    * rather than immediately calling shutdown it starts a timer.  If shutdown or reactivate
@@ -198,6 +193,11 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     public ClusterManagerLbState(Object key, LoadBalancerProvider policyProvider,
         Object childConfig, SubchannelPicker initialPicker) {
       super(key, policyProvider, childConfig, initialPicker);
+    }
+
+    @Override
+    protected ChildLbStateHelper createChildHelper() {
+      return new ClusterManagerChildHelper();
     }
 
     @Override
@@ -243,5 +243,24 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
       logger.log(XdsLogLevel.DEBUG, "Child balancer {0} deactivated", getKey());
     }
 
+    private class ClusterManagerChildHelper extends ChildLbStateHelper {
+      @Override
+      public void updateBalancingState(final ConnectivityState newState,
+                                       final SubchannelPicker newPicker) {
+        // If we are already in the process of resolving addresses, the overall balancing state
+        // will be updated at the end of it, and we don't need to trigger that update here.
+        if (getChildLbState(getKey()) == null) {
+          return;
+        }
+
+        // Subchannel picker and state are saved, but will only be propagated to the channel
+        // when the child instance exits deactivated state.
+        setCurrentState(newState);
+        setCurrentPicker(newPicker);
+        if (!isDeactivated() && !resolvingAddresses) {
+          updateOverallBalancingState();
+        }
+      }
+    }
   }
 }
