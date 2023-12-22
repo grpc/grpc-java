@@ -85,7 +85,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       return addressValidityStatus;
     }
 
-    AcceptResolvedAddrRetVal acceptRetVal;
     try {
       resolvingAddresses = true;
       // Subclass handles any special manipulation to create appropriate types of ChildLbStates
@@ -145,7 +144,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // clusters and resolver can remove them in service config.
       updateOverallBalancingState();
 
-      shutdownRemoved(removedChildren(newChildren.keySet()));
+      shutdownRemoved(getRemovedChildren(newChildren.keySet()));
     } finally {
       this.resolvingAddresses = false;
     }
