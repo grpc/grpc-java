@@ -80,24 +80,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   protected abstract void updateOverallBalancingState();
 
   /**
-   * Creates a picker representing the state before any connections have been established.
-   *
-   * <p/>Override to produce a custom picker.
-   */
-  protected SubchannelPicker getInitialPicker() {
-    return new FixedResultPicker(PickResult.withNoResult());
-  }
-
-  /**
-   * Creates a new picker representing an error status.
-   *
-   * <p/>Override to produce a custom picker when there are errors.
-   */
-  protected SubchannelPicker getErrorPicker(Status error)  {
-    return new FixedResultPicker(PickResult.withError(error));
-  }
-
-  /**
    * Override to utilize parsing of the policy configuration or alternative helper/lb generation.
    */
   protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
@@ -203,6 +185,24 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    */
   protected void handleNameResolutionError(ChildLbState child, Status error) {
     child.lb.handleNameResolutionError(error);
+  }
+
+  /**
+   * Creates a picker representing the state before any connections have been established.
+   *
+   * <p/>Override to produce a custom picker.
+   */
+  protected SubchannelPicker getInitialPicker() {
+    return new FixedResultPicker(PickResult.withNoResult());
+  }
+
+  /**
+   * Creates a new picker representing an error status.
+   *
+   * <p/>Override to produce a custom picker when there are errors.
+   */
+  protected SubchannelPicker getErrorPicker(Status error)  {
+    return new FixedResultPicker(PickResult.withError(error));
   }
 
   @Override
