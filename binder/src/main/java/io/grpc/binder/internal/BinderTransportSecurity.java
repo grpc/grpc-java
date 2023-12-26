@@ -33,8 +33,8 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 
-import java.util.HashMap;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import javax.annotation.CheckReturnValue;
@@ -162,12 +162,12 @@ public final class BinderTransportSecurity {
   private static final class TransportAuthorizationState {
     private final int uid;
     private final ServerPolicyChecker serverPolicyChecker;
-    private final HashMap<String, ListenableFuture<Status>> serviceAuthorization;
+    private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
 
     TransportAuthorizationState(int uid, ServerPolicyChecker serverPolicyChecker) {
       this.uid = uid;
       this.serverPolicyChecker = serverPolicyChecker;
-      serviceAuthorization = new HashMap<>(8);
+      serviceAuthorization = new ConcurrentHashMap<>(8);
     }
 
     /** Get whether we're authorized to make this call. */
@@ -178,43 +178,37 @@ public final class BinderTransportSecurity {
       // which is true for all generated methods. Otherwise, programmatically
       // created methods could cause this cache to grow unbounded.
       boolean useCache = method.isSampledToLocalTracing();
+      if (useCache) {
+        @Nullable ListenableFuture<Status> authorization = serviceAuthorization.get(serviceName);
+        if (authorization != null) {
+          // Authorization check exists and is a pending or successful future (even if for a
+          // failed authorization).
+          return authorization;
+        }
+      }
+      // Under high load, this may trigger a large number of concurrent authorization checks that
+      // perform essentially the same work and have the potential of exhausting the resources they
+      // depend on. This was a non-issue in the past with synchronous policy checks due to the
+      // fixed-size nature of the thread pool this method runs under.
+      //
+      // TODO(10669): evaluate if there should be at most a single pending authorization check per
+      //  (uid, serviceName) pair at any given time.
+      ListenableFuture<Status> authorization =
+          serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
+      if (useCache) {
+        serviceAuthorization.putIfAbsent(serviceName, authorization);
+        Futures.addCallback(authorization, new FutureCallback<Status>() {
+          @Override
+          public void onSuccess(Status result) {}
 
-      @Nullable ListenableFuture<Status> authorization;
-      synchronized (serviceAuthorization) {
-        if (useCache) {
-          authorization = serviceAuthorization.get(serviceName);
-          if (authorization != null) {
-            // Authorization check exists and is a pending or successful future (even if for a
-            // failed authorization).
-            return authorization;
+          @Override
+          public void onFailure(Throwable t) {
+            serviceAuthorization.remove(serviceName, authorization);
+            throw new IllegalStateException(t);
           }
-        }
-
-
-        // Under high load, this may trigger a large number of concurrent authorization checks that
-        // perform essentially the same work and have the potential of exhausting the resources they
-        // depend on. This was a non-issue in the past with synchronous policy checks due to the
-        // fixed-size nature of the thread pool this method runs under.
-        //
-        // TODO(10669): evaluate if there should be at most a single pending authorization check per
-        //  (uid, serviceName) pair at any given time.
-        authorization = serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
-        if (useCache) {
-          serviceAuthorization.put(serviceName, authorization);
-        }
-      } // end of synchronized(serviceAuthorization)
-
-      // Required to make the variable effectively "final"
-      final ListenableFuture<Status> finalAuthorization = authorization;
-
-      return Futures.catching(authorization, Throwable.class, t -> {
-        synchronized (serviceAuthorization) {
-          if (useCache) {
-            serviceAuthorization.remove(serviceName, finalAuthorization);
-          }
-        }
-        throw new IllegalStateException(t);
-      }, MoreExecutors.directExecutor());
+        }, MoreExecutors.directExecutor());
+      }
+      return authorization;
     }
   }
 
