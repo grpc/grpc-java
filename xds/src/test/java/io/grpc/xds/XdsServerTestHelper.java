@@ -39,7 +39,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /**
@@ -183,8 +182,7 @@ public class XdsServerTestHelper {
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
                                                      String resourceName,
-                                                     ResourceWatcher<T> watcher,
-                                                     Executor syncContext) {
+                                                     ResourceWatcher<T> watcher) {
       switch (resourceType.typeName()) {
         case "LDS":
           assertThat(ldsWatcher).isNull();

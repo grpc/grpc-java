@@ -54,11 +54,11 @@ import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -166,7 +166,7 @@ final class XdsClientImpl extends XdsClient
   @Override
   public void handleResourceResponse(
       XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
-      List<Any> resources, String nonce, ProcessingTracker processingTracker) {
+      List<Any> resources, String nonce) {
     checkNotNull(xdsResourceType, "xdsResourceType");
     syncContext.throwIfNotInThisSynchronizationContext();
     Set<String> toParseResourceNames = null;
@@ -178,7 +178,7 @@ final class XdsClientImpl extends XdsClient
     XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
         bootstrapInfo, filterRegistry, loadBalancerRegistry, tlsContextManager,
         toParseResourceNames);
-    handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
+    handleResourceUpdate(args, resources, xdsResourceType);
   }
 
   @Override
@@ -189,7 +189,7 @@ final class XdsClientImpl extends XdsClient
         resourceSubscribers.values()) {
       for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
         if (!subscriber.hasResult()) {
-          subscriber.onError(error, null);
+          subscriber.onError(error);
         }
       }
     }
@@ -289,8 +289,7 @@ final class XdsClientImpl extends XdsClient
 
   @Override
   <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                                                   ResourceWatcher<T> watcher,
-                                                   Executor watcherExecutor) {
+                                                   ResourceWatcher<T> watcher) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
@@ -300,7 +299,7 @@ final class XdsClientImpl extends XdsClient
           subscribedResourceTypeUrls.put(type.typeUrl(), type);
         }
         ResourceSubscriber<T> subscriber =
-            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);
+            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);;
         if (subscriber == null) {
           logger.log(XdsLogLevel.INFO, "Subscribe {0} resource {1}", type, resourceName);
           subscriber = new ResourceSubscriber<>(type, resourceName);
@@ -309,7 +308,7 @@ final class XdsClientImpl extends XdsClient
             subscriber.xdsChannel.adjustResourceSubscription(type);
           }
         }
-        subscriber.addWatcher(watcher, watcherExecutor);
+        subscriber.addWatcher(watcher);
       }
     });
   }
@@ -334,6 +333,7 @@ final class XdsClientImpl extends XdsClient
           if (resourceSubscribers.get(type).isEmpty()) {
             resourceSubscribers.remove(type);
             subscribedResourceTypeUrls.remove(type.typeUrl());
+
           }
         }
       }
@@ -420,9 +420,9 @@ final class XdsClientImpl extends XdsClient
   }
 
   @SuppressWarnings("unchecked")
-  private <T extends ResourceUpdate> void handleResourceUpdate(
-      XdsResourceType.Args args, List<Any> resources, XdsResourceType<T> xdsResourceType,
-      ProcessingTracker processingTracker) {
+  private <T extends ResourceUpdate> void handleResourceUpdate(XdsResourceType.Args args,
+                                                               List<Any> resources,
+                                                               XdsResourceType<T> xdsResourceType) {
     ValidatedResourceUpdate<T> result = xdsResourceType.parse(args, resources);
     logger.log(XdsLogger.XdsLogLevel.INFO,
         "Received {0} Response version {1} nonce {2}. Parsed resources: {3}",
@@ -449,10 +449,10 @@ final class XdsClientImpl extends XdsClient
     for (Map.Entry<String, ResourceSubscriber<?>> entry : subscribedResources.entrySet()) {
       String resourceName = entry.getKey();
       ResourceSubscriber<T> subscriber = (ResourceSubscriber<T>) entry.getValue();
+
       if (parsedResources.containsKey(resourceName)) {
         // Happy path: the resource updated successfully. Notify the watchers of the update.
-        subscriber.onData(parsedResources.get(resourceName), args.versionInfo, updateTime,
-            processingTracker);
+        subscriber.onData(parsedResources.get(resourceName), args.versionInfo, updateTime);
         continue;
       }
 
@@ -471,7 +471,7 @@ final class XdsClientImpl extends XdsClient
         // The resource is missing. Reuse the cached resource if possible.
         if (subscriber.data == null) {
           // No cached data. Notify the watchers of an invalid update.
-          subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail), processingTracker);
+          subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail));
         }
         continue;
       }
@@ -480,7 +480,7 @@ final class XdsClientImpl extends XdsClient
       // from the ADS update. Note that we can only do this if the resource update is coming from
       // the same xDS server that the ResourceSubscriber is subscribed to.
       if (subscriber.serverInfo.equals(args.serverInfo)) {
-        subscriber.onAbsent(processingTracker);
+        subscriber.onAbsent();
       }
     }
   }
@@ -493,7 +493,7 @@ final class XdsClientImpl extends XdsClient
     @Nullable private final ControlPlaneClient xdsChannel;
     private final XdsResourceType<T> type;
     private final String resource;
-    private final Map<ResourceWatcher<T>, Executor> watchers = new HashMap<>();
+    private final Set<ResourceWatcher<T>> watchers = new HashSet<>();
     @Nullable private T data;
     private boolean absent;
     // Tracks whether the deletion has been ignored per bootstrap server feature.
@@ -553,26 +553,22 @@ final class XdsClientImpl extends XdsClient
       return bootstrapInfo.servers().get(0); // use first server
     }
 
-    void addWatcher(ResourceWatcher<T> watcher, Executor watcherExecutor) {
-      checkArgument(!watchers.containsKey(watcher), "watcher %s already registered", watcher);
-      watchers.put(watcher, watcherExecutor);
-      T savedData = data;
-      boolean savedAbsent = absent;
-      watcherExecutor.execute(() -> {
-        if (errorDescription != null) {
-          watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
-          return;
-        }
-        if (savedData != null) {
-          notifyWatcher(watcher, savedData);
-        } else if (savedAbsent) {
-          watcher.onResourceDoesNotExist(resource);
-        }
-      });
+    void addWatcher(ResourceWatcher<T> watcher) {
+      checkArgument(!watchers.contains(watcher), "watcher %s already registered", watcher);
+      watchers.add(watcher);
+      if (errorDescription != null) {
+        watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
+        return;
+      }
+      if (data != null) {
+        notifyWatcher(watcher, data);
+      } else if (absent) {
+        watcher.onResourceDoesNotExist(resource);
+      }
     }
 
     void removeWatcher(ResourceWatcher<T>  watcher) {
-      checkArgument(watchers.containsKey(watcher), "watcher %s not registered", watcher);
+      checkArgument(watchers.contains(watcher), "watcher %s not registered", watcher);
       watchers.remove(watcher);
     }
 
@@ -590,7 +586,7 @@ final class XdsClientImpl extends XdsClient
           logger.log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout",
               type, resource);
           respTimer = null;
-          onAbsent(null);
+          onAbsent();
         }
 
         @Override
@@ -637,8 +633,7 @@ final class XdsClientImpl extends XdsClient
       return data != null || absent;
     }
 
-    void onData(ParsedResource<T> parsedResource, String version, long updateTime,
-                ProcessingTracker processingTracker) {
+    void onData(ParsedResource<T> parsedResource, String version, long updateTime) {
       if (respTimer != null && respTimer.isPending()) {
         respTimer.cancel();
         respTimer = null;
@@ -655,20 +650,13 @@ final class XdsClientImpl extends XdsClient
         resourceDeletionIgnored = false;
       }
       if (!Objects.equals(oldData, data)) {
-        for (ResourceWatcher<T> watcher : watchers.keySet()) {
-          processingTracker.startTask();
-          watchers.get(watcher).execute(() -> {
-            try {
-              notifyWatcher(watcher, data);
-            } finally {
-              processingTracker.onComplete();
-            }
-          });
+        for (ResourceWatcher<T> watcher : watchers) {
+          notifyWatcher(watcher, data);
         }
       }
     }
 
-    void onAbsent(@Nullable ProcessingTracker processingTracker) {
+    void onAbsent() {
       if (respTimer != null && respTimer.isPending()) {  // too early to conclude absence
         return;
       }
@@ -692,24 +680,13 @@ final class XdsClientImpl extends XdsClient
         data = null;
         absent = true;
         metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
-        for (ResourceWatcher<T> watcher : watchers.keySet()) {
-          if (processingTracker != null) {
-            processingTracker.startTask();
-          }
-          watchers.get(watcher).execute(() -> {
-            try {
-              watcher.onResourceDoesNotExist(resource);
-            } finally {
-              if (processingTracker != null) {
-                processingTracker.onComplete();
-              }
-            }
-          });
+        for (ResourceWatcher<T> watcher : watchers) {
+          watcher.onResourceDoesNotExist(resource);
         }
       }
     }
 
-    void onError(Status error, @Nullable ProcessingTracker tracker) {
+    void onError(Status error) {
       if (respTimer != null && respTimer.isPending()) {
         respTimer.cancel();
         respTimer = null;
@@ -722,19 +699,8 @@ final class XdsClientImpl extends XdsClient
           .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())
           .withCause(error.getCause());
 
-      for (ResourceWatcher<T> watcher : watchers.keySet()) {
-        if (tracker != null) {
-          tracker.startTask();
-        }
-        watchers.get(watcher).execute(() -> {
-          try {
-            watcher.onError(errorAugmented);
-          } finally {
-            if (tracker != null) {
-              tracker.onComplete();
-            }
-          }
-        });
+      for (ResourceWatcher<T> watcher : watchers) {
+        watcher.onError(errorAugmented);
       }
     }
 

@@ -24,7 +24,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.grpc.Status;
 import io.grpc.xds.Bootstrapper.ServerInfo;
@@ -37,8 +36,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
@@ -308,14 +305,8 @@ abstract class XdsClient {
    * Registers a data watcher for the given Xds resource.
    */
   <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                                                   ResourceWatcher<T> watcher,
-                                                   Executor executor) {
-    throw new UnsupportedOperationException();
-  }
-
-  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
                                                    ResourceWatcher<T> watcher) {
-    watchXdsResource(type, resourceName, watcher, MoreExecutors.directExecutor());
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -362,32 +353,11 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  static final class ProcessingTracker {
-    private final AtomicInteger pendingTask = new AtomicInteger(1);
-    private final Executor executor;
-    private final Runnable completionListener;
-
-    ProcessingTracker(Runnable completionListener, Executor executor) {
-      this.executor = executor;
-      this.completionListener = completionListener;
-    }
-
-    void startTask() {
-      pendingTask.incrementAndGet();
-    }
-
-    void onComplete() {
-      if (pendingTask.decrementAndGet() == 0) {
-        executor.execute(completionListener);
-      }
-    }
-  }
-
   interface XdsResponseHandler {
     /** Called when a xds response is received. */
     void handleResourceResponse(
         XdsResourceType<?> resourceType, ServerInfo serverInfo, String versionInfo,
-        List<Any> resources, String nonce, ProcessingTracker processingTracker);
+        List<Any> resources, String nonce);
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.
