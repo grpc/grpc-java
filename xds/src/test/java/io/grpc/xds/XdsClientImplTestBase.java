@@ -22,7 +22,6 @@ import static io.grpc.xds.XdsClientImpl.XdsChannelFactory.DEFAULT_XDS_CHANNEL_FA
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -3005,7 +3004,7 @@ public abstract class XdsClientImplTestBase {
     verifyResourceMetadataAcked(
         CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1, TIME_INCREMENT);
     barrier.await();
-    verify(cdsResourceWatcher, atLeastOnce()).onChanged(any());
+    verify(cdsResourceWatcher, times(1)).onChanged(any());
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com2' validation error: "
         + "Cluster cluster.googleapis.com2: unspecified cluster discovery type";
     call.verifyRequestNack(CDS, Arrays.asList(CDS_RESOURCE, anotherCdsResource), VERSION_1, "0001",
@@ -3068,8 +3067,8 @@ public abstract class XdsClientImplTestBase {
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
     barrier.await();
-    verify(edsResourceWatcher, atLeastOnce()).onChanged(edsUpdateCaptor.capture());
-    EdsUpdate edsUpdate = edsUpdateCaptor.getAllValues().get(0);
+    verify(edsResourceWatcher, times(1)).onChanged(edsUpdateCaptor.capture());
+    EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
     validateGoldenClusterLoadAssignment(edsUpdate);
     barrier.await();
     latch.await(10, TimeUnit.SECONDS);
