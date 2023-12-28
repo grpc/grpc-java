@@ -366,8 +366,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       void start() {
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Start watching EDS resource {0}", resourceName);
-        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),
-            resourceName, this, syncContext);
+        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), resourceName, this);
       }
 
       @Override
@@ -453,7 +452,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           }
         }
 
-        new EndpointsUpdated().run();
+        syncContext.execute(new EndpointsUpdated());
       }
 
       private List<String> generatePriorityNames(String name,
@@ -492,28 +491,38 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       @Override
       public void onResourceDoesNotExist(final String resourceName) {
-        if (shutdown) {
-          return;
-        }
-        logger.log(XdsLogLevel.INFO, "Resource {0} unavailable", resourceName);
-        status = Status.OK;
-        resolved = true;
-        result = null;  // resource revoked
-        handleEndpointResourceUpdate();
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (shutdown) {
+              return;
+            }
+            logger.log(XdsLogLevel.INFO, "Resource {0} unavailable", resourceName);
+            status = Status.OK;
+            resolved = true;
+            result = null;  // resource revoked
+            handleEndpointResourceUpdate();
+          }
+        });
       }
 
       @Override
       public void onError(final Status error) {
-        if (shutdown) {
-          return;
-        }
-        String resourceName = edsServiceName != null ? edsServiceName : name;
-        status = Status.UNAVAILABLE
-            .withDescription(String.format("Unable to load EDS %s. xDS server returned: %s: %s",
-                  resourceName, error.getCode(), error.getDescription()))
-            .withCause(error.getCause());
-        logger.log(XdsLogLevel.WARNING, "Received EDS error: {0}", error);
-        handleEndpointResolutionError();
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (shutdown) {
+              return;
+            }
+            String resourceName = edsServiceName != null ? edsServiceName : name;
+            status = Status.UNAVAILABLE
+                .withDescription(String.format("Unable to load EDS %s. xDS server returned: %s: %s",
+                      resourceName, error.getCode(), error.getDescription()))
+                .withCause(error.getCause());
+            logger.log(XdsLogLevel.WARNING, "Received EDS error: {0}", error);
+            handleEndpointResolutionError();
+          }
+        });
       }
     }
 

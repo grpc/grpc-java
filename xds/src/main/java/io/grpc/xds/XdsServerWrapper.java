@@ -366,78 +366,92 @@ final class XdsServerWrapper extends Server {
 
     private DiscoveryState(String resourceName) {
       this.resourceName = checkNotNull(resourceName, "resourceName");
-      xdsClient.watchXdsResource(
-          XdsListenerResource.getInstance(), resourceName, this, syncContext);
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), resourceName, this);
     }
 
     @Override
     public void onChanged(final LdsUpdate update) {
-      if (stopped) {
-        return;
-      }
-      logger.log(Level.FINEST, "Received Lds update {0}", update);
-      checkNotNull(update.listener(), "update");
-      if (!pendingRds.isEmpty()) {
-        // filter chain state has not yet been applied to filterChainSelectorManager and there
-        // are two sets of sslContextProviderSuppliers, so we release the old ones.
-        releaseSuppliersInFlight();
-        pendingRds.clear();
-      }
-      filterChains = update.listener().filterChains();
-      defaultFilterChain = update.listener().defaultFilterChain();
-      List<FilterChain> allFilterChains = filterChains;
-      if (defaultFilterChain != null) {
-        allFilterChains = new ArrayList<>(filterChains);
-        allFilterChains.add(defaultFilterChain);
-      }
-      Set<String> allRds = new HashSet<>();
-      for (FilterChain filterChain : allFilterChains) {
-        HttpConnectionManager hcm = filterChain.httpConnectionManager();
-        if (hcm.virtualHosts() == null) {
-          RouteDiscoveryState rdsState = routeDiscoveryStates.get(hcm.rdsName());
-          if (rdsState == null) {
-            rdsState = new RouteDiscoveryState(hcm.rdsName());
-            routeDiscoveryStates.put(hcm.rdsName(), rdsState);
-            xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
-                hcm.rdsName(), rdsState, syncContext);
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
           }
-          if (rdsState.isPending) {
-            pendingRds.add(hcm.rdsName());
+          logger.log(Level.FINEST, "Received Lds update {0}", update);
+          checkNotNull(update.listener(), "update");
+          if (!pendingRds.isEmpty()) {
+            // filter chain state has not yet been applied to filterChainSelectorManager and there
+            // are two sets of sslContextProviderSuppliers, so we release the old ones.
+            releaseSuppliersInFlight();
+            pendingRds.clear();
           }
-          allRds.add(hcm.rdsName());
+          filterChains = update.listener().filterChains();
+          defaultFilterChain = update.listener().defaultFilterChain();
+          List<FilterChain> allFilterChains = filterChains;
+          if (defaultFilterChain != null) {
+            allFilterChains = new ArrayList<>(filterChains);
+            allFilterChains.add(defaultFilterChain);
+          }
+          Set<String> allRds = new HashSet<>();
+          for (FilterChain filterChain : allFilterChains) {
+            HttpConnectionManager hcm = filterChain.httpConnectionManager();
+            if (hcm.virtualHosts() == null) {
+              RouteDiscoveryState rdsState = routeDiscoveryStates.get(hcm.rdsName());
+              if (rdsState == null) {
+                rdsState = new RouteDiscoveryState(hcm.rdsName());
+                routeDiscoveryStates.put(hcm.rdsName(), rdsState);
+                xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
+                    hcm.rdsName(), rdsState);
+              }
+              if (rdsState.isPending) {
+                pendingRds.add(hcm.rdsName());
+              }
+              allRds.add(hcm.rdsName());
+            }
+          }
+          for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
+            if (!allRds.contains(entry.getKey())) {
+              xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(),
+                  entry.getKey(), entry.getValue());
+            }
+          }
+          routeDiscoveryStates.keySet().retainAll(allRds);
+          if (pendingRds.isEmpty()) {
+            updateSelector();
+          }
         }
-      }
-      for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
-        if (!allRds.contains(entry.getKey())) {
-          xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(),
-              entry.getKey(), entry.getValue());
-        }
-      }
-      routeDiscoveryStates.keySet().retainAll(allRds);
-      if (pendingRds.isEmpty()) {
-        updateSelector();
-      }
+      });
     }
 
     @Override
     public void onResourceDoesNotExist(final String resourceName) {
-      if (stopped) {
-        return;
-      }
-      StatusException statusException = Status.UNAVAILABLE.withDescription(
-              "Listener " + resourceName + " unavailable").asException();
-      handleConfigNotFound(statusException);
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
+          }
+          StatusException statusException = Status.UNAVAILABLE.withDescription(
+                  "Listener " + resourceName + " unavailable").asException();
+          handleConfigNotFound(statusException);
+        }
+      });
     }
 
     @Override
     public void onError(final Status error) {
-      if (stopped) {
-        return;
-      }
-      logger.log(Level.FINE, "Error from XdsClient", error);
-      if (!isServing) {
-        listener.onNotServing(error.asException());
-      }
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (stopped) {
+            return;
+          }
+          logger.log(Level.FINE, "Error from XdsClient", error);
+          if (!isServing) {
+            listener.onNotServing(error.asException());
+          }
+        }
+      });
     }
 
     private void shutdown() {

@@ -65,7 +65,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -665,7 +664,7 @@ public class CdsLoadBalancer2Test {
                   outlierDetection)
               .lbPolicyConfig(ImmutableMap.of("unknown", ImmutableMap.of("foo", "bar"))).build());
     } catch (Exception e) {
-      assertThat(e).hasMessageThat().contains("No provider available");
+      assertThat(e).hasCauseThat().hasMessageThat().contains("No provider available");
       return;
     }
     fail("Expected the unknown LB to cause an exception");
@@ -680,7 +679,7 @@ public class CdsLoadBalancer2Test {
                   ImmutableMap.of("ring_hash_experimental", ImmutableMap.of("minRingSize", "-1")))
               .build());
     } catch (Exception e) {
-      assertThat(e).hasMessageThat().contains("Unable to parse");
+      assertThat(e).hasCauseThat().hasMessageThat().contains("Unable to parse");
       return;
     }
     fail("Expected the invalid config to cause an exception");
@@ -790,7 +789,7 @@ public class CdsLoadBalancer2Test {
     @Override
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                          ResourceWatcher<T> watcher, Executor syncContext) {
+                          ResourceWatcher<T> watcher) {
       assertThat(type.typeName()).isEqualTo("CDS");
       watchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
           .add((ResourceWatcher<CdsUpdate>)watcher);
