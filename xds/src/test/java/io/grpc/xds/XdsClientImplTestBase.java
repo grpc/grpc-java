@@ -3079,6 +3079,16 @@ public abstract class XdsClientImplTestBase {
   }
 
   @Test
+  public void flowControlUnknownType() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
+    call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
+    call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
+    call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(edsResourceWatcher).onChanged(any());
+  }
+
+  @Test
   public void edsResourceUpdated() {
     DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
         edsResourceWatcher);

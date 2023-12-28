@@ -415,6 +415,7 @@ final class ControlPlaneClient {
                     XdsLogLevel.WARNING,
                     "Ignore an unknown type of DiscoveryResponse: {0}",
                     response.getTypeUrl());
+                request(1);
                 return;
               }
               handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
