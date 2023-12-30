@@ -1251,8 +1251,8 @@ void GenerateService(const ServiceDescriptor* service,
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
   vars["Iterator"] = "java.util.Iterator";
   vars["Generated"] = jakarta_over_javax
-      ? "javax.annotation.Generated"
-      : "jakarta.annotation.Generated";
+      ? "jakarta.annotation.Generated"
+      : "javax.annotation.Generated";
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
