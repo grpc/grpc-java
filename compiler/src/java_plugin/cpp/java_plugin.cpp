@@ -59,12 +59,15 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
     java_grpc_generator::ProtoFlavor flavor =
         java_grpc_generator::ProtoFlavor::NORMAL;
 
+    bool jakarta_over_javax = false;
     bool disable_version = false;
     for (size_t i = 0; i < options.size(); i++) {
       if (options[i].first == "lite") {
         flavor = java_grpc_generator::ProtoFlavor::LITE;
       } else if (options[i].first == "noversion") {
         disable_version = true;
+      } else if (options[i].first == "jakarta") {
+        jakarta_over_javax = true;
       }
     }
 
@@ -77,7 +80,7 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
       std::unique_ptr<protobuf::io::ZeroCopyOutputStream> output(
           context->Open(filename));
       java_grpc_generator::GenerateService(
-          service, output.get(), flavor, disable_version);
+          service, output.get(), flavor, disable_version, jakarta_over_javax);
     }
     return true;
   }
