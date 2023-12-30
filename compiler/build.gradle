@@ -146,9 +146,11 @@ sourceSets {
 dependencies {
     testImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
+            libraries.jakarta.annotation,
             libraries.javax.annotation
     testLiteImplementation project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
+            libraries.jakarta.annotation,
             libraries.javax.annotation
 }
 
