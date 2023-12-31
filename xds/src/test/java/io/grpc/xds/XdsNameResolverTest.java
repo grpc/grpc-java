@@ -96,6 +96,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -1915,8 +1916,9 @@ public class XdsNameResolverTest {
     @Override
     @SuppressWarnings("unchecked")
     <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                    String resourceName,
-                                                    ResourceWatcher<T> watcher) {
+                                                     String resourceName,
+                                                     ResourceWatcher<T> watcher,
+                                                     Executor syncContext) {
 
       switch (resourceType.typeName()) {
         case "LDS":
@@ -1959,8 +1961,10 @@ public class XdsNameResolverTest {
     }
 
     void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          httpMaxStreamDurationNano, virtualHosts, null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null)));
+      });
     }
 
     void deliverLdsUpdate(final List<Route> routes) {
@@ -1968,8 +1972,10 @@ public class XdsNameResolverTest {
           VirtualHost.create(
               "virtual-host", Collections.singletonList(expectedLdsResourceName), routes,
               ImmutableMap.of());
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          0L, Collections.singletonList(virtualHost), null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), null)));
+      });
     }
 
     void deliverLdsUpdateWithFaultInjection(
@@ -2013,8 +2019,10 @@ public class XdsNameResolverTest {
           Collections.singletonList(expectedLdsResourceName),
           Collections.singletonList(route),
           overrideConfig);
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          0L, Collections.singletonList(virtualHost), filterChain)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), filterChain)));
+      });
     }
 
     void deliverLdsUpdateForRdsNameWithFaultInjection(
@@ -2026,17 +2034,23 @@ public class XdsNameResolverTest {
       ImmutableList<NamedFilterConfig> filterChain = ImmutableList.of(
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-          0L, rdsName, filterChain)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0L, rdsName, filterChain)));
+      });
     }
 
     void deliverLdsUpdateForRdsName(String rdsName) {
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-          0, rdsName, null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0, rdsName, null)));
+      });
     }
 
     void deliverLdsResourceNotFound() {
-      ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+      syncContext.execute(() -> {
+        ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+      });
     }
 
     void deliverRdsUpdateWithFaultInjection(
@@ -2072,29 +2086,39 @@ public class XdsNameResolverTest {
           Collections.singletonList(expectedLdsResourceName),
           Collections.singletonList(route),
           overrideConfig);
-      rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+      syncContext.execute(() -> {
+        rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+      });
     }
 
     void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
       if (!resourceName.equals(rdsResource)) {
         return;
       }
-      rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
+      syncContext.execute(() -> {
+        rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
+      });
     }
 
     void deliverRdsResourceNotFound(String resourceName) {
       if (!resourceName.equals(rdsResource)) {
         return;
       }
-      rdsWatcher.onResourceDoesNotExist(rdsResource);
+      syncContext.execute(() -> {
+        rdsWatcher.onResourceDoesNotExist(rdsResource);
+      });
     }
 
     void deliverError(final Status error) {
       if (ldsWatcher != null) {
-        ldsWatcher.onError(error);
+        syncContext.execute(() -> {
+          ldsWatcher.onError(error);
+        });
       }
       if (rdsWatcher != null) {
-        rdsWatcher.onError(error);
+        syncContext.execute(() -> {
+          rdsWatcher.onError(error);
+        });
       }
     }
   }
