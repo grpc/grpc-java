@@ -204,7 +204,6 @@ public final class BinderTransportSecurity {
           @Override
           public void onFailure(Throwable t) {
             serviceAuthorization.remove(serviceName, authorization);
-            throw new IllegalStateException(t);
           }
         }, MoreExecutors.directExecutor());
       }
