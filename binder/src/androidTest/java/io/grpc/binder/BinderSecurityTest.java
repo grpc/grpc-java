@@ -26,6 +26,7 @@ import com.google.common.base.Function;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
@@ -142,12 +143,16 @@ public final class BinderSecurityTest {
         .isNotNull();
   }
 
-  private void assertCallFailure(MethodDescriptor<Empty, Empty> method, Status status) {
+  @CanIgnoreReturnValue
+  private StatusRuntimeException assertCallFailure(
+      MethodDescriptor<Empty, Empty> method, Status status) {
     try {
       ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, null);
       fail("Expected call to " + method.getFullMethodName() + " to fail but it succeeded.");
+      throw new AssertionError();  // impossible
     } catch (StatusRuntimeException sre) {
       assertThat(sre.getStatus().getCode()).isEqualTo(status.getCode());
+      return sre;
     }
   }
 
@@ -173,6 +178,26 @@ public final class BinderSecurityTest {
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
       assertCallFailure(method, Status.PERMISSION_DENIED);
     }
+  }
+
+  @Test
+  public void testFailedFuturesPropagateOriginalException() throws Exception {
+    String errorMessage = "something went wrong";
+    IllegalStateException originalException = new IllegalStateException(errorMessage);
+    createChannel(
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy("foo", new AsyncSecurityPolicy() {
+              @Override
+              ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                return Futures.immediateFailedFuture(originalException);
+              }
+            })
+            .build(),
+        SecurityPolicies.internalOnly());
+    MethodDescriptor<Empty, Empty> method = methods.get("foo/method0");
+
+    StatusRuntimeException sre = assertCallFailure(method, Status.INTERNAL);
+    assertThat(sre.getStatus().getDescription()).contains(errorMessage);
   }
 
   @Test
