@@ -3010,7 +3010,7 @@ public abstract class XdsClientImplTestBase {
         + "Cluster cluster.googleapis.com2: unspecified cluster discovery type";
     call.verifyRequestNack(CDS, Arrays.asList(CDS_RESOURCE, anotherCdsResource), VERSION_1, "0001",
         NODE, Arrays.asList(errorMsg));
-    verify(anotherWatcher).onResourceDoesNotExist(eq(anotherCdsResource));
+    verify(anotherWatcher, Mockito.timeout(2000)).onResourceDoesNotExist(eq(anotherCdsResource));
     barrier.await();
     latch.await(10, TimeUnit.SECONDS);
     verify(cdsResourceWatcher, times(2)).onChanged(any());
