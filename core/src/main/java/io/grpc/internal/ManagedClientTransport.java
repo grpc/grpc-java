@@ -110,6 +110,8 @@ public interface ManagedClientTransport extends ClientTransport {
      * Called just before {@link #transportReady} to allow direct modification of transport
      * Attributes.
      */
-    Attributes filterTransport(Attributes attributes);
+    default Attributes filterTransport(Attributes attributes) {
+      return attributes;
+    }
   }
 }
