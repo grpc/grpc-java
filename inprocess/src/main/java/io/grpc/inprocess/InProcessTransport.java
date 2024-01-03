@@ -106,7 +106,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           new IdentityHashMap<InProcessStream, Boolean>());
   @GuardedBy("this")
   private List<ServerStreamTracer.Factory> serverStreamTracerFactories;
-  private final Attributes attributes;
+  private Attributes attributes;
 
   private Thread.UncaughtExceptionHandler uncaughtExceptionHandler =
       new Thread.UncaughtExceptionHandler() {
@@ -213,6 +213,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
               .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, address)
               .build();
           serverStreamAttributes = serverTransportListener.transportReady(serverTransportAttrs);
+          attributes = clientTransportListener.filterTransport(attributes);
           clientTransportListener.transportReady();
         }
       }

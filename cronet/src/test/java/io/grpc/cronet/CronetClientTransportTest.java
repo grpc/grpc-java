@@ -80,6 +80,8 @@ public final class CronetClientTransportTest {
 
   @Before
   public void setUp() {
+    when(clientTransportListener.filterTransport(any()))
+        .thenAnswer(i -> i.getArgument(0, Attributes.class));
     transport =
         new CronetClientTransport(
             streamFactory,

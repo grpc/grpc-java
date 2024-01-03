@@ -38,6 +38,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
@@ -219,6 +220,7 @@ public abstract class AbstractTransportTest {
   @Before
   public void setUp() {
     server = newServer(Arrays.asList(serverStreamTracerFactory));
+    when(mockClientTransportListener.filterTransport(any())).thenAnswer(i -> i.getArguments()[0]);
   }
 
   @After
@@ -2136,6 +2138,7 @@ public abstract class AbstractTransportTest {
       ManagedClientTransport clientTransport,
       ManagedClientTransport.Listener listener) {
     runIfNotNull(clientTransport.start(listener));
+    verify(listener, timeout(TIMEOUT_MS)).filterTransport(any());
     verify(listener, timeout(TIMEOUT_MS)).transportReady();
   }
 

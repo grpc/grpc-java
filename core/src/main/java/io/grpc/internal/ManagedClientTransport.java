@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.Attributes;
 import io.grpc.Status;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -104,5 +105,11 @@ public interface ManagedClientTransport extends ClientTransport {
      * at least one stream.
      */
     void transportInUse(boolean inUse);
+
+    /**
+     * Called just before {@link #transportReady} to allow direct modification of transport
+     * Attributes.
+     */
+    Attributes filterTransport(Attributes attributes);
   }
 }

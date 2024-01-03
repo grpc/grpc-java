@@ -61,7 +61,7 @@ class CronetClientTransport implements ConnectionClientTransport {
   private final int maxMessageSize;
   private final boolean alwaysUsePut;
   private final TransportTracer transportTracer;
-  private final Attributes attrs;
+  private Attributes attrs;
   private final boolean useGetForSafeMethods;
   private final boolean usePutForIdempotentMethods;
   // Indicates the transport is in go-away state: no new streams will be processed,
@@ -169,6 +169,7 @@ class CronetClientTransport implements ConnectionClientTransport {
     return new Runnable() {
       @Override
       public void run() {
+        attrs = CronetClientTransport.this.listener.filterTransport(attrs);
         // Listener callbacks should not be called simultaneously
         CronetClientTransport.this.listener.transportReady();
       }

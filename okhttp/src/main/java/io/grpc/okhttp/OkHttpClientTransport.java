@@ -1284,6 +1284,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           outboundWindowSizeIncreased = outboundFlow.initialOutboundWindowSize(initialWindowSize);
         }
         if (firstSettings) {
+          attributes = listener.filterTransport(attributes);
           listener.transportReady();
           firstSettings = false;
         }

@@ -36,6 +36,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
@@ -111,6 +113,7 @@ import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -148,6 +151,11 @@ public class NettyClientTransportTest {
   private InetSocketAddress address;
   private String authority;
   private NettyServer server;
+
+  @Before
+  public void setup() {
+    when(clientTransportListener.filterTransport(any())).thenAnswer(i -> i.getArguments()[0]);
+  }
 
   @After
   public void teardown() throws Exception {
