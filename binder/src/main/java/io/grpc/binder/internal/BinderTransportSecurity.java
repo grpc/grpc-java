@@ -19,6 +19,7 @@ package io.grpc.binder.internal;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 
 import io.grpc.Attributes;
 import io.grpc.Internal;
@@ -32,6 +33,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -110,9 +112,13 @@ public final class BinderTransportSecurity {
       Status authStatus;
       try {
         authStatus = Futures.getDone(authStatusFuture);
-      } catch (ExecutionException e) {
+      } catch (ExecutionException | CancellationException e) {
         // Failed futures are treated as an internal error rather than a security rejection.
         authStatus = Status.INTERNAL.withCause(e);
+        @Nullable String message = e.getMessage();
+        if (message != null) {
+          authStatus = authStatus.withDescription(message);
+        }
       }
 
       if (authStatus.isOk()) {
@@ -179,6 +185,8 @@ public final class BinderTransportSecurity {
       if (useCache) {
         @Nullable ListenableFuture<Status> authorization = serviceAuthorization.get(serviceName);
         if (authorization != null) {
+          // Authorization check exists and is a pending or successful future (even if for a
+          // failed authorization).
           return authorization;
         }
       }
@@ -193,6 +201,15 @@ public final class BinderTransportSecurity {
           serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
       if (useCache) {
         serviceAuthorization.putIfAbsent(serviceName, authorization);
+        Futures.addCallback(authorization, new FutureCallback<Status>() {
+          @Override
+          public void onSuccess(Status result) {}
+
+          @Override
+          public void onFailure(Throwable t) {
+            serviceAuthorization.remove(serviceName, authorization);
+          }
+        }, MoreExecutors.directExecutor());
       }
       return authorization;
     }
