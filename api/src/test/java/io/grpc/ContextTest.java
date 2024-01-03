@@ -706,7 +706,7 @@ public class ContextTest {
 
   @Test
   public void innerDeadlineCompletesBeforeOuter() throws Exception {
-    Context base = Context.current().withDeadline(Deadline.after(2, TimeUnit.SECONDS), scheduler);
+    Context base = Context.current().withDeadline(Deadline.after(3, TimeUnit.SECONDS), scheduler);
     Context child = base.withDeadline(Deadline.after(1, TimeUnit.SECONDS), scheduler);
     child.addListener(cancellationListener, MoreExecutors.directExecutor());
     assertFalse(base.isCancelled());
