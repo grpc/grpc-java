@@ -955,6 +955,8 @@ public abstract class LoadBalancer {
      *
      * <p>It must be called from {@link #getSynchronizationContext the Synchronization Context}
      *
+     * @return Must return a valid Subchannel object, may not return null.
+     *
      * @since 1.22.0
      */
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
