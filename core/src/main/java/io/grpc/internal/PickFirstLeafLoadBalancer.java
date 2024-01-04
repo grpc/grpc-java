@@ -66,6 +66,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
   private AtomicInteger numTf = new AtomicInteger(0);
+  private volatile boolean firstPass = true;
   @Nullable
   private ScheduledHandle scheduleConnectionTask;
   private ConnectivityState rawConnectivityState = IDLE;
@@ -100,7 +101,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    numTf.getAndSet(0); // Since we have a new set of addresses, we are again at first pass
+    // Since we have a new set of addresses, we are again at first pass
+    numTf.getAndSet(0);
+    firstPass = true;
 
     // We can optionally be configured to shuffle the address list. This can help better distribute
     // the load.
@@ -195,10 +198,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return;
     }
 
-    if (newState == TRANSIENT_FAILURE && !addressIndex.isValid()) {
-      numTf.getAndIncrement();
-    }
-
     if (newState == IDLE) {
       helper.refreshNameResolution();
     }
@@ -254,12 +253,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
         }
 
-        // If at end and: not doing happy eyeballs, just got to the end, or we have had enough TF
-        // since we got to the end, then refresh name resolution
-        if (!addressIndex.isValid()
-            && (!enableHappyEyeballs || numTf.get() >= addressIndex.size() || numTf.get() == 0)) {
-          numTf.getAndSet(0);
-          helper.refreshNameResolution();
+        // If we are (at the end and have had enough TF since we got there) or
+        // (just got to the end), then refresh name resolution which may call
+        // acceptResolvedAddresses which will reset addressIndex, but may not.
+        if (!addressIndex.isValid()) {
+          numTf.getAndIncrement();
+          if (numTf.get() >= addressIndex.size() || firstPass) {
+            firstPass = false; // idempotent so okay to call when false
+            numTf.getAndSet(0);
+            helper.refreshNameResolution();
+          }
         }
 
         // If no addresses remaining go into TRANSIENT_FAILURE
@@ -506,6 +509,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   /**
    * Index as in 'i', the pointer to an entry. Not a "search index."
+   * All updates should be done in a synchronization context.
    */
   @VisibleForTesting
   static final class Index {
@@ -530,7 +534,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
      * Move to next address in group.  If last address in group move to first address of next group.
      * @return false if went off end of the list, otherwise true
      */
-    public synchronized boolean increment() {
+    public boolean increment() {
       if (!isValid()) {
         return false;
       }
@@ -546,7 +550,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return true;
     }
 
-    public synchronized void reset() {
+    public void reset() {
       groupIndex = 0;
       addressIndex = 0;
     }
@@ -572,7 +576,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     /**
      * Update to new groups, resetting the current index.
      */
-    public synchronized void updateGroups(List<EquivalentAddressGroup> newGroups) {
+    public void updateGroups(List<EquivalentAddressGroup> newGroups) {
       addressGroups = newGroups != null ? newGroups : Collections.emptyList();
       reset();
     }
@@ -580,7 +584,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     /**
      * Returns false if the needle was not found and the current index was left unchanged.
      */
-    public synchronized boolean seekTo(SocketAddress needle) {
+    public boolean seekTo(SocketAddress needle) {
       for (int i = 0; i < addressGroups.size(); i++) {
         EquivalentAddressGroup group = addressGroups.get(i);
         int j = group.getAddresses().indexOf(needle);
