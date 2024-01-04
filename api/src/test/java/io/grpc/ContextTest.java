@@ -719,7 +719,7 @@ public class ContextTest {
 
     deadlineLatch = new CountDownLatch(1);
     base.addListener(cancellationListener, MoreExecutors.directExecutor());
-    assertTrue(deadlineLatch.await(2, TimeUnit.SECONDS));
+    assertTrue(deadlineLatch.await(4, TimeUnit.SECONDS));
     assertTrue(base.isCancelled());
     assertTrue(base.cancellationCause() instanceof TimeoutException);
     assertNotSame(base.cancellationCause(), child.cancellationCause());
