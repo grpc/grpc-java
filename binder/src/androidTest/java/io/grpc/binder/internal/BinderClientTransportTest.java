@@ -330,6 +330,11 @@ public final class BinderClientTransportTest {
     public void transportInUse(boolean inUse) {
       this.inUse = inUse;
     }
+
+    @Override
+    public Attributes filterTransport(Attributes attributes) {
+      throw new UnsupportedOperationException("Not Used");
+    }
   }
 
   private static final class TestStreamListener implements ClientStreamListener {
