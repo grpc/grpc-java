@@ -16,12 +16,17 @@
 
 package io.grpc.internal;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
 import io.grpc.Attributes;
 import io.grpc.Status;
-import junit.framework.TestCase;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
-public class ManagedClientTransportTest extends TestCase {
+@RunWith(JUnit4.class)
+public class ManagedClientTransportTest {
 
   @Test
   public void testListener() {
