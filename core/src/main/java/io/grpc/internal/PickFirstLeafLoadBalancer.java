@@ -45,6 +45,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -64,7 +65,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
-  private volatile int numTfSinceAccept = 0;
+  private AtomicInteger numTf = new AtomicInteger(0);
   @Nullable
   private ScheduledHandle scheduleConnectionTask;
   private ConnectivityState rawConnectivityState = IDLE;
@@ -99,7 +100,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    numTfSinceAccept = 0; // Since we have a new set of addresses, we are again at first pass
+    numTf.getAndSet(0); // Since we have a new set of addresses, we are again at first pass
 
     // We can optionally be configured to shuffle the address list. This can help better distribute
     // the load.
@@ -194,8 +195,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return;
     }
 
-    if (newState == TRANSIENT_FAILURE) {
-      ++numTfSinceAccept;
+    if (newState == TRANSIENT_FAILURE && !addressIndex.isValid()) {
+      numTf.getAndIncrement();
     }
 
     if (newState == IDLE) {
@@ -253,10 +254,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
         }
 
+        // If at end and: not doing happy eyeballs, just got to the end, or we have had enough TF
+        // since we got to the end, then refresh name resolution
         if (!addressIndex.isValid()
-            && (!enableHappyEyeballs || numTfSinceAccept >= addressIndex.size())) {
-          // If no addresses remaining and we have enough TF reports, go into TRANSIENT_FAILURE
+            && (!enableHappyEyeballs || numTf.get() >= addressIndex.size() || numTf.get() == 0)) {
+          numTf.getAndSet(0);
           helper.refreshNameResolution();
+        }
+
+        // If no addresses remaining go into TRANSIENT_FAILURE
+        if (!addressIndex.isValid())  {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
               new Picker(PickResult.withError(stateInfo.getStatus())));
