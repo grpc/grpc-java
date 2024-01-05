@@ -282,7 +282,6 @@ public class MultiChildLoadBalancerTest {
       return null;
     }
 
-    System.out.println(eag.getAddresses().toString());
     String withoutAttrs = eag.toString().replaceAll("\\/\\{\\}","");
     return "[" + withoutAttrs.replaceAll("[\\[\\]]", "") + "]";
   }
@@ -328,7 +327,6 @@ public class MultiChildLoadBalancerTest {
   private static List<Object> getChildEags(MultiChildLoadBalancer loadBalancer) {
     return loadBalancer.getChildLbStates().stream()
         .map(ChildLbState::getEag)
-        // .map(EquivalentAddressGroup::getAddresses)
         .collect(Collectors.toList());
   }
 
