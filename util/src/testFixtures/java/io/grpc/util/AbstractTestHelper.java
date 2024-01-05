@@ -201,6 +201,7 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   }
 
   public static class FakeSocketAddress extends SocketAddress {
+    private static final long serialVersionUID = 0L;
     final String name;
 
     FakeSocketAddress(String name) {
