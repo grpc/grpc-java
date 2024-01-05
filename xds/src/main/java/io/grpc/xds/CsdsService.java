@@ -80,6 +80,8 @@ public final class CsdsService extends
     if (handleRequest(request, responseObserver)) {
       responseObserver.onCompleted();
     }
+    // TODO(sergiitk): Add a case covering mutating handleRequest return false to true - to verify
+    //   that responseObserver.onCompleted() isn't called erroneously called on error.
   }
 
   @Override
@@ -115,12 +117,11 @@ public final class CsdsService extends
       Thread.currentThread().interrupt();
       logger.log(Level.FINE, "Server interrupted while building CSDS config dump", e);
       error = Status.ABORTED.withDescription("Thread interrupted").withCause(e).asException();
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       logger.log(Level.WARNING, "Unexpected error while building CSDS config dump", e);
       error =
           Status.INTERNAL.withDescription("Unexpected internal error").withCause(e).asException();
     }
-
     responseObserver.onError(error);
     return false;
   }
@@ -212,9 +213,8 @@ public final class CsdsService extends
         return ClientResourceStatus.ACKED;
       case NACKED:
         return ClientResourceStatus.NACKED;
-      default:
-        throw new AssertionError("Unexpected ResourceMetadataStatus: " + status);
     }
+    throw new AssertionError("Unexpected ResourceMetadataStatus: " + status);
   }
 
   private static io.envoyproxy.envoy.admin.v3.UpdateFailureState metadataUpdateFailureStateToProto(
