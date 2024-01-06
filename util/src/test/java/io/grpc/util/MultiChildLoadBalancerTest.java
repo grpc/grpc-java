@@ -286,6 +286,7 @@ public class MultiChildLoadBalancerTest {
     return "[" + withoutAttrs.replaceAll("[\\[\\]]", "") + "]";
   }
 
+  @SuppressWarnings("MixedMutabilityReturnType")
   private List<LoadBalancer.Subchannel> getList(LoadBalancer.SubchannelPicker picker) {
     if (picker instanceof LoadBalancer.FixedResultPicker) {
       LoadBalancer.Subchannel subchannel = picker.pickSubchannel(null).getSubchannel();
