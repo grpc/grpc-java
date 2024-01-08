@@ -36,7 +36,7 @@ public final class PendingAuthListenerTest {
   @Captor ArgumentCaptor<Status> statusCaptor;
 
   private final Metadata headers = new Metadata();
-  private final PendingAuthListener<Object, Object> listener = new PendingAuthListener<>();;
+  private final PendingAuthListener<Object, Object> listener = new PendingAuthListener<>();
 
   @Before
   public void setUp() {
