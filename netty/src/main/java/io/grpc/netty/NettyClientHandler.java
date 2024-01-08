@@ -131,7 +131,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
-  private Attributes attributes;
+  private volatile Attributes attributes;
   private InternalChannelz.Security securityInfo;
   private Status abruptGoAwayStatus;
   private Status channelInactiveReason;
