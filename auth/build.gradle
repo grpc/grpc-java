@@ -19,6 +19,7 @@ dependencies {
             libraries.google.auth.credentials
     implementation libraries.guava
     testImplementation project(':grpc-testing'),
+            project(':grpc-core'),
             libraries.google.auth.oauth2Http
     signature libraries.signature.java
     signature libraries.signature.android

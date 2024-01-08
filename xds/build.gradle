@@ -48,6 +48,7 @@ dependencies {
     compileOnly sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
             project(':grpc-core'),
+            project(':grpc-util'),
             project(':grpc-services'),
             project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
@@ -58,6 +59,7 @@ dependencies {
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-rls')
+    testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-util'))

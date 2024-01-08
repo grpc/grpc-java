@@ -3,7 +3,7 @@ plugins {
     id 'java'
 
     id "com.google.protobuf" version "0.9.4"
-    id 'com.google.cloud.tools.jib' version '3.1.4' // For releasing to Docker Hub
+    id 'com.google.cloud.tools.jib' version '3.3.2' // For releasing to Docker Hub
 }
 
 repositories {
@@ -23,7 +23,7 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.61.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.62.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protobufVersion = '3.25.1'
 
 dependencies {
@@ -35,6 +35,7 @@ dependencies {
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+    testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
 }
 
 protobuf {
@@ -58,7 +59,7 @@ mainClassName = 'io.grpc.examples.hostname.HostnameServer'
 
 // For releasing to Docker Hub
 jib {
-  from.image = "gcr.io/distroless/java:8"
+  from.image = "gcr.io/distroless/java17-debian12"
   container.ports = ['50051']
   outputPaths {
     tar = 'build/example-hostname.tar'

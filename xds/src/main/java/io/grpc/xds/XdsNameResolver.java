@@ -638,66 +638,52 @@ final class XdsNameResolver extends NameResolver {
 
     @Override
     public void onChanged(final LdsUpdate update) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (stopped) {
-            return;
-          }
-          logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-          HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
-          List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
-          String rdsName = httpConnectionManager.rdsName();
-          cleanUpRouteDiscoveryState();
-          if (virtualHosts != null) {
-            updateRoutes(virtualHosts, httpConnectionManager.httpMaxStreamDurationNano(),
-                httpConnectionManager.httpFilterConfigs());
-          } else {
-            routeDiscoveryState = new RouteDiscoveryState(
-                rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
-                httpConnectionManager.httpFilterConfigs());
-            logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
-            xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
-                rdsName, routeDiscoveryState);
-          }
-        }
-      });
+      if (stopped) {
+        return;
+      }
+      logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
+      HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
+      List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
+      String rdsName = httpConnectionManager.rdsName();
+      cleanUpRouteDiscoveryState();
+      if (virtualHosts != null) {
+        updateRoutes(virtualHosts, httpConnectionManager.httpMaxStreamDurationNano(),
+            httpConnectionManager.httpFilterConfigs());
+      } else {
+        routeDiscoveryState = new RouteDiscoveryState(
+            rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
+            httpConnectionManager.httpFilterConfigs());
+        logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
+        xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
+            rdsName, routeDiscoveryState, syncContext);
+      }
     }
 
     @Override
     public void onError(final Status error) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (stopped || receivedConfig) {
-            return;
-          }
-          listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
-              String.format("Unable to load LDS %s. xDS server returned: %s: %s",
-              ldsResourceName, error.getCode(), error.getDescription())));
-        }
-      });
+      if (stopped || receivedConfig) {
+        return;
+      }
+      listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
+          String.format("Unable to load LDS %s. xDS server returned: %s: %s",
+          ldsResourceName, error.getCode(), error.getDescription())));
     }
 
     @Override
     public void onResourceDoesNotExist(final String resourceName) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (stopped) {
-            return;
-          }
-          String error = "LDS resource does not exist: " + resourceName;
-          logger.log(XdsLogLevel.INFO, error);
-          cleanUpRouteDiscoveryState();
-          cleanUpRoutes(error);
-        }
-      });
+      if (stopped) {
+        return;
+      }
+      String error = "LDS resource does not exist: " + resourceName;
+      logger.log(XdsLogLevel.INFO, error);
+      cleanUpRouteDiscoveryState();
+      cleanUpRoutes(error);
     }
 
     private void start() {
       logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", ldsResourceName);
-      xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName, this);
+      xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
+          ldsResourceName, this, syncContext);
     }
 
     private void stop() {
@@ -865,47 +851,31 @@ final class XdsNameResolver extends NameResolver {
 
       @Override
       public void onChanged(final RdsUpdate update) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (RouteDiscoveryState.this != routeDiscoveryState) {
-              return;
-            }
-            logger.log(XdsLogLevel.INFO, "Received RDS resource update: {0}", update);
-            updateRoutes(update.virtualHosts, httpMaxStreamDurationNano,
-                filterConfigs);
-          }
-        });
+        if (RouteDiscoveryState.this != routeDiscoveryState) {
+          return;
+        }
+        logger.log(XdsLogLevel.INFO, "Received RDS resource update: {0}", update);
+        updateRoutes(update.virtualHosts, httpMaxStreamDurationNano, filterConfigs);
       }
 
       @Override
       public void onError(final Status error) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (RouteDiscoveryState.this != routeDiscoveryState || receivedConfig) {
-              return;
-            }
-            listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
-                String.format("Unable to load RDS %s. xDS server returned: %s: %s",
-                resourceName, error.getCode(), error.getDescription())));
-          }
-        });
+        if (RouteDiscoveryState.this != routeDiscoveryState || receivedConfig) {
+          return;
+        }
+        listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
+            String.format("Unable to load RDS %s. xDS server returned: %s: %s",
+            resourceName, error.getCode(), error.getDescription())));
       }
 
       @Override
       public void onResourceDoesNotExist(final String resourceName) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (RouteDiscoveryState.this != routeDiscoveryState) {
-              return;
-            }
-            String error = "RDS resource does not exist: " + resourceName;
-            logger.log(XdsLogLevel.INFO, error);
-            cleanUpRoutes(error);
-          }
-        });
+        if (RouteDiscoveryState.this != routeDiscoveryState) {
+          return;
+        }
+        String error = "RDS resource does not exist: " + resourceName;
+        logger.log(XdsLogLevel.INFO, error);
+        cleanUpRoutes(error);
       }
     }
   }

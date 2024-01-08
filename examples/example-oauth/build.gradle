@@ -23,7 +23,7 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.61.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.62.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protobufVersion = '3.25.1'
 def protocVersion = protobufVersion
 
@@ -38,6 +38,7 @@ dependencies {
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+    testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.mockito:mockito-core:4.4.0"
 }

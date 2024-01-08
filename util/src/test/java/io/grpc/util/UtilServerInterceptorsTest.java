@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.NoopServerCall;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptors;
@@ -29,7 +30,6 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.internal.NoopServerCall;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Arrays;
 import org.junit.Test;

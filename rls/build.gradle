@@ -25,6 +25,7 @@ dependencies {
     compileOnly libraries.javax.annotation
     testImplementation libraries.truth,
             project(':grpc-grpclb'),
+            project(':grpc-inprocess'),
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
             testFixtures(project(':grpc-core'))

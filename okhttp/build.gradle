@@ -15,8 +15,9 @@ tasks.named("jar").configure {
 }
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-api')
     implementation project(':grpc-util'),
+            project(':grpc-core'),
             libraries.okio,
             libraries.guava,
             libraries.perfmark.api

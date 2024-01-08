@@ -26,6 +26,7 @@ tasks.named("jar").configure {
 
 dependencies {
     implementation project(':grpc-core'),
+            project(':grpc-inprocess'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-stub'),
