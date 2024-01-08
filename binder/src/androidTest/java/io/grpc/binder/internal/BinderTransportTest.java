@@ -20,7 +20,6 @@ import android.content.Context;
 import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BindServiceFlags;
@@ -30,13 +29,13 @@ import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.internal.AbstractTransportTest;
-import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.After;
 import org.junit.Ignore;
@@ -55,6 +54,8 @@ public final class BinderTransportTest extends AbstractTransportTest {
   private final Context appContext = ApplicationProvider.getApplicationContext();
   private final ObjectPool<ScheduledExecutorService> executorServicePool =
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
+  private final ObjectPool<Executor> offloadExecutorPool =
+      SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
 
   @Override
   @After
@@ -104,7 +105,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
         BindServiceFlags.DEFAULTS,
         ContextCompat.getMainExecutor(appContext),
         executorServicePool,
-        new FixedObjectPool<>(MoreExecutors.directExecutor()),
+        offloadExecutorPool,
         SecurityPolicies.internalOnly(),
         InboundParcelablePolicy.DEFAULT,
         eagAttrs());
