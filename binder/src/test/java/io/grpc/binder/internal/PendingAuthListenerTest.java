@@ -25,7 +25,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.Status;
 
 @RunWith(JUnit4.class)
-
 public final class PendingAuthListenerTest {
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
