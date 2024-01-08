@@ -81,7 +81,7 @@ public final class CsdsService extends
       responseObserver.onCompleted();
     }
     // TODO(sergiitk): Add a case covering mutating handleRequest return false to true - to verify
-    //   that responseObserver.onCompleted() isn't called erroneously called on error.
+    //   that responseObserver.onCompleted() isn't erroneously called on error.
   }
 
   @Override
@@ -213,8 +213,9 @@ public final class CsdsService extends
         return ClientResourceStatus.ACKED;
       case NACKED:
         return ClientResourceStatus.NACKED;
+      default:
+        throw new AssertionError("Unexpected ResourceMetadataStatus: " + status);
     }
-    throw new AssertionError("Unexpected ResourceMetadataStatus: " + status);
   }
 
   private static io.envoyproxy.envoy.admin.v3.UpdateFailureState metadataUpdateFailureStateToProto(
