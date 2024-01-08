@@ -80,6 +80,8 @@ public final class CsdsService extends
     if (handleRequest(request, responseObserver)) {
       responseObserver.onCompleted();
     }
+    // TODO(sergiitk): Add a case covering mutating handleRequest return false to true - to verify
+    //   that responseObserver.onCompleted() isn't erroneously called on error.
   }
 
   @Override
@@ -115,12 +117,11 @@ public final class CsdsService extends
       Thread.currentThread().interrupt();
       logger.log(Level.FINE, "Server interrupted while building CSDS config dump", e);
       error = Status.ABORTED.withDescription("Thread interrupted").withCause(e).asException();
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       logger.log(Level.WARNING, "Unexpected error while building CSDS config dump", e);
       error =
           Status.INTERNAL.withDescription("Unexpected internal error").withCause(e).asException();
     }
-
     responseObserver.onError(error);
     return false;
   }
