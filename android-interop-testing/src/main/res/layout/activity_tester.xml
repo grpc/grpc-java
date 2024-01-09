@@ -37,12 +37,15 @@
         android:layout_height="wrap_content"
         android:onClick="enableUds"
         android:textColor="@color/focus"
-        android:text="Use UDS (SSL not supported)"/>
+        android:text="Use UDS (SSL not supported)"
+        tools:ignore="OnClick"
+        />
     <EditText
         android:id="@+id/uds_proxy_edit_text"
         android:layout_height="wrap_content"
         android:layout_width="match_parent"
         android:enabled="false"
+        android:inputType="text"
         android:hint="Enter Unix Domain Socket Abstract Namespace Address"
         />
   </LinearLayout>
