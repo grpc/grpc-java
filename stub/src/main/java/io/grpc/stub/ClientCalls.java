@@ -244,7 +244,7 @@ public final class ClientCalls {
   public static <ReqT, RespT> BlockingClientCall<?, RespT> blockingV2ServerStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req)
       throws InterruptedException {
-    io.grpc.stub.BlockingClientCall<ReqT, RespT> call =
+    BlockingClientCall<ReqT, RespT> call =
         blockingBidiStreamingCall(channel, method, callOptions);
     call.write(req);
     call.halfClose();
