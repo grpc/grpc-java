@@ -270,12 +270,12 @@ public class FileWatcherCertificateProviderTest {
         CLIENT_PEM_FILE,
         SERVER_0_PEM_FILE,
         CA_PEM_FILE,
-        java.security.KeyException.class,
+        java.security.spec.InvalidKeySpecException.class,
         0,
         1,
         0,
         0,
-        "could not find a PKCS #8 private key in input stream");
+        "Neither RSA nor EC worked");
   }
 
   @Test

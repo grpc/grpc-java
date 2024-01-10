@@ -17,9 +17,7 @@
 package io.grpc.xds.internal.security;
 
 import static com.google.common.truth.Truth.assertThat;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.io.CharStreams;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.BoolValue;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
@@ -32,14 +30,11 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContex
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
+import io.grpc.util.CertificateUtils;
 import io.grpc.xds.EnvoyServerProtoData;
-import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.handler.ssl.SslContext;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
@@ -195,20 +190,9 @@ public class CommonTlsContextTestsUtil {
   /** Gets a cert from contents of a resource. */
   public static X509Certificate getCertFromResourceName(String resourceName)
       throws IOException, CertificateException {
-    try (ByteArrayInputStream bais =
-        new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8))) {
-      return CertificateUtils.toX509Certificate(bais);
+    try (InputStream cert = TlsTesting.loadCert(resourceName)) {
+      return CertificateUtils.getX509Certificates(cert)[0];
     }
-  }
-
-  /** Gets contents of a certs resource. */
-  public static String getResourceContents(String resourceName) throws IOException {
-    InputStream inputStream = TlsTesting.loadCert(resourceName);
-    String text = null;
-    try (Reader reader = new InputStreamReader(inputStream, UTF_8)) {
-      text = CharStreams.toString(reader);
-    }
-    return text;
   }
 
   @SuppressWarnings("deprecation")
