@@ -1098,6 +1098,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
 
     @Override
+    @SuppressWarnings("Finally")
     public void run() {
       String threadName = Thread.currentThread().getName();
       Thread.currentThread().setName("OkHttpClientTransport");
