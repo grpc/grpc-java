@@ -16,19 +16,13 @@
 
 package io.grpc.xds.internal.security.certprovider;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
-import com.google.common.io.CharStreams;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.TimeProvider;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.util.CertificateUtils;
 import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider.ScheduledExecutorServiceFactory;
-import io.grpc.xds.internal.security.trust.CertificateUtils;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -44,17 +38,9 @@ public class CommonCertProviderTestUtils {
 
   static X509Certificate getCertFromResourceName(String resourceName)
           throws IOException, CertificateException {
-    return CertificateUtils.toX509Certificate(
-            new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8)));
-  }
-
-  private static String getResourceContents(String resourceName) throws IOException {
-    InputStream inputStream = TestUtils.class.getResourceAsStream("/certs/" + resourceName);
-    String text = null;
-    try (Reader reader = new InputStreamReader(inputStream, UTF_8)) {
-      text = CharStreams.toString(reader);
+    try (InputStream cert = TestUtils.class.getResourceAsStream("/certs/" + resourceName)) {
+      return CertificateUtils.getX509Certificates(cert)[0];
     }
-    return text;
   }
 
   /** Allow tests to register a provider using test clock.
