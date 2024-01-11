@@ -131,7 +131,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
-  private volatile Attributes attributes;
+  private Attributes attributes;
   private InternalChannelz.Security securityInfo;
   private Status abruptGoAwayStatus;
   private Status channelInactiveReason;
@@ -917,7 +917,8 @@ class NettyClientHandler extends AbstractNettyHandler {
     public void onSettingsRead(ChannelHandlerContext ctx, Http2Settings settings) {
       if (firstSettings) {
         firstSettings = false;
-        attributes = lifecycleManager.notifyReady(attributes);
+        attributes = lifecycleManager.filterAttributes(attributes);
+        lifecycleManager.notifyReady();
       }
     }
 
