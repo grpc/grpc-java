@@ -37,14 +37,19 @@ final class ClientTransportLifecycleManager {
     this.listener = listener;
   }
 
-  public Attributes notifyReady(Attributes attributes) {
+  public Attributes filterAttributes(Attributes attributes) {
     if (transportReady || transportShutdown) {
       return attributes;
     }
+    return listener.filterTransport(attributes);
+  }
+
+  public void notifyReady() {
+    if (transportReady || transportShutdown) {
+      return;
+    }
     transportReady = true;
-    attributes = listener.filterTransport(attributes);
     listener.transportReady();
-    return attributes;
   }
 
   /**
