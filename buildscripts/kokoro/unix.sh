@@ -31,7 +31,7 @@ fi
 # ARCH is x86_64 unless otherwise specified.
 ARCH="${ARCH:-x86_64}"
 
-cat <<EOF >> gradle.properties
+cat <<'EOF' >> gradle.properties
 # defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
 # https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
 # Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
@@ -43,11 +43,11 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
+GRADLE_FLAGS+=" --parallel"
 GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
-GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   GRADLE_FLAGS+=" -PskipAndroid=true"
 else
@@ -93,17 +93,17 @@ fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
+readonly GRADLE_FLAGS_NO_PARALLEL="${GRADLE_FLAGS// --parallel/}"
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" || "$ARCH" = "s390_64" ]]; then
     GRADLE_FLAGS+=" -x grpc-compiler:generateTestProto -x grpc-compiler:generateTestLiteProto"
     GRADLE_FLAGS+=" -x grpc-compiler:testGolden -x grpc-compiler:testLiteGolden"
     GRADLE_FLAGS+=" -x grpc-compiler:testDeprecatedGolden -x grpc-compiler:testDeprecatedLiteGolden"
   fi
-  ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS \
-    -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
+  ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS_NO_PARALLEL \
+    -PrepositoryDir=$LOCAL_MVN_TEMP
 else
-  ./gradlew publish :grpc-core:versionFile $GRADLE_FLAGS \
-    -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
+  ./gradlew publish :grpc-core:versionFile $GRADLE_FLAGS_NO_PARALLEL -PrepositoryDir=$LOCAL_MVN_TEMP
   pushd examples/example-hostname
   ../gradlew jibBuildTar $GRADLE_FLAGS
   popd
