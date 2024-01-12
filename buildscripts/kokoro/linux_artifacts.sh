@@ -1,9 +1,8 @@
 #!/bin/bash
-set -veux -o pipefail
-
-if [[ -f /VERSION ]]; then
-  cat /VERSION
-fi
+set -veu -o pipefail
+# Prepend command trace with the date.
+PS4='+ $(date "+%s.%N")\011 '
+set -x
 
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 
@@ -11,7 +10,8 @@ readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 trap spongify_logs EXIT
 
 "$GRPC_JAVA_DIR"/buildscripts/build_docker.sh
-"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-x86 /grpc-java/buildscripts/build_artifacts_in_docker.sh
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-x86 \
+  /grpc-java/buildscripts/build_artifacts_in_docker.sh
 
 "$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-multiarch env \
   SKIP_TESTS=true ARCH=aarch_64 /grpc-java/buildscripts/kokoro/unix.sh

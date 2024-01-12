@@ -15,7 +15,11 @@
 #  ARCH=s390_64 ./buildscripts/kokoro/unix.sh
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
-set -exu -o pipefail
+set -eu -o pipefail
+# Prepend command trace with the date.
+PS4='+ $(date "+%s.%N")\011 '
+set -x
+
 
 # It would be nicer to use 'readlink -f' here but osx does not support it.
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
@@ -93,17 +97,18 @@ fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
-readonly GRADLE_FLAGS_NO_PARALLEL="${GRADLE_FLAGS// --parallel/}"
+readonly GRADLE_FLAGS_ARTIFACTS="${GRADLE_FLAGS// --parallel/ --no-parallel} \
+  -PrepositoryDir=${LOCAL_MVN_TEMP}"
+
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" || "$ARCH" = "s390_64" ]]; then
     GRADLE_FLAGS+=" -x grpc-compiler:generateTestProto -x grpc-compiler:generateTestLiteProto"
     GRADLE_FLAGS+=" -x grpc-compiler:testGolden -x grpc-compiler:testLiteGolden"
     GRADLE_FLAGS+=" -x grpc-compiler:testDeprecatedGolden -x grpc-compiler:testDeprecatedLiteGolden"
   fi
-  ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS_NO_PARALLEL \
-    -PrepositoryDir=$LOCAL_MVN_TEMP
+  ./gradlew grpc-compiler:build grpc-compiler:publish "${GRADLE_FLAGS_ARTIFACTS}"
 else
-  ./gradlew publish :grpc-core:versionFile $GRADLE_FLAGS_NO_PARALLEL -PrepositoryDir=$LOCAL_MVN_TEMP
+  ./gradlew publish :grpc-core:versionFile "${GRADLE_FLAGS_ARTIFACTS}"
   pushd examples/example-hostname
   ../gradlew jibBuildTar $GRADLE_FLAGS
   popd
