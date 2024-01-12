@@ -20,8 +20,6 @@ set -eu -o pipefail
 PS4='+ $(date "+[%H:%M:%S %Z]")\011 '
 set -x
 
-free -h
-
 # It would be nicer to use 'readlink -f' here but osx does not support it.
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 
@@ -41,7 +39,7 @@ cat <<'EOF' >> gradle.properties
 # https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
 # Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
 # space is exhausted", and to increase build speed
-org.gradle.jvmargs=-Xmx24G -XX:MaxMetaspaceSize=1024m
+org.gradle.jvmargs=-Xmx24g -XX:MaxMetaspaceSize=2g
 EOF
 
 ARCH="$ARCH" buildscripts/make_dependencies.sh
@@ -49,6 +47,7 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
 GRADLE_FLAGS+=" --parallel"
+GRADLE_FLAGS+=" --configuration-cache"
 GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
