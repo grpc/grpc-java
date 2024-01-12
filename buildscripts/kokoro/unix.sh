@@ -47,7 +47,7 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
 GRADLE_FLAGS+=" --parallel"
-GRADLE_FLAGS+=" --configuration-cache"
+GRADLE_FLAGS+=" --configuration-cache --configuration-cache-problems=warn"
 GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
