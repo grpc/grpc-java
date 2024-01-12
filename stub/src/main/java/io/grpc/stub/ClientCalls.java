@@ -33,10 +33,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -45,6 +42,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Predicate;
 import java.util.logging.Level;
@@ -246,9 +245,15 @@ public final class ClientCalls {
       throws InterruptedException {
     BlockingClientCall<ReqT, RespT> call =
         blockingBidiStreamingCall(channel, method, callOptions);
-    call.write(req);
-    call.halfClose();
-    return call;
+
+    try {
+      call.write(req);
+      call.halfClose();
+      return call;
+    } catch (InterruptedException e) {
+      call.cancel("Interrupted while writing request", e);
+      throw e;
+    }
   }
 
   public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingClientStreamingCall(
@@ -266,9 +271,7 @@ public final class ClientCalls {
   public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingBidiStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
     ThreadSafeThreadlessExecutor executor = new ThreadSafeThreadlessExecutor();
-    ClientCall<ReqT, RespT> call = channel.newCall(method,
-        callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING)
-            .withExecutor(executor));
+    ClientCall<ReqT, RespT> call = channel.newCall(method, callOptions.withExecutor(executor));
 
     BlockingClientCall<ReqT, RespT> blockingClientCall = new BlockingClientCall<>(call, executor);
 
@@ -408,7 +411,7 @@ public final class ClientCalls {
     abstract void onStart();
   }
 
-  private static final class CallToStreamObserverAdapter<ReqT>
+  private static class CallToStreamObserverAdapter<ReqT>
       extends ClientCallStreamObserver<ReqT> {
     private boolean frozen;
     private final ClientCall<ReqT, ?> call;
@@ -864,117 +867,106 @@ public final class ClientCalls {
     private static final Logger log =
         Logger.getLogger(ThreadSafeThreadlessExecutor.class.getName());
 
-    private static final Object SHUTDOWN = new Object(); // sentinel
-
-    // Set to the calling thread while it's parked, SHUTDOWN on RPC completion
-    private volatile Object waiter;
-    private final Collection<Thread> waitingThreads = new ArrayList<>();
-    private final List<ValidatingThread<?>> validatingThreadList = new ArrayList<>();
+    private Lock waiterLock = new java.util.concurrent.locks.ReentrantLock();
+    private Condition waiterCondition = waiterLock.newCondition();
 
     // Non private to avoid synthetic class
     ThreadSafeThreadlessExecutor() {}
 
     /**
      * Waits until there is a Runnable, then executes it and all queued Runnables after it.
-     * This, {@link #drain}, and {@link #waitAndDrainWithTimeout(boolean, long, Predicate, Object)}
-     * must only be called by one thread at a time.
      */
     public void waitAndDrain() throws InterruptedException {
-      waitAndDrainWithTimeout(true, 0, null, null);
+      boolean executedRunnable = false;
+      while (!executedRunnable) {
+        executedRunnable = waitAndDrainWithTimeout(true, 0, null, null);
+      }
     }
 
     /**
      * Waits for up to specified nanoseconds until there is a Runnable, then executes it and all
      * queued Runnables after it.
      *
-     * <p>This method and {@link #drain}, must only be called by one thread at a time.
+     * <p>his should always be called in a loop that checks whether the reason we are waiting has
+     * been satisfied.</p>T
+     *
      * @param waitForever ignore the rest of the arguments and wait until there is a task to run
      * @param end System.nanoTime() to stop waiting if haven't been woken up yet
      * @param predicate condition to test for skipping wake or waking up threads
+     * @return true if a runnable was executed
      */
-    public <T> void waitAndDrainWithTimeout(boolean waitForever, long end,
+    @SuppressWarnings("WaitNotInLoop")
+    public <T> boolean waitAndDrainWithTimeout(boolean waitForever, long end,
         Predicate<T> predicate, T testTarget) throws InterruptedException {
       throwIfInterrupted();
-      Runnable runnable = poll();
-      if (runnable == null) {
-        synchronized (this) {
+      Runnable runnable;
+
+      synchronized (this) {
+        runnable = poll();
+
+        if (runnable == null) {
           if (predicate != null && predicate.test(testTarget)) {
-            return; // The condition for which we were waiting is now satisfied
+            return false; // The condition for which we were waiting is now satisfied
           }
-          validatingThreadList.add(
-              new ValidatingThread<>(Thread.currentThread(), predicate, testTarget));
-          waitingThreads.add(Thread.currentThread());
-          if (waiter != SHUTDOWN) {
-            waiter = Thread.currentThread();
-          }
+
+          waiterLock.lock();
           try {
             if (waitForever) {
-              LockSupport.park(this);
+              waiterCondition.await();
             } else {
               long waitNanos = end - System.nanoTime();
               if (waitNanos <= 0) {
-                return;
+                return false; // Deadline is expired
               }
-              LockSupport.parkNanos(this, waitNanos);
+              waiterCondition.awaitNanos(waitNanos);
               throwIfInterrupted();
             }
           } finally {
-            if (waiter != SHUTDOWN) {
-              waiter = null;
-            }
-            List<Thread> threads = new ArrayList<>(waitingThreads);
-            waitingThreads.clear();
-            validatingThreadList.clear(); // they should have all been in waitingThreads
-            for (Thread thread : threads) {
-              LockSupport.unpark(thread);
-            }
+            waiterLock.unlock();
           }
         }
         runnable = poll();
       }
 
       if (runnable == null) {
-        return;
+        signallAll();
+        return false;
       }
+
       do {
         runQuietly(runnable);
       } while ((runnable = poll()) != null);
 
-      // The do loop above may have satisfied something that was putting itself on the queue
-      // after we left the synchronized block, so test them all to make sure they weren't missed
-      // TODO(lsafran) does this block really need to be synchronized
-      synchronized (this) {
-        Iterator<ValidatingThread<?>> iterator = validatingThreadList.iterator();
-        while (iterator.hasNext()) {
-          ValidatingThread<?> validatingThread = iterator.next();
-          if (validatingThread.skipWaiting()) {
-            LockSupport.unpark(validatingThread.thread);
-            iterator.remove();
-          }
-        }
-      }
+      // Wake everything up now that we've done something
+      signallAll();
+
+      return true;
     }
 
     /**
-     * Executes all queued Runnables
-     * <br>This must only be called by one thread at a time.
+     * Executes all queued Runnables and if there were any wakes up any waiting threads.
      */
     public void drain() throws InterruptedException {
       throwIfInterrupted();
       Runnable runnable;
+      boolean didWork = false;
+
       while ((runnable = poll()) != null) {
         runQuietly(runnable);
+        didWork = true;
+      }
+
+      if (didWork) {
+        signallAll();
       }
     }
 
-    /**
-     * Called after final call to {@link #waitAndDrain()}, from same thread.
-     */
-    public void shutdown() {
-      waiter = SHUTDOWN;
-      Runnable runnable;
-      while ((runnable = poll()) != null) {
-        runQuietly(runnable);
+    private void signallAll() {
+      waiterLock.lock();
+      try {
+        waiterCondition.signalAll();
+      } finally {
+        waiterLock.unlock();
       }
     }
 
@@ -995,12 +987,11 @@ public final class ClientCalls {
     @Override
     public void execute(Runnable runnable) {
       add(runnable);
-      Object waiter = this.waiter;
-      if (waiter != SHUTDOWN) {
-        List<Thread> threads = new ArrayList<>(waitingThreads);
-        threads.forEach(thread -> LockSupport.unpark(thread));
-      } else if (remove(runnable) && rejectRunnableOnExecutor) {
-        throw new RejectedExecutionException();
+      waiterLock.lock();
+      try {
+        waiterCondition.signalAll(); // If anything is waiting let it wake up and process this task
+      } finally {
+        waiterLock.unlock();
       }
     }
   }

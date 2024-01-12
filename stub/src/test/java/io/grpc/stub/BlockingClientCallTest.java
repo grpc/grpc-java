@@ -297,14 +297,14 @@ public class BlockingClientCallTest {
   @Test
   public void testReadsAndWritesInterleaved_withBlocking()
       throws InterruptedException, TimeoutException {
-    testMethod.disableAutoRequest();
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
 
-    Integer[] valuesOut = {1, 2, 3};
+    Integer[] valuesOut = {1001, 10022, 1003};
     Integer[] valuesIn = new Integer[valuesOut.length];
     delayedAddValue(300, valuesOut);
-    for (int i = 0; i < valuesOut.length; ) {
+    int iteration = 0;
+    for (int i = 0; i < valuesOut.length && iteration++ < (20 + valuesOut.length); ) {
       try {
         if ((valuesIn[i] = biDiStream.read(50, TimeUnit.MILLISECONDS)) != null) {
           i++;
@@ -314,6 +314,14 @@ public class BlockingClientCallTest {
       }
     }
     assertArrayEquals(valuesOut, valuesIn);
+  }
+
+  @Test
+  public void testReadsAndWritesInterleaved_BlockingWrites()
+      throws InterruptedException, TimeoutException {
+    testMethod.disableAutoRequest();
+    biDiStream = ClientCalls.blockingBidiStreamingCall(channel, BIDI_STREAMING_METHOD,
+        CallOptions.DEFAULT);
 
     testMethod.sendValuesToClient(10, 11, 12);
     delayedWriteEnable(500);
@@ -345,7 +353,7 @@ public class BlockingClientCallTest {
     try {
       Integer value = biDiStream.read(200, TimeUnit.MILLISECONDS);
       fail("Unexpected read success instead of timeout.  Value was: " + value);
-    } catch (TimeoutException e) {
+    } catch (TimeoutException ignore) {
       // ignore since expected
     }
   }

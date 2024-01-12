@@ -338,12 +338,11 @@ public final class BlockingClientCall<ReqT, RespT> {
   private <T> void waitAndDrainExecutorOrTimeout(boolean waitForever, long end,
       Predicate<T> predicate, T testTarget)
       throws InterruptedException, TimeoutException {
-    long timeLeft = end - System.nanoTime();
-    if (!waitForever && timeLeft <= 0) {
+    if (!waitForever && (end - System.nanoTime() <= 0)) {
       throw new TimeoutException();
     }
     // Let threadless executor do stuff until there is something for us to check
-    executor.waitAndDrainWithTimeout(waitForever, timeLeft, predicate, testTarget);
+    executor.waitAndDrainWithTimeout(waitForever, end, predicate, testTarget);
 
     if (!waitForever && end - System.nanoTime() <= 0) {
       throw new TimeoutException();
