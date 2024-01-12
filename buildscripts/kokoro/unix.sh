@@ -41,7 +41,7 @@ cat <<'EOF' >> gradle.properties
 # https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
 # Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
 # space is exhausted", and to increase build speed
-org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m
+org.gradle.jvmargs=-Xmx24G -XX:MaxMetaspaceSize=1024m
 EOF
 
 ARCH="$ARCH" buildscripts/make_dependencies.sh
@@ -99,7 +99,7 @@ fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
-readonly GRADLE_FLAGS_ARTIFACTS="${GRADLE_FLAGS// --parallel/} -PrepositoryDir=${LOCAL_MVN_TEMP}"
+GRADLE_FLAGS_ARTIFACTS="${GRADLE_FLAGS// --parallel/} -PrepositoryDir=${LOCAL_MVN_TEMP}"
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" || "$ARCH" = "s390_64" ]]; then
     GRADLE_FLAGS_ARTIFACTS+=" \
