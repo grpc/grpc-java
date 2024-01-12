@@ -17,7 +17,7 @@
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
 set -eu -o pipefail
 # Prepend command trace with the date.
-PS4='+ $(date "+%s.%N")\011 '
+PS4='+ $(date "+[%H:%M:%S %Z]")\011 '
 set -x
 
 

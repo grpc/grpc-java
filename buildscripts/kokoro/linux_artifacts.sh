@@ -1,7 +1,7 @@
 #!/bin/bash
 set -veu -o pipefail
 # Prepend command trace with the date.
-PS4='+ $(date "+%s.%N")\011 '
+PS4='+ $(date "+[%H:%M:%S %Z]")\011 '
 set -x
 
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
