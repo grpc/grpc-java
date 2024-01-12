@@ -64,6 +64,7 @@ export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
+./gradlew properties $GRADLE_FLAGS
 ./gradlew grpc-compiler:clean $GRADLE_FLAGS
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
