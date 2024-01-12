@@ -33,15 +33,6 @@ fi
 
 # ARCH is x86_64 unless otherwise specified.
 ARCH="${ARCH:-x86_64}"
-
-cat <<'EOF' >> gradle.properties
-# defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
-# https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
-# Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
-# space is exhausted", and to increase build speed
-org.gradle.jvmargs=-Xmx24g -XX:MaxMetaspaceSize=2g
-EOF
-
 ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
@@ -51,6 +42,11 @@ GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
+# defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
+# https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
+# Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
+# space is exhausted", and to increase build speed
+GRADLE_FLAGS+=" -P'org.gradle.jvmargs=-Xmx24g -XX:MaxMetaspaceSize=2g'"
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   GRADLE_FLAGS+=" -PskipAndroid=true"
 else
