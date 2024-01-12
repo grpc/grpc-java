@@ -1,9 +1,5 @@
 #!/bin/bash
 
 spongify_logs() {
-  local f
-  while read -r f; do
-    mkdir "${f%.xml}"
-    cp "$f" "${f%.xml}/sponge_log.xml"
-  done < <(find "${KOKORO_ARTIFACTS_DIR:-.}" -name 'TEST-*.xml')
+  find . -name 'TEST-*.xml' | xargs -I{} -P30 sh -c $'f=\'{}\'; mkdir "${f%.xml}" && cp "$f" "${f%.xml}/sponge_log.xml"'
 }
