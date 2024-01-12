@@ -106,9 +106,9 @@ if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
       -x grpc-compiler:testGolden -x grpc-compiler:testLiteGolden \
       -x grpc-compiler:testDeprecatedGolden -x grpc-compiler:testDeprecatedLiteGolden"
   fi
-  ./gradlew grpc-compiler:build grpc-compiler:publish "${GRADLE_FLAGS_ARTIFACTS}"
+  ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS_ARTIFACTS
 else
-  ./gradlew publish :grpc-core:versionFile "${GRADLE_FLAGS_ARTIFACTS}"
+  ./gradlew publish :grpc-core:versionFile $GRADLE_FLAGS_ARTIFACTS
   pushd examples/example-hostname
   ../gradlew jibBuildTar $GRADLE_FLAGS
   popd
