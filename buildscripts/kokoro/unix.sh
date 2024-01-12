@@ -15,7 +15,10 @@
 #  ARCH=s390_64 ./buildscripts/kokoro/unix.sh
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
-set -exu -o pipefail
+set -eu -o pipefail
+# Prepend command trace with the date.
+PS4='+ $(date "+[%H:%M:%S %Z]")\011 '
+set -x
 
 # It would be nicer to use 'readlink -f' here but osx does not support it.
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
