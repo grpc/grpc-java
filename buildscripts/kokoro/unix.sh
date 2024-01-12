@@ -99,12 +99,12 @@ GRADLE_FLAGS_ARTIFACTS=("${GRADLE_FLAGS[@]//--parallel ?/}" "-PrepositoryDir=${L
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" || "$ARCH" = "s390_64" ]]; then
     GRADLE_FLAGS_ARTIFACTS+=(
-      "-x grpc-compiler:generateTestProto"
-      "-x grpc-compiler:generateTestLiteProto"
-      "-x grpc-compiler:testGolden"
-      "-x grpc-compiler:testLiteGolden"
-      "-x grpc-compiler:testDeprecatedGolden"
-      "-x grpc-compiler:testDeprecatedLiteGolden"
+      "--exclude-task=grpc-compiler:generateTestProto"
+      "--exclude-task=grpc-compiler:generateTestLiteProto"
+      "--exclude-task=grpc-compiler:testGolden"
+      "--exclude-task=grpc-compiler:testLiteGolden"
+      "--exclude-task=grpc-compiler:testDeprecatedGolden"
+      "--exclude-task=grpc-compiler:testDeprecatedLiteGolden"
     )
   fi
   ./gradlew grpc-compiler:build grpc-compiler:publish "${GRADLE_FLAGS_ARTIFACTS[@]}"
