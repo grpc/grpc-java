@@ -36,21 +36,23 @@ ARCH="${ARCH:-x86_64}"
 ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
-GRADLE_FLAGS="${GRADLE_FLAGS:-}"
-GRADLE_FLAGS+=" --parallel"
-GRADLE_FLAGS+=" -PtargetArch=$ARCH"
-GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
-GRADLE_FLAGS+=" -PfailOnWarnings=true"
-GRADLE_FLAGS+=" -PerrorProne=true"
-# defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
-# https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
-# Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
-# space is exhausted", and to increase build speed
-GRADLE_FLAGS+=" -P'org.gradle.jvmargs=-Xmx24g -XX:MaxMetaspaceSize=2g'"
+GRADLE_FLAGS=(
+  ${GRADLE_FLAGS:-}
+  "--parallel"
+  "-PtargetArch=$ARCH"
+  "-Pcheckstyle.ignoreFailures=false"
+  "-PfailOnWarnings=true"
+  "-PerrorProne=true"
+  # defaults to -Xmx512m -XX:MaxMetaspaceSize=256m
+  # https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
+  # Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
+  # space is exhausted", and to increase build speed
+  "-Porg.gradle.jvmargs=-Xmx24g -XX:MaxMetaspaceSize=2g"
+)
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
-  GRADLE_FLAGS+=" -PskipAndroid=true"
+  GRADLE_FLAGS+=("-PskipAndroid=true")
 else
-  GRADLE_FLAGS+=" -Pandroid.useAndroidX=true"
+  GRADLE_FLAGS+=("-Pandroid.useAndroidX=true")
 fi
 export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 
@@ -59,12 +61,12 @@ export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
-./gradlew properties $GRADLE_FLAGS
-./gradlew grpc-compiler:clean $GRADLE_FLAGS
+./gradlew properties "${GRADLE_FLAGS[@]}"
+./gradlew grpc-compiler:clean "${GRADLE_FLAGS[@]}"
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code
-  ./gradlew assemble generateTestProto publishToMavenLocal $GRADLE_FLAGS
+  ./gradlew assemble generateTestProto publishToMavenLocal "${GRADLE_FLAGS[@]}"
 
   if [[ -z "${SKIP_CLEAN_CHECK:-}" && ! -z $(git status --porcelain) ]]; then
     git status
@@ -72,16 +74,16 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
     exit 1
   fi
   # Run tests
-  ./gradlew build :grpc-all:jacocoTestReport $GRADLE_FLAGS
+  ./gradlew build :grpc-all:jacocoTestReport "${GRADLE_FLAGS[@]}"
   pushd examples
-  ./gradlew build $GRADLE_FLAGS
+  ./gradlew build "${GRADLE_FLAGS[@]}"
   # --batch-mode reduces log spam
   mvn verify --batch-mode
   popd
   for f in examples/example-*
   do
      pushd "$f"
-     ../gradlew build $GRADLE_FLAGS
+     ../gradlew build "${GRADLE_FLAGS[@]}"
      if [ -f "pom.xml" ]; then
        # --batch-mode reduces log spam
        mvn verify --batch-mode
@@ -93,19 +95,23 @@ fi
 
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
-GRADLE_FLAGS_ARTIFACTS="${GRADLE_FLAGS// --parallel/} -PrepositoryDir=${LOCAL_MVN_TEMP}"
+GRADLE_FLAGS_ARTIFACTS=("${GRADLE_FLAGS[@]//--parallel ?/}" "-PrepositoryDir=${LOCAL_MVN_TEMP}")
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   if [[ "$ARCH" = "aarch_64" || "$ARCH" = "ppcle_64" || "$ARCH" = "s390_64" ]]; then
-    GRADLE_FLAGS_ARTIFACTS+=" \
-      -x grpc-compiler:generateTestProto -x grpc-compiler:generateTestLiteProto \
-      -x grpc-compiler:testGolden -x grpc-compiler:testLiteGolden \
-      -x grpc-compiler:testDeprecatedGolden -x grpc-compiler:testDeprecatedLiteGolden"
+    GRADLE_FLAGS_ARTIFACTS+=(
+      "-x grpc-compiler:generateTestProto"
+      "-x grpc-compiler:generateTestLiteProto"
+      "-x grpc-compiler:testGolden"
+      "-x grpc-compiler:testLiteGolden"
+      "-x grpc-compiler:testDeprecatedGolden"
+      "-x grpc-compiler:testDeprecatedLiteGolden"
+    )
   fi
-  ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS_ARTIFACTS
+  ./gradlew grpc-compiler:build grpc-compiler:publish "${GRADLE_FLAGS_ARTIFACTS[@]}"
 else
-  ./gradlew publish :grpc-core:versionFile $GRADLE_FLAGS_ARTIFACTS
+  ./gradlew publish :grpc-core:versionFile "${GRADLE_FLAGS_ARTIFACTS[@]}"
   pushd examples/example-hostname
-  ../gradlew jibBuildTar $GRADLE_FLAGS
+  ../gradlew jibBuildTar "${GRADLE_FLAGS[@]}"
   popd
 
   readonly OTHER_ARTIFACT_DIR="${OTHER_ARTIFACT_DIR:-$GRPC_JAVA_DIR/artifacts}"
