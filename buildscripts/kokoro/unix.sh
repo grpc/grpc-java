@@ -20,6 +20,7 @@ set -eu -o pipefail
 PS4='+ $(date "+[%H:%M:%S %Z]")\011 '
 set -x
 
+free -h
 
 # It would be nicer to use 'readlink -f' here but osx does not support it.
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
