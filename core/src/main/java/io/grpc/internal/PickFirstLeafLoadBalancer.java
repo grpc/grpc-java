@@ -442,7 +442,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return false;
     }
     for (SubchannelData sc : subchannels.values()) {
-      if (sc.getState() != READY && sc.getState() != TRANSIENT_FAILURE) {
+      if (!sc.isCompletedConnectivityAttempt() ) {
         return false;
       }
     }
@@ -617,6 +617,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     private final Subchannel subchannel;
     private ConnectivityState state;
     private final HealthListener healthListener;
+    private boolean completedConnectivityAttempt = false;
 
     public SubchannelData(Subchannel subchannel, ConnectivityState state,
                           HealthListener subchannelHealthListener) {
@@ -633,8 +634,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return this.state;
     }
 
+    public boolean isCompletedConnectivityAttempt() {
+      return completedConnectivityAttempt;
+    }
+
     private void updateState(ConnectivityState newState) {
       this.state = newState;
+      if (newState == READY || newState == TRANSIENT_FAILURE) {
+        completedConnectivityAttempt = true;
+      } else if (newState == IDLE) {
+        completedConnectivityAttempt = false;
+      }
     }
 
     private ConnectivityState getHealthState() {

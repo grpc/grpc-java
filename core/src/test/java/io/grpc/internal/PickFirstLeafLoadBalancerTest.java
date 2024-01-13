@@ -294,8 +294,8 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).requestConnection();
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
     assertEquals(CONNECTION_ERROR, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
@@ -419,8 +419,8 @@ public class PickFirstLeafLoadBalancerTest {
     // subchannel1 | TF     | READY
     // subchannel2 | TF      | IDLE
     stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
     assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs)
         .getStatus()).isEqualTo(Status.UNAVAILABLE);
     // subchannel  |  state    |   health
@@ -477,8 +477,8 @@ public class PickFirstLeafLoadBalancerTest {
       listener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
     }
 
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
@@ -504,8 +504,8 @@ public class PickFirstLeafLoadBalancerTest {
     // An error has happened.
     Status error = Status.UNAVAILABLE.withDescription("boom!");
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
     // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
@@ -565,8 +565,8 @@ public class PickFirstLeafLoadBalancerTest {
     verify(mockSubchannel3).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
     stateListener3.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
     // Only after we have TFs reported for # of subchannels do we call refreshNameResolution
@@ -617,9 +617,9 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+    inOrder.verify(mockHelper).refreshNameResolution();
     Status error = Status.NOT_FOUND.withDescription("nameResolutionError");
     loadBalancer.handleNameResolutionError(error);
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
@@ -1474,8 +1474,8 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
 
     // Accept same resolved addresses to update
@@ -1572,8 +1572,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Failing second connection attempt
     stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
 
     // backoff for first address
@@ -1672,7 +1672,7 @@ public class PickFirstLeafLoadBalancerTest {
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> addrs = Lists.newArrayList(servers.get(0), servers.get(1));
 
-    // Accepting resolved addresses starts all subchannels
+    // Accepting resolved addresses starts first subchannel and cascades on failures
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(addrs).setAttributes(affinity).build());
@@ -1697,8 +1697,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Failing second connection attempt
     stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
-    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
     //   sticky transient failure
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
 
