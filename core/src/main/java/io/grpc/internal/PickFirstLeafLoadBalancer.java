@@ -45,7 +45,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -65,7 +64,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
-  private AtomicInteger numTf = new AtomicInteger(0);
+  private int numTf = 0;
   private volatile boolean firstPass = true;
   @Nullable
   private ScheduledHandle scheduleConnectionTask;
@@ -102,7 +101,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     // Since we have a new set of addresses, we are again at first pass
-    numTf.getAndSet(0);
     firstPass = true;
 
     // We can optionally be configured to shuffle the address list. This can help better distribute
@@ -253,23 +251,22 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
         }
 
-        // If we are (at the end and have had enough TF since we got there) or
-        // (just got to the end), then refresh name resolution which may call
-        // acceptResolvedAddresses which will reset addressIndex, but may not.
-        if (!addressIndex.isValid()) {
-          numTf.getAndIncrement();
-          if (numTf.get() >= addressIndex.size() || firstPass) {
-            firstPass = false; // idempotent so okay to call when false
-            numTf.getAndSet(0);
-            helper.refreshNameResolution();
-          }
-        }
-
-        // If no addresses remaining go into TRANSIENT_FAILURE
-        if (!addressIndex.isValid())  {
+        if (passComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
               new Picker(PickResult.withError(stateInfo.getStatus())));
+
+          // Refresh Name Resolution, but only when all 3 conditions are met
+          // * We are at the end of addressIndex
+          // * have had status reported for all subchannels.
+          // * And one of the following conditions:
+          //    * Have had enough TF reported since we completed first pass
+          //    * Just completed the first pass
+          if (++numTf >= addressIndex.size() || firstPass) {
+            firstPass = false; // idempotent so okay to call when false
+            numTf = 0;
+            helper.refreshNameResolution();
+          }
         }
         break;
 
@@ -437,6 +434,19 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
     subchannel.start(stateInfo -> processSubchannelState(subchannel, stateInfo));
     return subchannel;
+  }
+
+  private boolean passComplete() {
+    if (addressIndex == null || addressIndex.isValid()
+        || subchannels.size() < addressIndex.size()) {
+      return false;
+    }
+    for (SubchannelData sc : subchannels.values()) {
+      if (sc.getState() != READY && sc.getState() != TRANSIENT_FAILURE) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private final class HealthListener implements SubchannelStateListener {
