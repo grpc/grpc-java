@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
@@ -30,14 +31,20 @@ import java.util.concurrent.TimeUnit;
 
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
-  static final XdsTransportFactory DEFAULT_XDS_TRANSPORT_FACTORY = new GrpcXdsTransportFactory();
+  static final GrpcXdsTransportFactory DEFAULT_XDS_TRANSPORT_FACTORY =
+      new GrpcXdsTransportFactory();
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
     return new GrpcXdsTransport(serverInfo);
   }
 
-  private class GrpcXdsTransport implements XdsTransport {
+  public XdsTransport createForTest(ManagedChannel channel) {
+    return new GrpcXdsTransport(channel);
+  }
+
+  @VisibleForTesting
+  static class GrpcXdsTransport implements XdsTransport {
 
     private final ManagedChannel channel;
 
@@ -47,6 +54,11 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       this.channel = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
+    }
+
+    @VisibleForTesting
+    public GrpcXdsTransport(ManagedChannel channel) {
+      this.channel = checkNotNull(channel, "channel");
     }
 
     @Override
