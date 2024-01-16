@@ -74,10 +74,9 @@ public interface XdsTransportFactory {
   interface EventHandler<RespT> {
 
     /**
-     * Called when the stream is ready to send additional messages. It can be used to set up timer
-     * that notify resource absent on resources watchers when initial resource update does not
-     * arrive before a timeout(15s), also see {@link StreamingCall#isReady()}. Application is free
-     * to ignore it.
+     * Called when the stream is ready to send additional messages. If called the library use this
+     * handler to trigger resource arrival timeout, also see {@link StreamingCall#isReady()}.
+     * Application is free to ignore it.
      */
     void onReady();
 

@@ -45,7 +45,7 @@ public class GrpcXdsTransportFactoryTest {
   private Server server;
 
   @Before
-  public void setup() throws Exception{
+  public void setup() throws Exception {
     server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
         .addService(echoAdsService())
         .build()
@@ -115,7 +115,8 @@ public class GrpcXdsTransportFactoryTest {
     xdsTransport.shutdown();
   }
 
-  private static class FakeEventHandler implements XdsTransportFactory.EventHandler<DiscoveryResponse> {
+  private static class FakeEventHandler implements
+      XdsTransportFactory.EventHandler<DiscoveryResponse> {
     private final BlockingQueue<DiscoveryResponse> respQ = new LinkedBlockingQueue<>();
     private SettableFuture<Status> endFuture = SettableFuture.create();
     private SettableFuture<Boolean> ready = SettableFuture.create();
