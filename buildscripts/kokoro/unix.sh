@@ -64,12 +64,12 @@ export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
 ./gradlew grpc-compiler:clean $GRADLE_FLAGS
-echo "gradle done"
+echo "gradlew done"
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code
   ./gradlew assemble generateTestProto publishToMavenLocal $GRADLE_FLAGS
-  echo "gradle done"
+  echo "gradlew done"
 
   if [[ -z "${SKIP_CLEAN_CHECK:-}" && ! -z $(git status --porcelain) ]]; then
     git status
@@ -78,10 +78,10 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   fi
   # Run tests
   ./gradlew build :grpc-all:jacocoTestReport $GRADLE_FLAGS
-  echo "gradle done"
+  echo "gradlew done"
   pushd examples
   ./gradlew build $GRADLE_FLAGS
-  echo "gradle done"
+  echo "gradlew done"
   # --batch-mode reduces log spam
   mvn verify --batch-mode
   popd
@@ -89,7 +89,7 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   do
      pushd "$f"
      ../gradlew build $GRADLE_FLAGS
-     echo "gradle done"
+     echo "gradlew done"
      if [ -f "pom.xml" ]; then
        # --batch-mode reduces log spam
        mvn verify --batch-mode
@@ -109,11 +109,11 @@ if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   fi
   ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
-    echo "gradle done"
+    echo "gradlew done"
 else
   ./gradlew publish :grpc-core:versionFile $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
-    echo "gradle done"
+    echo "gradlew done"
   pushd examples/example-hostname
   ../gradlew jibBuildTar $GRADLE_FLAGS
   echo "gradlew done"
