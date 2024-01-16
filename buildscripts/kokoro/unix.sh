@@ -47,7 +47,7 @@ GRADLE_FLAGS=(
   # https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory
   # Increased due to java.lang.OutOfMemoryError: Metaspace failures, "JVM heap
   # space is exhausted", and to increase build speed
-  "-Porg.gradle.jvmargs=-Xmx24g -XX:MaxMetaspaceSize=2g"
+  "-Porg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m"
 )
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   GRADLE_FLAGS+=("-PskipAndroid=true")
@@ -61,12 +61,13 @@ export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
-./gradlew properties "${GRADLE_FLAGS[@]}"
 ./gradlew grpc-compiler:clean "${GRADLE_FLAGS[@]}"
+echo "gradle done"
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code
   ./gradlew assemble generateTestProto publishToMavenLocal "${GRADLE_FLAGS[@]}"
+  echo "gradle done"
 
   if [[ -z "${SKIP_CLEAN_CHECK:-}" && ! -z $(git status --porcelain) ]]; then
     git status
@@ -75,8 +76,10 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   fi
   # Run tests
   ./gradlew build :grpc-all:jacocoTestReport "${GRADLE_FLAGS[@]}"
+  echo "gradle done"
   pushd examples
   ./gradlew build "${GRADLE_FLAGS[@]}"
+  echo "gradle done"
   # --batch-mode reduces log spam
   mvn verify --batch-mode
   popd
@@ -84,6 +87,7 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   do
      pushd "$f"
      ../gradlew build "${GRADLE_FLAGS[@]}"
+     echo "gradle done"
      if [ -f "pom.xml" ]; then
        # --batch-mode reduces log spam
        mvn verify --batch-mode
@@ -108,10 +112,13 @@ if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
     )
   fi
   ./gradlew grpc-compiler:build grpc-compiler:publish "${GRADLE_FLAGS_ARTIFACTS[@]}"
+  echo "gradle done"
 else
   ./gradlew publish :grpc-core:versionFile "${GRADLE_FLAGS_ARTIFACTS[@]}"
+  echo "gradle done"
   pushd examples/example-hostname
   ../gradlew jibBuildTar "${GRADLE_FLAGS[@]}"
+  echo "gradle done"
   popd
 
   readonly OTHER_ARTIFACT_DIR="${OTHER_ARTIFACT_DIR:-$GRPC_JAVA_DIR/artifacts}"
