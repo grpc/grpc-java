@@ -21,7 +21,7 @@ package io.grpc;
  * to modify the channels or transport life-cycle event behavior, but they can be useful hooks
  * for transport observability. Multiple filters may be registered to the client.
  *
- * @since 1.61.0
+ * @since 1.62.0
  */
 @ExperimentalApi("https://gitub.com/grpc/grpc-java/issues/10652")
 public abstract class ClientTransportFilter {
