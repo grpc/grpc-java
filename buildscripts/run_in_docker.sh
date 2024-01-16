@@ -19,7 +19,6 @@ else
   # The input device on kokoro is not a TTY, so -it does not work.
   DOCKER_ARGS=
 fi
-
 # Use a trap function to fix file permissions upon exit, without affecting
 # the original exit code. $DOCKER_ARGS can not be quoted, otherwise it becomes a '' which confuses
 # docker.
