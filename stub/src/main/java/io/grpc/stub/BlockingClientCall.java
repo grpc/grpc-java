@@ -164,10 +164,12 @@ public final class BlockingClientCall<ReqT, RespT> {
    * <b>NOTE:  </b>This method will return as soon as it passes the request to the grpc stream
    * layer. It will not block while the message is being sent on the wire and returning true does
    * not guarantee that the server gets the message.
-   * <p>
-   * <b>WARNING:  </b>Doing only writes without reads can lead to deadlocks as a result of flow
-   * control.  Furthermore, the server closing the stream will only be identified after the last
-   * sent value is read.
+   * <p><br>
+   * <b>WARNING:  </b>Doing only writes without reads can lead to deadlocks.  This is because
+   * flow control, imposed by networks to protect intermediary routers and endpoints that are
+   * operating under resource constraints, requires reads to be done in order to progress writes.
+   * Furthermore, the server closing the stream will only be identified after
+   * the last sent value is read.
    * </p>
    *
    * @param request Message to send to the server
