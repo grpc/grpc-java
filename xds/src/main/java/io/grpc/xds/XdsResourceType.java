@@ -23,8 +23,8 @@ import static io.grpc.xds.XdsClient.canonifyResourceName;
 import static io.grpc.xds.XdsClient.isResourceNameValid;
 
 import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
@@ -117,7 +117,7 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
     }
   }
 
-  static public final class ResourceInvalidException extends Exception {
+  public static final class ResourceInvalidException extends Exception {
     private static final long serialVersionUID = 0L;
 
     public ResourceInvalidException(String message) {
