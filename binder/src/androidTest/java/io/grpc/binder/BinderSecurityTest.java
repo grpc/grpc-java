@@ -47,7 +47,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -65,6 +67,8 @@ public final class BinderSecurityTest {
   Map<String, MethodDescriptor<Empty, Empty>> methods = new HashMap<>();
   List<MethodDescriptor<Empty, Empty>> calls = new ArrayList<>();
   CountingServerInterceptor countingServerInterceptor;
+
+  private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 
   @Before
   public void setupServiceDefinitionsAndMethods() {
@@ -102,6 +106,7 @@ public final class BinderSecurityTest {
       channel.shutdownNow();
     }
     HostServices.awaitServiceShutdown();
+    MoreExecutors.shutdownAndAwaitTermination(executor, 1, TimeUnit.MINUTES);
   }
 
   private void createChannel() throws Exception {
@@ -276,8 +281,12 @@ public final class BinderSecurityTest {
   public void testPerServicePolicyAsync() throws Exception {
     createChannel(
             ServerSecurityPolicy.newBuilder()
-                    .servicePolicy("foo", asyncPolicy((uid) -> Futures.immediateFuture(true)))
-                    .servicePolicy("bar", asyncPolicy((uid) -> Futures.immediateFuture(false)))
+                    // Use delayed futures instead of immediate futures to force the implementation
+                    // to execute the asynchronous code paths. The implementation has several
+                    // shortcuts for immediately completed futures that could otherwise be triggered
+                    // in these tests.
+                    .servicePolicy("foo", asyncPolicy((uid) -> delayedFuture(true)))
+                    .servicePolicy("bar", asyncPolicy((uid) -> delayedFuture(false)))
                     .build(),
             SecurityPolicies.internalOnly());
 
@@ -333,6 +342,12 @@ public final class BinderSecurityTest {
                 MoreExecutors.directExecutor());
       }
     };
+  }
+
+  /** Returns a Future that is resolved with a value after some delay. */
+  private <T> ListenableFuture<T> delayedFuture(T result) {
+    return Futures.scheduleAsync(
+        () -> Futures.immediateFuture(result), 1, TimeUnit.SECONDS, executor);
   }
 
   private final class CountingServerInterceptor implements ServerInterceptor {
