@@ -16,9 +16,9 @@ def _java_rpc_toolchain_impl(ctx):
         _JavaRpcToolchainInfo(
             java_toolchain = ctx.attr._java_toolchain,
             java_plugins = ctx.attr.java_plugins,
-            plugin = ctx.executable.plugin,
+            plugin = ctx.attr.plugin,
             plugin_arg = ctx.attr.plugin_arg,
-            protoc = ctx.executable._protoc,
+            protoc = ctx.attr._protoc,
             runtime = ctx.attr.runtime,
         ),
         platform_common.ToolchainInfo(),  # Magic for b/78647825
@@ -89,15 +89,15 @@ def _java_rpc_library_impl(ctx):
     srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
 
     args = ctx.actions.args()
-    args.add(toolchain.plugin, format = "--plugin=protoc-gen-rpc-plugin=%s")
+    args.add(toolchain.plugin.files_to_run.executable, format = "--plugin=protoc-gen-rpc-plugin=%s")
     args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
     args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.configuration.host_path_separator)
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
     ctx.actions.run(
-        inputs = depset([toolchain.plugin] + srcs, transitive = [descriptor_set_in]),
+        inputs = depset(srcs, transitive = [descriptor_set_in, toolchain.plugin.files]),
         outputs = [srcjar],
-        executable = toolchain.protoc,
+        executable = toolchain.protoc.files_to_run,
         arguments = [args],
         use_default_shell_env = True,
         toolchain = None,
