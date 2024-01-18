@@ -2293,7 +2293,8 @@ public class PickFirstLeafLoadBalancerTest {
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       SocketAddress addr = args.getAddresses().get(0).getAddresses().get(0);
-      List<FakeSubchannel> fakeSubchannels = Arrays.asList(mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4,
+      List<FakeSubchannel> fakeSubchannels =
+          Arrays.asList(mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4,
           mockSubchannel5);
       for (int i = 1; i <= 5; i++) {
         if (addr.toString().equals(new FakeSocketAddress("server" + i).toString())) {
