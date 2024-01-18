@@ -382,7 +382,7 @@ public final class BinderClientTransportTest {
         try (InputStream message = messageProducers.peek().next()) {
           if (message == null) {
             messageProducers.remove();
-            break;
+            continue;
           }
           n += 1;
         }
