@@ -748,18 +748,6 @@ final class XdsClientImpl extends XdsClient
     }
   }
 
-  static final class ResourceInvalidException extends Exception {
-    private static final long serialVersionUID = 0L;
-
-    ResourceInvalidException(String message) {
-      super(message, null, false, false);
-    }
-
-    ResourceInvalidException(String message, Throwable cause) {
-      super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
-    }
-  }
-
   abstract static class XdsChannelFactory {
     static final XdsChannelFactory DEFAULT_XDS_CHANNEL_FACTORY = new XdsChannelFactory() {
       @Override

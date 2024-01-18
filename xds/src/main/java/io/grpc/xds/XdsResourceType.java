@@ -21,7 +21,10 @@ import static io.grpc.xds.Bootstrapper.ServerInfo;
 import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.canonifyResourceName;
 import static io.grpc.xds.XdsClient.isResourceNameValid;
-import static io.grpc.xds.XdsClientImpl.ResourceInvalidException;
+
+import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
+import io.grpc.xds.XdsClient.ResourceUpdate;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
@@ -38,7 +41,7 @@ import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 
-abstract class XdsResourceType<T extends ResourceUpdate> {
+public abstract class XdsResourceType<T extends ResourceUpdate> {
   static final String TYPE_URL_RESOURCE =
       "type.googleapis.com/envoy.service.discovery.v3.Resource";
   static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
@@ -68,22 +71,22 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       "type.googleapis.com/xds.type.v3.TypedStruct";
 
   @Nullable
-  abstract String extractResourceName(Message unpackedResource);
+  protected abstract String extractResourceName(Message unpackedResource);
 
-  abstract Class<? extends com.google.protobuf.Message> unpackedClassName();
+  protected abstract Class<? extends com.google.protobuf.Message> unpackedClassName();
 
-  abstract String typeName();
+  protected abstract String typeName();
 
-  abstract String typeUrl();
+  protected abstract String typeUrl();
 
   // Do not confuse with the SotW approach: it is the mechanism in which the client must specify all
   // resource names it is interested in with each request. Different resource types may behave
   // differently in this approach. For LDS and CDS resources, the server must return all resources
   // that the client has subscribed to in each request. For RDS and EDS, the server may only return
   // the resources that need an update.
-  abstract boolean isFullStateOfTheWorld();
+  protected abstract boolean isFullStateOfTheWorld();
 
-  static class Args {
+  public static class Args {
     final ServerInfo serverInfo;
     final String versionInfo;
     final String nonce;
@@ -111,6 +114,18 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       this.loadBalancerRegistry = loadBalancerRegistry;
       this.tlsContextManager = tlsContextManager;
       this.subscribedResources = subscribedResources;
+    }
+  }
+
+  static public final class ResourceInvalidException extends Exception {
+    private static final long serialVersionUID = 0L;
+
+    public ResourceInvalidException(String message) {
+      super(message, null, false, false);
+    }
+
+    public ResourceInvalidException(String message, Throwable cause) {
+      super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
     }
   }
 
@@ -147,7 +162,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
       T resourceUpdate;
       try {
         resourceUpdate = doParse(args, unpackedMessage);
-      } catch (XdsClientImpl.ResourceInvalidException e) {
+      } catch (ResourceInvalidException e) {
         errors.add(String.format("%s response %s '%s' validation error: %s",
                 typeName(), unpackedClassName().getSimpleName(), cname, e.getMessage()));
         invalidResources.add(cname);
@@ -162,7 +177,7 @@ abstract class XdsResourceType<T extends ResourceUpdate> {
 
   }
 
-  abstract T doParse(Args args, Message unpackedMessage) throws ResourceInvalidException;
+  protected abstract T doParse(Args args, Message unpackedMessage) throws ResourceInvalidException;
 
   /**
    * Helper method to unpack serialized {@link com.google.protobuf.Any} message, while replacing

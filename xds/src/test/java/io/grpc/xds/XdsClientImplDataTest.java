@@ -134,7 +134,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsResourceType.StructOrError;
 import io.grpc.xds.internal.Matchers;
