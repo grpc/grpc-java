@@ -901,36 +901,33 @@ public final class ClientCalls {
       throwIfInterrupted();
       Runnable runnable;
 
-      synchronized (this) {
-        runnable = poll();
+      runnable = poll();
 
-        if (runnable == null) {
+      if (runnable == null) {
+        waiterLock.lock();
+        try {
           if (predicate != null && predicate.test(testTarget)) {
             return false; // The condition for which we were waiting is now satisfied
           }
 
-          waiterLock.lock();
-          try {
-            if (waitForever) {
-              waiterCondition.await();
-            } else {
-              long waitNanos = end - System.nanoTime();
-              if (waitNanos <= 0) {
-                return false; // Deadline is expired
-              }
-              waiterCondition.awaitNanos(waitNanos);
-              throwIfInterrupted();
+          if (waitForever) {
+            waiterCondition.await();
+          } else {
+            long waitNanos = end - System.nanoTime();
+            if (waitNanos <= 0) {
+              return false; // Deadline is expired
             }
-          } finally {
-            waiterLock.unlock();
+            waiterCondition.awaitNanos(waitNanos);
+            throwIfInterrupted();
           }
+          runnable = poll();
+          if (runnable == null) {
+            waiterCondition.signalAll();
+            return false;
+          }
+        } finally {
+          waiterLock.unlock();
         }
-        runnable = poll();
-      }
-
-      if (runnable == null) {
-        signallAll();
-        return false;
       }
 
       do {
