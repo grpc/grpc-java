@@ -65,7 +65,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
   private int numTf = 0;
-  private volatile boolean firstPass = true;
+  private boolean firstPass = true;
   @Nullable
   private ScheduledHandle scheduleConnectionTask;
   private ConnectivityState rawConnectivityState = IDLE;
@@ -79,6 +79,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    if (rawConnectivityState == SHUTDOWN) {
+      return Status.FAILED_PRECONDITION.withDescription("Already shut down");
+    }
+
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
 
     // Validate the address list
@@ -251,7 +255,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
         }
 
-        if (passComplete()) {
+        if (isPassComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
               new Picker(PickResult.withError(stateInfo.getStatus())));
@@ -263,7 +267,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           //    * Have had enough TF reported since we completed first pass
           //    * Just completed the first pass
           if (++numTf >= addressIndex.size() || firstPass) {
-            firstPass = false; // idempotent so okay to call when false
+            firstPass = false;
             numTf = 0;
             helper.refreshNameResolution();
           }
@@ -340,7 +344,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (addressIndex == null || !addressIndex.isValid()) {
+    if (addressIndex == null || !addressIndex.isValid() || rawConnectivityState == SHUTDOWN ) {
       return;
     }
 
@@ -436,7 +440,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     return subchannel;
   }
 
-  private boolean passComplete() {
+  private boolean isPassComplete() {
     if (addressIndex == null || addressIndex.isValid()
         || subchannels.size() < addressIndex.size()) {
       return false;
