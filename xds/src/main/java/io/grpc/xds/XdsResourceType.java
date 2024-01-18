@@ -22,9 +22,6 @@ import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.canonifyResourceName;
 import static io.grpc.xds.XdsClient.isResourceNameValid;
 
-import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.XdsClient.ResourceUpdate;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.protobuf.Any;
@@ -32,6 +29,8 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.XdsClient.ResourceUpdate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
