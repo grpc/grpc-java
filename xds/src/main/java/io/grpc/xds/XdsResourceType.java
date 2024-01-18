@@ -24,7 +24,6 @@ import static io.grpc.xds.XdsClient.isResourceNameValid;
 
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
