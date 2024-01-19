@@ -28,11 +28,9 @@ unset JAVA_HOME
 
 GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 
-./gradlew $GRADLE_FLAGS \
-  :grpc-android-interop-testing:assembleDebug \
-  :grpc-android-interop-testing:assembleDebugAndroidTest
-./gradlew $GRADLE_FLAGS \
-  :grpc-binder:assembleDebugAndroidTest
+./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebug
+./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebugAndroidTest
+./gradlew $GRADLE_FLAGS :grpc-binder:assembleDebugAndroidTest
 
 # Run interop instrumentation tests on Firebase Test Lab
 gcloud firebase test android run \
