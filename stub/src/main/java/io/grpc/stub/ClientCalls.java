@@ -42,12 +42,14 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
@@ -876,10 +878,11 @@ public final class ClientCalls {
     /**
      * Waits until there is a Runnable, then executes it and all queued Runnables after it.
      */
-    public void waitAndDrain() throws InterruptedException {
-      boolean executedRunnable = false;
-      while (!executedRunnable) {
-        executedRunnable = waitAndDrainWithTimeout(true, 0, null, null);
+    public <T> void waitAndDrain(Predicate<T> predicate, T testTarget) throws InterruptedException {
+      try {
+        waitAndDrainWithTimeout(true, 0, predicate, testTarget);
+      } catch (TimeoutException e) {
+        throw new AssertionError(e); // Should never happen
       }
     }
 
@@ -892,52 +895,44 @@ public final class ClientCalls {
      *
      * @param waitForever ignore the rest of the arguments and wait until there is a task to run
      * @param end System.nanoTime() to stop waiting if haven't been woken up yet
-     * @param predicate condition to test for skipping wake or waking up threads
-     * @return true if a runnable was executed
+     * @param predicate non-null condition to test for skipping wake or waking up threads
+     * @param testTarget object to pass to predicate
      */
-    @SuppressWarnings("WaitNotInLoop")
-    public <T> boolean waitAndDrainWithTimeout(boolean waitForever, long end,
-        Predicate<T> predicate, T testTarget) throws InterruptedException {
+    public <T> void waitAndDrainWithTimeout(boolean waitForever, long end,
+                                            @Nonnull Predicate<T> predicate, T testTarget)
+        throws InterruptedException, TimeoutException {
       throwIfInterrupted();
       Runnable runnable;
 
-      runnable = poll();
-
-      if (runnable == null) {
+      while (!predicate.test(testTarget)) {
         waiterLock.lock();
         try {
-          if (predicate != null && predicate.test(testTarget)) {
-            return false; // The condition for which we were waiting is now satisfied
-          }
-
-          if (waitForever) {
-            waiterCondition.await();
-          } else {
-            long waitNanos = end - System.nanoTime();
-            if (waitNanos <= 0) {
-              return false; // Deadline is expired
+          while ((runnable = poll()) == null) {
+            if (predicate.test(testTarget)) {
+              return; // The condition for which we were waiting is now satisfied
             }
-            waiterCondition.awaitNanos(waitNanos);
-            throwIfInterrupted();
-          }
-          runnable = poll();
-          if (runnable == null) {
-            waiterCondition.signalAll();
-            return false;
+
+            if (waitForever) {
+              waiterCondition.await();
+            } else {
+              long waitNanos = end - System.nanoTime();
+              if (waitNanos <= 0) {
+                throw new TimeoutException(); // Deadline is expired
+              }
+              waiterCondition.awaitNanos(waitNanos);
+            }
           }
         } finally {
           waiterLock.unlock();
         }
+
+        do {
+          runQuietly(runnable);
+        } while ((runnable = poll()) != null);
+        // Wake everything up now that we've done something and they can check in their outer loop
+        // if they can continue or need to wait again.
+        signallAll();
       }
-
-      do {
-        runQuietly(runnable);
-      } while ((runnable = poll()) != null);
-
-      // Wake everything up now that we've done something
-      signallAll();
-
-      return true;
     }
 
     /**
@@ -983,9 +978,9 @@ public final class ClientCalls {
 
     @Override
     public void execute(Runnable runnable) {
-      add(runnable);
       waiterLock.lock();
       try {
+        add(runnable);
         waiterCondition.signalAll(); // If anything is waiting let it wake up and process this task
       } finally {
         waiterLock.unlock();

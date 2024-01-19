@@ -30,6 +30,7 @@ import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+// TODO Change StatusRuntimeException to StatusException?
 /**
  * Represents a bidirectional streaming call from a client.  Allows in a blocking manner, sending
  * over the stream and receiving from the stream.  Also supports terminating the call.
@@ -50,7 +51,7 @@ public final class BlockingClientCall<ReqT, RespT> {
   private final ThreadSafeThreadlessExecutor executor;
 
   private boolean writeClosed;
-  private Status closedStatus;
+  private volatile Status closedStatus; // TODO(lsafran) audit the uses
 
   BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadSafeThreadlessExecutor executor) {
     this.call = call;
@@ -68,10 +69,9 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public RespT read() throws InterruptedException {
     try {
-      return read(true, Integer.MAX_VALUE, TimeUnit.DAYS);
+      return read(true, 0, TimeUnit.NANOSECONDS);
     } catch (TimeoutException e) {
-      throw new AssertionError("Timed out even though we wanted to wait forever."
-              + "  This implies that time was advanced over 200 years.");
+      throw new AssertionError("should never happen", e);
     }
   }
 
@@ -95,13 +95,9 @@ public final class BlockingClientCall<ReqT, RespT> {
     long start = System.nanoTime();
     long end = start + unit.toNanos(timeout);
 
-    executor.drain();
-
-    RespT bufferedValue;
-    while ((bufferedValue = buffer.poll()) == null && closedStatus == null) {
-      Predicate<BlockingClientCall<ReqT, RespT>> predicate = BlockingClientCall::skipWaitingForRead;
-      waitAndDrainExecutorOrTimeout(waitForever, end, predicate, this);
-    }
+    Predicate<BlockingClientCall<ReqT, RespT>> predicate = BlockingClientCall::skipWaitingForRead;
+    executor.waitAndDrainWithTimeout(waitForever, end, predicate, this);
+    RespT bufferedValue = buffer.poll();
 
     if (logger.isLoggable(Level.FINER)) {
       logger.finer("Client Blocking read had value:  " + bufferedValue);
@@ -109,11 +105,15 @@ public final class BlockingClientCall<ReqT, RespT> {
 
     if (bufferedValue != null) {
       call.request(1);
-    } else if (closedStatus != null && !closedStatus.isOk()) {
+      return bufferedValue;
+    } else if (closedStatus == null) {
+      throw new IllegalStateException(
+          "The message disappeared... are you reading from multiple threads?");
+    } else if (!closedStatus.isOk()) {
       throw closedStatus.asRuntimeException();
+    } else {
+      return null;
     }
-
-    return bufferedValue;
   }
 
   boolean skipWaitingForRead() {
@@ -130,23 +130,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @throws io.grpc.StatusRuntimeException If the stream was closed in an error state
    */
   public boolean hasNext() throws InterruptedException {
-    executor.drain();
-
-    if (!buffer.isEmpty()) {
-      return true;
-    }
-
-    if (closedStatus != null) {
-      if (!closedStatus.isOk()) {
-        throw closedStatus.asRuntimeException();
-      }
-      return false;
-    }
-
-    while (!isReadReady() && closedStatus == null) {
-      executor.waitAndDrain();
-    }
-
+    executor.waitAndDrain((x) -> !x.buffer.isEmpty() || x.closedStatus != null, this);
 
     if (closedStatus != null && !closedStatus.isOk()) {
       throw closedStatus.asRuntimeException();
@@ -213,36 +197,27 @@ public final class BlockingClientCall<ReqT, RespT> {
     return write(false, request, timeout, unit);
   }
 
-  public boolean write(boolean waitForever, ReqT request, long timeout, TimeUnit unit)
+  private boolean write(boolean waitForever, ReqT request, long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException {
 
     if (writeClosed) {
       throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
     }
 
-    boolean writeDone = false;
-    long start = System.nanoTime();
-    long end = start + unit.toNanos(timeout);
+    long end = System.nanoTime() + unit.toNanos(timeout);
 
-    while (!writeDone && isWriteLegal()) {
-      if (call.isReady()) {
-        call.sendMessage(request);
-        writeDone = true;
-      } else {
-        Predicate<ClientCall<ReqT, RespT>> predicate = ClientCall::isReady;
-        waitAndDrainExecutorOrTimeout(waitForever, end, predicate, call);
-      }
-    }
-
-    if (writeDone || getClosedStatus() == null) {
-      return writeDone;
-    }
-
-    if (getClosedStatus().isOk()) {
+    Predicate<BlockingClientCall<ReqT, RespT>> predicate =
+        (x) -> x.call.isReady() || x.closedStatus != null;
+    executor.waitAndDrainWithTimeout(waitForever, end, predicate, this);
+    Status savedClosedStatus = closedStatus;
+    if (savedClosedStatus == null) {
+      call.sendMessage(request);
+      return true;
+    } else if (savedClosedStatus.isOk()) {
       return false;
     } else {
       // Propagate any errors returned from the server
-      throw getClosedStatus().asRuntimeException();
+      throw savedClosedStatus.asRuntimeException();
     }
   }
 
@@ -256,7 +231,6 @@ public final class BlockingClientCall<ReqT, RespT> {
   public void cancel(String message, Throwable cause) {
     call.cancel(message, cause);
     writeClosed = true;
-    executor.add(NoOpRunnable.INSTANCE);
   }
 
   /**
@@ -265,16 +239,13 @@ public final class BlockingClientCall<ReqT, RespT> {
    * See {@link ClientCall#halfClose()}
    */
   public void halfClose() {
-    boolean origWriteClosed = writeClosed;
-    writeClosed = true;
-
-    if (origWriteClosed) {
-      throw new IllegalStateException("halfClose cannot be called after stream terminated");
-    } else if (getClosedStatus() == null) {
-      call.halfClose();
+    if (writeClosed) {
+      throw new IllegalStateException(
+          "halfClose cannot be called after already half closed or cancelled");
     }
 
-    executor.add(NoOpRunnable.INSTANCE);
+    writeClosed = true;
+    call.halfClose();
   }
 
   /**
@@ -282,6 +253,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    *
    * @return null if stream not closed by server, otherwise Status sent by server
    */
+  @VisibleForTesting
   Status getClosedStatus() {
     drainQuietly();
     return closedStatus;
@@ -330,27 +302,6 @@ public final class BlockingClientCall<ReqT, RespT> {
     return !writeClosed && closedStatus == null;
   }
 
-  /**
-   * Calls this.executor's waitAndDrain or waitAndDrainWithTimeout.
-   *
-   * @param end The time in nanoseconds to trigger timeout
-   * @throws TimeoutException If no events become available on the queue within the specified
-   *     timeout or processing them exceeds the timeout
-   */
-  private <T> void waitAndDrainExecutorOrTimeout(boolean waitForever, long end,
-      Predicate<T> predicate, T testTarget)
-      throws InterruptedException, TimeoutException {
-    if (!waitForever && (end - System.nanoTime() <= 0)) {
-      throw new TimeoutException();
-    }
-    // Let threadless executor do stuff until there is something for us to check
-    executor.waitAndDrainWithTimeout(waitForever, end, predicate, testTarget);
-
-    if (!waitForever && end - System.nanoTime() <= 0) {
-      throw new TimeoutException();
-    }
-  }
-
   ClientCall.Listener<RespT> getListener() {
     return new QueuingListener();
   }
@@ -363,41 +314,17 @@ public final class BlockingClientCall<ReqT, RespT> {
     }
   }
 
-  /**
-   * wake up write if it is blocked.
-   */
-  void handleReady() {
-    executor.add(NoOpRunnable.INSTANCE);
-  }
-
   private final class QueuingListener extends ClientCall.Listener<RespT> {
     @Override
     public void onMessage(RespT value) {
       Preconditions.checkState(closedStatus == null, "ClientCall already closed");
       buffer.add(value);
-      executor.add(NoOpRunnable.INSTANCE);
     }
 
     @Override
     public void onClose(Status status, Metadata trailers) {
       Preconditions.checkState(closedStatus == null, "ClientCall already closed");
       closedStatus = status;
-      executor.add(NoOpRunnable.INSTANCE);
-    }
-
-    @Override
-    public void onReady() {
-      handleReady();
-    }
-  }
-
-  private static class NoOpRunnable implements Runnable {
-
-    static NoOpRunnable INSTANCE = new NoOpRunnable();
-
-    @Override
-    public void run() {
-      // do nothing
     }
   }
 

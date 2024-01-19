@@ -379,7 +379,7 @@ public class BlockingClientCallTest {
       assertThat(e.getMessage()).containsMatch("after.*halfClose.*cancel");
     }
 
-    // verify pending writeOrRead released
+    // verify pending write with timeout released
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
     delayedVoidMethod(DELAY_MILLIS, biDiStream::halfClose);
