@@ -73,7 +73,7 @@ final class LoadReportClient {
   private ScheduledHandle lrsRpcRetryTimer;
   @Nullable
   @VisibleForTesting
-  LrsStreamStatus lrsStreamStatus;
+  LrsStream lrsStream;
   private static final MethodDescriptor<LoadStatsRequest, LoadStatsResponse> method =
       LoadReportingServiceGrpc.getStreamLoadStatsMethod();
 
@@ -129,17 +129,17 @@ final class LoadReportClient {
     if (lrsRpcRetryTimer != null && lrsRpcRetryTimer.isPending()) {
       lrsRpcRetryTimer.cancel();
     }
-    if (lrsStreamStatus != null) {
-      lrsStreamStatus.close(Status.CANCELLED.withDescription("stop load reporting").asException());
+    if (lrsStream != null) {
+      lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
     }
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
   @VisibleForTesting
   static class LoadReportingTask implements Runnable {
-    private final LrsStreamStatus stream;
+    private final LrsStream stream;
 
-    LoadReportingTask(LrsStreamStatus stream) {
+    LoadReportingTask(LrsStream stream) {
       this.stream = stream;
     }
 
@@ -162,17 +162,17 @@ final class LoadReportClient {
     if (!started) {
       return;
     }
-    checkState(lrsStreamStatus == null, "previous lbStream has not been cleared yet");
+    checkState(lrsStream == null, "previous lbStream has not been cleared yet");
     retryStopwatch.reset().start();
     Context prevContext = context.attach();
     try {
-      lrsStreamStatus = new LrsStreamStatus();
+      lrsStream = new LrsStream();
     } finally {
       context.detach(prevContext);
     }
   }
 
-  private final class LrsStreamStatus {
+  private final class LrsStream implements EventHandler<LoadStatsResponse> {
     boolean initialResponseReceived;
     boolean closed;
     long intervalNano = -1;
@@ -180,47 +180,43 @@ final class LoadReportClient {
     List<String> clusterNames;  // clusters to report loads for, if not report all.
     ScheduledHandle loadReportTimer;
     private final StreamingCall<LoadStatsRequest, LoadStatsResponse> call;
-    private final EventHandler<LoadStatsResponse> eventHandler = new LrsEventHandler();
 
-    LrsStreamStatus() {
+    LrsStream() {
       this.call = xdsTransport.createStreamingCall(method.getFullMethodName(),
           method.getRequestMarshaller(), method.getResponseMarshaller());
-      call.start(eventHandler);
+      call.start(this);
       logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
       sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
-      call.startRecvMessage();
     }
 
-    private final class LrsEventHandler implements EventHandler<LoadStatsResponse> {
-      @Override
-      public void onReady() {}
+    @Override
+    public void onReady() {}
 
-      @Override
-      public void onRecvMessage(LoadStatsResponse response) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
-            handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
-                Durations.toNanos(response.getLoadReportingInterval()));
-            call.startRecvMessage();
-          }
-        });
-      }
+    @Override
+    public void onRecvMessage(LoadStatsResponse response) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          logger.log(XdsLogLevel.DEBUG, "Received LRS response:\n{0}", response);
+          handleRpcResponse(response.getClustersList(), response.getSendAllClusters(),
+              Durations.toNanos(response.getLoadReportingInterval()));
+          call.startRecvMessage();
+        }
+      });
+    }
 
-      @Override
-      public void onStatusReceived(final Status status) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (status.isOk()) {
-              handleStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
-            } else {
-              handleStreamClosed(status);
-            }
+    @Override
+    public void onStatusReceived(final Status status) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (status.isOk()) {
+            handleStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
+          } else {
+            handleStreamClosed(status);
           }
-        });
-      }
+        }
+      });
     }
 
     void sendLoadStatsRequest(List<ClusterStats> clusterStatsList) {
@@ -329,8 +325,8 @@ final class LoadReportClient {
         loadReportTimer.cancel();
         loadReportTimer = null;
       }
-      if (lrsStreamStatus == this) {
-        lrsStreamStatus = null;
+      if (lrsStream == this) {
+        lrsStream = null;
       }
     }
 

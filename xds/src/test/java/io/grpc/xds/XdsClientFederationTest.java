@@ -147,7 +147,7 @@ public class XdsClientFederationTest {
       xdsClient.addClusterLocalityStats(entry.getKey(), "clusterName", "edsServiceName",
           Locality.create("", "", ""));
       waitForSyncContext(xdsClient);
-      assertThat(entry.getValue().lrsStreamStatus).isNotNull();
+      assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
 
@@ -176,7 +176,7 @@ public class XdsClientFederationTest {
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
       waitForSyncContext(xdsClient);
-      assertThat(entry.getValue().lrsStreamStatus).isNotNull();
+      assertThat(entry.getValue().lrsStream).isNotNull();
     }
   }
 

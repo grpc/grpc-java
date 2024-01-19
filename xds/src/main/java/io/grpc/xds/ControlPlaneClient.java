@@ -83,7 +83,7 @@ final class ControlPlaneClient {
 
   private boolean shutdown;
   @Nullable
-  private AdsStreamState adsStreamState;
+  private AdsStream adsStream;
   @Nullable
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
@@ -126,8 +126,8 @@ final class ControlPlaneClient {
       public void run() {
         shutdown = true;
         logger.log(XdsLogLevel.INFO, "Shutting down");
-        if (adsStreamState != null) {
-          adsStreamState.close(Status.CANCELLED.withDescription("shutdown").asException());
+        if (adsStream != null) {
+          adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
         }
         if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
           rpcRetryTimer.cancel();
@@ -150,12 +150,12 @@ final class ControlPlaneClient {
     if (isInBackoff()) {
       return;
     }
-    if (adsStreamState == null) {
+    if (adsStream == null) {
       startRpcStream();
     }
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
     if (resources != null) {
-      adsStreamState.sendDiscoveryRequest(resourceType, resources);
+      adsStream.sendDiscoveryRequest(resourceType, resources);
     }
   }
 
@@ -172,7 +172,7 @@ final class ControlPlaneClient {
     if (resources == null) {
       resources = Collections.emptyList();
     }
-    adsStreamState.sendDiscoveryRequest(type, versionInfo, resources, nonce, null);
+    adsStream.sendDiscoveryRequest(type, versionInfo, resources, nonce, null);
   }
 
   /**
@@ -188,7 +188,7 @@ final class ControlPlaneClient {
     if (resources == null) {
       resources = Collections.emptyList();
     }
-    adsStreamState.sendDiscoveryRequest(type, versionInfo, resources, nonce, errorDetail);
+    adsStream.sendDiscoveryRequest(type, versionInfo, resources, nonce, errorDetail);
   }
 
   /**
@@ -200,7 +200,7 @@ final class ControlPlaneClient {
   }
 
   boolean isReady() {
-    return adsStreamState != null && adsStreamState.call != null && adsStreamState.call.isReady();
+    return adsStream != null && adsStream.call != null && adsStream.call.isReady();
   }
 
   /**
@@ -226,10 +226,10 @@ final class ControlPlaneClient {
    */
   // Must be synchronized.
   private void startRpcStream() {
-    checkState(adsStreamState == null, "Previous adsStream has not been cleared yet");
+    checkState(adsStream == null, "Previous adsStream has not been cleared yet");
     Context prevContext = context.attach();
     try {
-      adsStreamState = new AdsStreamState();
+      adsStream = new AdsStream();
     } finally {
       context.detach(prevContext);
     }
@@ -250,7 +250,7 @@ final class ControlPlaneClient {
       for (XdsResourceType<?> type : subscribedResourceTypes) {
         Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
         if (resources != null) {
-          adsStreamState.sendDiscoveryRequest(type, resources);
+          adsStream.sendDiscoveryRequest(type, resources);
         }
       }
       xdsResponseHandler.handleStreamRestarted(serverInfo);
@@ -263,7 +263,7 @@ final class ControlPlaneClient {
     return resourceStore.getSubscribedResourceTypesWithTypeUrl().get(typeUrl);
   }
 
-  private class AdsStreamState {
+  private class AdsStream implements EventHandler<DiscoveryResponse> {
     private boolean responseReceived;
     private boolean closed;
     // Response nonce for the most recently received discovery responses of each resource type.
@@ -274,14 +274,13 @@ final class ControlPlaneClient {
     // most recently received responses of each resource type.
     private final Map<XdsResourceType<?>, String> respNonces = new HashMap<>();
     private final StreamingCall<DiscoveryRequest, DiscoveryResponse> call;
-    private final EventHandler<DiscoveryResponse> listener = new AdsStreamEventHandler();
     private final MethodDescriptor<DiscoveryRequest, DiscoveryResponse> methodDescriptor =
         AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod();
 
-    private AdsStreamState() {
+    private AdsStream() {
       this.call = xdsTransport.createStreamingCall(methodDescriptor.getFullMethodName(),
           methodDescriptor.getRequestMarshaller(), methodDescriptor.getResponseMarshaller());
-      call.start(listener);
+      call.start(this);
     }
 
     /**
@@ -324,48 +323,46 @@ final class ControlPlaneClient {
           respNonces.getOrDefault(type, ""), null);
     }
 
-    private final class AdsStreamEventHandler implements EventHandler<DiscoveryResponse> {
-      @Override
-      public void onReady() {
-        readyHandler();
-      }
+    @Override
+    public void onReady() {
+      readyHandler();
+    }
 
-      @Override
-      public void onRecvMessage(DiscoveryResponse response) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
-            if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-              logger.log(
-                  XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
-                  MessagePrinter.print(response));
-            }
-            if (type == null) {
-              logger.log(
-                  XdsLogLevel.WARNING,
-                  "Ignore an unknown type of DiscoveryResponse: {0}",
-                  response.getTypeUrl());
-
-              call.startRecvMessage();
-              return;
-            }
-            handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
-                response.getNonce());
+    @Override
+    public void onRecvMessage(DiscoveryResponse response) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
+          if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+            logger.log(
+                XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
+                MessagePrinter.print(response));
           }
-        });
-      }
+          if (type == null) {
+            logger.log(
+                XdsLogLevel.WARNING,
+                "Ignore an unknown type of DiscoveryResponse: {0}",
+                response.getTypeUrl());
 
-      @Override
-      public void onStatusReceived(final Status status) {
-        syncContext.execute(() -> {
-          if (status.isOk()) {
-            handleRpcStreamClosed(Status.UNAVAILABLE.withDescription(CLOSED_BY_SERVER));
-          } else {
-            handleRpcStreamClosed(status);
+            call.startRecvMessage();
+            return;
           }
-        });
-      }
+          handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
+              response.getNonce());
+        }
+      });
+    }
+
+    @Override
+    public void onStatusReceived(final Status status) {
+      syncContext.execute(() -> {
+        if (status.isOk()) {
+          handleRpcStreamClosed(Status.UNAVAILABLE.withDescription(CLOSED_BY_SERVER));
+        } else {
+          handleRpcStreamClosed(status);
+        }
+      });
     }
 
     final void handleRpcResponse(XdsResourceType<?> type, String versionInfo, List<Any> resources,
@@ -423,8 +420,8 @@ final class ControlPlaneClient {
     }
 
     private void cleanUp() {
-      if (adsStreamState == this) {
-        adsStreamState = null;
+      if (adsStream == this) {
+        adsStream = null;
       }
     }
   }

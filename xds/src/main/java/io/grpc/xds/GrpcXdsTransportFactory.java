@@ -39,6 +39,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     return new GrpcXdsTransport(serverInfo);
   }
 
+  @VisibleForTesting
   public XdsTransport createForTest(ManagedChannel channel) {
     return new GrpcXdsTransport(channel);
   }
