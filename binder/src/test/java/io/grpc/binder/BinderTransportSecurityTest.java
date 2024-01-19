@@ -146,7 +146,7 @@ public final class BinderTransportSecurityTest {
   private static class SomeService extends LifecycleService {
 
     private final IBinderReceiver binderReceiver = new IBinderReceiver();
-    private final ArrayBlockingQueue<SettableFuture<Status>> statuses =
+    private final ArrayBlockingQueue<SettableFuture<Status>> statusesToSet =
         new ArrayBlockingQueue<>(128);
     private Server server;
     private HandlerThread handlerThread;
@@ -182,7 +182,7 @@ public final class BinderTransportSecurityTest {
                 ListenableFuture<Status> checkAuthorizationAsync(int uid) {
                   return Futures.submitAsync(() -> {
                     SettableFuture<Status> status = SettableFuture.create();
-                    statuses.add(status);
+                    statusesToSet.add(status);
                     return status;
                   }, getExecutor());
                 }
@@ -204,8 +204,8 @@ public final class BinderTransportSecurityTest {
     }
 
     /**
-     * Returns an {@link Executor} under which all of the gRPC computations run under. The execution
-     * of any pending tasks on this executor can be triggered via {@link #idleLooper()}.
+     * Returns an {@link Executor} under which all of the gRPC computations run. The execution of
+     * any pending tasks on this executor can be triggered via {@link #idleLooper()}.
      */
     Executor getExecutor() {
       return handler::post;
@@ -216,7 +216,7 @@ public final class BinderTransportSecurityTest {
     }
 
     void setSecurityPolicyStatusWhenReady(Status status) {
-      Uninterruptibles.takeUninterruptibly(statuses).set(status);
+      Uninterruptibles.takeUninterruptibly(statusesToSet).set(status);
     }
 
     @Override
