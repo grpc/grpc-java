@@ -35,7 +35,6 @@ import io.grpc.ChannelCredentials;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.InternalLogId;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -90,9 +89,7 @@ final class XdsClientImpl extends XdsClient
           throw new AssertionError(e);
         }
       });
-  private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
-  private final LoadBalancerRegistry loadBalancerRegistry
-      = LoadBalancerRegistry.getDefaultRegistry();
+
   private final Map<ServerInfo, ControlPlaneClient> serverChannelMap = new HashMap<>();
   private final Map<XdsResourceType<? extends ResourceUpdate>,
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
@@ -176,8 +173,7 @@ final class XdsClientImpl extends XdsClient
       toParseResourceNames = resourceSubscribers.get(xdsResourceType).keySet();
     }
     XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
-        bootstrapInfo, filterRegistry, loadBalancerRegistry, tlsContextManager,
-        toParseResourceNames);
+        bootstrapInfo, tlsContextManager, toParseResourceNames);
     handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
   }
 
