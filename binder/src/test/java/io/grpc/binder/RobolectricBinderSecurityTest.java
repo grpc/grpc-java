@@ -57,6 +57,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Delayed;
@@ -314,7 +315,7 @@ public final class RobolectricBinderSecurityTest {
      * Minimal implementation of a {@link ScheduledExecutorService} that delegates tasks to a
      * {@link Handler}. Pending tasks can be forced to run via {@link #idleLooper()}.
      */
-    private class HandlerScheduledExecutorService implements ScheduledExecutorService {
+    private class HandlerScheduledExecutorService extends AbstractExecutorService implements ScheduledExecutorService {
 
       private Runnable asRunnableFor(HandlerFuture<Void> future, Runnable runnable) {
         return () -> {
@@ -406,71 +407,6 @@ public final class RobolectricBinderSecurityTest {
       public boolean awaitTermination(long l, TimeUnit timeUnit) {
         idleLooper();
         return true;
-      }
-
-      @Override
-      public <T> Future<T> submit(Callable<T> callable) {
-        HandlerFuture<T> result = new HandlerFuture<>(Duration.ZERO);
-        handler.post(asRunnableFor(result, callable));
-        return result;
-      }
-
-      @Override
-      public <T> Future<T> submit(Runnable runnable, T t) {
-        HandlerFuture<T> result = new HandlerFuture<>(Duration.ZERO);
-        handler.post(asRunnableFor(result, () -> {
-          runnable.run();
-          return t;
-        }));
-        return result;
-      }
-
-      @Override
-      public Future<?> submit(Runnable runnable) {
-        HandlerFuture<Void> result = new HandlerFuture<>(Duration.ZERO);
-        handler.post(asRunnableFor(result, runnable));
-        return result;
-      }
-
-      @Override
-      public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> collection) {
-        return collection.stream().map(this::submit).collect(Collectors.toList());
-      }
-
-      @Override
-      public <T> List<Future<T>> invokeAll(
-          Collection<? extends Callable<T>> collection, long l, TimeUnit timeUnit) {
-        return collection
-            .stream()
-            .map(callable -> this.schedule(callable, l, timeUnit))
-            .collect(Collectors.toList());
-      }
-
-      @Override
-      public <T> T invokeAny(Collection<? extends Callable<T>> collection)
-          throws ExecutionException {
-        for (Callable<T> callable : collection) {
-          try {
-            return submit(callable).get();
-          } catch (Exception e) {
-            throw new ExecutionException(e);
-          }
-        }
-        throw new IllegalArgumentException();
-      }
-
-      @Override
-      public <T> T invokeAny(
-          Collection<? extends Callable<T>> collection, long timeout, TimeUnit timeUnit)
-          throws ExecutionException {
-        for (Callable<T> callable : collection) {
-          try {
-            return submit(callable).get(timeout, timeUnit);
-          } catch (Exception e) {
-            throw new ExecutionException(e);
-          }
-        }
-        throw new IllegalArgumentException();
       }
 
       @Override
