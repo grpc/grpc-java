@@ -34,7 +34,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -62,6 +61,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -120,11 +120,6 @@ public final class RobolectricBinderSecurityTest {
     assertThat(Futures.getDone(status).getCode()).isEqualTo(Status.Code.OK);
   }
 
-  private void idleLoopers() {
-    service.idleLooper();
-    shadowOf(Looper.getMainLooper()).idle();
-  }
-
   private ListenableFuture<Status> makeCall() {
     ClientCall<Empty, Empty> call =
         channel.newCall(
@@ -139,6 +134,15 @@ public final class RobolectricBinderSecurityTest {
         StatusRuntimeException.class,
         StatusRuntimeException::getStatus,
         directExecutor());
+  }
+
+  private void idleLoopers() {
+    idleLoopers(service);
+  }
+
+  private static void idleLoopers(SomeService service) {
+    service.idleLooper();
+    shadowOf(Looper.getMainLooper()).idle();
   }
 
   private static MethodDescriptor<Empty, Empty> getMethodDescriptor() {
@@ -231,7 +235,14 @@ public final class RobolectricBinderSecurityTest {
     }
 
     void setSecurityPolicyStatusWhenReady(Status status) {
-      Uninterruptibles.takeUninterruptibly(statusesToSet).set(status);
+      @Nullable SettableFuture<Status> future = statusesToSet.poll();
+      while (future == null) {
+        // It's possible that either the test thread or the gRPC thread has posted tasks to each
+        // other's executor. Keep idling until the future is available.
+        idleLoopers(this);
+        future = statusesToSet.poll();
+      }
+      future.set(status);
     }
 
     @Override
