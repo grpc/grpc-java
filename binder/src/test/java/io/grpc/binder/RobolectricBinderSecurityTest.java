@@ -19,13 +19,7 @@ package io.grpc.binder;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
-import com.google.common.util.concurrent.Uninterruptibles;
-import com.google.protobuf.Empty;
+import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Application;
 import android.content.ComponentName;
@@ -34,27 +28,29 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
-
+import androidx.lifecycle.LifecycleService;
+import androidx.test.core.app.ApplicationProvider;
+import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
+import com.google.common.util.concurrent.Uninterruptibles;
+import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
+import io.grpc.MethodDescriptor;
+import io.grpc.Server;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerMethodDefinition;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
-
-import androidx.lifecycle.LifecycleService;
-import androidx.test.core.app.ApplicationProvider;
-
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.Robolectric;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.android.controller.ServiceController;
-
+import io.grpc.stub.ClientCalls;
+import io.grpc.stub.ServerCalls;
 import java.io.IOException;
-import java.util.Collection;
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
@@ -62,23 +58,17 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.time.Duration;
-import java.util.stream.Collectors;
-
-import io.grpc.MethodDescriptor;
-import io.grpc.Server;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerMethodDefinition;
-import io.grpc.ServerServiceDefinition;
-import io.grpc.stub.ClientCalls;
-import io.grpc.stub.ServerCalls;
-
-import static org.robolectric.Shadows.shadowOf;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.android.controller.ServiceController;
 
 @RunWith(RobolectricTestRunner.class)
 public final class RobolectricBinderSecurityTest {
@@ -97,11 +87,12 @@ public final class RobolectricBinderSecurityTest {
 
     AndroidComponentAddress listenAddress = AndroidComponentAddress.forContext(service);
     ScheduledExecutorService executor = service.getExecutor();
-    channel = BinderChannelBuilder.forAddress(listenAddress, context)
-        .executor(executor)
-        .scheduledExecutorService(executor)
-        .offloadExecutor(executor)
-        .build();
+    channel =
+        BinderChannelBuilder.forAddress(listenAddress, context)
+            .executor(executor)
+            .scheduledExecutorService(executor)
+            .offloadExecutor(executor)
+            .build();
     idleLoopers();
   }
 
@@ -137,8 +128,7 @@ public final class RobolectricBinderSecurityTest {
   private ListenableFuture<Status> makeCall() {
     ClientCall<Empty, Empty> call =
         channel.newCall(
-            getMethodDescriptor(),
-            CallOptions.DEFAULT.withExecutor(service.getExecutor()));
+            getMethodDescriptor(), CallOptions.DEFAULT.withExecutor(service.getExecutor()));
     ListenableFuture<Empty> responseFuture =
         ClientCalls.futureUnaryCall(call, Empty.getDefaultInstance());
 
@@ -189,29 +179,32 @@ public final class RobolectricBinderSecurityTest {
               });
       ServerMethodDefinition<Empty, Empty> methodDef =
           ServerMethodDefinition.create(methodDesc, callHandler);
-      ServerServiceDefinition def = ServerServiceDefinition.builder(SERVICE_NAME)
-          .addMethod(methodDef)
-          .build();
+      ServerServiceDefinition def =
+          ServerServiceDefinition.builder(SERVICE_NAME).addMethod(methodDef).build();
 
-      server = BinderServerBuilder.forAddress(
-              AndroidComponentAddress.forContext(this),
-              binderReceiver)
-          .addService(def)
-          .securityPolicy(ServerSecurityPolicy.newBuilder()
-              .servicePolicy(SERVICE_NAME, new AsyncSecurityPolicy() {
-                @Override
-                ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-                  return Futures.submitAsync(() -> {
-                    SettableFuture<Status> status = SettableFuture.create();
-                    statusesToSet.add(status);
-                    return status;
-                  }, getExecutor());
-                }
-              })
-              .build())
-          .executor(getExecutor())
-          .scheduledExecutorService(getExecutor())
-          .build();
+      server =
+          BinderServerBuilder.forAddress(AndroidComponentAddress.forContext(this), binderReceiver)
+              .addService(def)
+              .securityPolicy(
+                  ServerSecurityPolicy.newBuilder()
+                      .servicePolicy(
+                          SERVICE_NAME,
+                          new AsyncSecurityPolicy() {
+                            @Override
+                            ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                              return Futures.submitAsync(
+                                  () -> {
+                                    SettableFuture<Status> status = SettableFuture.create();
+                                    statusesToSet.add(status);
+                                    return status;
+                                  },
+                                  getExecutor());
+                            }
+                          })
+                      .build())
+              .executor(getExecutor())
+              .scheduledExecutorService(getExecutor())
+              .build();
       try {
         server.start();
       } catch (IOException e) {
@@ -271,8 +264,8 @@ public final class RobolectricBinderSecurityTest {
 
       @Override
       public int compareTo(Delayed other) {
-        return Comparator
-            .comparingLong((Delayed delayed) -> delayed.getDelay(TimeUnit.MILLISECONDS))
+        return Comparator.comparingLong(
+                (Delayed delayed) -> delayed.getDelay(TimeUnit.MILLISECONDS))
             .compare(this, other);
       }
 
@@ -312,10 +305,11 @@ public final class RobolectricBinderSecurityTest {
     }
 
     /**
-     * Minimal implementation of a {@link ScheduledExecutorService} that delegates tasks to a
-     * {@link Handler}. Pending tasks can be forced to run via {@link #idleLooper()}.
+     * Minimal implementation of a {@link ScheduledExecutorService} that delegates tasks to a {@link
+     * Handler}. Pending tasks can be forced to run via {@link #idleLooper()}.
      */
-    private class HandlerScheduledExecutorService extends AbstractExecutorService implements ScheduledExecutorService {
+    private class HandlerScheduledExecutorService extends AbstractExecutorService
+        implements ScheduledExecutorService {
 
       private Runnable asRunnableFor(HandlerFuture<Void> future, Runnable runnable) {
         return () -> {
@@ -327,6 +321,7 @@ public final class RobolectricBinderSecurityTest {
           }
         };
       }
+
       private <V> Runnable asRunnableFor(HandlerFuture<V> future, Callable<V> callable) {
         return () -> {
           try {
@@ -366,17 +361,18 @@ public final class RobolectricBinderSecurityTest {
         long periodMillis = timeUnit.toMillis(delay);
         HandlerFuture<Void> result = new HandlerFuture<>(Duration.ofMillis(initialDelayMillis));
 
-        Runnable scheduledRunnable = new Runnable() {
-          @Override
-          public void run() {
-            try {
-              runnable.run();
-              handler.postDelayed(this, periodMillis);
-            } catch (Exception e) {
-              result.setException(e);
-            }
-          }
-        };
+        Runnable scheduledRunnable =
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  runnable.run();
+                  handler.postDelayed(this, periodMillis);
+                } catch (Exception e) {
+                  result.setException(e);
+                }
+              }
+            };
 
         handler.postDelayed(scheduledRunnable, initialDelayMillis);
         return result;
